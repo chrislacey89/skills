@@ -6,7 +6,7 @@ Use this file when editing the skills pack itself. For a quick overview of the r
 
 ## What This Repository Is
 
-A personal directory of Claude Code skills — composable workflow steps that form a feature development pipeline. Skills are installed into a target project's `.claude/skills/` directory via `npx skills@latest add chrislacey89/skills/<skill-name>`.
+A personal directory of Claude Code skills — composable workflow steps that form a feature development pipeline. Skills are installed globally for Claude Code via `npx skills@latest add chrislacey89/skills --skill '*' --agent claude-code --global -y`.
 
 This repo is not an application — there is no build system, test runner, or deployment target. Each subdirectory contains a `SKILL.md` (with YAML frontmatter for `name` and `description`) and optional reference files.
 

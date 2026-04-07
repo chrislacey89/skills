@@ -10,18 +10,10 @@ Built around structured research, GitHub-native state, and a compounding knowled
 
 ## Installation
 
-Install individual skills:
+Global install (all skills, Claude Code):
 
 ```bash
-npx skills@latest add chrislacey89/skills/shape
-npx skills@latest add chrislacey89/skills/research
-npx skills@latest add chrislacey89/skills/execute
-```
-
-Or install the full pack:
-
-```bash
-npx skills@latest add chrislacey89/skills --all
+npx skills@latest add chrislacey89/skills --skill '*' --agent claude-code --global -y
 ```
 
 ## Keeping skills updated
@@ -52,41 +44,41 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 
 ### Planning & Design
 
-| Skill | Description | Install |
-|-------|-------------|---------|
-| [shape](shape/) | Structured requirements discovery — shared understanding before research | `npx skills@latest add chrislacey89/skills/shape` |
-| [create-milestone](create-milestone/) | Turn a shaped app-sized or tranche-sized idea into a GitHub milestone with sequenced feature bets | `npx skills@latest add chrislacey89/skills/create-milestone` |
-| [research](research/) | Mandatory pre-PRD research with auto-calibrated depth | `npx skills@latest add chrislacey89/skills/research` |
-| [write-a-prd](write-a-prd/) | PRD creation via interview, filed as GitHub issue | `npx skills@latest add chrislacey89/skills/write-a-prd` |
-| [prd-to-issues](prd-to-issues/) | Break PRD into vertical slices with boundary maps | `npx skills@latest add chrislacey89/skills/prd-to-issues` |
-| [design-an-interface](design-an-interface/) | Generate multiple radically different interface designs | `npx skills@latest add chrislacey89/skills/design-an-interface` |
-| [api-design-review](api-design-review/) | Focused contract review for higher-risk API design decisions | `npx skills@latest add chrislacey89/skills/api-design-review` |
+| Skill | Description |
+|-------|-------------|
+| [shape](shape/) | Structured requirements discovery — shared understanding before research |
+| [create-milestone](create-milestone/) | Turn a shaped app-sized or tranche-sized idea into a GitHub milestone with sequenced feature bets |
+| [research](research/) | Mandatory pre-PRD research with auto-calibrated depth |
+| [write-a-prd](write-a-prd/) | PRD creation via interview, filed as GitHub issue |
+| [prd-to-issues](prd-to-issues/) | Break PRD into vertical slices with boundary maps |
+| [design-an-interface](design-an-interface/) | Generate multiple radically different interface designs |
+| [api-design-review](api-design-review/) | Focused contract review for higher-risk API design decisions |
 
 ### Development
 
-| Skill | Description | Install |
-|-------|-------------|---------|
-| [execute](execute/) | Execute a unit of work end-to-end with verification | `npx skills@latest add chrislacey89/skills/execute` |
-| [tdd](tdd/) | Test-driven development with red-green-refactor loop | `npx skills@latest add chrislacey89/skills/tdd` |
-| [triage-issue](triage-issue/) | Investigate bugs, find root cause, create TDD fix plan | `npx skills@latest add chrislacey89/skills/triage-issue` |
-| [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules | `npx skills@latest add chrislacey89/skills/improve-codebase-architecture` |
-| [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits | `npx skills@latest add chrislacey89/skills/request-refactor-plan` |
+| Skill | Description |
+|-------|-------------|
+| [execute](execute/) | Execute a unit of work end-to-end with verification |
+| [tdd](tdd/) | Test-driven development with red-green-refactor loop |
+| [triage-issue](triage-issue/) | Investigate bugs, find root cause, create TDD fix plan |
+| [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
+| [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
 
 ### Tooling & Setup
 
-| Skill | Description | Install |
-|-------|-------------|---------|
-| [setup-pre-commit](setup-pre-commit/) | Lefthook + Biome pre-commit hooks | `npx skills@latest add chrislacey89/skills/setup-pre-commit` |
-| [git-guardrails-claude-code](git-guardrails-claude-code/) | Block dangerous git commands | `npx skills@latest add chrislacey89/skills/git-guardrails-claude-code` |
+| Skill | Description |
+|-------|-------------|
+| [setup-pre-commit](setup-pre-commit/) | Lefthook + Biome pre-commit hooks |
+| [git-guardrails-claude-code](git-guardrails-claude-code/) | Block dangerous git commands |
 
 ### Knowledge & QA
 
-| Skill | Description | Install |
-|-------|-------------|---------|
-| [qa](qa/) | Interactive QA session, files GitHub issues | `npx skills@latest add chrislacey89/skills/qa` |
-| [pre-merge](pre-merge/) | Create the PR and run an architectural review before merge | `npx skills@latest add chrislacey89/skills/pre-merge` |
-| [compound](compound/) | Capture lessons learned into docs/solutions/ | `npx skills@latest add chrislacey89/skills/compound` |
-| [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register | `npx skills@latest add chrislacey89/skills/ubiquitous-language` |
+| Skill | Description |
+|-------|-------------|
+| [qa](qa/) | Interactive QA session, files GitHub issues |
+| [pre-merge](pre-merge/) | Create the PR and run an architectural review before merge |
+| [compound](compound/) | Capture lessons learned into docs/solutions/ |
+| [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
 
 ## Repo guide
 
