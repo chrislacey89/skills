@@ -1,0 +1,60 @@
+name: Validate Skills
+
+on:
+  push:
+    branches: [prod]
+  pull_request:
+    branches: [prod]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate SKILL.md files
+        run: |
+          errors=0
+          count=0
+
+          for dir in */; do
+            skill_file="${dir}SKILL.md"
+            [ ! -f "$skill_file" ] && continue
+
+            count=$((count + 1))
+            dir_name="${dir%/}"
+
+            # Check YAML frontmatter exists
+            if ! head -1 "$skill_file" | grep -q '^---$'; then
+              echo "ERROR: $skill_file missing YAML frontmatter"
+              errors=$((errors + 1))
+              continue
+            fi
+
+            # Extract frontmatter
+            frontmatter=$(sed -n '2,/^---$/p' "$skill_file" | head -n -1)
+
+            # Check name field
+            name=$(echo "$frontmatter" | grep '^name:' | sed 's/name: *//')
+            if [ -z "$name" ]; then
+              echo "ERROR: $skill_file missing 'name' field"
+              errors=$((errors + 1))
+            elif [ "$name" != "$dir_name" ]; then
+              echo "ERROR: $skill_file name '$name' does not match directory '$dir_name'"
+              errors=$((errors + 1))
+            fi
+
+            # Check description field
+            description=$(echo "$frontmatter" | grep '^description:')
+            if [ -z "$description" ]; then
+              echo "ERROR: $skill_file missing 'description' field"
+              errors=$((errors + 1))
+            fi
+          done
+
+          echo ""
+          echo "Validated $count skills, $errors errors"
+
+          if [ $errors -gt 0 ]; then
+            exit 1
+          fi
