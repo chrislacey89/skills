@@ -1,0 +1,155 @@
+---
+name: pre-merge
+description: "Primary pipeline review step after verified implementation. Use to create a PR with lineage and run architectural review before merge. Not for QA intake, planning, or implementation work."
+---
+
+# Pre-Merge
+
+Create a GitHub PR linking back to the PRD and slice issues, then review the full diff against the project's architectural principles. Produces advisory findings — does not block merge, auto-fix code, or file issues.
+
+## Invocation Position
+
+This is a primary pipeline skill used after implementation has been verified and before merging to main.
+
+Use `/pre-merge` when the branch is ready for PR creation, architectural review, and final plan-to-code reconciliation.
+
+Do not use it as a substitute for implementation verification, QA intake, or refactor planning. It assumes the work is already built and ready to review.
+
+## When to Use
+
+- After QA passes and before merging a feature branch to main
+- After Ralph finishes AFK execution and you've verified behavior
+- For any branch you want reviewed before merge, even without a full pipeline run
+
+## Execution Flow
+
+### Phase 1: Gather Context
+
+1. **Ask for the PRD issue number.** Accept "none" if this change didn't go through the full pipeline.
+
+2. **If a PRD was given:**
+   ```bash
+   gh issue view <number>
+   gh issue list --search "in:body #<prd-number>" --state all --json number,title,state,body --limit 100
+   ```
+   Parse boundary maps (Produces/Consumes sections) from each slice issue body.
+
+3. **Assess the diff:**
+   ```bash
+   git diff main...HEAD --stat
+   git log --oneline main..HEAD
+   ```
+   If no diff from main, tell the user there's nothing to review and stop.
+
+### Phase 2: Create the PR
+
+1. **Check for an existing PR:**
+   ```bash
+   gh pr list --head $(git branch --show-current) --json number,url
+   ```
+
+2. **Create or update the PR.** Use `gh pr create` or `gh pr edit`.
+
+**PR body template (when PRD exists):**
+
+```markdown
+## Summary
+
+[1-3 sentences derived from the PRD's Problem and Solution sections.]
+
+## PRD
+
+Closes #<prd-issue-number>
+
+## Slices
+
+- [x] #N — Title (for closed slices)
+- [ ] #N — Title (for still-open slices)
+
+## Key Decisions
+
+[Bullet list of notable implementation decisions that refined or diverged from the PRD. Derived from commit messages and slice issue comments. Omit this section if nothing diverged.]
+```
+
+**PR body template (no PRD):**
+
+```markdown
+## Summary
+
+[1-3 sentences summarizing the change, derived from the diff and commit messages.]
+```
+
+3. Print the PR URL.
+
+### Phase 3: Architectural Review
+
+Consult `review-checklist.md` for the seven review dimensions and their violation patterns.
+
+**Small diff** (< 200 changed lines, < 10 files): run all seven dimensions sequentially in the main agent.
+
+**Larger diff**: spawn two sub-agents in parallel:
+- **Sub-agent A (structural):** Deep Modules, Vertical Slice Integrity, State Discipline
+- **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Fix Completeness
+
+Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format.
+
+**Dimension 4 (Boundary Map Contracts) only runs if a PRD with slice issues was provided.** Without boundary maps, there are no contracts to verify.
+
+**Dimension 6 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
+
+### Phase 4: Present Findings
+
+Combine findings from all dimensions (or sub-agents). Present in the terminal using three tiers:
+
+```
+## Architectural Review
+
+### Observations (for awareness — no action needed)
+
+[Patterns noticed that aren't violations. Example: "The presence module
+exports 6 functions — reasonable, but worth watching if it grows."]
+
+### Suggestions (action optional — would improve quality)
+
+[Grouped by dimension. Things that aren't violations but would make
+the code better.]
+
+### Concerns (action recommended — potential principle violation)
+
+[Grouped by dimension. Each concern cites the principle, shows the
+specific code, and explains why it matters.]
+
+---
+No action is required. These are advisory.
+When ready, merge the PR at <PR-URL>.
+```
+
+**Scope Notes (only when a PRD with slice issues was provided):**
+
+After the three-tier findings, note any significant scope drift between the planned decomposition and the actual diff:
+
+- Work that appears in the diff but wasn't in any slice's Boundary Map (omitted scope discovered during implementation)
+- Declared Produces that don't appear in the diff (planned work that was cut or deferred)
+- Slices where the actual diff footprint was dramatically different from the boundary map's declared scope
+
+These are factual notes, not review findings. They don't produce Observations, Suggestions, or Concerns — they record plan-vs-actual divergence so the user and `/compound` can decide whether a pattern is worth capturing. Omit this section entirely if the diff aligns closely with the planned boundary maps.
+
+If a concern warrants deeper work, note: "Consider running `/request-refactor-plan` for this area." Do not invoke it.
+
+If a finding looks like a behavioral bug, note: "Consider running `/qa` to verify." Do not file an issue.
+
+Omit any tier that has zero findings.
+
+## What This Skill is NOT
+
+- **Not a test runner.** Pre-commit hooks run tests, typecheck, and lint on every commit.
+- **Not a bug finder.** `/qa` files behavioral bugs as GitHub issues.
+- **Not a refactoring planner.** `/request-refactor-plan` produces RFC-style refactor proposals.
+- **Not a CI gate.** Findings are advisory. The user decides what to address before merging.
+
+## Handoff
+
+- **Expected input:** verified implementation work that is ready for review and PR creation
+- **Produces:** a PR with lineage plus an architectural review readout
+- **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
+- **Comes next by default:** merge, then `/compound`

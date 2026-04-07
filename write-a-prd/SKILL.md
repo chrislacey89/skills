@@ -1,0 +1,282 @@
+---
+name: write-a-prd
+description: "Primary pipeline shaping step after /research and before /prd-to-issues. Use when the problem is understood well enough to turn into a bounded PRD issue. May invoke /design-an-interface or /api-design-review when interface or contract uncertainty remains. Not for discovery, decomposition, or implementation-ready work."
+sources:
+  primary:
+    - "Shape Up — Ryan Singer"
+  secondary:
+    - "A Philosophy of Software Design — John Ousterhout"
+    - "Software Estimation — Steve McConnell"
+    - "Thinking in Bets — Annie Duke"
+    - "Thinking in Systems — Donella Meadows"
+    - "Writing Effective Use Cases — Alistair Cockburn"
+---
+
+# Write a PRD
+
+This skill produces a shaped pitch — a PRD that's rough enough for builder judgment, solved enough to ship, and bounded by an explicit time appetite. Follow the steps below, adapting depth to the work but not skipping the checks that establish appetite, current code reality, institutional knowledge, and handoff readiness.
+
+## Invocation Position
+
+This is a primary pipeline skill that normally follows `/research` and precedes `/prd-to-issues`.
+
+Use `/write-a-prd` when the problem is understood well enough to shape a bounded solution and turn it into an implementable pitch.
+
+Do not start here when the problem is still ambiguous enough that discovery should continue in `/shape`, when technical reality has not yet been verified in `/research`, or when the user already has a shaped PRD and wants decomposition or execution instead.
+
+## Process
+
+### 1. Get the problem as a specific story
+
+Ask the user to describe the problem as a **specific story** showing why the status quo fails for a real user. Push back on abstract feature requests ("we need better X") until they're grounded in concrete friction ("when a user tries to do Y, they hit Z because...").
+
+A good problem statement is one scene — one actor, one attempt, one failure. If the user gives you a solution first ("I want to add a webhook system"), ask: "What's happening today that's painful enough to justify building this?"
+
+### 2. Set the appetite
+
+Before any solution design, establish the time budget: **How much is this problem worth?**
+
+- **Small batch**: 1-2 weeks of implementation time
+- **Big batch**: up to 6 weeks of implementation time
+
+The appetite is a constraint, not an estimate. It answers "how much time are we willing to spend?" — not "how long will this take?" If the problem doesn't fit the appetite, narrow the problem, don't expand the budget.
+
+The appetite is a **target** — how much time the business is willing to spend. It is not an **estimate** — an analytical forecast of how long the work might take — and it is not a **commitment** — a promise to deliver by a date. If the current estimate exceeds the appetite, reshape the solution rather than silently converting the appetite into a commitment.
+
+The appetite shapes everything downstream: which user stories are must-haves vs. nice-to-haves, how many rabbit holes are acceptable, and how aggressively scope gets hammered.
+
+### 3. Explore the codebase
+
+Explore the repo to verify the user's assertions and understand the current state of the code.
+
+### 4. Consult institutional knowledge
+
+Before interviewing the user, check two sources:
+
+**Past solutions** — Search `docs/solutions/` for relevant documented solutions:
+```bash
+grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
+```
+If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
+
+**Research document** — Check if a `research.md` exists in the repo root or `plans/` directory:
+```bash
+ls research.md plans/research.md 2>/dev/null
+```
+If a research document exists, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the research document in the pitch so Ralph reads it during implementation.
+
+**Artifact precedence:** When `research.md` and `docs/solutions/` disagree, `research.md` takes precedence — it was verified against installed versions. Surface the conflict to the user during the interview rather than silently choosing one.
+
+### 5. Interview with shaping discipline
+
+Interview the user about the solution, but apply Shape Up's shaping techniques throughout:
+
+**Walk each use case against the solution.** Step through every interaction one-by-one against the emerging design. Gaps and rabbit holes surface here — "what happens when the user does X but Y hasn't loaded yet?" Name each rabbit hole as you find it and agree on a one-line resolution before moving on.
+Every important use case needs a main success scenario plus at least two extension scenarios where the flow bends, fails, or needs recovery. If you cannot name the extensions, the scenario is under-shaped.
+
+**Invert once after walking the use cases.** After the forward pass surfaces initial rabbit holes, flip the framing: imagine this feature shipped and caused a serious problem. What was the problem? Work backward from the failure. Route each failure mode into Rabbit Holes (with a resolution) or No-gos. Don't carry them as vague "accepted risks" — if a failure mode can't be resolved or excluded, the design isn't solved yet.
+
+**Check the structure, not just the symptom.** Ask three short questions before locking the shaped approach:
+- What underlying condition is producing the current problem, not just the visible complaint?
+- Are there delays, handoffs, or missing feedback loops that make the problem harder to see early?
+- Is the proposed intervention a high-leverage change to the condition, or just a local symptom fix?
+
+Keep this compact. The goal is to improve shaping, not to turn the pitch into a systems-thinking essay.
+
+**Classify scope continuously.** As features and behaviors come up, classify them as must-haves or nice-to-haves (~). Nice-to-haves are pre-authorized cuts — if the appetite runs tight, these get scope-hammered first without debate.
+
+**Keep the clay wet.** Present your emerging understanding as malleable — "here's what I'm thinking, push back anywhere" — not as final decisions. This invites course correction rather than rubber-stamping.
+
+**Compare down to baseline, not up to ideal.** When evaluating whether a scope cut is acceptable, compare to what users have today (the baseline), not to the perfect version. Shipping something better than baseline is always better than shipping nothing because you aimed for ideal.
+
+**Conditional flow sketch.** If the feature introduces multi-step user-facing flows, new navigation, or significant UI state changes, produce a Flow Sketch during the interview — a bullet list of places (screens/dialogs), affordances (buttons/fields/actions on each), and connections (what leads where). This catches missing transitions and ambiguous states early. Skip for API-only, backend, or single-screen changes.
+
+During the interview, bring forward relevant lessons from past solutions and research:
+- "The research recommends Ably for presence — should we adopt that recommendation or revisit?"
+- "docs/solutions/ has a documented pitfall about X — we should account for that in the design."
+- "A past solution suggests using pattern Y for this type of integration. Does that fit here?"
+
+If the user starts speaking in dates, deadlines, or confidence language, make the framing explicit before moving on:
+- Is this a **target** (desired business outcome or deadline), an **estimate** (current forecast), or a **commitment** (a negotiated promise)?
+- What uncertainty still makes a strong commitment premature?
+- Should this pitch carry a range or confidence note rather than a single-point date?
+
+For API-shaped work, shape the contract before you leave the interview. Keep it lightweight, but make these items explicit:
+
+- the API problem statement and impact statement
+- the developer consumers of the contract
+- the operations the API must support
+- the endpoint or event surface at a sketch level
+- the required, optional, and defaulted fields that matter to consumers
+- the expected error shape
+- compatibility notes for existing consumers
+- a short "other things we considered" note for rejected paradigm or contract directions
+
+This is not a full implementation spec. It is the minimum contract sketch needed so `/execute` does not invent API behavior mid-flight.
+
+### 6. Validate: rough, solved, bounded
+
+Before writing the pitch, verify the shaped work has all three properties:
+
+- **Rough**: The solution intentionally leaves room for builder judgment. You haven't specified pixel-level UI, exact method signatures, or step-by-step implementation. If it reads like a wireframe or a tutorial, it's too detailed.
+- **Solved**: The macro-level direction is resolved. All identified rabbit holes have a one-line resolution. The builder won't need to make fundamental architectural decisions — just tactical ones.
+- **Bounded**: The appetite is set. No-gos are declared. Nice-to-haves are marked with ~. The builder knows what's in and what's out without asking.
+- **Uncertainty is honest**: If timeline or scope pressure exists, the pitch distinguishes the appetite target from any current estimate or commitment. It does not present a single-point date with false precision while major unknowns remain unresolved.
+- **Complete**: Before writing, scan for commonly omitted work that isn't covered by the user stories or rabbit holes. Omitted work — not underestimated work — is the primary driver of scope overruns. AI agents amplify this: Ralph doesn't stay late to add error handling nobody mentioned. It ships without it. Scan this checklist (30 seconds — check for relevance, don't exhaustively discuss each item):
+  - Error handling, failure modes, and assertion strategy for each integration point — where should the system fail fast rather than propagate corrupted state silently? If `docs/solutions/` shows past defect clusters in modules this feature touches, name them as Rabbit Holes with monitoring or assertion resolutions.
+  - Auth/permission changes for new endpoints or data access
+  - Database migrations or schema changes
+  - Loading, empty, and partial states (UI features)
+  - Monitoring, logging, or observability for new backend paths
+  - Data backfill or migration of existing records
+  - Deployment or environment changes (new env vars, feature flags)
+  - Cleanup of code paths being replaced
+  - Edge cases in existing features this change might affect
+  - API contract implications: request/response shape changes, additive vs breaking risk, auth or scope changes, webhook verification, and developer-facing error contracts
+
+For each omitted category that applies: add it to user stories, name it as a Rabbit Hole with a resolution, or declare it a No-go. Don't leave it invisible.
+
+If the feature changes or introduces an important API contract and the contract shape still feels under-specified after the interview, invoke `/api-design-review` before finalizing the pitch.
+
+If any property is missing, go back to the interview and close the gap.
+
+### 7. Design modules
+
+Sketch out the major modules you will need to build or modify to complete the implementation. Actively look for opportunities to extract deep modules that can be tested in isolation.
+
+A deep module (as opposed to a shallow module) is one which encapsulates a lot of functionality in a simple, testable interface which rarely changes.
+
+For each module with complex internal state: identify the key invariant that, if violated, would produce a silent corruption rather than an immediate failure. Note it in the Implementation Decisions section — the implementor should add a precondition or `isValid()` check for it.
+
+Check with the user that these modules match their expectations. Check with the user which modules they want tests written for, and at what boundary.
+
+**If the user is uncertain about a module's interface** — or if there are multiple plausible designs with real tradeoffs (e.g., one method that does everything vs. three composable methods, or a callback API vs. an event emitter) — invoke `/design-an-interface` to generate 2-3 radically different options using parallel sub-agents. Present the options with tradeoffs and let the user choose. If the interface is obvious or the user has a clear preference, skip this and move on.
+
+**If the uncertainty is in the API contract itself** — paradigm choice, request/response shape, webhook model, auth model, or compatibility posture — invoke `/api-design-review` instead of treating it like a normal module interface exercise.
+
+### 8. Write the pitch
+
+Once you have a complete, shaped understanding of the problem and solution, write the pitch using the template below. The pitch should be submitted as a GitHub issue.
+
+<pitch-template>
+
+## Problem
+
+A specific story showing why the status quo fails. One actor, one attempt, one failure. Not an abstract complaint — a scene that makes the pain concrete.
+
+## Appetite
+
+Small batch (1-2 weeks) or Big batch (6 weeks). State why this is the right budget for this problem — what makes it worth this investment but not more.
+
+State explicitly that the appetite is the **target** for how much time this problem is worth, not the current **estimate** of duration and not a delivery **commitment**.
+
+## Target / Estimate / Commitment
+
+[Include when timeline, scope, or deadline pressure exists. Omit when there is no meaningful timing discussion.]
+
+- **Target:** [Desired business outcome, event date, or budget boundary]
+- **Current estimate:** [Range or confidence ladder, not a false-precision single point]
+- **Commitment posture:** [No commitment yet / conditional commitment after X is resolved / explicit commitment]
+
+## Uncertainty / Confidence
+
+[Include when timing or scope confidence materially affects the pitch. Omit for low-pressure shaping work.]
+
+- **Current confidence:** [High / medium / low]
+- **Main uncertainty drivers:** [What must be learned or decided before the estimate tightens]
+- **What would increase confidence:** [Prototype, research answer, first tracer bullet, contract decision, etc.]
+
+## Solution
+
+The shaped concept. Rough enough that the builder has room for judgment. Solved enough that the macro direction is clear and rabbit holes are patched. Bounded by the appetite above.
+
+Describe what changes from the user's perspective. Where it helps, describe the approach at the architectural level, but don't prescribe implementation details the builder should own.
+
+If the problem has a clear structural driver, state it briefly here — enough to explain why this approach addresses the condition producing the pain rather than only the nearest symptom.
+
+## Rabbit Holes
+
+Named risks with one-line pre-decided resolutions. These are the unknowns that could cause a 6-week project to take 18 weeks if left unexamined. By naming them here with a resolution, the builder doesn't have to make these calls under deadline pressure.
+
+- **[Risk name]**: [One-line resolution]
+
+## No-gos
+
+Explicit exclusions. Silence means "in scope," so anything the builder might reasonably assume is included but ISN'T must be listed here. These aren't "maybe laters" — they're deliberate boundaries.
+
+- [Thing that's explicitly out]
+
+## Flow Sketch
+
+[Include ONLY when the feature has multi-step user-facing flows, new navigation, or significant UI state changes. Omit entirely for API-only, backend, or single-screen changes.]
+
+- **[Place Name]**: [affordance 1], [affordance 2] -> connects to [Other Place]
+- **[Other Place]**: [affordance 3] -> connects to ...
+
+## User Stories
+
+### Must-haves
+
+1. As a [actor], I want [feature], so that [benefit]
+
+### Nice-to-haves (~)
+
+1. ~As a [actor], I want [feature], so that [benefit]
+
+Stories are bounded by the appetite. Must-haves define the minimum shippable version — what makes this better than the user's baseline today. Nice-to-haves are pre-authorized cuts: if the appetite runs tight, these get scope-hammered without debate. prd-to-issues maps each vertical slice back to these stories.
+
+## API Contract Sketch
+
+[Include ONLY when the feature introduces or changes an API contract. Keep this lightweight and consumer-oriented, not implementation-detailed.]
+
+- **Problem statement:** [What developer problem this API solves]
+- **Impact statement:** [What outcome the API enables]
+- **Consumers:** [Who integrates with it]
+- **Operations:** [What the API must allow consumers to do]
+- **Surface sketch:** [Endpoints/events at a high level]
+- **Important fields:** [Required / optional / defaults that matter to consumers]
+- **Error shape:** [Machine-readable codes + human-readable messages]
+- **Compatibility:** [Additive / potentially breaking / breaking]
+- **Other things we considered:** [Rejected paradigm or contract directions]
+
+## Implementation Decisions
+
+A list of implementation decisions that were made. This can include:
+
+- The modules that will be built/modified
+- The interfaces of those modules that will be modified
+- Technical clarifications from the developer
+- Architectural decisions
+- Schema changes
+- API contracts
+- Specific interactions
+
+Do NOT include specific file paths or code snippets. They may end up being outdated very quickly.
+
+## Research Reference
+
+[Include only if a research.md exists]
+
+Technical research for this feature is documented in `research.md` (or `plans/research.md`). Key recommendations:
+
+- [Recommended approach from research]
+- [Key constraint or tradeoff from research]
+
+Implementors should read the research document before starting work.
+
+## Lessons from Past Solutions
+
+[Include only if relevant docs/solutions/ files were found]
+
+The following documented solutions informed this pitch:
+
+- `docs/solutions/<path>` — [What lesson was applied]
+
+</pitch-template>
+
+## Handoff
+
+- **Expected input:** clarified user problem, validated technical context from `/research`, and any past-solution guidance relevant to the feature
+- **Produces:** a shaped PRD issue with appetite, solution, rabbit holes, no-gos, and contract sketching when relevant
+- **May invoke:** `/design-an-interface` when a module interface is still unresolved, or `/api-design-review` when API contract uncertainty remains
+- **Comes next by default:** `/prd-to-issues`
