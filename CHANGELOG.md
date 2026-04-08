@@ -22,6 +22,7 @@ Adds deterministic enforcement for mandatory `/execute` steps (TDD classificatio
 - TDD classification enforcement via PreToolUse hook — blocks `.ts` writes without `.tdd-active` or `.tdd-skipped` marker
 - Git guardrails integrated into `/init-pipeline` orchestration via `/git-guardrails-claude-code`
 - Pre-commit hooks integrated into `/init-pipeline` orchestration via `/setup-pre-commit` (project-independent detection)
+- `/tdd` marker creation is now deterministic via `!` command (harness preprocessing on skill load) — zero LLM compliance dependency for marker creation
 
 ## v1.3.0 — Auto-invoke Ralph Setup from /execute
 

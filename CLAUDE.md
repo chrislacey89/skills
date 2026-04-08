@@ -40,7 +40,7 @@ Key interactions between skills:
 - `/execute` delegates to `/tdd` for backend code and consults `docs/solutions/` + `research.md` before implementation
 - `/init-pipeline` is auto-invoked by `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing — scaffolds Claude Code hooks (TDD classification gate, git guardrails), pre-commit hooks, and package manager enforcement into the target project
 - `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
-- `/tdd` creates a `.claude/.tdd-active` marker on entry; `/execute` removes it after commit — a PreToolUse hook blocks `.ts` file writes unless the classification gate was passed
+- `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (deterministic, not LLM-dependent); `/execute` Step 5 removes it after commit — a PreToolUse hook blocks `.ts` file writes unless the classification gate was passed
 - `/prd-to-issues` produces boundary maps (Produces/Consumes) that `/execute` reads to understand interfaces
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
 - `/compound` runs after ship to capture lessons into `docs/solutions/` — this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes

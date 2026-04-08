@@ -16,13 +16,13 @@ Scaffold pipeline enforcement infrastructure into the current project: Claude Co
 
 All files are created in the **target project**, not in the skills repo.
 
-### 1. TDD classification gate (Claude Code hook)
+### 1. Git guardrails (Claude Code hook)
 
 Invoke `/git-guardrails-claude-code` with project scope.
 
 This blocks dangerous git commands (`git push`, `git reset --hard`, `git clean -f`, `git branch -D`, `git checkout .`, `git restore .`) via a PreToolUse hook on Bash.
 
-### 2. Git guardrails (Claude Code hook)
+### 2. TDD classification gate (Claude Code hook)
 
 Create `.claude/hooks/enforce-classification.sh` and make it executable. This blocks Write/Edit to `.ts`/`.tsx` implementation files unless the `/execute` Step 3 classification gate has been passed.
 
@@ -126,7 +126,7 @@ ls lefthook.yml .husky 2>/dev/null
 
 For npm or yarn, skip this step — `only-allow` is only needed when enforcing pnpm specifically.
 
-### 6. `.gitignore` additions
+### 5. `.gitignore` additions
 
 Append these lines if not already present:
 

@@ -61,11 +61,7 @@ RIGHT (vertical):
 
 ## Workflow
 
-**On entry:** Create the TDD marker file so enforcement hooks know TDD is active.
-
-```bash
-mkdir -p "$CLAUDE_PROJECT_DIR/.claude" && touch "$CLAUDE_PROJECT_DIR/.claude/.tdd-active"
-```
+!`mkdir -p .claude && touch .claude/.tdd-active && echo "TDD marker created — enforcement hook active"`
 
 ### 1. Planning
 
@@ -152,4 +148,4 @@ Not every cycle needs this step. Apply it when the code handles complex state, c
 - **Produces:** tested code increments built through red-green-refactor
 - **Usually invoked by:** `/execute`, or by bug-fix work prepared through `/triage-issue`
 - **Returns control to:** the calling implementation flow, usually `/execute`, for final verification and handoff to `/pre-merge`
-- **On exit:** The calling skill (usually `/execute`) removes `.claude/.tdd-active` after commit
+- **On exit:** `/execute` Step 5 removes `.claude/.tdd-active` after commit

@@ -33,7 +33,7 @@ If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 
 
 **Pipeline hooks gate.** If `.claude/hooks/enforce-classification.sh` does not exist in this project, invoke `/init-pipeline` now to scaffold enforcement hooks.
 
-**TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` creates `.claude/.tdd-active`; visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 5 removes both markers after commit.
+**TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 5 removes both markers after commit.
 
 ### 1. Understand the Task
 
