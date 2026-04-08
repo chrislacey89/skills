@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.1 — Init Pipeline: Better Lefthook Config + CLAUDE_PROJECT_DIR Paths
+
+Improves `/init-pipeline` based on real-world usage. Hook command paths now use `$CLAUDE_PROJECT_DIR` for reliable resolution, and the recommended Lefthook + Biome config uses production-quality flags.
+
+### Changes
+
+- `/init-pipeline` settings.json template now uses `"$CLAUDE_PROJECT_DIR"` prefix for hook command paths — fixes resolution issues when Claude's working directory differs from the project root
+- Added recommended Lefthook + Biome config template with `--no-errors-on-unmatched`, `--files-ignore-unknown=true`, and `--colors=off` flags
+- Lefthook config uses `commands` format (single Biome check) instead of `jobs` with parallel typecheck — typecheck is too slow for pre-commit and should be a pre-push hook
+- Broader glob pattern: adds `cjs`, `mjs`, `d.cts`, `d.mts` to file matching
+
 ## v1.4.0 — Pipeline Enforcement via Init Pipeline + Claude Code Hooks
 
 Adds deterministic enforcement for mandatory `/execute` steps (TDD classification, Ralph setup) that were previously prose-only and had a 50-85% compliance ceiling. A new `/init-pipeline` skill scaffolds Claude Code PreToolUse hooks into any project at runtime, and `/execute` auto-invokes it when hooks are missing.

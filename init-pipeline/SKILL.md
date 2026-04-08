@@ -67,7 +67,7 @@ Create or merge `.claude/settings.json` with both hooks:
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/enforce-classification.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/enforce-classification.sh"
           }
         ]
       },
@@ -76,7 +76,7 @@ Create or merge `.claude/settings.json` with both hooks:
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/block-dangerous-git.sh"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous-git.sh"
           }
         ]
       }
@@ -113,6 +113,20 @@ ls lefthook.yml .husky 2>/dev/null
 - If none detected → "No lockfile found. I'd suggest pnpm. OK?"
 
 **After user confirms**, invoke `/setup-pre-commit` with the confirmed tools.
+
+**Recommended Lefthook + Biome config** (when both are confirmed):
+
+```yaml
+# Pre-push hook for vitest run should be added after test suite stabilizes.
+pre-commit:
+  commands:
+    check:
+      glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
+      run: pnpm biome check --write --no-errors-on-unmatched --files-ignore-unknown=true --colors=off {staged_files}
+      stage_fixed: true
+```
+
+Key flags: `--no-errors-on-unmatched` prevents false failures when no staged files match, `--files-ignore-unknown=true` avoids Biome choking on unsupported files, `--colors=off` gives cleaner hook output. Skip typecheck in pre-commit (too slow) — add it as a pre-push hook later.
 
 **Package manager enforcement:** If the confirmed package manager is pnpm (detected or chosen), add the `only-allow` guard:
 
