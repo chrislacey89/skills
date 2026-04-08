@@ -18,7 +18,7 @@ Skills compose into an ordered pipeline for taking a feature from idea to shippe
 /shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → delete research.md
 ```
 
-This summary is here so skill authors can keep handoffs consistent. For blank-project or major-tranche work that is too large for a single PRD, `/shape` may branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the default path at `/research`. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step. The canonical rationale, state model, and recovery rules live in `SYSTEM-OVERVIEW.md`.
+This summary is here so skill authors can keep handoffs consistent. For work that requires multiple independent PRDs, `/shape` may branch to `/create-milestone`, which creates a planning milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the default path at `/research`. For big-batch work (6 weeks) that fits a single PRD, `/write-a-prd` creates a lightweight container milestone and attaches the PRD issue to it; `/prd-to-issues` then propagates the milestone to all slice issues. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step. The canonical rationale, state model, and recovery rules live in `SYSTEM-OVERVIEW.md`.
 
 ## Operating Modes
 
@@ -32,8 +32,9 @@ When a skill participates in execution, say whether it is normally HITL, AFK, or
 
 Key interactions between skills:
 - `/research` is mandatory between `/shape` and `/write-a-prd` — never skip it
-- `/shape` branches to `/create-milestone` when the shaped work is a blank project or major tranche that needs milestone-level decomposition before feature research begins
-- `/create-milestone` creates a GitHub milestone plus sequenced feature issues and promotes the next chosen feature from `roadmap bet` to `research-ready` before it re-enters the main flow at `/research`
+- `/shape` branches to `/create-milestone` only when the shaped work requires multiple independent PRDs — not for all blank projects or large-scope efforts that fit one PRD
+- `/create-milestone` creates a planning milestone plus sequenced feature issues and promotes the next chosen feature from `roadmap bet` to `research-ready` before it re-enters the main flow at `/research`
+- `/write-a-prd` creates a container milestone for big-batch (6-week) work that fits a single PRD; `/prd-to-issues` propagates the milestone to all slice issues
 - `/research` invokes `/api-design-review` for higher-risk API contract work (new external APIs, contract changes, OAuth/webhook security, or unresolved paradigm choices)
 - `/write-a-prd` uses Shape Up's shaping discipline (appetite → solution → rabbit holes → no-gos), requires a lightweight API contract sketch for API-shaped work, and auto-invokes `/design-an-interface` or `/api-design-review` when the interface or contract is still uncertain; when the input issue came from `/create-milestone`, it expands the existing `research-ready` feature issue into the full PRD rather than creating a duplicate issue
 - `/execute` delegates to `/tdd` for backend code and consults `docs/solutions/` + `research.md` before implementation
@@ -67,7 +68,7 @@ Each pipeline skill should end with a clear transition statement:
 - **What it produces** — the artifact, decision, or verified outcome it leaves behind
 - **What comes next** — the default next skill or branch
 
-If a skill can branch, the branch condition should be explicit. Example: `/shape` normally hands off to `/research`, but branches to `/create-milestone` when the work is too large for a single PRD. If a skill advances an issue through maturity states, name them explicitly (`roadmap bet` → `research-ready` → `prd`) so downstream skills do not guess what artifact they are consuming.
+If a skill can branch, the branch condition should be explicit. Example: `/shape` normally hands off to `/research`, but branches to `/create-milestone` when the work requires multiple independent PRDs. Example: `/write-a-prd` creates a container milestone for big-batch appetite before creating the PRD issue. If a skill advances an issue through maturity states, name them explicitly (`roadmap bet` → `research-ready` → `prd`) so downstream skills do not guess what artifact they are consuming.
 
 ## Conversational Principles
 
@@ -79,7 +80,7 @@ If a skill can branch, the branch condition should be explicit. Example: `/shape
 
 **Vertical slices, not horizontal layers.** `/tdd` enforces one-test-one-implementation cycles (not "write all tests then all code"). `/prd-to-issues` decomposes into tracer-bullet vertical slices that cut through all layers end-to-end.
 
-**State lives in GitHub, not the filesystem.** PRDs, milestones, work items, and bugs are GitHub issues or GitHub milestones. No `.gsd/` directories, no `STATE.md`, no `PLAN.md` per slice. The only persistent filesystem artifacts are skills themselves and `docs/solutions/`.
+**State lives in GitHub, not the filesystem.** PRDs, milestones, work items, and bugs are GitHub issues or GitHub milestones. Milestones serve two procedural roles: container milestones (from `/write-a-prd` for single-PRD big-batch work) and planning milestones (from `/create-milestone` for multi-PRD tranches) — both are the same GitHub object. No `.gsd/` directories, no `STATE.md`, no `PLAN.md` per slice. The only persistent filesystem artifacts are skills themselves and `docs/solutions/`.
 
 **`research.md` is temporary.** Created by `/research`, referenced by the PRD and by `/execute` executions including Ralph's AFK loop, then deleted after the feature ships. Stale research actively harms agent performance.
 
