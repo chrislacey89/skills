@@ -38,7 +38,9 @@ Key interactions between skills:
 - `/research` invokes `/api-design-review` for higher-risk API contract work (new external APIs, contract changes, OAuth/webhook security, or unresolved paradigm choices)
 - `/write-a-prd` uses Shape Up's shaping discipline (appetite → solution → rabbit holes → no-gos), requires a lightweight API contract sketch for API-shaped work, and auto-invokes `/design-an-interface` or `/api-design-review` when the interface or contract is still uncertain; when the input issue came from `/create-milestone`, it expands the existing `research-ready` feature issue into the full PRD rather than creating a duplicate issue
 - `/execute` delegates to `/tdd` for backend code and consults `docs/solutions/` + `research.md` before implementation
+- `/init-pipeline` is auto-invoked by `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing — scaffolds Claude Code hooks (TDD classification gate, git guardrails), pre-commit hooks, and package manager enforcement into the target project
 - `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
+- `/tdd` creates a `.claude/.tdd-active` marker on entry; `/execute` removes it after commit — a PreToolUse hook blocks `.ts` file writes unless the classification gate was passed
 - `/prd-to-issues` produces boundary maps (Produces/Consumes) that `/execute` reads to understand interfaces
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
 - `/compound` runs after ship to capture lessons into `docs/solutions/` — this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes
@@ -51,7 +53,7 @@ Use these categories consistently across the repo:
 - **Primary pipeline skills** — direct-entry steps in the default delivery path, plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
 - **Invoked helper skills** — usually not top-level entry points for a feature, but delegated when a narrower decision is unresolved: `/api-design-review`, `/design-an-interface`, `/tdd`
 - **Side-route skills** — valid alternate or supporting paths beside the main pipeline: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`
-- **Infrastructure skills** — project setup or safety tooling, not normal delivery steps: `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
+- **Infrastructure skills** — project setup or safety tooling, not normal delivery steps: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 Each skill should make its role obvious.
 

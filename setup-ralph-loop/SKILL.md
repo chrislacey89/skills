@@ -178,6 +178,12 @@ Check:
 - the generated prompt references only real feedback loops
 - no `progress.txt` was introduced unless the user explicitly asked for it
 
+**On completion:** Create the Ralph marker so enforcement hooks know setup was done.
+
+```bash
+mkdir -p "$CLAUDE_PROJECT_DIR/.claude" && touch "$CLAUDE_PROJECT_DIR/.claude/.ralph-checked"
+```
+
 ### 8. Recommend first usage
 
 Instruct the user to:

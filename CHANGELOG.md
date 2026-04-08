@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.4.0 — Pipeline Enforcement via Init Pipeline + Claude Code Hooks
+
+Adds deterministic enforcement for mandatory `/execute` steps (TDD classification, Ralph setup) that were previously prose-only and had a 50-85% compliance ceiling. A new `/init-pipeline` skill scaffolds Claude Code PreToolUse hooks into any project at runtime, and `/execute` auto-invokes it when hooks are missing.
+
+### Changes
+
+- New skill: `/init-pipeline` — scaffolds enforcement hooks, git guardrails, pre-commit hooks, and package manager enforcement into target projects at runtime (detects existing tools first, defaults to Lefthook + Biome + pnpm)
+- `/execute` Step 0 restructured with three explicit gates: Ralph auto-detection (checklist format), pipeline hooks check (auto-invokes `/init-pipeline`), and TDD classification gate
+- `/execute` Step 3 restructured with STOP classification gate — must classify work as backend/behavior-heavy/visual before writing any code
+- `/execute` Step 5 now removes `.tdd-active` and `.tdd-skipped` markers after commit
+- `/tdd` creates `.claude/.tdd-active` marker on entry; handoff documents marker cleanup
+- `/setup-ralph-loop` creates `.claude/.ralph-checked` marker on completion
+- `README.md` updated: skill count 19→20, `/init-pipeline` added to Tooling & Setup table
+- `CLAUDE.md` updated: infrastructure skills list, key interactions (init-pipeline auto-invocation, TDD marker lifecycle)
+- `SYSTEM-OVERVIEW.md` updated: file tree, handoff map, skill taxonomy, quick reference table, pre-commit hooks section
+- `docs/using-this-pack.md` updated: infrastructure skills list, operating tips
+
+### Infrastructure
+
+- TDD classification enforcement via PreToolUse hook — blocks `.ts` writes without `.tdd-active` or `.tdd-skipped` marker
+- Git guardrails integrated into `/init-pipeline` orchestration via `/git-guardrails-claude-code`
+- Pre-commit hooks integrated into `/init-pipeline` orchestration via `/setup-pre-commit` (project-independent detection)
+
 ## v1.3.0 — Auto-invoke Ralph Setup from /execute
 
 `/execute` now automatically invokes `/setup-ralph-loop` when it detects multi-slice GitHub-issue work and no Ralph scripts exist in the repo. Previously, the language was passive ("if a repo wants"), which required the agent to infer intent and was easy to miss.

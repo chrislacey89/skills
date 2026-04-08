@@ -15,17 +15,25 @@ Use `/execute` when the work is ready to build, verify, and commit.
 
 Use HITL `/execute` when the slice still needs active user judgment, supervision, or acceptance decisions during implementation. Use AFK `/execute` only when the next slice is already durable in GitHub, unblocked, and legible from its issue, boundary map, and any linked `research.md` or `docs/solutions/` context.
 
-**Ralph auto-detection (mandatory check).** Before starting the workflow, check whether Ralph scripts already exist in the repo root (`ralph-once.sh` or `ralph.sh`). If all three of these conditions are true, invoke `/setup-ralph-loop` as a prerequisite before proceeding to Step 1:
-
-1. The task comes from a GitHub issue (not a one-off verbal request)
-2. The issue has multi-slice scope — it is a PRD, has a big-batch appetite, or contains multiple user stories
-3. No `ralph-once.sh` or `ralph.sh` exists in the repo root
-
-This is not a suggestion — it is a required step when the conditions are met. A big-batch project with durable GitHub state and no runner scripts is the clearest signal that Ralph setup is needed.
+See **Step 0: Prerequisites** below for the mandatory Ralph auto-detection and TDD marker gates.
 
 Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the problem or shape is still unresolved. Do not use it as a substitute for `/pre-merge` once implementation is complete and ready for review.
 
 ## Workflow
+
+### 0. Prerequisites
+
+**Ralph auto-detection gate.** Evaluate all three conditions:
+
+- [ ] The task comes from a GitHub issue (not a one-off verbal request)
+- [ ] The issue has multi-slice scope (PRD, big-batch appetite, or multiple user stories)
+- [ ] No `ralph-once.sh` or `ralph.sh` exists in the repo root
+
+If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 until Ralph setup is complete or the conditions are not met.
+
+**Pipeline hooks gate.** If `.claude/hooks/enforce-classification.sh` does not exist in this project, invoke `/init-pipeline` now to scaffold enforcement hooks.
+
+**TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` creates `.claude/.tdd-active`; visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 5 removes both markers after commit.
 
 ### 1. Understand the Task
 
@@ -59,9 +67,13 @@ Before implementing, check the project's stack and load relevant best practices.
 
 ### 3. Implement
 
-**For backend code**: invoke the `/tdd` skill by default. It enforces strict red-green-refactor with vertical slices (one test → one implementation → repeat), prevents the horizontal slicing anti-pattern (writing all tests first), and includes reference files for deep module design, interface testability, mocking boundaries, and refactoring candidates.
+**STOP — classify before writing any code:**
 
-**For frontend code**: invoke `/tdd` when the work is behavior-heavy and the main risk is interaction logic rather than visual polish — for example reducers, state machines, validation flows, accessibility-critical behavior, or reproducible regressions in a user flow. For primarily visual, layout, styling, copy, or composition work, implement directly and verify in the browser.
+- [ ] **Backend code** → invoke `/tdd` now (creates `.claude/.tdd-active`)
+- [ ] **Behavior-heavy frontend** (reducers, state machines, validation, accessibility, interaction regressions) → invoke `/tdd` now (creates `.claude/.tdd-active`)
+- [ ] **Visual/layout/styling/copy frontend** → run: `mkdir -p .claude && touch .claude/.tdd-skipped`
+
+A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Do not write implementation code until you have classified the work.
 
 If `/tdd` is not available, follow this minimum discipline:
 
@@ -128,6 +140,12 @@ Once typecheck, tests, and verification pass, commit the work. Write a commit me
 - Key decisions made during implementation (if any)
 - Files changed (summary, not exhaustive list)
 
+**Cleanup:** After a successful commit, remove the classification markers:
+
+```bash
+rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped"
+```
+
 If you cannot complete the task in this context window, leave a comment on the GitHub issue with:
 
 - What was done
@@ -142,5 +160,5 @@ If the error suggests the approach from `research.md` or the PRD is wrong, say s
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
 - **Produces:** verified code changes, commit-ready work, and implementation context for the next reviewer or iteration
 - **May invoke:** `/tdd` for backend work and behavior-heavy frontend logic, plus stack-specific reference skills when the project stack warrants them
-- **Auto-invokes:** `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo
+- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo
 - **Comes next by default:** `/pre-merge`

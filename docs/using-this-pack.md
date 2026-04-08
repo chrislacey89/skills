@@ -133,6 +133,7 @@ These support or re-enter the main flow:
 ### Infrastructure skills
 
 These are setup or safety tasks, not normal delivery stages:
+- `/init-pipeline` (orchestrates the others — auto-invoked by `/execute` when hooks are missing)
 - `/setup-pre-commit`
 - `/setup-ralph-loop`
 - `/git-guardrails-claude-code`
@@ -228,6 +229,7 @@ For milestone-planned work, `/research` should consume the selected feature issu
 - For milestone-planned work, do not run `/research` against a raw `roadmap bet`; promote the chosen feature issue to `research-ready` first.
 - Use helper skills only when their narrower rigor is actually needed.
 - `/execute` handles Ralph setup automatically for multi-slice GitHub-issue work. You can also invoke `/setup-ralph-loop` directly if you want to set up Ralph before reaching `/execute`.
+- `/execute` handles pipeline enforcement setup automatically via `/init-pipeline` when Claude Code hooks are missing. This scaffolds TDD classification gates, git guardrails, and pre-commit hooks (detecting existing tools first). You can also invoke `/init-pipeline` directly.
 - Keep side-route skills tied back to the main flow so work does not drift.
 
 ## If you are editing the pack itself

@@ -231,7 +231,7 @@ Use this taxonomy consistently:
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`
 - **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`
-- **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
+- **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Default Handoff Map
 
@@ -239,6 +239,7 @@ Use this taxonomy consistently:
 - `/create-milestone` → selected feature issue promoted from `roadmap bet` to `research-ready`, then `/research`
 - `/research` → `/write-a-prd` and conditionally `/api-design-review`
 - `/write-a-prd` → `/prd-to-issues` (with optional container milestone for big-batch work) and conditionally `/design-an-interface` or `/api-design-review`
+- `/init-pipeline` is auto-invoked by `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing — scaffolds Claude Code hooks (TDD classification gate, git guardrails), pre-commit hooks, and package manager enforcement
 - `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
 - `/prd-to-issues` → `/execute`, with Ralph optionally running the AFK execution loop for unblocked slices, then QA and `/pre-merge`
 - `/execute` → `/pre-merge` after verification, delegating to `/tdd` when backend work benefits from strict red-green-refactor
@@ -262,7 +263,8 @@ Use this taxonomy consistently:
 │
 │  ── INFRASTRUCTURE ────────────────────────────────────────────────────
 │
-├── setup-pre-commit/SKILL.md       # Lefthook + Biome preferred, supports ESLint/Prettier (enhanced)
+├── init-pipeline/SKILL.md          # Scaffold all enforcement: Claude Code hooks, git guardrails, pre-commit, pnpm (auto-invoked by /execute)
+├── setup-pre-commit/SKILL.md       # Lefthook + detected formatter/linter, supports ESLint/Prettier/Biome (enhanced)
 ├── setup-ralph-loop/SKILL.md       # Generates ralph-once.sh and bounded ralph.sh for HITL-to-AFK /execute execution
 ├── git-guardrails-claude-code/     # Block dangerous git commands (from Matt, unmodified)
 │   ├── SKILL.md
@@ -323,7 +325,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 
 ### Pre-commit hooks:
 
-Invoke `/setup-pre-commit` in Claude Code. This sets up Lefthook with Biome (or your preferred formatter/linter) plus typecheck and test runs before every commit. The skill is already in your `.claude/skills/` directory.
+`/init-pipeline` handles this automatically — it detects existing tools (formatter, linter, hook manager, package manager), confirms with the user, and invokes `/setup-pre-commit` with the confirmed tools. Defaults to Lefthook + Biome + pnpm if nothing is detected. You can also invoke `/setup-pre-commit` directly if you only want pre-commit hooks without the full pipeline enforcement setup.
 
 ---
 
@@ -337,6 +339,7 @@ Invoke `/setup-pre-commit` in Claude Code. This sets up Lefthook with Biome (or 
 | Promote a milestone feature into the pipeline | Expand the selected feature issue from `roadmap bet` to `research-ready`, then run `/research` |
 | Write a shaped pitch | `/write-a-prd` → shaped pitch filed as GitHub issue (appetite → solution → rabbit holes → no-gos, includes API contract sketch when relevant, auto-invokes `/design-an-interface` or `/api-design-review` when needed, then hands off to `/prd-to-issues`) |
 | Break into work items | `/prd-to-issues` → GitHub issues with boundary maps that feed `/execute`; Ralph can run the AFK loop over unblocked issues |
+| Set up pipeline enforcement | `/init-pipeline` — scaffold Claude Code hooks, git guardrails, pre-commit hooks, pnpm enforcement (auto-invoked by `/execute`) |
 | Set up Ralph for a repo | `/setup-ralph-loop` — generate `ralph-once.sh` and bounded `ralph.sh` adapted to the repo's task source and feedback loops |
 | Execute AFK | Start with HITL Ralph first, then run a bounded Ralph loop over the highest-risk unblocked issues once the prompt and quality bar are proven |
 | Execute HITL | Run `/execute` directly on a specific issue, then `/pre-merge` after verification |

@@ -1,10 +1,10 @@
 # Skills
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-19-blue)
+![Skills](https://img.shields.io/badge/skills-20-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-A pipeline-first Claude Code skills pack for structured feature delivery. 19 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+A pipeline-first Claude Code skills pack for structured feature delivery. 20 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -68,7 +68,8 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 
 | Skill | Description |
 |-------|-------------|
-| [setup-pre-commit](setup-pre-commit/) | Lefthook + Biome pre-commit hooks |
+| [init-pipeline](init-pipeline/) | Scaffold pipeline enforcement — Claude Code hooks, git guardrails, pre-commit setup (auto-invoked by `/execute`) |
+| [setup-pre-commit](setup-pre-commit/) | Lefthook + Biome pre-commit hooks (detects existing tools) |
 | [git-guardrails-claude-code](git-guardrails-claude-code/) | Block dangerous git commands |
 
 ### Knowledge & QA
