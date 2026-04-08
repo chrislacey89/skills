@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.1.0 — One Question Per Turn
+
+Enforces a strict one-question-at-a-time conversational pattern across all pipeline skills. Skills now maintain a genuine back-and-forth instead of batching multiple questions into a single message.
+
+### Changes
+
+- Added `## Conversational Principles` section to `CLAUDE.md` as a global default for all skills
+- Added per-skill `> **One question per turn.**` blockquote to `/shape`, `/research`, `/write-a-prd`, `/create-milestone`
+- Rewrote batched-question sites in `/research` (Phase 2 constraints, Phase 6 review), `/write-a-prd` (structural checks, timeline framing), `/create-milestone` (branch confirmation), and `/design-an-interface` (synthesis) to ask sequentially
+
 ## v1.0.0 — Initial Public Release
 
 ### Skills (19)
