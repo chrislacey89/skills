@@ -1,6 +1,6 @@
 ---
 name: init-pipeline
-description: "Infrastructure skill for scaffolding pipeline enforcement into a project. Sets up Claude Code hooks (TDD classification gate, git guardrails) and pre-commit hooks (detects existing tools, defaults to Lefthook + Biome + pnpm if none found). Run once per project, auto-invoked by /execute if hooks are missing."
+description: "Infrastructure skill for scaffolding pipeline enforcement into a project. Sets up Claude Code hooks (TDD classification gate, git guardrails, optional quality gate), pre-commit hooks (detects existing tools, defaults to Lefthook + Biome + pnpm if none found). Run once per project, auto-invoked by /execute if hooks are missing."
 ---
 
 # Init Pipeline
@@ -140,7 +140,92 @@ Key flags: `--no-errors-on-unmatched` prevents false failures when no staged fil
 
 For npm or yarn, skip this step — `only-allow` is only needed when enforcing pnpm specifically.
 
-### 5. `.gitignore` additions
+### 5. Quality gate (Claude Code hook — optional)
+
+Ask the user: "Do you want a quality gate hook that runs feedback loops during editing? This catches issues while Claude works, not just at commit time."
+
+If yes, create `.claude/hooks/quality-gate.sh` and make it executable. This runs as a **PostToolUse** hook on `Write|Edit`, providing immediate feedback after each file change.
+
+**Detect available feedback loops first.** Check `package.json` scripts for `check`/`lint`, `tsc`/`typecheck`, and `test`/`vitest`. Only include loops that actually exist.
+
+```bash
+#!/bin/bash
+# Quality gate — runs after each Write/Edit to catch issues early.
+# Only runs on TypeScript/JavaScript files. Skips test/config files.
+
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+
+# Only gate TypeScript/JavaScript implementation files
+if [[ ! "$FILE_PATH" == *.ts && ! "$FILE_PATH" == *.tsx && ! "$FILE_PATH" == *.js && ! "$FILE_PATH" == *.jsx ]]; then
+  exit 0
+fi
+# Skip test files, type declarations, config files
+if [[ "$FILE_PATH" == *test* || "$FILE_PATH" == *spec* || "$FILE_PATH" == *.d.ts || "$FILE_PATH" == *.config.* ]]; then
+  exit 0
+fi
+
+# 1. Biome check (fast — format + lint)
+BIOME_OUTPUT=$(pnpm biome check src/ 2>&1)
+BIOME_EXIT=$?
+
+# 2. TypeScript type check
+TSC_OUTPUT=$(pnpm tsc --noEmit 2>&1)
+TSC_EXIT=$?
+
+if [ $BIOME_EXIT -ne 0 ] || [ $TSC_EXIT -ne 0 ]; then
+  if [ $BIOME_EXIT -ne 0 ]; then
+    echo "Biome errors found:" >&2
+    echo "$BIOME_OUTPUT" >&2
+    echo "" >&2
+  fi
+  if [ $TSC_EXIT -ne 0 ]; then
+    echo "TypeScript errors found:" >&2
+    echo "$TSC_OUTPUT" >&2
+  fi
+  exit 2
+fi
+
+# 3. Run tests for changed files only (vitest import graph analysis)
+VITEST_OUTPUT=$(pnpm vitest run --changed 2>&1)
+VITEST_EXIT=$?
+
+if [ $VITEST_EXIT -ne 0 ]; then
+  echo "Tests failed for changed files:" >&2
+  echo "$VITEST_OUTPUT" >&2
+  exit 2
+fi
+
+exit 0
+```
+
+**Project-specific extensions:** If the project has domain-specific smoke tests (e.g., RAG agent tests, API health checks), append them after the generic checks. Use `git diff --name-only HEAD` to scope them to relevant directories.
+
+After writing, run: `chmod +x .claude/hooks/quality-gate.sh`
+
+Add the PostToolUse hook to `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Merge into existing settings — do not overwrite.
+
+### 6. `.gitignore` additions
 
 Append these lines if not already present:
 
@@ -157,6 +242,7 @@ Before considering setup complete, check:
 - [ ] `.claude/hooks/enforce-classification.sh` exists and is executable
 - [ ] `.claude/hooks/block-dangerous-git.sh` exists and is executable
 - [ ] `.claude/settings.json` has both PreToolUse hooks configured
+- [ ] If quality gate accepted: `.claude/hooks/quality-gate.sh` exists, is executable, and PostToolUse hook is in settings
 - [ ] Hook manager config exists (e.g. `lefthook.yml`)
 - [ ] Pre-commit hooks run successfully
 - [ ] `.gitignore` has marker entries

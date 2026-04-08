@@ -1,11 +1,12 @@
 # Changelog
 
-## v1.4.1 — Init Pipeline: Better Lefthook Config + CLAUDE_PROJECT_DIR Paths
+## v1.4.1 — Init Pipeline: Quality Gate, Better Lefthook Config, CLAUDE_PROJECT_DIR Paths
 
-Improves `/init-pipeline` based on real-world usage. Hook command paths now use `$CLAUDE_PROJECT_DIR` for reliable resolution, and the recommended Lefthook + Biome config uses production-quality flags.
+Improves `/init-pipeline` based on real-world usage. Adds optional quality gate hook for real-time feedback during editing, fixes hook command paths, and improves the Lefthook + Biome config template.
 
 ### Changes
 
+- New optional Step 5: **Quality gate** — PostToolUse hook on Write|Edit that runs biome check, tsc, and vitest --changed after each file edit, catching issues while Claude works instead of only at commit time. Supports project-specific extensions (e.g., RAG smoke tests). Asks user before adding.
 - `/init-pipeline` settings.json template now uses `"$CLAUDE_PROJECT_DIR"` prefix for hook command paths — fixes resolution issues when Claude's working directory differs from the project root
 - Added recommended Lefthook + Biome config template with `--no-errors-on-unmatched`, `--files-ignore-unknown=true`, and `--colors=off` flags
 - Lefthook config uses `commands` format (single Biome check) instead of `jobs` with parallel typecheck — typecheck is too slow for pre-commit and should be a pre-push hook
