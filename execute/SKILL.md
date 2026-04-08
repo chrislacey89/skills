@@ -85,18 +85,38 @@ If `/tdd` is not available, follow this minimum discipline:
 
 Do not write all tests upfront — write one, make it pass, then move to the next.
 
+#### Commit after each logical unit
+
+Do not accumulate all changes into one commit. Commit after each self-contained unit of progress. A logical unit is the smallest change that leaves the codebase in a working state — typecheck passes, tests pass, nothing is half-wired. Examples:
+
+- One red-green-refactor TDD cycle (test + implementation for one behavior)
+- A new module, type, or schema with its tests
+- A wiring change (route registration, dependency injection, config)
+- A refactor that improves structure without changing behavior
+- A migration or seed file
+
+After completing each logical unit:
+
+1. Run `pnpm run typecheck` and `pnpm run test` (or the project's equivalent). Fix any failures before committing.
+2. Stage only the files for that unit — do not stage unrelated changes.
+3. Commit with a message that says what this unit accomplished, not "WIP" or "progress".
+
+If a unit touches both a test and its implementation, they belong in the same commit. If a refactor was triggered by the unit but is conceptually separate, commit the refactor separately.
+
 ### 4. Verify
 
 **"All steps done" is NOT verification. Check the actual outcomes.**
 
-Run the feedback loops first:
+By this point, each logical unit has already been committed with passing typecheck and tests. Step 4 is the full-slice verification pass — confirming the whole feature works end-to-end, not just that individual units pass.
+
+Run the full feedback loops one final time:
 
 ```
 pnpm run typecheck
 pnpm run test
 ```
 
-Fix any issues. Repeat until both pass cleanly.
+Fix any issues. If fixes are needed, commit them as a separate commit (e.g., "fix integration between X and Y").
 
 Then apply the verification ladder — use the strongest tier you can reach:
 
@@ -122,7 +142,7 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - Be specific about what you need them to check: "Can you verify that the presence indicator shows your name when you open lesson 3 in a second browser tab?"
 - Never use human verification as a substitute for Tiers 1-3
 
-**If verification reveals gaps**, fix them before committing. Do not commit code that fails verification and leave a "TODO: fix this" comment.
+**If verification reveals gaps**, fix them and commit the fix as its own commit. Do not amend a prior commit — the history should show what was built and what was corrected.
 
 #### Bug-Fix Verification (when the task is a fix, not a feature)
 
@@ -132,15 +152,11 @@ If this unit of work is fixing a bug, apply these additional checks before commi
 2. **Structural sibling search**: Search the codebase for the same pattern that caused the defect. If found in other locations, fix all instances or file issues for them. A defect fixed in one location but present in three others is 75% unfixed.
 3. **Two-condition confirmation**: Confirm both that (a) the corrupted state is no longer produced, AND (b) the original failure no longer occurs. If only the failure is suppressed but the underlying state is still wrong, the fix is a workaround, not a correction.
 
-### 5. Commit
+### 5. Cleanup
 
-Once typecheck, tests, and verification pass, commit the work. Write a commit message that includes:
+All commits should already be done by this point. This step handles post-implementation cleanup only.
 
-- What was built (the feature or fix, not "implemented changes")
-- Key decisions made during implementation (if any)
-- Files changed (summary, not exhaustive list)
-
-**Cleanup:** After a successful commit, remove the classification markers:
+Remove the classification markers:
 
 ```bash
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped"
@@ -158,7 +174,7 @@ If the error suggests the approach from `research.md` or the PRD is wrong, say s
 ## Handoff
 
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
-- **Produces:** verified code changes, commit-ready work, and implementation context for the next reviewer or iteration
+- **Produces:** verified code changes as compartmentalized commits (one per logical unit), and implementation context for the next reviewer or iteration
 - **May invoke:** `/tdd` for backend work and behavior-heavy frontend logic, plus stack-specific reference skills when the project stack warrants them
 - **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo
 - **Comes next by default:** `/pre-merge`

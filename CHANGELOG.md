@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.4.2 — Compartmentalized Commits in /execute
+
+`/execute` now commits after each logical unit of progress instead of accumulating all changes into a single commit at the end. This produces a clean, reviewable commit history where each commit is the smallest change that leaves the codebase working.
+
+### Changes
+
+- `/execute` Step 3 adds **"Commit after each logical unit"** section — defines what a logical unit is (TDD cycle, new module, wiring change, refactor, migration) and requires typecheck + test pass before each commit
+- `/execute` Step 4 reframed as a full-slice integration verification pass — individual units are already committed, so this step confirms the whole feature works end-to-end; fixes discovered here become their own commits
+- `/execute` Step 5 renamed from "Commit" to "Cleanup" — all commits are already done, this step only removes classification markers
+- Handoff section updated: produces "compartmentalized commits (one per logical unit)" instead of "commit-ready work"
+
 ## v1.4.1 — Init Pipeline: Quality Gate, Better Lefthook Config, CLAUDE_PROJECT_DIR Paths
 
 Improves `/init-pipeline` based on real-world usage. Adds optional quality gate hook for real-time feedback during editing, fixes hook command paths, and improves the Lefthook + Biome config template.
