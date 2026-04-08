@@ -83,10 +83,10 @@ Discuss trade-offs in prose, not tables. Highlight where designs diverge most.
 
 ### 5. Synthesize
 
-Often the best design combines insights from multiple options. Ask:
+Often the best design combines insights from multiple options. Ask one question at a time:
 
-- "Which design best fits your primary use case?"
-- "Any elements from other designs worth incorporating?"
+1. "Which design best fits your primary use case?"
+2. "Any elements from other designs worth incorporating?"
 
 ## Evaluation Criteria
 

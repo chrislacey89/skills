@@ -13,6 +13,8 @@ sources:
 
 This skill bridges the gap between tranche-level shaping and feature-level delivery. Use it when `/shape` clarified a blank project or major product tranche, but the result is still too large for one PRD. The goal is to create just enough GitHub-native structure to sequence feature bets, pick a tracer bullet, and let the selected feature re-enter the normal pipeline with a researchable brief.
 
+> **One question per turn.** When confirming the branch, reviewing bets, or asking the user anything, ask one question at a time and wait for the answer before asking the next. Never batch questions into a list.
+
 ## Invocation Position
 
 This is a primary planning branch that follows `/shape` only when the shaped work is too large for a single PRD.
@@ -44,11 +46,11 @@ Do not create a duplicate PRD issue by default. Preserve one canonical feature i
 
 Before creating anything, confirm that the shaped work is too large for a single PRD.
 
-Ask:
-- What is the milestone or tranche boundary?
-- What does success for this tranche look like?
-- What is explicitly out of scope for this tranche?
-- What is the smallest feature that would prove the architecture or product direction early?
+Ask these questions one at a time — ask one, wait for the answer, then proceed to the next:
+1. What is the milestone or tranche boundary?
+2. What does success for this tranche look like?
+3. What is explicitly out of scope for this tranche?
+4. What is the smallest feature that would prove the architecture or product direction early?
 
 If the answers suggest the work already fits one bounded pitch, do not continue. Return to the normal `/research` path.
 

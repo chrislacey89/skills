@@ -18,6 +18,8 @@ This skill applies structured requirements discovery to prevent the most expensi
 
 Output is shared understanding in the conversation. No file is produced. This normally feeds into `/research` and later `/write-a-prd`, but for blank-project or major-tranche work it can instead hand off to `/create-milestone`.
 
+> **One question per turn.** Throughout every phase of this skill, ask one question at a time and wait for the user's answer before asking the next. Never batch questions into a list. This is a conversation, not a questionnaire.
+
 Use `/shape` when the problem, user needs, or scope boundaries are still fuzzy and you need shared understanding before doing technical research or shaping. This applies both to ordinary feature work and to larger app-sized or tranche-sized outcomes that may later branch to `/create-milestone`.
 
 Do not start here when the work is already well-shaped enough to research, when the user already has a PRD they want decomposed, or when the task is clearly an implementation or QA task.
@@ -54,7 +56,7 @@ Start with domain-independent questions before any technical framing. These esta
 
 This is the heart of the interview — walking the decision tree one branch at a time.
 
-**Walk each branch to resolution.** For each significant design decision, resolve it before moving to the next branch. Don't jump between topics. When you encounter a dependency ("we can't decide X until we know Y"), note it, resolve Y first, then return to X. For each question, provide your recommended answer.
+**Walk each branch to resolution.** For each significant design decision, resolve it before moving to the next branch. Don't jump between topics. Ask one question at a time — present your recommended answer, wait for the user's response, then move to the next question. When you encounter a dependency ("we can't decide X until we know Y"), note it, resolve Y first, then return to X.
 
 **Classify functions as you go.** As features emerge, classify each:
 - **Evident** — the user perceives it working (UI, notifications, responses). Usually well-specified because users can see them.

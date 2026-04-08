@@ -12,6 +12,8 @@ Always run this skill after /shape and before /write-a-prd. It auto-calibrates d
 
 This is also the first anti-anchoring checkpoint in the workflow. If the user or an earlier conversation introduced a date, budget, or confidence claim, clarify whether it is a **target**, an **estimate**, or a **commitment** before carrying it forward into the PRD.
 
+> **One question per turn.** When confirming constraints, reviewing findings, or asking the user anything, ask one question at a time and wait for the answer before asking the next. Never present a batch of questions as a numbered or bulleted list.
+
 ## Invocation Position
 
 This is a primary pipeline skill, not an optional extra. The default flow is `/shape` → `/research` → `/write-a-prd`.
@@ -113,15 +115,15 @@ If `/api-design-review` runs, incorporate its verdict into `research.md` rather 
 
 ### Phase 2: Establish Constraints
 
-State the constraints from the shape session. These bound the research and prevent scope drift:
+State the constraints from the shape session. These bound the research and prevent scope drift. Present each constraint one at a time, ask the user to confirm or correct it, then move to the next:
 
-- What is the feature trying to accomplish? (1-2 sentences from shape)
-- What are the hard constraints? (scale, budget, self-hosted vs managed, latency, auth model, etc.)
-- What decisions are already locked? (framework, language, deployment target, etc.)
-- What version constraints did Phase 0 surface? (list any flags)
-- If timing language exists, what is currently a target, what is currently an estimate, and what is explicitly not yet a commitment?
+1. What is the feature trying to accomplish? (1-2 sentences from shape)
+2. What are the hard constraints? (scale, budget, self-hosted vs managed, latency, auth model, etc.)
+3. What decisions are already locked? (framework, language, deployment target, etc.)
+4. What version constraints did Phase 0 surface? (list any flags)
+5. If timing language exists, what is currently a target, what is currently an estimate, and what is explicitly not yet a commitment?
 
-Ask the user to confirm or correct these constraints before proceeding.
+Do not present these as a batch. State one constraint, get confirmation, then proceed to the next.
 
 ### Phase 3: Consult Past Solutions
 
@@ -324,14 +326,14 @@ If timeline pressure exists, include the short Estimate Readiness section even i
 
 ### Phase 6: Review with User
 
-Present the research document to the user. Ask:
+Present the research document to the user. Then walk through these review questions one at a time — ask one, wait for the answer, then ask the next:
 
 1. Does the recommended approach match your instinct?
 2. Are there options I missed that you'd like investigated?
 3. Any version surprises that change your thinking?
 4. Are you comfortable proceeding to PRD with this recommendation?
 
-Iterate until the user is satisfied, then commit the research.md to git.
+Do not present all four questions at once. Iterate on each answer until the user is satisfied, then commit the research.md to git.
 
 ## Handoff
 

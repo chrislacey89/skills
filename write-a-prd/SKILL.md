@@ -16,6 +16,8 @@ sources:
 
 This skill produces a shaped pitch — a PRD that's rough enough for builder judgment, solved enough to ship, and bounded by an explicit time appetite. Follow the steps below, adapting depth to the work but not skipping the checks that establish appetite, current code reality, institutional knowledge, and handoff readiness.
 
+> **One question per turn.** Throughout this skill's interview, ask one question at a time and wait for the user's answer before asking the next. Never present multiple questions in a single message, even when they are short.
+
 ## Invocation Position
 
 This is a primary pipeline skill that normally follows `/research` and precedes `/prd-to-issues`.
@@ -76,10 +78,10 @@ Every important use case needs a main success scenario plus at least two extensi
 
 **Invert once after walking the use cases.** After the forward pass surfaces initial rabbit holes, flip the framing: imagine this feature shipped and caused a serious problem. What was the problem? Work backward from the failure. Route each failure mode into Rabbit Holes (with a resolution) or No-gos. Don't carry them as vague "accepted risks" — if a failure mode can't be resolved or excluded, the design isn't solved yet.
 
-**Check the structure, not just the symptom.** Ask three short questions before locking the shaped approach:
-- What underlying condition is producing the current problem, not just the visible complaint?
-- Are there delays, handoffs, or missing feedback loops that make the problem harder to see early?
-- Is the proposed intervention a high-leverage change to the condition, or just a local symptom fix?
+**Check the structure, not just the symptom.** Before locking the shaped approach, ask these three questions one at a time — ask one, absorb the answer, then ask the next:
+1. What underlying condition is producing the current problem, not just the visible complaint?
+2. Are there delays, handoffs, or missing feedback loops that make the problem harder to see early?
+3. Is the proposed intervention a high-leverage change to the condition, or just a local symptom fix?
 
 Keep this compact. The goal is to improve shaping, not to turn the pitch into a systems-thinking essay.
 
@@ -96,10 +98,10 @@ During the interview, bring forward relevant lessons from past solutions and res
 - "docs/solutions/ has a documented pitfall about X — we should account for that in the design."
 - "A past solution suggests using pattern Y for this type of integration. Does that fit here?"
 
-If the user starts speaking in dates, deadlines, or confidence language, make the framing explicit before moving on:
-- Is this a **target** (desired business outcome or deadline), an **estimate** (current forecast), or a **commitment** (a negotiated promise)?
-- What uncertainty still makes a strong commitment premature?
-- Should this pitch carry a range or confidence note rather than a single-point date?
+If the user starts speaking in dates, deadlines, or confidence language, make the framing explicit before moving on. Ask these one at a time:
+1. Is this a **target** (desired business outcome or deadline), an **estimate** (current forecast), or a **commitment** (a negotiated promise)?
+2. What uncertainty still makes a strong commitment premature?
+3. Should this pitch carry a range or confidence note rather than a single-point date?
 
 For API-shaped work, shape the contract before you leave the interview. Keep it lightweight, but make these items explicit:
 
