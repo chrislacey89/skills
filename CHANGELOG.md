@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.2.0 — Container Milestones for Big-Batch Work
+
+Fills a gap in the pipeline where big-batch (6-week) work that fits a single PRD had no organizational container. Also fixes the `/shape` branching condition so "blank-project" no longer auto-triggers `/create-milestone`.
+
+### Changes
+
+- `/write-a-prd` now creates a lightweight GitHub milestone for big-batch work and attaches the PRD issue to it
+- `/prd-to-issues` detects the milestone on the parent PRD and propagates it to all slice issues
+- `/shape` branching condition corrected: route to `/create-milestone` only when work requires multiple independent PRDs, not for all blank projects
+- `/create-milestone` description updated for consistency with the corrected condition
+- `SYSTEM-OVERVIEW.md` updated: pipeline description, handoff map, state table, file tree, and quick reference
+
+### Pipeline
+
+Two types of milestones now exist (same GitHub object, different procedural origin):
+- **Container milestone** — created by `/write-a-prd` for single-PRD big-batch work (one PRD + its slices)
+- **Planning milestone** — created by `/create-milestone` for multi-PRD tranches (multiple feature bets)
+
 ## v1.1.0 — One Question Per Turn
 
 Enforces a strict one-question-at-a-time conversational pattern across all pipeline skills. Skills now maintain a genuine back-and-forth instead of batching multiple questions into a single message.
@@ -16,7 +34,7 @@ Enforces a strict one-question-at-a-time conversational pattern across all pipel
 
 **Primary Pipeline (8):**
 - `/shape` — structured requirements discovery
-- `/create-milestone` — GitHub milestone planning for blank-project or major-tranche work
+- `/create-milestone` — GitHub milestone planning for multi-PRD tranche work
 - `/research` — mandatory pre-PRD research with auto-calibrated depth
 - `/write-a-prd` — PRD creation via Shape Up discipline, filed as GitHub issue
 - `/prd-to-issues` — decompose PRD into vertical slices with boundary maps
