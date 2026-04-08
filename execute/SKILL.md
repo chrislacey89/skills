@@ -15,7 +15,13 @@ Use `/execute` when the work is ready to build, verify, and commit.
 
 Use HITL `/execute` when the slice still needs active user judgment, supervision, or acceptance decisions during implementation. Use AFK `/execute` only when the next slice is already durable in GitHub, unblocked, and legible from its issue, boundary map, and any linked `research.md` or `docs/solutions/` context.
 
-If a repo wants repeatable Ralph execution around `/execute` and does not already have runner scripts, use `/setup-ralph-loop` first to generate `ralph-once.sh` and bounded `ralph.sh` entrypoints instead of hand-rolling them ad hoc.
+**Ralph auto-detection (mandatory check).** Before starting the workflow, check whether Ralph scripts already exist in the repo root (`ralph-once.sh` or `ralph.sh`). If all three of these conditions are true, invoke `/setup-ralph-loop` as a prerequisite before proceeding to Step 1:
+
+1. The task comes from a GitHub issue (not a one-off verbal request)
+2. The issue has multi-slice scope — it is a PRD, has a big-batch appetite, or contains multiple user stories
+3. No `ralph-once.sh` or `ralph.sh` exists in the repo root
+
+This is not a suggestion — it is a required step when the conditions are met. A big-batch project with durable GitHub state and no runner scripts is the clearest signal that Ralph setup is needed.
 
 Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the problem or shape is still unresolved. Do not use it as a substitute for `/pre-merge` once implementation is complete and ready for review.
 
@@ -136,5 +142,5 @@ If the error suggests the approach from `research.md` or the PRD is wrong, say s
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
 - **Produces:** verified code changes, commit-ready work, and implementation context for the next reviewer or iteration
 - **May invoke:** `/tdd` for backend work and behavior-heavy frontend logic, plus stack-specific reference skills when the project stack warrants them
-- **Supports setup via:** `/setup-ralph-loop` when the repo wants repeatable HITL-to-AFK execution scripts around `/execute`
+- **Auto-invokes:** `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo
 - **Comes next by default:** `/pre-merge`

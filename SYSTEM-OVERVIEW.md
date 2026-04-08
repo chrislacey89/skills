@@ -239,7 +239,7 @@ Use this taxonomy consistently:
 - `/create-milestone` → selected feature issue promoted from `roadmap bet` to `research-ready`, then `/research`
 - `/research` → `/write-a-prd` and conditionally `/api-design-review`
 - `/write-a-prd` → `/prd-to-issues` (with optional container milestone for big-batch work) and conditionally `/design-an-interface` or `/api-design-review`
-- `/setup-ralph-loop` prepares `ralph-once.sh` and bounded `ralph.sh` for repos that want repeatable HITL-to-AFK execution around `/execute`
+- `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
 - `/prd-to-issues` → `/execute`, with Ralph optionally running the AFK execution loop for unblocked slices, then QA and `/pre-merge`
 - `/execute` → `/pre-merge` after verification, delegating to `/tdd` when backend work benefits from strict red-green-refactor
 - `/pre-merge` → merge → `/compound`
@@ -296,7 +296,7 @@ Use this taxonomy consistently:
 
 ### Ralph setup:
 
-Use `/setup-ralph-loop` when a repo wants repeatable Ralph execution around `/execute`. The skill should generate `ralph-once.sh` for supervised use and bounded `ralph.sh` for AFK use, adapted to the repo's real task source and feedback loops.
+`/execute` auto-invokes `/setup-ralph-loop` when it detects multi-slice GitHub-issue work (PRD, big-batch appetite, or multiple user stories) and no `ralph-once.sh` or `ralph.sh` exists in the repo root. The skill generates `ralph-once.sh` for supervised use and bounded `ralph.sh` for AFK use, adapted to the repo's real task source and feedback loops. You can also invoke `/setup-ralph-loop` directly if you want to set up Ralph before reaching `/execute`.
 
 A generated `ralph.sh` should follow Matt's pattern:
 

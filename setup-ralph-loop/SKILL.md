@@ -13,6 +13,8 @@ This is an infrastructure skill, not a normal feature-delivery stage.
 
 Use `/setup-ralph-loop` when a project wants to run `/execute` in a repeatable HITL-to-AFK loop.
 
+**Auto-invocation:** `/execute` automatically invokes this skill when it detects multi-slice GitHub-issue work (PRD, big-batch appetite, or multiple user stories) and no `ralph-once.sh` or `ralph.sh` exists in the repo root. This means the skill may be entered without the user explicitly calling it — the detection and invocation happen as a prerequisite step inside `/execute`.
+
 Do not use it as part of the default feature pipeline. It prepares the repo so later `/execute` execution can run under Ralph with bounded iterations, explicit feedback loops, and durable GitHub-backed state.
 
 ## What This Sets Up

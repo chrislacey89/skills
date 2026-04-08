@@ -38,7 +38,7 @@ Key interactions between skills:
 - `/research` invokes `/api-design-review` for higher-risk API contract work (new external APIs, contract changes, OAuth/webhook security, or unresolved paradigm choices)
 - `/write-a-prd` uses Shape Up's shaping discipline (appetite → solution → rabbit holes → no-gos), requires a lightweight API contract sketch for API-shaped work, and auto-invokes `/design-an-interface` or `/api-design-review` when the interface or contract is still uncertain; when the input issue came from `/create-milestone`, it expands the existing `research-ready` feature issue into the full PRD rather than creating a duplicate issue
 - `/execute` delegates to `/tdd` for backend code and consults `docs/solutions/` + `research.md` before implementation
-- `/setup-ralph-loop` prepares `ralph-once.sh` and bounded `ralph.sh` scripts for repos that want HITL-to-AFK execution around `/execute`
+- `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
 - `/prd-to-issues` produces boundary maps (Produces/Consumes) that `/execute` reads to understand interfaces
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
 - `/compound` runs after ship to capture lessons into `docs/solutions/` — this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes

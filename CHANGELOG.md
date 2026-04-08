@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.3.0 — Auto-invoke Ralph Setup from /execute
+
+`/execute` now automatically invokes `/setup-ralph-loop` when it detects multi-slice GitHub-issue work and no Ralph scripts exist in the repo. Previously, the language was passive ("if a repo wants"), which required the agent to infer intent and was easy to miss.
+
+### Changes
+
+- `/execute` Invocation Position section now has a **mandatory auto-detection check** with three explicit conditions: (1) task comes from a GitHub issue, (2) issue has multi-slice scope, (3) no `ralph-once.sh` or `ralph.sh` in repo root
+- `/setup-ralph-loop` Invocation Position section now documents auto-invocation from `/execute`
+- `SYSTEM-OVERVIEW.md` handoff map and Ralph setup section updated to reflect auto-detection as the primary trigger
+- `CLAUDE.md` interaction note updated for `/setup-ralph-loop`
+- `docs/using-this-pack.md` AFK execution section and operating tips updated
+
+### Infrastructure
+
+- `/setup-ralph-loop` is now listed as an infrastructure skill that can be auto-invoked, not just manually called
+
 ## v1.2.0 — Container Milestones for Big-Batch Work
 
 Fills a gap in the pipeline where big-batch (6-week) work that fits a single PRD had no organizational container. Also fixes the `/shape` branching condition so "blank-project" no longer auto-triggers `/create-milestone`.

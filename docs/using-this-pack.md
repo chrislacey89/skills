@@ -94,7 +94,7 @@ The pipeline stays the same, but the way you run a stage can change.
 - Use when the next slice is already unblocked and legible from durable artifacts
 - The minimum preconditions are: a clear GitHub issue, correct dependencies, enough boundary-map detail to avoid interface invention, and any needed `research.md` or `docs/solutions/` context already linked or available
 - `Ralph` is the AFK execution mode for `/execute`, not a separate pipeline branch
-- If the repo does not already have Ralph runner scripts, use `/setup-ralph-loop` before expecting repeatable AFK execution
+- `/execute` auto-invokes `/setup-ralph-loop` when it detects multi-slice GitHub-issue work and no Ralph scripts exist — no manual setup needed
 
 A good default is: plan in public, execute from durable artifacts, and fall back to HITL the moment the work needs new shaping rather than implementation.
 
@@ -227,7 +227,7 @@ For milestone-planned work, `/research` should consume the selected feature issu
 - Treat `docs/solutions/` as a compounding loop, not a dumping ground.
 - For milestone-planned work, do not run `/research` against a raw `roadmap bet`; promote the chosen feature issue to `research-ready` first.
 - Use helper skills only when their narrower rigor is actually needed.
-- Use `/setup-ralph-loop` when a repo wants repeatable HITL-to-AFK execution around `/execute` rather than hand-rolling Ralph scripts ad hoc.
+- `/execute` handles Ralph setup automatically for multi-slice GitHub-issue work. You can also invoke `/setup-ralph-loop` directly if you want to set up Ralph before reaching `/execute`.
 - Keep side-route skills tied back to the main flow so work does not drift.
 
 ## If you are editing the pack itself
