@@ -16,7 +16,7 @@ sources:
 
 This skill applies structured requirements discovery to prevent the most expensive class of engineering error: building the right thing wrong, or building the wrong thing right. Quality is a pre-design activity — better solutions come from more accurate problem definition, not from better solution-finding techniques.
 
-Output is shared understanding in the conversation. No file is produced. This normally feeds into `/research` and later `/write-a-prd`, but for blank-project or major-tranche work it can instead hand off to `/create-milestone`.
+Output is shared understanding in the conversation. No file is produced. This normally feeds into `/research` and later `/write-a-prd`, but for work that requires multiple independent PRDs it can instead hand off to `/create-milestone`.
 
 > **One question per turn.** Throughout every phase of this skill, ask one question at a time and wait for the user's answer before asking the next. Never batch questions into a list. This is a conversation, not a questionnaire.
 
@@ -101,14 +101,14 @@ Ask the user to confirm this classification. Anything marked as an Assumption is
 
 **This closing summary is the compressed handoff to `/research`.** If `/research` runs in this same session, it should work from this summary rather than re-reading the full interview transcript. If the interview ran long (20+ minutes), suggest the user start `/research` in a fresh session using this summary as context.
 
-For blank-project or major-tranche work that is too large for a single PRD, use this same closing summary as the compressed handoff to `/create-milestone` instead. `/create-milestone` should use it to define a GitHub milestone, feature sequencing, and the first feature to promote from `roadmap bet` to `research-ready`.
+For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features that each need their own research-PRD cycle — use this same closing summary as the compressed handoff to `/create-milestone` instead. `/create-milestone` should use it to define a GitHub milestone, feature sequencing, and the first feature to promote from `roadmap bet` to `research-ready`. Note: a blank project or large-scope effort that is still one cohesive product stays on the default path; `/write-a-prd` will create a container milestone for big-batch work.
 
 ## Handoff
 
-Hand off to `/research` by default. For blank-project or major-tranche work that is too large for a single PRD, branch to `/create-milestone` instead. Treat assumptions by confidence tag: `Uncertain` and `Speculative` assumptions are first-priority research targets because they carry the most downstream risk. `Likely` assumptions can usually be confirmed during PRD writing. `Established` assumptions need only targeted verification.
+Hand off to `/research` by default. For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features that each need their own research-PRD cycle — branch to `/create-milestone` instead. Big-batch work (6 weeks) that fits a single PRD stays on the default path and gets a container milestone from `/write-a-prd`. Treat assumptions by confidence tag: `Uncertain` and `Speculative` assumptions are first-priority research targets because they carry the most downstream risk. `Likely` assumptions can usually be confirmed during PRD writing. `Established` assumptions need only targeted verification.
 
 - **Carries forward:** choices, assumptions with their confidence tags, impositions, and structural signals
-- **Comes next by default:** `/research`, or `/create-milestone` when the shaped work is too large for a single PRD
+- **Comes next by default:** `/research`, or `/create-milestone` when the shaped work requires multiple independent PRDs
 
 ## What to Avoid
 

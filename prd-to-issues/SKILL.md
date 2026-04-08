@@ -29,6 +29,8 @@ Ask the user for the PRD GitHub issue number (or URL).
 
 If the PRD is not already in your context window, fetch it with `gh issue view <number>` (with comments).
 
+**Check for milestone.** After fetching the PRD, check whether it belongs to a GitHub milestone: `gh issue view <number> --json milestone`. If a milestone exists, note the milestone title for use in Step 6 — all slice issues should be attached to the same milestone.
+
 ### 2. Explore the Codebase (optional)
 
 If you have not already explored the codebase, do so to understand the current state of the code.
@@ -112,6 +114,8 @@ Iterate until the user approves the breakdown.
 
 For each approved slice, create a GitHub issue using `gh issue create`. Use the issue body template below.
 
+**Milestone propagation.** If the parent PRD belongs to a GitHub milestone (detected in Step 1), add `--milestone "<Milestone Name>"` to each `gh issue create` command so all slice issues are attached to the same milestone.
+
 Create issues in dependency order (blockers first) so you can reference real issue numbers in the "Blocked by" field.
 
 <issue-template>
@@ -173,12 +177,13 @@ After all issues are created, present a summary showing:
 - Dependency graph (which issues block which)
 - Suggested implementation order
 - The boundary map across all slices (a quick-reference view of what flows between them)
+- If a milestone was used: "All N issues attached to milestone: [milestone name]"
 
 This summary helps the user (and Ralph) understand the full picture before execution begins.
 
 ## Handoff
 
 - **Expected input:** a shaped PRD issue with clear user stories, rabbit holes, and no-gos
-- **Produces:** implementation-ready GitHub issues with dependency order and boundary maps
+- **Produces:** implementation-ready GitHub issues with dependency order, boundary maps, and milestone attachment when the parent PRD belongs to a milestone
 - **Comes next by default:** `/execute` for implementation, with Ralph optionally running the AFK execution loop for unblocked slices
 - **Feeds downstream:** `/pre-merge` uses the slice lineage and boundary maps to review plan-vs-actual code

@@ -47,6 +47,12 @@ The appetite is a **target** — how much time the business is willing to spend.
 
 The appetite shapes everything downstream: which user stories are must-haves vs. nice-to-haves, how many rabbit holes are acceptable, and how aggressively scope gets hammered.
 
+**Container milestone for big-batch work.** If the appetite is big-batch (6 weeks), ask whether a GitHub milestone should be created as an organizational container for the PRD and its downstream slice issues. The default answer is yes — big-batch work benefits from milestone-level progress tracking in GitHub.
+
+Before creating a new milestone, check for an existing one: `gh api repos/{owner}/{repo}/milestones --jq '.[].title'`. If a milestone already exists (e.g., from `/create-milestone` on a prior tranche), ask whether to attach to that milestone instead of creating a new one.
+
+If the user confirms, note the milestone name for use in Step 8. If the user declines, proceed without a milestone — it is organizational convenience, not a structural requirement. Small-batch work (1-2 weeks) does not need a milestone.
+
 ### 3. Explore the codebase
 
 Explore the repo to verify the user's assertions and understand the current state of the code.
@@ -159,6 +165,12 @@ Check with the user that these modules match their expectations. Check with the 
 ### 8. Write the pitch
 
 Once you have a complete, shaped understanding of the problem and solution, write the pitch using the template below. The pitch should be submitted as a GitHub issue.
+
+**If a container milestone was requested in Step 2**, create it before the PRD issue so the issue can be attached:
+
+1. Create the milestone: `gh api repos/{owner}/{repo}/milestones -f title="<Milestone Name>" -f description="<1-2 sentences from the problem story>"`
+2. Create the PRD issue with `--milestone "<Milestone Name>"` to attach it
+3. Note the milestone name in the pitch output so `/prd-to-issues` can propagate it to slice issues
 
 <pitch-template>
 
@@ -279,6 +291,6 @@ The following documented solutions informed this pitch:
 ## Handoff
 
 - **Expected input:** clarified user problem, validated technical context from `/research`, and any past-solution guidance relevant to the feature
-- **Produces:** a shaped PRD issue with appetite, solution, rabbit holes, no-gos, and contract sketching when relevant
+- **Produces:** a shaped PRD issue (optionally attached to a container milestone for big-batch work) with appetite, solution, rabbit holes, no-gos, and contract sketching when relevant
 - **May invoke:** `/design-an-interface` when a module interface is still unresolved, or `/api-design-review` when API contract uncertainty remains
 - **Comes next by default:** `/prd-to-issues`

@@ -24,7 +24,7 @@ What we explicitly reject:
 /shape → /research (always, depth-calibrated) → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → cleanup
 ```
 
-The pipeline order is the default path, not a prison. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that move from `roadmap bet` to `research-ready` to `prd` before re-entering the default path at `/research`. If `/research` invalidates assumptions from `/shape`, return to `/shape`. If `/research` invalidates assumptions from a milestone feature, backtrack to `/create-milestone` or `/shape` depending on the blast radius. If `/write-a-prd` reveals the problem was misunderstood, return to `/research`. If `/prd-to-issues` reveals materially more work than the appetite supports, return to `/write-a-prd` and reshape. Backtrack deliberately rather than patching forward with stale assumptions.
+The pipeline order is the default path, not a prison. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step. For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features each needing their own research-PRD cycle — `/shape` can branch to `/create-milestone`, which creates a planning milestone plus feature issues that move from `roadmap bet` to `research-ready` to `prd` before re-entering the default path at `/research`. For big-batch work (6 weeks) that fits a single PRD, `/write-a-prd` creates a lightweight container milestone to organize the PRD and its downstream slice issues. If `/research` invalidates assumptions from `/shape`, return to `/shape`. If `/research` invalidates assumptions from a milestone feature, backtrack to `/create-milestone` or `/shape` depending on the blast radius. If `/write-a-prd` reveals the problem was misunderstood, return to `/research`. If `/prd-to-issues` reveals materially more work than the appetite supports, return to `/write-a-prd` and reshape. Backtrack deliberately rather than patching forward with stale assumptions.
 
 ### Context Engineering
 
@@ -52,7 +52,7 @@ When `research.md` and `docs/solutions/` disagree, `research.md` wins because it
 
 **Skill:** Enhanced `/shape`.
 
-When the shaped work is a blank project or major tranche that is too large for a single PRD, `/shape` should branch after its closing summary instead of handing off directly to `/research`. The closing summary becomes the input to `/create-milestone`.
+When the shaped work requires multiple independent PRDs — where the outcome decomposes into several features each needing their own research-PRD cycle — `/shape` should branch after its closing summary instead of handing off directly to `/research`. The closing summary becomes the input to `/create-milestone`. A blank project or large-scope effort that is one cohesive product stays on the default path; `/write-a-prd` will create a container milestone for big-batch work.
 
 ### Step 1.5: /create-milestone (new — only for oversized work)
 
@@ -98,9 +98,9 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **What it does:** Turns the shape conversation + research findings into a shaped pitch filed as a GitHub issue. Uses Shape Up's shaping discipline: sets appetite (time budget) before solution design, names rabbit holes with pre-decided resolutions, declares explicit no-gos, and classifies user stories as must-haves vs. nice-to-haves (~). Interviews you about modules, interfaces, and test boundaries.
 
-**Enhancement:** Now consults `docs/solutions/` for relevant past solutions and incorporates `research.md` recommendations. Surfaces relevant pitfalls during the interview. Validates the pitch is rough (room for builder judgment), solved (rabbit holes patched), bounded (appetite set, no-gos declared), and complete (omitted activities scan — checks for commonly missed work like error handling, auth changes, migrations, monitoring, and surfaces any that apply as Rabbit Holes) before writing. Includes a conditional Flow Sketch for multi-step UI features. Auto-invokes `/design-an-interface` when a module interface is uncertain.
+**Enhancement:** Now consults `docs/solutions/` for relevant past solutions and incorporates `research.md` recommendations. Surfaces relevant pitfalls during the interview. Validates the pitch is rough (room for builder judgment), solved (rabbit holes patched), bounded (appetite set, no-gos declared), and complete (omitted activities scan — checks for commonly missed work like error handling, auth changes, migrations, monitoring, and surfaces any that apply as Rabbit Holes) before writing. Includes a conditional Flow Sketch for multi-step UI features. Auto-invokes `/design-an-interface` when a module interface is uncertain. For big-batch appetite (6 weeks), creates a lightweight container milestone and attaches the PRD issue to it — distinct from the planning milestone created by `/create-milestone` for multi-PRD tranches.
 
-**Output:** A GitHub issue containing the pitch — problem story, appetite, solution, rabbit holes, no-gos, flow sketch (conditional), user stories (must-haves + nice-to-haves), implementation decisions, research reference, lessons from past solutions.
+**Output:** A GitHub issue containing the pitch (optionally attached to a container milestone for big-batch work) — problem story, appetite, solution, rabbit holes, no-gos, flow sketch (conditional), user stories (must-haves + nice-to-haves), implementation decisions, research reference, lessons from past solutions.
 
 **Time:** 10-15 min active.
 
@@ -110,7 +110,7 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **What it does:** Breaks the PRD into independently-grabbable GitHub issues using vertical slices (tracer bullets). Each issue is a thin end-to-end slice, not a horizontal layer.
 
-**Enhancement:** Now includes boundary maps in each issue body — what each slice produces (exported functions, types, endpoints), what it consumes from upstream slices, and the contract notes that matter to downstream work (error shape, compatibility posture, versioning readiness when relevant). This forces interface thinking before implementation and prevents slices from making incompatible assumptions. Runs a scope completeness check per slice (verifying Produces covers error paths, loading states, and Rabbit Hole edge cases — not just the happy path) and an appetite proportionality check (flagging when decomposition is disproportionate to the stated appetite).
+**Enhancement:** Now includes boundary maps in each issue body — what each slice produces (exported functions, types, endpoints), what it consumes from upstream slices, and the contract notes that matter to downstream work (error shape, compatibility posture, versioning readiness when relevant). This forces interface thinking before implementation and prevents slices from making incompatible assumptions. Runs a scope completeness check per slice (verifying Produces covers error paths, loading states, and Rabbit Hole edge cases — not just the happy path) and an appetite proportionality check (flagging when decomposition is disproportionate to the stated appetite). When the parent PRD belongs to a milestone, all slice issues are attached to the same milestone for progress tracking.
 
 **Output:** GitHub issues with blocking relationships, acceptance criteria, and boundary maps.
 
@@ -202,7 +202,7 @@ The pipeline described above is the forward path. This section covers what happe
 | State | Location | Why |
 |-------|----------|-----|
 | Feature plans (PRDs) | GitHub issues | Traceable, visible, survives context resets |
-| Milestone roadmaps | GitHub milestones + feature issues | Sequence large work without introducing local roadmap files |
+| Milestone roadmaps | GitHub milestones + feature issues | Sequence large work without introducing local roadmap files. Two roles: container milestones (from `/write-a-prd` for big-batch single-PRD work) and planning milestones (from `/create-milestone` for multi-PRD tranches) |
 | Work items (slices) | GitHub issues with blocking relationships | Native kanban, Ralph reads them |
 | QA bugs | GitHub issues | Created during manual QA, closed by Ralph |
 | Decisions register | Ubiquitous language doc (decisions section) | Co-located with terminology, single source of truth |
@@ -235,10 +235,10 @@ Use this taxonomy consistently:
 
 ### Default Handoff Map
 
-- `/shape` → `/research` for work that fits a single PRD, or `/create-milestone` for blank-project or major-tranche work that needs milestone-level decomposition
+- `/shape` → `/research` for work that fits a single PRD, or `/create-milestone` for work that requires multiple independent PRDs
 - `/create-milestone` → selected feature issue promoted from `roadmap bet` to `research-ready`, then `/research`
 - `/research` → `/write-a-prd` and conditionally `/api-design-review`
-- `/write-a-prd` → `/prd-to-issues` and conditionally `/design-an-interface` or `/api-design-review`
+- `/write-a-prd` → `/prd-to-issues` (with optional container milestone for big-batch work) and conditionally `/design-an-interface` or `/api-design-review`
 - `/setup-ralph-loop` prepares `ralph-once.sh` and bounded `ralph.sh` for repos that want repeatable HITL-to-AFK execution around `/execute`
 - `/prd-to-issues` → `/execute`, with Ralph optionally running the AFK execution loop for unblocked slices, then QA and `/pre-merge`
 - `/execute` → `/pre-merge` after verification, delegating to `/tdd` when backend work benefits from strict red-green-refactor
@@ -252,7 +252,7 @@ Use this taxonomy consistently:
 │  ── PRIMARY PIPELINE (direct-entry) ───────────────────────────────────
 │
 ├── shape/SKILL.md               # Requirements discovery (enhanced — workflow stories, hidden-function stability probes)
-├── create-milestone/SKILL.md    # GitHub milestone planning for blank-project or major-tranche work before feature research
+├── create-milestone/SKILL.md    # GitHub milestone planning for multi-PRD tranche work before feature research
 ├── research/SKILL.md               # Technical research with version checking (new — GSD-structured)
 ├── write-a-prd/SKILL.md            # Shaped pitch (enhanced — Shape Up discipline, consults solutions + research, auto-invokes /design-an-interface)
 ├── prd-to-issues/SKILL.md          # Issue decomposition (enhanced — boundary maps in each issue)
@@ -332,7 +332,7 @@ Invoke `/setup-pre-commit` in Claude Code. This sets up Lefthook with Biome (or 
 | I want to... | Do this |
 |---------------|---------|
 | Start a new feature | `/shape` to establish what to build, then hand off to `/research` |
-| Plan a blank project or major tranche | `/shape`, then `/create-milestone` if the shaped work is too large for a single PRD |
+| Plan a blank project or major tranche | `/shape`, then `/create-milestone` if the work requires multiple independent PRDs. If it fits one PRD (even if big-batch), stay on the default path — `/write-a-prd` creates a container milestone |
 | Research the technical approach | `/research` (always runs, depth auto-calibrated, invokes `/api-design-review` for higher-risk API contract work, then hands off to `/write-a-prd`) |
 | Promote a milestone feature into the pipeline | Expand the selected feature issue from `roadmap bet` to `research-ready`, then run `/research` |
 | Write a shaped pitch | `/write-a-prd` → shaped pitch filed as GitHub issue (appetite → solution → rabbit holes → no-gos, includes API contract sketch when relevant, auto-invokes `/design-an-interface` or `/api-design-review` when needed, then hands off to `/prd-to-issues`) |

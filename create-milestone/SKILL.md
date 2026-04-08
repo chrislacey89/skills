@@ -1,6 +1,6 @@
 ---
 name: create-milestone
-description: "Primary planning branch after /shape for blank-project or major-tranche work that is too large for a single PRD. Use to create a GitHub milestone plus sequenced feature issues that will later mature from roadmap bet to research-ready to prd. Not for single-feature shaping, decomposition of a finished PRD, or implementation-ready work."
+description: "Primary planning branch after /shape for major-tranche work that requires multiple independent PRDs. Use to create a GitHub milestone plus sequenced feature issues that will later mature from roadmap bet to research-ready to prd. Not for single-feature shaping, single-PRD big-batch work (which gets a container milestone from /write-a-prd), decomposition of a finished PRD, or implementation-ready work."
 sources:
   primary:
     - "Shape Up — Ryan Singer"
@@ -11,7 +11,7 @@ sources:
 
 # Create Milestone
 
-This skill bridges the gap between tranche-level shaping and feature-level delivery. Use it when `/shape` clarified a blank project or major product tranche, but the result is still too large for one PRD. The goal is to create just enough GitHub-native structure to sequence feature bets, pick a tracer bullet, and let the selected feature re-enter the normal pipeline with a researchable brief.
+This skill bridges the gap between tranche-level shaping and feature-level delivery. Use it when `/shape` clarified work that requires multiple independent PRDs — the result is too large or too decomposable for one PRD. The goal is to create just enough GitHub-native structure to sequence feature bets, pick a tracer bullet, and let the selected feature re-enter the normal pipeline with a researchable brief.
 
 > **One question per turn.** When confirming the branch, reviewing bets, or asking the user anything, ask one question at a time and wait for the answer before asking the next. Never batch questions into a list.
 
@@ -21,7 +21,7 @@ This is a primary planning branch that follows `/shape` only when the shaped wor
 
 Use `/create-milestone` when:
 - `/shape` already produced a closing summary with choices, assumptions, impositions, and structural signals
-- the shaped work represents a blank project or major tranche rather than one bounded feature
+- the shaped work requires multiple independent PRDs rather than one bounded feature
 - you need to sequence feature bets in GitHub before running feature-level `/research`
 
 Do not use it when the work already fits inside one PRD, when a feature is already `research-ready`, or when the next need is decomposition or implementation.
