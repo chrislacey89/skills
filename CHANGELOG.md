@@ -1,19 +1,20 @@
 # Changelog
 
-## v1.5.2 — Runtime Startup Verification
+## v1.5.2 — Branch Isolation + Runtime Startup Verification
 
-Adds mandatory runtime verification for slices that touch schema, migrations, environment config, or new routes. Prevents the class of bug where code builds and tests pass (using in-memory databases) but the actual app crashes at startup because database migrations haven't been applied to the dev environment.
+Two fixes from Civic Mirror issue #5: (1) `/execute` started work on a stale feature branch instead of branching from the base branch, and (2) the verification ladder had no step between "it compiles" and "it behaves correctly" — the app crashed at runtime because database migrations hadn't been applied, but all tests passed using in-memory SQLite.
 
 ### Changes
 
+- `/execute` Step 0 adds **Branch isolation gate** — first prerequisite, runs before Ralph/hooks/TDD gates. Checks that the current branch is appropriate for the task (not a stale feature branch from previous work). Prefers `wt switch --create` (worktrunk) for full worktree isolation; falls back to `git checkout -b` from the base branch. References `/worktrunk` skill for guidance.
 - `/execute` Step 4 adds **Tier 2.5: Runtime Startup Verification** — between Command Verification (Tier 2) and Behavioral Verification (Tier 3). Mandatory when the slice touches schema, migrations, env config, server initialization, or new routes. Checks: database migrations applied, dev server boots from cold, new routes return 200, env vars present, no console errors at startup.
 - `/pre-merge` review checklist adds **Dimension 7: Runtime Initialization** — conditional review dimension (only for schema/config PRs) that catches missing migrations, untested cold boots, in-memory test divergence, and missing environment variables. Review dimension count updated from 7 to 8.
 - `/pre-merge` SKILL.md updated: dimension count references (seven → eight), Sub-agent B assignment includes Runtime Initialization, conditional trigger note added for Dimension 7
-- `SYSTEM-OVERVIEW.md` updated: verification ladder description now mentions runtime startup checks and in-memory database caveat
+- `SYSTEM-OVERVIEW.md` updated: verification ladder description mentions runtime startup checks; new key enhancement note for branch isolation gate with worktrunk preference
 
 ### Motivation
 
-During Civic Mirror issue #5 (Landing Page), all 67 tests passed using in-memory SQLite with auto-migrations, the build succeeded, and typecheck was clean. But the app crashed at runtime with "no such table: governing_bodies" because `db:push` had never been run against the real `dev.db`. The verification ladder had no step between "it compiles" and "it behaves correctly" that forced a cold-boot check.
+During Civic Mirror issue #5 (Landing Page), `/execute` was invoked while still on the `finalsite-scraper` branch from issue #4. All landing page commits went onto that stale branch. Separately, all 67 tests passed using in-memory SQLite with auto-migrations, the build succeeded, and typecheck was clean — but the app crashed at runtime with "no such table: governing_bodies" because `db:push` had never been run against the real `dev.db`.
 
 ## v1.5.1 — Manual Verification Checklist in /execute
 

@@ -23,6 +23,19 @@ Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the probl
 
 ### 0. Prerequisites
 
+**Branch isolation gate.** Before any implementation work, ensure you are working on a clean branch created for this specific task — not a leftover feature branch from previous work.
+
+1. Check the current branch: `git branch --show-current`
+2. If the current branch is the base branch (e.g., `main`, `prod`, `master`), create a new feature branch for this task.
+3. If the current branch is a **different feature branch** (not the base branch and not a branch named for this task), you are on a stale branch from previous work. Do not commit new work here.
+
+**To create an isolated branch**, use one of these approaches (in order of preference):
+
+- **Worktrunk** (if `wt` is available): `wt switch --create <branch-name>` — creates a new worktree + branch from the base branch and switches to it, giving full filesystem isolation. Use the `/worktrunk` skill for guidance.
+- **Plain git**: `git checkout <base-branch> && git checkout -b <branch-name>` — creates a new branch from the base branch in the current working directory.
+
+Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
+
 **Ralph auto-detection gate.** Evaluate all three conditions:
 
 - [ ] The task comes from a GitHub issue (not a one-off verbal request)

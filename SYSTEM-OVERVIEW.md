@@ -128,6 +128,8 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Key enhancement to /execute:** GSD's verification ladder. After tests pass, Ralph checks the actual outcomes — files exist, exports are real (not stubs), imports resolve, API endpoints respond, behavioral flows work. For slices touching schema, migrations, environment config, or new routes, a mandatory runtime startup check verifies that the dev database has the latest schema, the dev server boots from cold, and new routes load without 500 errors — tests that use in-memory databases are not sufficient. "All steps done" is NOT verification. For bug fixes, an additional gate classifies the fix as correction (removes the defect) or workaround (suppresses the failure), searches for structural siblings of the defect pattern, and confirms the corrupted state is no longer produced.
 
+**Key enhancement to /execute:** Branch isolation gate. Before starting any implementation, `/execute` verifies the current branch is appropriate — not a stale feature branch from previous work. If worktrunk (`wt`) is available, it uses `wt switch --create` to create an isolated worktree + branch from the base branch. Otherwise, a plain `git checkout -b` from the base branch.
+
 **Key enhancement to /execute:** Now consults `docs/solutions/` and `research.md` before implementation, so past lessons and technical decisions don't need re-discovery each iteration.
 
 **Key enhancement to /execute:** When a project uses Next.js or React, Ralph loads `/vercel-react-best-practices`, `/vercel-composition-patterns`, `/next-best-practices`, and `/next-cache-components` before implementation so framework guidance is present in every iteration.
