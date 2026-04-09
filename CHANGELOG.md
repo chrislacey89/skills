@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5.1 — Manual Verification Checklist in /execute
+
+Adds a new Step 5 to `/execute` — a manual verification checklist presented to the user before handing off to `/pre-merge`. Covers behavior review, code quality, and acceptance criteria confirmation so the user has a structured gate to catch issues automated checks miss.
+
+### Changes
+
+- `/execute` new Step 5: **Manual Verification Checklist** — summarizes commits and key files, presents checklist covering behavior, code quality, and acceptance criteria, waits for user confirmation before proceeding
+- `/execute` Step 5 (Cleanup) renumbered to Step 6
+- Cross-references updated: `execute/SKILL.md` Step 0, `CLAUDE.md`, `tdd/SKILL.md` all point to Step 6 for TDD marker cleanup
+
 ## v1.5.0 — TypeScript Audit Skill
 
 Adds `/ts-audit` as a side-route skill for auditing TypeScript and React code against 9 Total TypeScript library references. Produces structured markdown reports with findings grouped by category (Type Safety, Generics, Discriminated Unions, Advanced Patterns, Type Transformations, React Patterns, Testing Patterns).

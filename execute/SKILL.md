@@ -33,7 +33,7 @@ If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 
 
 **Pipeline hooks gate.** If `.claude/hooks/enforce-classification.sh` does not exist in this project, invoke `/init-pipeline` now to scaffold enforcement hooks.
 
-**TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 5 removes both markers after commit.
+**TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes both markers after commit.
 
 ### 1. Understand the Task
 
@@ -152,7 +152,31 @@ If this unit of work is fixing a bug, apply these additional checks before commi
 2. **Structural sibling search**: Search the codebase for the same pattern that caused the defect. If found in other locations, fix all instances or file issues for them. A defect fixed in one location but present in three others is 75% unfixed.
 3. **Two-condition confirmation**: Confirm both that (a) the corrupted state is no longer produced, AND (b) the original failure no longer occurs. If only the failure is suppressed but the underlying state is still wrong, the fix is a workaround, not a correction.
 
-### 5. Cleanup
+### 5. Manual Verification Checklist
+
+Before handing off to `/pre-merge`, present the user with a verification checklist so they can confirm the work is ready.
+
+**Preparation:** Summarize what was built — list the commits made and key files changed. If the task originated from a GitHub issue with acceptance criteria, pull those criteria into the checklist so the user doesn't have to cross-reference.
+
+Present the checklist:
+
+#### Behavior Review
+- [ ] Feature works as expected when manually exercised (browser, terminal, API)
+- [ ] Edge cases and error states behave correctly
+- [ ] No regressions in adjacent functionality
+
+#### Code Quality
+- [ ] Diff reviewed — no debug code, console.logs, or commented-out blocks left behind
+- [ ] No TODOs that should be resolved before merge
+- [ ] No hardcoded values that should be config or env vars
+
+#### Acceptance Criteria
+- [ ] Each acceptance criterion from the issue/PRD confirmed met
+- [ ] Scope matches what was asked — no unasked-for additions, no missing pieces
+
+Wait for the user to review and confirm. If they flag items that need fixing, address them, commit the fixes, and re-present the checklist. Only proceed to Step 6 after user confirmation.
+
+### 6. Cleanup
 
 All commits should already be done by this point. This step handles post-implementation cleanup only.
 

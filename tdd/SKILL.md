@@ -148,4 +148,4 @@ Not every cycle needs this step. Apply it when the code handles complex state, c
 - **Produces:** tested code increments built through red-green-refactor
 - **Usually invoked by:** `/execute`, or by bug-fix work prepared through `/triage-issue`
 - **Returns control to:** the calling implementation flow, usually `/execute`, for final verification and handoff to `/pre-merge`
-- **On exit:** `/execute` Step 5 removes `.claude/.tdd-active` after commit
+- **On exit:** `/execute` Step 6 removes `.claude/.tdd-active` after commit
