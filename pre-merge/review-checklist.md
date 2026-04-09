@@ -1,6 +1,6 @@
 # Review Checklist
 
-Used by `/pre-merge` during Phase 3. Seven dimensions, each independent. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
+Used by `/pre-merge` during Phase 3. Eight dimensions, each independent. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
 
 ---
 
@@ -89,7 +89,23 @@ Used by `/pre-merge` during Phase 3. Seven dimensions, each independent. For eve
 
 ---
 
-## 7. Fix Completeness (Bug-Fix PRs only)
+## 7. Runtime Initialization (Schema/Config PRs only)
+
+**Principle:** Code that builds and passes tests is not necessarily code that runs. When a slice changes database schema, migrations, environment configuration, or server initialization, the actual dev environment must boot successfully — not just the build or test suite.
+
+**Only runs when the diff includes changes to schema files, migration files, environment config, or server startup code.**
+
+**Violation patterns:**
+- Missing migration — schema code was changed but no corresponding migration file was generated or committed
+- Untested cold boot — new routes or server functions were added but no evidence the dev server was started and the routes loaded (e.g., the `/execute` verification checklist doesn't mention Tier 2.5 runtime checks)
+- In-memory test divergence — tests use in-memory databases with their own migration setup, so they pass even when the real dev database is missing tables or columns
+- Missing environment variable — code references a new env var that isn't in `.env.example`, `.env.local`, or documented in the PR
+
+**Out of scope:** Whether the schema design is optimal (that's Dimension 1). Whether tests are sufficient (that's Dimension 5).
+
+---
+
+## 8. Fix Completeness (Bug-Fix PRs only)
 
 **Principle:** A correction removes the defect; a workaround suppresses the failure while the defect remains. Corrections are complete; workarounds are technical debt that must be tracked.
 

@@ -132,6 +132,17 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - Lint is clean
 - Any CLI commands the feature exposes actually work when invoked
 
+#### Tier 2.5: Runtime Startup Verification
+**Mandatory when the slice touches schema, migrations, environment config, server initialization, or new routes. Skip only for pure-logic changes to existing modules where nothing about app startup changed.**
+
+- Database is ready: run pending migrations or `db:push` — do not assume the dev database has the latest schema just because tests passed (tests often use in-memory databases that run their own migrations)
+- Dev server starts from cold without errors: `pnpm run dev` (or equivalent) boots and responds, not just builds
+- The new or changed routes load without 500 errors: `curl -s -o /dev/null -w '%{http_code}' http://localhost:<port>/` returns 200
+- Required environment variables are present and valid (check `.env.local` or equivalent)
+- No unhandled errors in the server console output during startup
+
+If you cannot start the dev server (e.g., missing external services), note which checks you skipped and why in the Step 5 checklist so the user can verify them.
+
 #### Tier 3: Behavioral Verification
 - API endpoints return the expected responses (use curl or httpie to verify)
 - Browser flows work end-to-end (if applicable and you can verify)

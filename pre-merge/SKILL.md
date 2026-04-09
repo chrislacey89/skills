@@ -83,17 +83,19 @@ Closes #<prd-issue-number>
 
 ### Phase 3: Architectural Review
 
-Consult `review-checklist.md` for the seven review dimensions and their violation patterns.
+Consult `review-checklist.md` for the eight review dimensions and their violation patterns.
 
-**Small diff** (< 200 changed lines, < 10 files): run all seven dimensions sequentially in the main agent.
+**Small diff** (< 200 changed lines, < 10 files): run all eight dimensions sequentially in the main agent.
 
 **Larger diff**: spawn two sub-agents in parallel:
 - **Sub-agent A (structural):** Deep Modules, Vertical Slice Integrity, State Discipline
-- **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Fix Completeness
+- **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
 
 Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format.
 
 **Dimension 4 (Boundary Map Contracts) only runs if a PRD with slice issues was provided.** Without boundary maps, there are no contracts to verify.
+
+**Dimension 7 (Runtime Initialization) only runs if the diff includes schema files, migration files, environment config, or server startup code.** Without infrastructure changes, there is nothing to verify.
 
 **Dimension 6 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
 
