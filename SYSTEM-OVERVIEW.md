@@ -230,7 +230,7 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Default Handoff Map
@@ -246,6 +246,7 @@ Use this taxonomy consistently:
 - `/pre-merge` → merge → `/compound`
 - `/qa` and `/triage-issue` feed bug work back into `/execute`
 - `/request-refactor-plan` and `/improve-codebase-architecture` produce refactor work that can re-enter at `/execute`
+- `/ts-audit` produces type-safety findings that can feed into `/execute` for fixes or inform `/pre-merge` architectural review
 
 ```
 .claude/skills/
@@ -293,7 +294,10 @@ Use this taxonomy consistently:
 │   ├── SKILL.md
 │   └── REFERENCE.md
 ├── request-refactor-plan/SKILL.md  # Refactor RFC with tiny commits that can re-enter execution through /execute
-└── ubiquitous-language/SKILL.md    # Domain glossary support that can sharpen shaping, QA, and refactor conversations
+├── ubiquitous-language/SKILL.md    # Domain glossary support that can sharpen shaping, QA, and refactor conversations
+└── ts-audit/                       # Audit TypeScript code against Total TypeScript library references
+    ├── SKILL.md
+    └── evals/
 ```
 
 ### Ralph setup:
@@ -353,4 +357,5 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Define domain terms | `/ubiquitous-language` to build or update the glossary + decisions register, then reuse that language in shaping, QA, and issue writing |
 | Record a decision | Add a row to the decisions register in ubiquitous language doc |
 | Clean up after ship | Delete `research.md`, close the PRD issue |
+| Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
 | Audit knowledge base | Review `docs/solutions/` quarterly |

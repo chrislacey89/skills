@@ -1,0 +1,31 @@
+{
+  "skill_name": "ts-audit",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "audit src/db/queries.ts for TypeScript best practices",
+      "expected_output": "Report identifying type widening issues (status: string instead of union literal, meetingType: string, documentType: string), unsafe `as` casts on JSON columns (voteRecord, highlights), and suggesting derived types or branded types where applicable",
+      "files": ["src/db/queries.ts"]
+    },
+    {
+      "id": 2,
+      "prompt": "review the typescript in src/routes/meetings/$bodySlug/$date.tsx",
+      "expected_output": "Report identifying React-specific patterns: ternary chain for statusColor could use a record lookup, FiscalCard props could leverage ComponentProps patterns, potential for discriminated union on status-dependent rendering, and any type safety gaps in the component",
+      "files": ["src/routes/meetings/$bodySlug/$date.tsx"]
+    },
+    {
+      "id": 3,
+      "prompt": "ts-audit src/pipeline/",
+      "expected_output": "Report covering multiple files (StorageService.ts, errors.ts, ScraperService.ts, SummarizationService.ts) plus test files. Should identify patterns across the Effect services, check test files for testing patterns, and produce a summary table",
+      "files": [
+        "src/pipeline/services/StorageService.ts",
+        "src/pipeline/services/ScraperService.ts",
+        "src/pipeline/services/SummarizationService.ts",
+        "src/pipeline/errors.ts",
+        "src/pipeline/services/StorageService.test.ts",
+        "src/pipeline/services/ScraperService.test.ts",
+        "src/pipeline/services/SummarizationService.test.ts"
+      ]
+    }
+  ]
+}

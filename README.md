@@ -1,10 +1,10 @@
 # Skills
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-20-blue)
+![Skills](https://img.shields.io/badge/skills-21-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-A pipeline-first Claude Code skills pack for structured feature delivery. 20 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+A pipeline-first Claude Code skills pack for structured feature delivery. 21 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -63,6 +63,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [triage-issue](triage-issue/) | Investigate bugs, find root cause, create TDD fix plan |
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
+| [ts-audit](ts-audit/) | Audit TypeScript code against Total TypeScript best practices |
 
 ### Tooling & Setup
 

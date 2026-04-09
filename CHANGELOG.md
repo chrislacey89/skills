@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.5.0 — TypeScript Audit Skill
+
+Adds `/ts-audit` as a side-route skill for auditing TypeScript and React code against 9 Total TypeScript library references. Produces structured markdown reports with findings grouped by category (Type Safety, Generics, Discriminated Unions, Advanced Patterns, Type Transformations, React Patterns, Testing Patterns).
+
+### Changes
+
+- New skill: `/ts-audit` — audit TypeScript code quality against Total TypeScript best practices (user-invoked, side-route)
+- `/ts-audit` SKILL.md: added Invocation Position and Handoff sections for pipeline integration
+- `/pre-merge` Phase 3: added note about `/ts-audit` as optional companion for TypeScript projects
+- `README.md` updated: skill count 20→21, `/ts-audit` added to Development table
+- `CLAUDE.md` updated: side-route skills list
+- `SYSTEM-OVERVIEW.md` updated: side-route skills list, directory tree, handoff map, quick reference table
+- `docs/using-this-pack.md` updated: side-route skills list
+
 ## v1.4.2 — Compartmentalized Commits in /execute
 
 `/execute` now commits after each logical unit of progress instead of accumulating all changes into a single commit at the end. This produces a clean, reviewable commit history where each commit is the smallest change that leaves the codebase working.

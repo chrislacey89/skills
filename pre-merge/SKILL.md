@@ -97,6 +97,8 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 **Dimension 6 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
 
+**TypeScript projects:** For branches with significant `.ts` or `.tsx` changes, mention that `/ts-audit` can be run on the changed files for type-safety analysis that complements the architectural review. Do not invoke it automatically — note it as an option. Example: "For deeper TypeScript analysis, consider running `/ts-audit` on the changed files."
+
 ### Phase 4: Present Findings
 
 Combine findings from all dimensions (or sub-agents). Present in the terminal using three tiers:

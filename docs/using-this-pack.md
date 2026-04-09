@@ -129,6 +129,7 @@ These support or re-enter the main flow:
 - `/request-refactor-plan`
 - `/improve-codebase-architecture`
 - `/ubiquitous-language`
+- `/ts-audit`
 
 ### Infrastructure skills
 
