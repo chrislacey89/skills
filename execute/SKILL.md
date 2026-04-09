@@ -171,7 +171,13 @@ Present the checklist:
 - [ ] No hardcoded values that should be config or env vars
 
 #### Acceptance Criteria
-- [ ] Each acceptance criterion from the issue/PRD confirmed met
+
+If the task originated from a GitHub issue or PRD with acceptance criteria, read them and generate a concrete verification step for each one. Each step should tell the user exactly what to do and what to expect — not just restate the criterion.
+
+Example — if the AC says "user can reset their password via email":
+- [ ] Go to /login → click "Forgot password" → enter test email → confirm reset email arrives → follow link → set new password → log in with new password
+
+After the generated steps, always include:
 - [ ] Scope matches what was asked — no unasked-for additions, no missing pieces
 
 Wait for the user to review and confirm. If they flag items that need fixing, address them, commit the fixes, and re-present the checklist. Only proceed to Step 6 after user confirmation.

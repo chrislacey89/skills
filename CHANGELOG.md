@@ -7,6 +7,7 @@ Adds a new Step 5 to `/execute` — a manual verification checklist presented to
 ### Changes
 
 - `/execute` new Step 5: **Manual Verification Checklist** — summarizes commits and key files, presents checklist covering behavior, code quality, and acceptance criteria, waits for user confirmation before proceeding
+- `/execute` Step 5 Acceptance Criteria: generates concrete walkthrough-style verification steps derived from the GitHub issue/PRD AC rather than generic checkboxes
 - `/execute` Step 5 (Cleanup) renumbered to Step 6
 - Cross-references updated: `execute/SKILL.md` Step 0, `CLAUDE.md`, `tdd/SKILL.md` all point to Step 6 for TDD marker cleanup
 
