@@ -48,6 +48,16 @@ If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 
 
 **TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes both markers after commit.
 
+**Assumptions validation gate.** If the task is a GitHub issue with an "Assumptions from Parent PRD" section, spend 60 seconds checking each listed assumption against current reality before proceeding. For each:
+
+- Is the external service still available at the expected API and pricing tier?
+- Does the parent PRD's approach still hold given what you now know?
+- Are the packages this slice depends on still at compatible versions?
+
+If all assumptions still hold, proceed to Step 1. If any assumption has changed, stop and flag it to the user — this slice needs a targeted `/research` + mini-PRD cycle before execution, not a patch during implementation. Do not proceed with stale assumptions and attempt to work around them mid-execution.
+
+Skip this gate entirely for one-off tasks without an "Assumptions from Parent PRD" section.
+
 ### 1. Understand the Task
 
 Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understand the relevant files, patterns, and conventions. If the task is ambiguous, ask the user to clarify scope before proceeding.

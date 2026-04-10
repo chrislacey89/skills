@@ -152,6 +152,14 @@ Mark policy-driven criteria with `[POLICY]` — these encode current business ru
 - [ ] Criterion 2
 - [ ] `[POLICY]` Criterion that reflects a current business rule rather than a stable requirement
 
+## Assumptions from Parent PRD
+
+List the 3-5 key assumptions from the parent PRD that this slice depends on. Before starting execution, spend 60 seconds confirming each is still true. If any assumption has changed, this slice gets a targeted `/research` → mini-PRD cycle before proceeding. If all hold, execute directly.
+
+- [ ] [Assumption 1 — e.g., "Turso free tier still provides 5GB storage"]
+- [ ] [Assumption 2 — e.g., "better-sqlite3 is still the Drizzle driver in use"]
+- [ ] [Assumption 3 — e.g., "Vercel auto-detects TanStack Start"]
+
 ## Blocked by
 
 - Blocked by #<issue-number> (if any)

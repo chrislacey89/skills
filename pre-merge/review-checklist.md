@@ -56,6 +56,7 @@ Used by `/pre-merge` during Phase 3. Eight dimensions, each independent. For eve
 - Undeclared cross-slice imports — code that imports from another slice's module without a corresponding Consumes declaration in the issue body
 - Signature drift — a function exists but its signature (parameters, return type) differs from what was declared
 - Missing Produces — a slice exports something that downstream slices depend on, but it wasn't listed in Produces
+- Phantom dependencies — a package added to `package.json` (or equivalent manifest) in this diff but never imported in any source file. Front-loaded decisions from `research.md` or the PRD that were recommended but never materialized in the implementation. These should be removed from the manifest before subsequent slices inherit them as implicit constraints.
 
 **Out of scope:** Whether the interfaces are well-designed or deep (Dimension 1 covers shallowness).
 
