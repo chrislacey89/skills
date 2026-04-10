@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.6.1 — /help base-branch detection + parallel tool-use gotcha note
+
+One fix to `/help`'s Phase 1 state gather. The prior version hardcoded `git log main..HEAD || git log master..HEAD` to count commits ahead of base, which exit-128'd in any repo whose default branch is not `main`/`master` (this pack's own repo uses `prod`; others use `develop`, `trunk`, or team-specific names). Because `/help` dispatches its snapshot commands as a parallel tool-use batch in Claude Code, and because Claude Code cancels the in-flight siblings of any bash call that errors, a single bad ref killed the entire snapshot and forced a full retry.
+
+### Changes
+
+- **`/help` Step 1 split into Phase 1a and Phase 1b** — Phase 1a detects the base branch sequentially using `git symbolic-ref refs/remotes/origin/HEAD` with fallback through `main`, `master`, `prod`, `trunk`. Phase 1b dispatches the six read-only snapshot commands in parallel, each referencing the detected `$BASE_BRANCH`. If `origin/HEAD` is unset and no fallback candidate exists, the skill asks the user for the base branch name before continuing.
+- **New "parallel tool-use gotcha" note in `/help`** — explicitly documents that one failing bash call in a Claude Code parallel batch cancels its siblings, and that this is why base-branch detection must run first and alone. Discourages the shortcut of chaining `&&`/`||` against a guessed branch inside a parallel batch.
+
+### Motivation
+
+Caught while running `/help` in the Civic Mirror repo (default branch `prod`). The initial state gather exited 128 on `git log main..HEAD`, which cancelled the other six commands in the same parallel batch, and the recovery round had to retry everything with the correct ref. Two compounding problems: (1) the hardcoded branch name was wrong for the repo, and (2) the parallel dispatch amplified one failure into seven. Fix (1) addresses the immediate bug; fix (2) is a durable note so future skill authors know not to trust `&&`-chains inside parallel batches.
+
 ## v1.6.0 — BMAD Audit Adopts + /execute Auto-Flow + QA/Triage Restructure
 
 Seven changes: five derived from the audit in `docs/bmad-comparison.md` against [bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD), a flow improvement that folds `/pre-merge` invocation into `/execute`'s existing manual verification checklist, and a restructuring of the bug path so `/qa` is the single entry point for bug conversations and delegates per-issue to `/triage-issue` when depth is needed. None of the seven changes the pipeline's core shape. Together they harden review, lower the friction of trivial changes, add the orientation and recovery affordances the pack was missing, remove the manual handoff step when the user is already at the PR-ready moment, and collapse two overlapping bug entry points into one.

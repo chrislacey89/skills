@@ -31,12 +31,29 @@ Do not use `/help`:
 
 ### 1. Gather repo state
 
-Run these commands in parallel to build a state snapshot. Each is fast and read-only:
+Build a state snapshot in two phases: first detect the base branch sequentially (so downstream calls can reference it), then dispatch the read-only snapshot commands in parallel.
+
+**Phase 1a — detect the base branch (run first, sequentially):**
 
 ```bash
-# Current branch and whether it has commits ahead of the base branch
+# Prefer the remote's HEAD, fall back through common names
+BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
+if [ -z "$BASE_BRANCH" ]; then
+  for candidate in main master prod trunk; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
+  done
+fi
+echo "base=$BASE_BRANCH"
+```
+
+Do not hardcode `main` or `master` — not every repo uses them (this pack's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name). If `origin/HEAD` is not set and none of the fallback candidates exist, ask the user for the base branch name before continuing.
+
+**Phase 1b — gather the snapshot (run in parallel, each call independent):**
+
+```bash
+# Current branch and commits ahead of the detected base branch
 git branch --show-current
-git log --oneline main..HEAD 2>/dev/null || git log --oneline master..HEAD 2>/dev/null
+git log --oneline "$BASE_BRANCH..HEAD"
 
 # Open PR for the current branch, if any
 gh pr list --head "$(git branch --show-current)" --state open --json number,title,url
@@ -50,6 +67,8 @@ gh issue list --state open --json number,title,labels,milestone --limit 50
 # Open milestones with remaining feature issues
 gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | {title, open_issues, closed_issues}' 2>/dev/null
 ```
+
+**Parallel tool-use gotcha.** In Claude Code, when one bash call in a parallel batch errors, the harness cancels its in-flight siblings — one bad ref takes down the whole snapshot. This is why Phase 1a must run first (and alone): if base-branch detection fails, nothing in Phase 1b will try to reference `$BASE_BRANCH`. Do not chain `&&`/`||` against a guessed branch name inside a parallel batch to "save a round trip" — it will fail noisily on any repo that does not match your guess.
 
 If `gh` is not authenticated or the repo is not a GitHub repo, note which signals you could not gather and work from the rest. A missing signal is not a failure — it just narrows the recommendation.
 
