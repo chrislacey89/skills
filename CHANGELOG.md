@@ -1,5 +1,36 @@
 # Changelog
 
+## v1.6.0 — BMAD Audit Adopts: Orientation, Recovery, Hardening
+
+Five changes derived from the audit in `docs/bmad-comparison.md` against [bmad-code-org/BMAD-METHOD](https://github.com/bmad-code-org/BMAD-METHOD). The audit identified five specific adopts — none of which change the pipeline's core shape, but together they harden review, lower the friction of trivial changes, and add the orientation and recovery affordances the pack was missing.
+
+### Changes
+
+- **New skill: `/help`** — side-route orientation skill that reads current repo state (branch, open PRs, open issues, `research.md` presence, milestones) and recommends one next pipeline step with a one-line reason and the specific state signals that triggered it. Advisory only — never runs the recommended skill itself. Twelve-rule priority table covers the common pipeline states from "open PR on current branch" down to "clean slate, start with `/shape`."
+- **New skill: `/correct-course`** — side-route recovery skill that turns the `SYSTEM-OVERVIEW.md` Pipeline Recovery prose into an invocable workflow. Captures the trigger, diagnoses which upstream skill's output is now untrustworthy, lists every stale artifact (`research.md`, PRD issue, slice issues, open PR, planning milestone), walks the cleanup one decision at a time, and hands off to the earliest affected skill with scoped re-run instructions.
+- **`/pre-merge` minimum-findings guard** — Phase 4 now counts findings across all three tiers before presenting. If fewer than 4 surfaced on a non-trivial diff (>50 changed lines or >2 files), the skill does one more focused pass for common miss categories (scope drift, silent assumption changes, shallow modules, happy-path-only tests, new state files). Borrowed from BMAD's `bmad-review-adversarial-general` "at least ten issues" rule and tuned to our context — explicit anti-sycophancy guard that stops the review from closing too early.
+- **`/execute` trivial-task exception** — Step 0 TDD classification gate now allows skipping classification via direct `.claude/.tdd-skipped` creation for single-commit cleanups (typo fixes, dead code removal, comment-only changes, formatting-only changes, dependency bumps without API changes). Guarded by four conjunctive conditions: not tied to a GitHub issue, not on an active feature branch, single commit, no behavior change. When any condition fails, use the normal gate.
+- **`SYSTEM-OVERVIEW.md` handoff table** — new one-row-per-skill table added before the existing Default Handoff Map bullets. Covers all 23 skills with `Expects | Produces | Next` in ≤15 words per cell. Scannable orientation for readers who do not want to read the narrative bullets. Borrowed from BMAD's `module-help.csv` declarative flow model, adapted to markdown.
+
+### Documentation updates
+
+- `README.md` — skill count 21 → 23, new "Orientation & Recovery" section with `/help` and `/correct-course`
+- `SYSTEM-OVERVIEW.md` — side-route list, handoff map bullets, directory tree, and quick reference table all include the two new skills; new handoff table section above the existing bullets
+- `CLAUDE.md` — side-route list updated; `/correct-course` noted as the invocable front door for Pipeline Recovery; `/help` described as advisory orientation
+- `docs/using-this-pack.md` — side-route list updated with descriptions; new "Start with `/help`" and "Start with `/correct-course`" entry points added
+
+### Motivation
+
+The audit against BMAD-METHOD (`docs/bmad-comparison.md`) surfaced twelve dimensions of comparison and cut the adopt list to the five highest-value items:
+
+1. `/help` — BMAD's strongest idea this pack lacked. A router that reads state and tells you the next step makes every other pipeline investment more discoverable.
+2. `/correct-course` — the Pipeline Recovery section of `SYSTEM-OVERVIEW.md` already documented backtracking, but it was prose. Turning it into a named skill gives it a front door.
+3. Minimum-findings guard — `/pre-merge` was sometimes closing with two or three findings on large diffs because the agent found nothing obvious and stopped. A re-pass threshold hardens this cheaply.
+4. Trivial-task exception — the TDD classification gate is load-bearing but creates friction on single-line cleanups. An explicit, guarded opt-out reduces the "pipeline is all-or-nothing" feeling without loosening the gate for real work.
+5. Handoff table — BMAD's declarative `module-help.csv` is more scannable than narrative handoff prose for orientation. A markdown table gives most of that benefit without adding a CSV.
+
+The audit also named five things deliberately not adopted (agent personas, filesystem-first state, story-level cadence, separate market/domain/technical research skills, post-hoc test generation) and five distinctive values to defend (mandatory research with Phase 0 version check, GitHub-native state discipline, compounding `docs/solutions/`, TDD classification gate, boundary maps before implementation). Those trade-offs are now durable in `docs/bmad-comparison.md`.
+
 ## v1.5.2 — Branch Isolation + Runtime Startup Verification
 
 Two fixes from Civic Mirror issue #5: (1) `/execute` started work on a stale feature branch instead of branching from the base branch, and (2) the verification ladder had no step between "it compiles" and "it behaves correctly" — the app crashed at runtime because database migrations hadn't been applied, but all tests passed using in-memory SQLite.

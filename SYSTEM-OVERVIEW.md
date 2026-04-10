@@ -232,8 +232,38 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
+
+### Handoff Table
+
+One row per skill. For quick orientation — what each skill expects, what it produces, and where it usually goes next. The narrative Default Handoff Map below covers branch conditions and auto-invocations this table cannot fit.
+
+| Skill | Expects | Produces | Next |
+|---|---|---|---|
+| `/shape` | Fuzzy problem, unclear scope | Shared understanding — choices, assumptions, impositions, signals | `/research` (or `/create-milestone` for multi-PRD work) |
+| `/create-milestone` | `/shape` closing summary for a multi-PRD tranche | GitHub milestone plus sequenced feature issues | `/research` on a `research-ready` feature |
+| `/research` | Clarified problem from `/shape` | `research.md` with verified versions and doc links | `/write-a-prd` (may invoke `/api-design-review`) |
+| `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
+| `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
+| `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` |
+| `/pre-merge` | Verified implementation ready to review | PR with lineage plus architectural review readout | Merge, then `/compound` |
+| `/compound` | Shipped work or meaningful lesson from review or QA | `docs/solutions/` entry with volatility and Shelf Life | Future `/research` and `/write-a-prd` consult it |
+| `/api-design-review` | API-shaped uncertainty from `/research` or `/write-a-prd` | Contract verdict, compatibility class, must-lock decisions | Returns to the calling skill |
+| `/design-an-interface` | Module problem with multiple plausible shapes | Contrasted interface options with a recommendation | Returns to caller (usually `/write-a-prd`) |
+| `/tdd` | Concrete behavior ready for red-green-refactor | Tested code increments via vertical cycles | Returns to caller (usually `/execute`) |
+| `/qa` | Observed user-facing failures or regressions | Durable GitHub bug issues in domain language | `/triage-issue` or `/execute` |
+| `/triage-issue` | Bug needing diagnosis before implementation | Root-cause issue with TDD fix plan | `/execute`, often via `/tdd` |
+| `/request-refactor-plan` | Refactor problem needing safer sequencing | GitHub issue with tiny-commit refactor plan | `/execute` |
+| `/improve-codebase-architecture` | Architectural friction, coupled modules, shallow pain | Candidate deepening opportunities and a refactor RFC | `/request-refactor-plan` or `/execute` |
+| `/ubiquitous-language` | Terminology ambiguity or competing domain terms | `UBIQUITOUS_LANGUAGE.md` with decisions register | Returns to the caller workflow |
+| `/ts-audit` | TypeScript or React files to audit | Structured findings report grouped by category | `/execute` or `/pre-merge` |
+| `/help` | Uncertainty about current pipeline position | Next-step recommendation with a one-line reason | The recommended next skill |
+| `/correct-course` | Invalidated artifact or changed assumption | Blast-radius diagnosis and artifact cleanup plan | The earliest skill that needs to re-run |
+| `/init-pipeline` | Project that will use `/execute` | Claude Code hooks, git guardrails, pre-commit setup | `/execute` (auto-invokes it) |
+| `/setup-pre-commit` | Repo needing commit-time quality gates | Lefthook config plus formatter/linter wiring | Normal feature work, now gated at commit |
+| `/setup-ralph-loop` | Repo wanting repeatable Ralph execution | `ralph-once.sh` and bounded `ralph.sh` | `/execute`, first HITL then bounded AFK |
+| `/git-guardrails-claude-code` | Project or user environment needing git safety | Installed guardrail hooks blocking destructive commands | Normal workflow with guardrails in place |
 
 ### Default Handoff Map
 
@@ -249,6 +279,8 @@ Use this taxonomy consistently:
 - `/qa` and `/triage-issue` feed bug work back into `/execute`
 - `/request-refactor-plan` and `/improve-codebase-architecture` produce refactor work that can re-enter at `/execute`
 - `/ts-audit` produces type-safety findings that can feed into `/execute` for fixes or inform `/pre-merge` architectural review
+- `/help` reads repo state and recommends the next pipeline skill with a one-line reason — advisory only, never runs the next skill itself
+- `/correct-course` diagnoses stale artifacts when an upstream assumption fails, walks the cleanup, and hands off to the earliest skill that needs to re-run
 
 ```
 .claude/skills/
@@ -297,9 +329,11 @@ Use this taxonomy consistently:
 │   └── REFERENCE.md
 ├── request-refactor-plan/SKILL.md  # Refactor RFC with tiny commits that can re-enter execution through /execute
 ├── ubiquitous-language/SKILL.md    # Domain glossary support that can sharpen shaping, QA, and refactor conversations
-└── ts-audit/                       # Audit TypeScript code against Total TypeScript library references
-    ├── SKILL.md
-    └── evals/
+├── ts-audit/                       # Audit TypeScript code against Total TypeScript library references
+│   ├── SKILL.md
+│   └── evals/
+├── help/SKILL.md                   # Read repo state and recommend the next pipeline skill (advisory only)
+└── correct-course/SKILL.md         # Diagnose stale artifacts and walk the cleanup when an upstream assumption fails
 ```
 
 ### Ralph setup:
@@ -360,4 +394,6 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Record a decision | Add a row to the decisions register in ubiquitous language doc |
 | Clean up after ship | Delete `research.md`, close the PRD issue |
 | Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
+| Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research.md, milestones) and recommends the next skill with a one-line reason |
+| Back out of a stale artifact | `/correct-course` — names the earliest affected skill and walks the cleanup before you re-run it |
 | Audit knowledge base | Review `docs/solutions/` quarterly |

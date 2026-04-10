@@ -1,10 +1,10 @@
 # Skills
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-21-blue)
+![Skills](https://img.shields.io/badge/skills-23-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-A pipeline-first Claude Code skills pack for structured feature delivery. 21 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+A pipeline-first Claude Code skills pack for structured feature delivery. 23 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -81,6 +81,13 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [pre-merge](pre-merge/) | Create the PR and run an architectural review before merge |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
+
+### Orientation & Recovery
+
+| Skill | Description |
+|-------|-------------|
+| [help](help/) | Read repo state and recommend the next pipeline step |
+| [correct-course](correct-course/) | Diagnose stale artifacts and walk the cleanup before backtracking |
 
 ## Repo guide
 

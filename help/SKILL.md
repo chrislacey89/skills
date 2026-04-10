@@ -1,0 +1,144 @@
+---
+name: help
+description: "Side-route orientation skill. Use when the user asks 'what's next', 'where am I', or is returning to a repo mid-pipeline and wants to know which skill to run next. Reads repo state (branch, PRs, issues, research.md, milestones) and recommends one next step with a one-line reason. Not for executing work — only for routing."
+---
+
+# Help
+
+Read the current repo state and recommend the next pipeline step. This skill does not do any work itself — it orients the user by pointing to the right next skill, citing the state it observed so the recommendation can be overruled.
+
+This is the front door for users who are returning to a repo after a break, onboarding to the pack for the first time, or stuck mid-pipeline and unsure which skill to invoke next.
+
+## Invocation Position
+
+This is a side-route skill. It reconnects to the main pipeline at whichever skill the diagnosis points to.
+
+Use `/help` when:
+
+- The user is starting a session in a repo that already uses this pack and wants to know where they are in the pipeline
+- The user has been away from a feature for a while and needs a refresher on what state the work is in
+- A new team member is learning the pipeline and wants guidance rather than reading all of `SYSTEM-OVERVIEW.md`
+- The user explicitly asks "what should I do next?" or "where am I?"
+
+Do not use `/help`:
+
+- To actually run the recommended skill — `/help` only recommends; the user runs the next skill themselves
+- When the user already knows the next step and just wants to execute
+- As a substitute for reading `SYSTEM-OVERVIEW.md` when the question is conceptual rather than state-specific
+- For tasks unrelated to the feature pipeline (bug fixes with no upstream artifacts, one-off cleanups)
+
+## Process
+
+### 1. Gather repo state
+
+Run these commands in parallel to build a state snapshot. Each is fast and read-only:
+
+```bash
+# Current branch and whether it has commits ahead of the base branch
+git branch --show-current
+git log --oneline main..HEAD 2>/dev/null || git log --oneline master..HEAD 2>/dev/null
+
+# Open PR for the current branch, if any
+gh pr list --head "$(git branch --show-current)" --state open --json number,title,url
+
+# research.md presence
+ls research.md plans/research.md 2>/dev/null
+
+# Open issues with PRD or slice labels, or in open milestones
+gh issue list --state open --json number,title,labels,milestone --limit 50
+
+# Open milestones with remaining feature issues
+gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | {title, open_issues, closed_issues}' 2>/dev/null
+```
+
+If `gh` is not authenticated or the repo is not a GitHub repo, note which signals you could not gather and work from the rest. A missing signal is not a failure — it just narrows the recommendation.
+
+### 2. Classify the state
+
+Walk through these checks in priority order. The first one that matches is the recommendation. Stop at the first match — do not try to give the user three options.
+
+| # | Signal | Recommendation | One-line reason |
+|---|---|---|---|
+| 1 | Open PR on current branch | Merge the PR, then run `/compound` | "You have an open PR on `<branch>` — if review is done, merge it and capture lessons." |
+| 2 | Current branch has commits ahead of base, no open PR | `/pre-merge` | "You have `<N>` commits ahead of `<base>` with no PR yet — `/pre-merge` creates it and runs the architectural review." |
+| 3 | Open slice issues referencing a PRD, none closed | `/execute` on the highest-priority unblocked slice | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
+| 4 | Open slice issues referencing a PRD, some closed | `/execute` on the next unblocked slice | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |
+| 5 | Open PRD issue with no slice issues | `/prd-to-issues` on PRD #`<prd>` | "PRD #`<prd>` is shaped but not yet decomposed — `/prd-to-issues` breaks it into slices." |
+| 6 | `research.md` exists, no open PRD issue | `/write-a-prd` | "`research.md` is present but there is no PRD issue — `/write-a-prd` turns research into a shaped pitch." |
+| 7 | Planning milestone with a `research-ready` feature issue | `/research` on the `research-ready` feature | "Milestone `<name>` has a `research-ready` feature — run `/research` on it." |
+| 8 | Planning milestone with only `roadmap bet` features | Promote one feature to `research-ready`, then `/research` | "Milestone `<name>` has only `roadmap bet` features — pick one, promote it, then `/research`." |
+| 9 | Merged PR in last N commits, `research.md` still present | `/compound`, then delete `research.md` | "A recent PR merged but `research.md` is still in the repo — `/compound` captures lessons, then delete it." |
+| 10 | Shipped work but no `docs/solutions/` entry since the last merge | `/compound` | "The last merge shipped work that has not yet been compounded — run `/compound`." |
+| 11 | QA bugs open and no active feature work | `/execute` on the highest-priority QA bug | "You have `<N>` open QA bug issues — `/execute` to work through them." |
+| 12 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |
+
+### 3. Present the recommendation
+
+Present one recommendation, with the one-line reason and the state signals that triggered it. Use this format:
+
+```
+## Where you are
+
+<one paragraph: the state signals you observed, stated as facts>
+
+## Next step
+
+**`/<recommended-skill>`** — <one-line reason>
+
+## Why this skill
+
+<one short paragraph: what the skill produces and how it connects to the observed state>
+
+## If this is wrong
+
+<2-3 alternative next steps for common cases where the heuristic might have missed>
+```
+
+Example output (for signal #6, `research.md` present but no PRD issue):
+
+```
+## Where you are
+
+Current branch: main. No open PRs. `research.md` exists in the repo root, dated 2026-04-05 and pointing at a Next.js 16 middleware migration. No open PRD issue matches it (I searched open issues for "middleware" and "Next.js" and found nothing). No open slice issues. No active milestone.
+
+## Next step
+
+**`/write-a-prd`** — `research.md` is present but there is no PRD issue for the work it covers.
+
+## Why this skill
+
+`/write-a-prd` takes a completed research document and turns it into a shaped PRD filed as a GitHub issue. It consults `research.md` automatically, so the recommendations in the research will flow into the pitch without you re-summarizing them. Expect 10–15 minutes of interview, then a PRD issue ready for `/prd-to-issues`.
+
+## If this is wrong
+
+- If the `research.md` is stale and no longer matches what you intend to build, run `/correct-course` first to clean up before shaping again.
+- If the feature has already shipped and you just forgot to delete `research.md`, delete it directly — no skill needed.
+- If you want to rewrite the research for a different approach, run `/research` again (it will overwrite).
+```
+
+### 4. Stop
+
+After presenting the recommendation, stop. Do not start the recommended skill automatically, and do not ask the user if they want you to run it — the user decides. If the user wants to run it, they will invoke it themselves.
+
+If the user responds with "that's wrong, I'm actually doing X," do not re-run the full state gather. Just answer the corrected question directly — your recommendation was based on signals, not authority.
+
+## Heuristic Rules
+
+- **One recommendation, not three.** The user is asking for a next step, not a menu. Pick the best match and commit to it.
+- **Cite the state.** Every recommendation must reference the specific signal that triggered it — a file path, an issue number, a branch name. Vague recommendations lose trust fast.
+- **Prefer the earliest unblocked step.** If the user has both an open slice issue and an unrelated merged PR that was never compounded, recommend compounding first only if the slice work is paused. When in doubt, recommend what unblocks forward motion on the most recent work.
+- **Never fabricate signals.** If you could not read open issues because `gh` is unauthenticated, say so. Do not guess.
+- **Never auto-run the recommendation.** `/help` is advisory. The user runs the next skill.
+
+## What This Skill is NOT
+
+- **Not a task tracker.** GitHub issues and PRs are the task tracker. This skill reads that state, it does not replace it.
+- **Not a replacement for `SYSTEM-OVERVIEW.md`.** If the user is asking conceptual questions about how the pipeline works, point them at `SYSTEM-OVERVIEW.md` and `docs/using-this-pack.md` instead of improvising an explanation.
+- **Not a wizard.** It does not walk the user through shaping, research, or planning. It tells them which skill to start and gets out of the way.
+
+## Handoff
+
+- **Expected input:** a question like "what should I do next?" or ambient uncertainty about pipeline position
+- **Produces:** a single next-step recommendation with cited state signals and a one-line reason
+- **Feeds into:** whichever pipeline skill the recommendation points at — `/shape`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, or `/compound`
+- **What comes next:** the user runs the recommended skill themselves — `/help` does not invoke anything

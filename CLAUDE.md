@@ -44,7 +44,8 @@ Key interactions between skills:
 - `/prd-to-issues` produces boundary maps (Produces/Consumes) that `/execute` reads to understand interfaces
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
 - `/compound` runs after ship to capture lessons into `docs/solutions/` — this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes
-- When backtracking to an earlier skill, stale artifacts (`research.md`, PRD issues, slice issues) must be explicitly updated or removed before proceeding forward — see SYSTEM-OVERVIEW.md "Pipeline Recovery"
+- When backtracking to an earlier skill, stale artifacts (`research.md`, PRD issues, slice issues) must be explicitly updated or removed before proceeding forward — `/correct-course` is the invocable front door for this, and the canonical rules live in SYSTEM-OVERVIEW.md "Pipeline Recovery"
+- `/help` is the orientation skill — it reads repo state (branch, PRs, issues, `research.md`, milestones) and recommends the next pipeline skill with a one-line reason. It is advisory only and never invokes the recommended skill itself.
 
 ## Invocation Roles
 
@@ -52,7 +53,7 @@ Use these categories consistently across the repo:
 
 - **Primary pipeline skills** — direct-entry steps in the default delivery path, plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
 - **Invoked helper skills** — usually not top-level entry points for a feature, but delegated when a narrower decision is unresolved: `/api-design-review`, `/design-an-interface`, `/tdd`
-- **Side-route skills** — valid alternate or supporting paths beside the main pipeline: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`
+- **Side-route skills** — valid alternate or supporting paths beside the main pipeline: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
 - **Infrastructure skills** — project setup or safety tooling, not normal delivery steps: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 Each skill should make its role obvious.

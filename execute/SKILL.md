@@ -48,6 +48,15 @@ If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 
 
 **TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes both markers after commit.
 
+**Trivial-task exception.** For single-commit cleanups unrelated to active feature work — typo fixes, dead code removal, comment-only changes, formatting-only changes, dependency version bumps without API surface changes — you may skip classification by creating `.claude/.tdd-skipped` directly. This exception applies only when **all** of the following are true:
+
+- The task is not tied to an open GitHub issue, PRD, slice issue, or QA bug
+- The task is not part of an active feature branch created for multi-slice work
+- The change is expected to be a single commit (not a sequence of logical units)
+- The change does not touch behavior — no new conditionals, no new state, no new exported symbols, no schema or migration changes
+
+If any of these is false, go through the normal classification gate. When in doubt, use the gate — the cost of one extra `/tdd` invocation is lower than the cost of an unverified behavior change slipping through as "trivial."
+
 **Assumptions validation gate.** If the task is a GitHub issue with an "Assumptions from Parent PRD" section, spend 60 seconds checking each listed assumption against current reality before proceeding. For each:
 
 - Is the external service still available at the expected API and pricing tier?

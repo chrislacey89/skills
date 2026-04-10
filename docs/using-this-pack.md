@@ -65,6 +65,24 @@ Use when:
 Use when:
 - behavior is failing and you need bug intake or diagnosis rather than normal feature flow
 
+### Start with `/help`
+
+Use when:
+- you are returning to a repo mid-pipeline and are not sure which skill to run next
+- a new team member is onboarding and wants a recommendation grounded in actual repo state
+- you just want confirmation that your mental model of the next step matches what is actually durable in GitHub
+
+`/help` is advisory — it reads state (branch, PRs, issues, `research.md`, milestones) and recommends one next step. It does not run the recommended skill itself.
+
+### Start with `/correct-course`
+
+Use when:
+- an upstream artifact (research, PRD, slice decomposition) has been invalidated by new information
+- you need to clean up stale issues, `research.md`, or an in-flight PR before re-running an earlier pipeline skill
+- `/research` or `/pre-merge` surfaced a concern that warrants deliberate backtracking rather than patching forward
+
+`/correct-course` diagnoses the blast radius, walks artifact cleanup one decision at a time, and hands off to the earliest affected skill.
+
 ## Default pipeline
 
 ```text
@@ -130,6 +148,8 @@ These support or re-enter the main flow:
 - `/improve-codebase-architecture`
 - `/ubiquitous-language`
 - `/ts-audit`
+- `/help` — orientation skill that reads repo state and recommends the next pipeline skill
+- `/correct-course` — invocable backtracking skill for when an upstream artifact has gone stale
 
 ### Infrastructure skills
 

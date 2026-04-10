@@ -103,7 +103,11 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 ### Phase 4: Present Findings
 
-Combine findings from all dimensions (or sub-agents). Present in the terminal using three tiers:
+Combine findings from all dimensions (or sub-agents).
+
+**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
+
+Present in the terminal using three tiers:
 
 ```
 ## Architectural Review
