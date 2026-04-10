@@ -223,17 +223,25 @@ Example — if the AC says "user can reset their password via email":
 After the generated steps, always include:
 - [ ] Scope matches what was asked — no unasked-for additions, no missing pieces
 
+#### Ready for PR Review
+
+- [ ] Ready to create the PR and run architectural review now (flows directly into `/pre-merge`)?
+
 Wait for the user to review and confirm. If they flag items that need fixing, address them, commit the fixes, and re-present the checklist. Only proceed to Step 6 after user confirmation.
 
-### 6. Cleanup
+**How the "Ready for PR Review" item drives the handoff:** If the user confirms this final item, Step 6 runs cleanup and then automatically invokes `/pre-merge` with the PRD issue number (if the task originated from one). If the user confirms the behavior, code quality, and acceptance criteria items but answers "no" to the PR review item — because they want to batch with more work, are waiting on external input, or plan to sit on the branch — Step 6 runs cleanup and `/execute` exits cleanly. The user invokes `/pre-merge` manually when ready.
 
-All commits should already be done by this point. This step handles post-implementation cleanup only.
+### 6. Cleanup and Handoff
+
+All commits should already be done by this point. This step handles post-implementation cleanup and the transition to `/pre-merge`.
 
 Remove the classification markers:
 
 ```bash
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped"
 ```
+
+**Auto-invoke `/pre-merge`.** If Step 5 ran and the user confirmed the "Ready for PR Review" item, invoke `/pre-merge` now. If the task originated from a PRD issue, pass the issue number so `/pre-merge` can gather slice lineage and verify boundary map contracts without asking the user for it again. If the user answered "no" to the PR review item, or Step 5 was skipped entirely (AFK Ralph iterations, trivial-task flows that never reached a user checklist), `/execute` exits here and the user invokes `/pre-merge` manually when ready.
 
 If you cannot complete the task in this context window, leave a comment on the GitHub issue with:
 
@@ -249,5 +257,5 @@ If the error suggests the approach from `research.md` or the PRD is wrong, say s
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
 - **Produces:** verified code changes as compartmentalized commits (one per logical unit), and implementation context for the next reviewer or iteration
 - **May invoke:** `/tdd` for backend work and behavior-heavy frontend logic, plus stack-specific reference skills when the project stack warrants them
-- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo
-- **Comes next by default:** `/pre-merge`
+- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo, and `/pre-merge` at the end of Step 6 when Step 5 ran and the user confirmed the "Ready for PR Review" checklist item
+- **Comes next by default:** `/pre-merge` — auto-invoked after Step 5 user confirmation in HITL mode; user invokes it manually after AFK Ralph iterations or when they answered "no" to the PR review item

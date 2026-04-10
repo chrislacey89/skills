@@ -59,8 +59,8 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | Skill | Description |
 |-------|-------------|
 | [execute](execute/) | Execute a unit of work end-to-end with verification |
-| [tdd](tdd/) | Test-driven development with red-green-refactor loop |
-| [triage-issue](triage-issue/) | Investigate bugs, find root cause, create TDD fix plan |
+| [tdd](tdd/) | Test-driven development with red-green-refactor loop (invoked from `/execute`) |
+| [triage-issue](triage-issue/) | Deep bug diagnosis + root cause + TDD fix plan (invoked from `/qa` per issue) |
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
 | [ts-audit](ts-audit/) | Audit TypeScript code against Total TypeScript best practices |
@@ -77,7 +77,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 
 | Skill | Description |
 |-------|-------------|
-| [qa](qa/) | Interactive QA session, files GitHub issues |
+| [qa](qa/) | Single entry point for bug conversations; files lightweight issues and delegates per-issue to `/triage-issue` for deep diagnosis |
 | [pre-merge](pre-merge/) | Create the PR and run an architectural review before merge |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |

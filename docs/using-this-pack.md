@@ -60,10 +60,12 @@ Use when:
 - the work is ready to build and verify
 `Ralph` is the AFK execution mode/persona for this stage, not a separate skill or pipeline step. Use HITL `/execute` when the slice still needs active user decisions, review, or supervision. Use AFK `/execute` only when the slice is already durable in GitHub, unblocked, and clear enough to execute without renegotiating scope.
 
-### Start with `/qa` or `/triage-issue`
+### Start with `/qa`
 
 Use when:
-- behavior is failing and you need bug intake or diagnosis rather than normal feature flow
+- behavior is failing and you need bug intake rather than normal feature flow
+
+`/qa` is the single entry point for bug conversations. Within its per-issue loop, it delegates to `/triage-issue` for any specific bug that needs root-cause diagnosis before it can be filed lightweight, then returns to the loop. Do not start a bug session with `/triage-issue` directly — start with `/qa` and let the depth check decide.
 
 ### Start with `/help`
 
@@ -138,12 +140,12 @@ These are usually called from another skill when a narrower question needs focus
 - `/api-design-review`
 - `/design-an-interface`
 - `/tdd`
+- `/triage-issue` — invoked from `/qa` per issue when a specific bug needs root-cause diagnosis
 
 ### Side-route skills
 
 These support or re-enter the main flow:
 - `/qa`
-- `/triage-issue`
 - `/request-refactor-plan`
 - `/improve-codebase-architecture`
 - `/ubiquitous-language`

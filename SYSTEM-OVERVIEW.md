@@ -231,8 +231,8 @@ Everything lives in `.claude/skills/`. No external dependencies. You own all cop
 Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
-- **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/triage-issue`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
+- **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Handoff Table
@@ -246,14 +246,14 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/research` | Clarified problem from `/shape` | `research.md` with verified versions and doc links | `/write-a-prd` (may invoke `/api-design-review`) |
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
 | `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
-| `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` |
+| `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` (auto-invoked after Step 5 PR-review confirmation) |
 | `/pre-merge` | Verified implementation ready to review | PR with lineage plus architectural review readout | Merge, then `/compound` |
 | `/compound` | Shipped work or meaningful lesson from review or QA | `docs/solutions/` entry with volatility and Shelf Life | Future `/research` and `/write-a-prd` consult it |
 | `/api-design-review` | API-shaped uncertainty from `/research` or `/write-a-prd` | Contract verdict, compatibility class, must-lock decisions | Returns to the calling skill |
 | `/design-an-interface` | Module problem with multiple plausible shapes | Contrasted interface options with a recommendation | Returns to caller (usually `/write-a-prd`) |
 | `/tdd` | Concrete behavior ready for red-green-refactor | Tested code increments via vertical cycles | Returns to caller (usually `/execute`) |
-| `/qa` | Observed user-facing failures or regressions | Durable GitHub bug issues in domain language | `/triage-issue` or `/execute` |
-| `/triage-issue` | Bug needing diagnosis before implementation | Root-cause issue with TDD fix plan | `/execute`, often via `/tdd` |
+| `/qa` | Observed user-facing failures or regressions — single entry for bug conversations | Durable GitHub bug issues in domain language; delegates per-issue to `/triage-issue` for deep bugs | `/execute` (or per-issue to `/triage-issue`) |
+| `/triage-issue` | Single bug delegated from `/qa`'s depth check, needing diagnosis before implementation | Root-cause issue with TDD fix plan, replacing the lightweight `/qa` issue for that bug | Returns to the `/qa` loop, then `/execute` (often via `/tdd`) |
 | `/request-refactor-plan` | Refactor problem needing safer sequencing | GitHub issue with tiny-commit refactor plan | `/execute` |
 | `/improve-codebase-architecture` | Architectural friction, coupled modules, shallow pain | Candidate deepening opportunities and a refactor RFC | `/request-refactor-plan` or `/execute` |
 | `/ubiquitous-language` | Terminology ambiguity or competing domain terms | `UBIQUITOUS_LANGUAGE.md` with decisions register | Returns to the caller workflow |
@@ -274,9 +274,9 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 - `/init-pipeline` is auto-invoked by `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing — scaffolds Claude Code hooks (TDD classification gate, git guardrails), pre-commit hooks, and package manager enforcement
 - `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
 - `/prd-to-issues` → `/execute`, with Ralph optionally running the AFK execution loop for unblocked slices, then QA and `/pre-merge`
-- `/execute` → `/pre-merge` after verification, delegating to `/tdd` when backend work benefits from strict red-green-refactor
+- `/execute` → `/pre-merge` after verification — auto-invoked at the end of Step 6 when Step 5's manual verification checklist ran and the user confirmed the "Ready for PR Review" item; AFK Ralph iterations and trivial-task flows that skipped Step 5 exit cleanly for manual `/pre-merge` invocation. `/execute` delegates to `/tdd` when backend work benefits from strict red-green-refactor.
 - `/pre-merge` → merge → `/compound`
-- `/qa` and `/triage-issue` feed bug work back into `/execute`
+- `/qa` is the single entry point for bug conversations and feeds bug work back into `/execute`; it delegates per-issue to `/triage-issue` when a specific bug needs root-cause diagnosis, then returns to its own loop
 - `/request-refactor-plan` and `/improve-codebase-architecture` produce refactor work that can re-enter at `/execute`
 - `/ts-audit` produces type-safety findings that can feed into `/execute` for fixes or inform `/pre-merge` architectural review
 - `/help` reads repo state and recommends the next pipeline skill with a one-line reason — advisory only, never runs the next skill itself
@@ -317,13 +317,13 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 │   ├── mocking.md
 │   ├── tests.md
 │   └── refactoring.md
+├── triage-issue/                    # Bug investigation + structural diagnosis + TDD fix plan, delegated per-issue from /qa when depth is needed
+│   ├── SKILL.md
+│   └── systems-reference.md
 │
 │  ── SIDE ROUTES AND SUPPORTING PATHS ──────────────────────────────────
 │
-├── qa/SKILL.md                     # Interactive QA session that files bug issues and feeds fix work back into the pipeline
-├── triage-issue/                    # Bug investigation + structural diagnosis + TDD fix plan that produces implementation-ready fix work
-│   ├── SKILL.md
-│   └── systems-reference.md
+├── qa/SKILL.md                     # Single entry point for bug conversations — files lightweight issues and delegates per-issue to /triage-issue when depth is needed
 ├── improve-codebase-architecture/  # Find deepening opportunities and spin them into refactor work
 │   ├── SKILL.md
 │   └── REFERENCE.md
@@ -384,9 +384,9 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Execute AFK | Start with HITL Ralph first, then run a bounded Ralph loop over the highest-risk unblocked issues once the prompt and quality bar are proven |
 | Execute HITL | Run `/execute` directly on a specific issue, then `/pre-merge` after verification |
 | Write tests first | `/tdd` for strict red-green-refactor, usually delegated from `/execute` |
-| Run a QA session | `/qa` — report bugs conversationally, agent files GitHub issues that feed fix work back into the pipeline |
+| Run a QA session or report bugs | `/qa` — single entry point for bug conversations; files lightweight GitHub issues in domain language and delegates per-issue to `/triage-issue` when a specific bug needs root-cause diagnosis |
 | Review and create PR before merge | `/pre-merge` — creates PR with PRD lineage, runs architectural review |
-| Investigate a bug | `/triage-issue` — explores codebase, finds root cause, diagnoses structural condition (archetype + leverage), creates TDD fix plan that can flow into `/execute` |
+| Investigate a specific bug deeply | Start with `/qa` — its Step 3.5 depth check delegates to `/triage-issue` for root-cause analysis, structural diagnosis, and a TDD fix plan that flows into `/execute` |
 | Plan a refactor | `/request-refactor-plan` — tiny commits RFC as GitHub issue, then implement via `/execute` |
 | Find architecture improvements | `/improve-codebase-architecture` — surface deepening opportunities that can become refactor work |
 | Capture lessons learned | `/compound` after feature ships or after a high-value bug fix |

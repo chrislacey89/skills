@@ -1,6 +1,6 @@
 ---
 name: triage-issue
-description: "Side-route skill for deeper bug diagnosis before implementation. Use when a reported issue needs root-cause analysis and a fix plan that can flow into /execute, often with /tdd. Not for lightweight QA intake or already-clear implementation tasks."
+description: "Invoked helper skill for deep bug diagnosis, usually delegated from /qa when a reported issue needs root-cause analysis and a TDD fix plan before implementation. Use when the cause is unclear, the bug is a regression, or the user explicitly wants diagnosis. Not for lightweight QA intake (use /qa) or already-clear implementation tasks (use /execute)."
 sources:
   primary:
     - "Thinking in Systems — Donella Meadows"
@@ -15,11 +15,11 @@ Investigate a reported problem, find its root cause, and create a GitHub issue w
 
 ## Invocation Position
 
-This is a side-route skill for bug work that needs deeper diagnosis than a normal QA intake.
+This is an invoked helper skill, not a normal first stop for bug work. It normally runs from `/qa` when the per-issue depth check decides a specific reported bug needs root-cause analysis before it can be filed as a lightweight issue.
 
-Use `/triage-issue` when the user wants root-cause analysis, a fix strategy, or a TDD-oriented bug issue rather than just a lightweight bug report.
+Use `/triage-issue` when the cause is unclear after lightweight exploration, the bug is a regression, reproduction is intermittent, multiple symptoms may share an upstream cause, or the user explicitly asks for diagnosis.
 
-Do not use it for routine QA intake that can go straight to issue filing in `/qa`, and do not use it as the implementation step itself once the fix task is clear enough for `/execute`.
+Do not use it directly as the entry point for bug conversations — start with `/qa`, which delegates here per issue when depth is warranted. Do not use it once the fix task is already clear enough for `/execute` either.
 
 ## Process
 
@@ -158,7 +158,8 @@ After creating the issue, print the issue URL and a one-line summary of the root
 
 ## Handoff
 
-- **Expected input:** a reported bug or failure that needs diagnosis before implementation
-- **Produces:** a GitHub issue with root-cause analysis, structural diagnosis when relevant, and a TDD fix plan
+- **Expected input:** a single reported bug, usually delegated from `/qa`'s per-issue depth check, that needs diagnosis before implementation
+- **Produces:** a GitHub issue with root-cause analysis, structural diagnosis when relevant, and a TDD fix plan — replaces the lightweight issue `/qa` would otherwise have filed for this bug
 - **May recommend:** `/improve-codebase-architecture` when the bug reveals a deeper structural pattern
-- **Feeds back into:** `/execute`, often delegating further to `/tdd` during implementation
+- **Usually invoked by:** `/qa`
+- **Returns control to:** the calling `/qa` loop for the next observation, or `/execute` (often via `/tdd`) when the bug is ready to implement
