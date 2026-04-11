@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.6.2 — Boundary-map drift checks + non-dry path sanity
+
+Four changes tighten the contract between planning, execution, testing, and review. The through-line is the same failure mode seen from different angles: upstream slice artifacts that drift from reality, dry-run paths that hide production defaults, and tests whose timing behavior quietly degrades after retry or backoff logic is introduced. This patch adds checks at planning time, execution time, review time, and TDD time, then trims the new wording so the guidance stays scoped to issue-based slice work instead of reading like a universal preflight.
+
+### Changes
+
+- **`/execute` new Consumes verification gate** — Step 0 now adds a scoped check for issue-based slice work created by `/prd-to-issues`: when a slice's `## Boundary Map` / `### Consumes` section references an already-closed upstream slice, verify the declared symbols still exist at the declared path and shape before implementation starts. If not, stop and either expand scope explicitly, backtrack via `/correct-course`, or create a new blocker slice.
+- **`/prd-to-issues` new Consumes plausibility check** — boundary-map drafting now verifies `Consumes` entries that reference already-closed upstream slices before finalizing the new slice, and requires a post-hoc correction comment on the upstream issue when drift is found.
+- **`/pre-merge` review checklist hardening** — Boundary Map Contracts now explicitly checks upstream-produced symbols consumed by the current PR, and Runtime Initialization now covers CLI/orchestration dry-run paths, silent env-var fallbacks, and placeholder production defaults that would silently degrade non-dry execution.
+- **`/tdd` timing-coupled primitives guidance** — `/tdd` now calls out `sleep` / `delay` / `retry` / `timeout` / `interval` as injectable policies rather than hardcoded behavior, and `/execute` Tier 2 command verification now tells reviewers to treat sudden test-runtime jumps as a design smell rather than a reason to bump `testTimeout`.
+
+### Motivation
+
+The pack already treated boundary maps as contracts and verification as a first-class stage, but the failure mode where a closed upstream slice claimed outputs it did not actually ship was still under-specified. The same was true for dry-run CLI paths that can mask placeholder defaults and for tests that quietly become wall-clock-coupled after retries or sleeps are introduced. This patch closes those gaps without changing the pipeline shape: the new guidance is strongest where the repo is already opinionated — explicit handoffs, GitHub-native truth, and verification over assumption — and the follow-up cleanup keeps the language narrow enough that normal one-off execution work does not inherit unnecessary ceremony.
+
 ## v1.6.1 — /help base-branch detection + parallel tool-use gotcha note
 
 One fix to `/help`'s Phase 1 state gather. The prior version hardcoded `git log main..HEAD || git log master..HEAD` to count commits ahead of base, which exit-128'd in any repo whose default branch is not `main`/`master` (this pack's own repo uses `prod`; others use `develop`, `trunk`, or team-specific names). Because `/help` dispatches its snapshot commands as a parallel tool-use batch in Claude Code, and because Claude Code cancels the in-flight siblings of any bash call that errors, a single bad ref killed the entire snapshot and forced a full retry.

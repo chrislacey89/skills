@@ -132,6 +132,18 @@ After refactoring, consider where production assertions would catch future infec
 
 Not every cycle needs this step. Apply it when the code handles complex state, crosses trust boundaries, or was the site of a bug fix.
 
+## Timing-coupled primitives are test couplings
+
+Any test that could reach code calling `sleep`, `delay`, `retry`, `timeout`, `interval`, or any other scheduled/debounced/throttled primitive has a hidden coupling to real wall-clock time. This is how tests that pass in milliseconds suddenly jump to multi-second runtime — or worse, start timing out — the moment a retry or backoff is added.
+
+Two rules:
+
+1. **Every time-based primitive is a first-class configurable policy.** Pass the delay, schedule, or timeout as a parameter or config value; never hardcode it. Tests pass zero-duration or no-retry policies; production passes real ones. This applies to `Effect.sleep` / `Schedule` / `Effect.retry` in Effect projects, `setTimeout` / `setInterval` in vanilla Node, RxJS `delay` / `timer` operators, any retry-wrapped fetch client, and any worker queue with a polling interval.
+
+2. **If a test jumps from sub-second to multi-second runtime after adding a retry or sleep, the fix is never "bump `testTimeout`."** The fix is "inject the primitive so tests can disable it." `testTimeout` bumps mask the coupling; injection removes it. Only bump if you have an affirmative reason — e.g. the test is genuinely exercising real-time behavior and cannot use a virtual clock.
+
+**Audit signal:** before you decide a slow test is legitimate, grep the touched code for `Effect\.sleep|Effect\.delay|Schedule\.|setTimeout|setInterval` (or the equivalent in your stack). If any match is in a code path the test can reach and the primitive isn't injected, the coupling is the bug — not the timeout.
+
 ## Checklist Per Cycle
 
 ```

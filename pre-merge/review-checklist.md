@@ -47,7 +47,7 @@ Used by `/pre-merge` during Phase 3. Eight dimensions, each independent. For eve
 
 ## 4. Boundary Map Contracts
 
-**Principle:** Each slice's Produces and Consumes declarations are contracts. The implementation should match them.
+**Principle:** Each slice's Produces and Consumes declarations are contracts. The implementation should match them, and upstream slices this PR consumes from must have actually shipped what their Produces claimed.
 
 **Only runs when a PRD with slice issues was provided.**
 
@@ -57,8 +57,18 @@ Used by `/pre-merge` during Phase 3. Eight dimensions, each independent. For eve
 - Signature drift — a function exists but its signature (parameters, return type) differs from what was declared
 - Missing Produces — a slice exports something that downstream slices depend on, but it wasn't listed in Produces
 - Phantom dependencies — a package added to `package.json` (or equivalent manifest) in this diff but never imported in any source file. Front-loaded decisions from `research.md` or the PRD that were recommended but never materialized in the implementation. These should be removed from the manifest before subsequent slices inherit them as implicit constraints.
+- Upstream-produced but unverified — this PR consumes a symbol from an already-closed upstream slice, but the symbol doesn't exist at the declared path or has a different shape than declared. This is not the reviewee's defect, but it should still be flagged as a Concern with a recommendation to correct the upstream issue.
 
-**Out of scope:** Whether the interfaces are well-designed or deep (Dimension 1 covers shallowness).
+**Verification procedure (not eyeballing):**
+
+For each `Produces` entry in the PR's slice issue:
+1. Parse the declared path + symbol (e.g. `src/pipeline/services/ScraperService.ts → EgovScraper, EgovScraperLive`).
+2. Confirm the path exists in the merged tree and exports the named symbols — grep or `rg` for the export.
+3. If the declaration includes a shape hint (e.g. "Layer", "interface", "Zod schema", "React component"), confirm the exported symbol matches the shape, not just the name. Run `tsc --noEmit` against the declared import if unclear.
+
+For each `Consumes` entry referencing an already-closed upstream slice, run the same check against the upstream's declared Produces. If the upstream export is missing or shape-drifted, note it and flag the upstream issue for correction.
+
+**Out of scope:** Whether the interfaces are well-designed or deep (Dimension 1 covers shallowness). Verifying that the upstream slice's *close state* was correct at merge time is handled by the Verification procedure above.
 
 ---
 
@@ -90,17 +100,19 @@ Used by `/pre-merge` during Phase 3. Eight dimensions, each independent. For eve
 
 ---
 
-## 7. Runtime Initialization (Schema/Config PRs only)
+## 7. Runtime Initialization (Schema/Config/CLI PRs only)
 
-**Principle:** Code that builds and passes tests is not necessarily code that runs. When a slice changes database schema, migrations, environment configuration, or server initialization, the actual dev environment must boot successfully — not just the build or test suite.
+**Principle:** Code that builds and passes tests is not necessarily code that runs correctly. When a slice changes database schema, migrations, environment configuration, server initialization, or ships a CLI/orchestration entrypoint with a dry-run mode, the actual production path must work — not just the build, the test suite, or the dry-run shortcut.
 
-**Only runs when the diff includes changes to schema files, migration files, environment config, or server startup code.**
+**Only runs when the diff includes changes to schema files, migration files, environment config, server startup code, or a CLI/orchestration entrypoint with a dry-run or preview mode.**
 
 **Violation patterns:**
 - Missing migration — schema code was changed but no corresponding migration file was generated or committed
 - Untested cold boot — new routes or server functions were added but no evidence the dev server was started and the routes loaded (e.g., the `/execute` verification checklist doesn't mention Tier 2.5 runtime checks)
 - In-memory test divergence — tests use in-memory databases with their own migration setup, so they pass even when the real dev database is missing tables or columns
 - Missing environment variable — code references a new env var that isn't in `.env.example`, `.env.local`, or documented in the PR
+- Silent env-var fallback — code reads an optional env var and falls back to a stub or no-op when unset, without logging a warning or failing loudly. Production operators have no discoverable way to learn the var exists until something visibly breaks (or worse, silently does nothing).
+- Placeholder wired as production default — a function named or documented as a placeholder, stub, TODO, or follow-up is used as the default binding in a production code path without a fail-fast guard. If a non-dry run would silently produce garbage, **flag it as a Concern, not a Suggestion**.
 
 **Out of scope:** Whether the schema design is optimal (that's Dimension 1). Whether tests are sufficient (that's Dimension 5).
 

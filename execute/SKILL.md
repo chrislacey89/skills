@@ -67,6 +67,24 @@ If all assumptions still hold, proceed to Step 1. If any assumption has changed,
 
 Skip this gate entirely for one-off tasks without an "Assumptions from Parent PRD" section.
 
+**Consumes verification gate.** Only for issue-based slice work. If the task comes from a GitHub issue created by `/prd-to-issues`, and its `## Boundary Map` / `### Consumes` section references an already-closed upstream slice, spend 60 seconds verifying each listed symbol exists at the declared path in the current tree. This catches upstream boundary-map drift before implementation starts.
+
+For each Consumes entry:
+
+1. If it names a file path — check the file exists.
+2. If it names a function, type, or exported symbol — grep for the export.
+3. If it names a shape (e.g. "Effect Layer", "Zod schema", "React component", "Context provider") — confirm the *shape* matches, not just the name. A pure helper function does not satisfy a claim of "Effect Layer." A plain object does not satisfy a claim of "Zod schema."
+
+If any Consumes symbol is missing or wrong-shaped, **stop**. The upstream boundary map is stale. Choose one of:
+
+1. **Expand scope in this slice** to fill the gap. Note the expansion in the first commit's message, in the PR description, and file a post-hoc correction comment on the upstream closed issue so future slices don't trust the stale claim.
+2. **Backtrack via `/correct-course`** to update the upstream boundary map and reshape the affected slices.
+3. **File a new slice** for the missing work and block this one on it.
+
+Do not silently absorb the gap — leave a breadcrumb for the next slice.
+
+Skip this gate for one-off tasks, sibling slices still being planned, or issues without upstream `Consumes` entries.
+
 ### 1. Understand the Task
 
 Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understand the relevant files, patterns, and conventions. If the task is ambiguous, ask the user to clarify scope before proceeding.
@@ -160,6 +178,7 @@ Then apply the verification ladder — use the strongest tier you can reach:
 
 #### Tier 2: Command Verification
 - Tests pass (not just "no test failures" — confirm tests actually exist and ran)
+- Test wall-clock duration didn't unexpectedly jump. A sudden multi-second increase in a previously fast test, especially after adding retry, sleep, backoff, or interval code, signals a real-time primitive was introduced without being injected. See `/tdd` § Timing-coupled primitives. Fix via injection, not `testTimeout` bumps.
 - Build succeeds
 - Lint is clean
 - Any CLI commands the feature exposes actually work when invoked
@@ -174,6 +193,25 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - No unhandled errors in the server console output during startup
 
 If you cannot start the dev server (e.g., missing external services), note which checks you skipped and why in the Step 5 checklist so the user can verify them.
+
+#### Tier 2.6: Non-Dry Path Sanity Check (CLI + orchestration slices only)
+
+**Mandatory when the slice ships a CLI, scheduled job, cron worker, or orchestration entrypoint that has a dry-run or preview mode.**
+
+Dry-run success does not imply real-run success. A dry-run can short-circuit before storage or side-effects and hide placeholder functions wired into the production path.
+
+For each function wired as a default in the production code path (layer construction, DI container, config object, CLI flag handler), check:
+
+1. Is the function named, documented, or commented as a placeholder, stub, TODO, or follow-up?
+2. If yes, is it either (a) guarded by a fail-fast check that throws in non-dry mode, or (b) bound only to the dry-run code path?
+
+If any placeholder is wired as the default for a non-dry path without a fail-fast guard, **flag it now**. Options:
+
+- Add a runtime guard: `if (!process.env.ALLOW_PLACEHOLDER) throw new Error(...)` or equivalent
+- Bind the stub only when `dryRun === true` and require a real implementation for the non-dry path
+- Gate the slice on the real implementation (larger scope but eliminates the silent-degradation window entirely)
+
+This is a silent-degradation check: if an operator ran this without `--dry-run`, would the output be real, or would placeholder data flow through the production path?
 
 #### Tier 3: Behavioral Verification
 - API endpoints return the expected responses (use curl or httpie to verify)

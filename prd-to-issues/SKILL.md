@@ -76,6 +76,16 @@ The boundary map prevents the most common multi-slice failure: slices that are e
 
 If a forgotten deliverable surfaces, either add it to the current slice's Produces or create a new slice for it. Don't leave it as an implicit assumption — unscoped work is invisible to Ralph.
 
+**Consumes plausibility check:** For each `Consumes` entry that references an already-closed upstream slice — not a sibling slice still being planned in this PRD — verify the claimed symbol exists at the declared path *before* finalizing this slice's boundary map. This catches upstream boundary-map drift during planning instead of execution.
+
+For each such Consumes entry:
+
+- Check the declared file path exists.
+- Grep for the named export.
+- If the declaration includes a shape (e.g. "Layer", "Zod schema", "React component"), confirm the export actually matches that shape, not just the name.
+
+If a gap is found, don't just document it in this slice's `Consumes`. File a post-hoc correction comment on the upstream closed issue and note the correction in this slice's "Assumptions from Parent PRD" section as a verified check.
+
 **Estimate-readiness check:** After the scope completeness check, verify that the decomposition made the work more legible rather than more performative. For each slice, ask:
 
 - Is this slice small enough that its uncertainty can be explained in one or two sentences?
@@ -103,6 +113,7 @@ Ask the user:
 - Are the correct slices marked as HITL and AFK?
 - Do the boundary map interfaces look right? (Are these the right function signatures, types, endpoints?)
 - Does every shared type, endpoint, or data model have exactly one owning slice in the Produces column?
+- For every `Consumes` entry that references an already-closed upstream slice: does the symbol actually exist at the declared path, in the declared shape?
 - Does the total decomposition feel proportionate to the stated appetite? A small-batch appetite (1-2 weeks) with 10+ slices or 4+ dependency levels suggests scope grew beyond what was shaped. A big-batch appetite with only 2-3 trivial slices suggests the shaping was too aggressive. If the decomposition feels disproportionate, which slices should be merged, split, or cut?
 - Did decomposition reveal any slice whose uncertainty is still too high for a credible commitment? If so, should it be split further, converted into a tracer bullet, or pushed back into PRD shaping?
 
