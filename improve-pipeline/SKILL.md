@@ -1,6 +1,6 @@
 ---
 name: improve-pipeline
-description: "Optional meta-skill for improving `chrislacey89/skills` from real-world friction or breakdowns discovered while using the pipeline in another repo. Use when the main lesson is about the pipeline itself, not the downstream project. Produces a GitHub issue in `chrislacey89/skills` and only moves to implementation after review."
+description: "Optional meta-skill for improving `chrislacey89/skills` from real-world friction or breakdowns discovered while using the pipeline in another repo. Use when the main lesson is about the pipeline itself, not the downstream project. Grounds proposals in established software-engineering guidance from `/library`. Produces a GitHub issue in `chrislacey89/skills` and only moves to implementation after review."
 sources:
   primary:
     - "Thinking in Systems — Donella Meadows"
@@ -141,6 +141,20 @@ Explicitly search for:
 
 A proposal that only improves one file but weakens repository coherence is not ready.
 
+### Phase 3.5: Consult the Library
+
+Pipeline proposals should be grounded in established software-engineering guidance, not only in the agent's or the user's opinion. Before running the dialectic, consult `/library` — the user's local book index at `~/.claude/library/` — for books relevant to the incident.
+
+Procedure:
+
+1. **Survey the index.** Run `/library` with no args to see the catalog, or `/library --search <keywords>` when the incident has a clear topical handle (e.g. `testing`, `code review`, `debugging`, `systems`, `deep modules`, `feedback loops`, `refactoring`, `domain`).
+2. **Select 1–3 relevant books.** Prefer books whose `description` or `tags` map directly to the incident type. Prefer books already cited in this skill's `sources:` frontmatter (Meadows, Duke, Senge, Nygard) when they are topically relevant so the skill's lineage and its live reasoning stay coherent.
+3. **Load them.** Run `/library <name>` for each selected book and extract the concrete principle, checklist item, or failure mode that bears on the incident. Record these — they feed Phase 4 and the issue body.
+4. **Do not over-consult.** Loading books has a context cost. Stop at three unless the incident is genuinely cross-cutting.
+5. **Graceful degradation.** If `/library` is not installed or the index is empty, record "Library consultation: unavailable" and continue. Do not block filing.
+
+Each book loaded should contribute something specific the dialectic can cite — a named principle ("shallow module smell"), a checklist item ("reviewer checks for X"), or a known failure mode ("policy resistance"). If a loaded book produces nothing citable, drop it from the record rather than name-dropping it.
+
 ### Phase 4: Run the Three-Agent Dialectic
 
 Use a structured tension pattern before writing the proposal. If sub-agents are available, use them. If not, simulate the three roles sequentially with clear separation.
@@ -159,6 +173,8 @@ The Advocate should answer:
 
 The Advocate should optimize for better real-world outcomes, not for defending current structure.
 
+The Advocate must cite at least one loaded library source that supports the change — a named principle, checklist item, or design guideline. If no book in the surveyed set supports the proposal, say so explicitly; an unsupported advocacy case is a signal, not a thing to paper over.
+
 #### Agent 2: Skeptic
 
 The Skeptic makes the strongest good-faith case against the change.
@@ -173,6 +189,8 @@ The Skeptic should look for:
 - evidence that the issue was downstream and not structural here
 
 The Skeptic should assume the cost of a bad pipeline change compounds across future usage.
+
+The Skeptic must cite at least one library source or established principle that warns against the change or names a known failure mode the change could create (for example, Nygard on accidental coupling, Meadows on policy resistance, Ousterhout on shallow modules, Fowler on premature abstraction).
 
 #### Agent 3: Mediator
 
@@ -191,6 +209,8 @@ The Mediator must name:
 - repo-wide risks
 - what should explicitly remain unchanged
 - what evidence would later justify revisiting the decision
+
+The Mediator must reconcile the Advocate's and Skeptic's cited sources. If both roles cited the same book to opposite ends, surface that tension in the verdict narrative rather than resolving it silently — disagreement between principled readings of the same source is useful information for a future reviewer.
 
 ### Phase 5: Search for Related Issues, Then File the GitHub Issue
 
@@ -256,6 +276,24 @@ Use this issue body template:
 - `path/to/file` — [Why it matters]
 - `path/to/other-file` — [Why it matters]
 
+## Library Consultation
+
+- **Books surveyed:** [brief notes from `/library` index or `/library --search <keywords>`, or "Library consultation: unavailable"]
+- **Books loaded:** [names of books loaded via `/library <name>`]
+- **Key principles applied:** [1–3 bullets, each tied to a specific book and the concrete idea borrowed]
+
+## Suggested Further Reading
+
+**From the library** (already available via `/library <name>`):
+
+- `<book-name>` — [one line on why this book is worth loading before implementing or reviewing this proposal]
+
+**Gap in the library** (not yet available; worth acquiring):
+
+- `<Title> — <Author>` — [one line on why this book would have sharpened the analysis and what topic area it fills]
+
+If no gap is identified, remove the Gap subsection rather than leaving a placeholder.
+
 ## Advocate Case
 
 [The strongest argument for making the change.]
@@ -293,6 +331,16 @@ Use this issue body template:
 Do not pad sections. If a section has no substance, tighten the proposal rather than writing filler.
 
 If labels exist in the repository for maintenance or pipeline work, apply them. If they do not exist, do not block on label management.
+
+When the proposal's "Gap in the library" subsection names one or more books the library should acquire, apply the `library-gap` label so these issues accumulate as a visible backlog rather than sitting buried in issue bodies. If the label does not yet exist in `chrislacey89/skills`, create it once with:
+
+```bash
+gh label create library-gap -R chrislacey89/skills \
+  --description "Proposal surfaces a book the /library should acquire" \
+  --color BFD4F2
+```
+
+Then apply it to this and future issues. If label creation fails (permissions, network), do not block filing — note in the issue body that the label should be applied later.
 
 ### Phase 6: Review Before Any Implementation
 
@@ -332,11 +380,13 @@ A run of `/improve-pipeline` is not complete until all of the following are true
 - the target repo was explicitly treated as `chrislacey89/skills`
 - the canonical context was loaded from `README.md`, `SYSTEM-OVERVIEW.md`, `CLAUDE.md`, and `docs/skill-anatomy.md`
 - the nearest affected skill and adjacent overlapping skills were reviewed
+- `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating
 - an issue was filed or updated in `chrislacey89/skills`, or filing was intentionally deferred with a stated reason
 
 ## Repo-Wide Guardrails
 
+- **Ground proposals in established guidance.** Before filing, consult `/library` for books relevant to the incident type and cite what they contribute in the issue. If `/library` is unavailable, record that explicitly rather than silently skipping the step.
 - **Proposal first.** Do not jump from incident to repo edits.
 - **Do not overfit.** One painful incident is evidence, not proof.
 - **Protect ordinary users.** Most pipeline users are trying to ship work, not evolve the pipeline.
