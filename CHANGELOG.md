@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.6.3 — Improve-pipeline meta-skill + pack-feedback loop
+
+Four changes add a new feedback path for improving the skills pack itself. The through-line is turning real-world friction discovered while using the pipeline in another repo into durable improvements for `chrislacey89/skills`, without overfitting to one incident or mutating the pack before review. This patch introduces a proposal-first meta-skill, anchors it to a fixed GitHub repo, requires canonical pack context before filing issues, and teaches the end-of-loop skills when to recommend it.
+
+### Changes
+
+- **New skill: `/improve-pipeline`** — optional side-route skill for pipeline-pack feedback. It captures pipeline-level lessons from real-world usage, runs an advocate / skeptic / mediator analysis, searches for overlapping issues, and files a GitHub issue in `chrislacey89/skills` instead of writing a local proposal file.
+- **Fixed target-repo and context-loading guardrails** — `/improve-pipeline` now always targets `chrislacey89/skills`, never the downstream project's remote. Before filing, it must load canonical pack context from `README.md`, `SYSTEM-OVERVIEW.md`, `CLAUDE.md`, and `docs/skill-anatomy.md`, then review the nearest affected skill plus adjacent overlapping skills.
+- **`/compound` and `/pre-merge` recommendation hooks** — both skills now explicitly note that when the main lesson is about the pipeline pack rather than the downstream project, they may recommend `/improve-pipeline` if it is present. The recommendation is advisory only; neither skill invokes it.
+- **Repo-level docs updated** — `CLAUDE.md` and `SYSTEM-OVERVIEW.md` now include `/improve-pipeline` in the side-route taxonomy, handoff model, directory tree, and quick-reference guidance so the new skill is discoverable and consistent with the rest of the pack.
+
+### Motivation
+
+The pack already had a strong compounding loop for project knowledge (`docs/solutions/`), but it lacked a matching loop for improving the pack itself. Real-world usage in downstream repositories revealed a recurring meta-problem: sometimes the right lesson is not "how should this app change?" but "how should the pipeline prompt, handoff, checklist, or skill boundary change?" Without a named path for that feedback, those lessons stayed trapped in chat history or got mixed into downstream project docs where they did not belong. This patch gives the pack a deliberate self-improvement path while preserving the pack's existing principles: GitHub-native durable state, explicit handoffs, and review before mutation.
+
 ## v1.6.2 — Boundary-map drift checks + non-dry path sanity
 
 Four changes tighten the contract between planning, execution, testing, and review. The through-line is the same failure mode seen from different angles: upstream slice artifacts that drift from reality, dry-run paths that hide production defaults, and tests whose timing behavior quietly degrades after retry or backoff logic is introduced. This patch adds checks at planning time, execution time, review time, and TDD time, then trims the new wording so the guidance stays scoped to issue-based slice work instead of reading like a universal preflight.

@@ -87,6 +87,8 @@ Prefer capturing the highest level you can support with evidence. If the lesson 
 
 If a scope pattern emerges (e.g., "auth changes in this codebase consistently require updating three additional systems"), capture it in the appropriate existing `docs/solutions/` category — `integration-issues/`, `patterns/`, etc. The lesson compounds: `/write-a-prd`'s omitted activities scan and `/prd-to-issues`'s scope completeness check both consult `docs/solutions/`, so a documented pattern directly improves the next feature's planning.
 
+If the main lesson is not about the downstream project but about the pipeline pack itself — for example unclear skill boundaries, missing handoff guidance, or weak process guardrails in `chrislacey89/skills` — recommend `/improve-pipeline` if that skill is present. Do not invoke it. `/compound` still captures project knowledge; `/improve-pipeline` is for improving the pipeline repo.
+
 **Calibration check.** Also ask:
 
 - Which unknowns actually drove variance between the shaped work and the implemented work?

@@ -232,7 +232,7 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Handoff Table
@@ -256,6 +256,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/triage-issue` | Single bug delegated from `/qa`'s depth check, needing diagnosis before implementation | Root-cause issue with TDD fix plan, replacing the lightweight `/qa` issue for that bug | Returns to the `/qa` loop, then `/execute` (often via `/tdd`) |
 | `/request-refactor-plan` | Refactor problem needing safer sequencing | GitHub issue with tiny-commit refactor plan | `/execute` |
 | `/improve-codebase-architecture` | Architectural friction, coupled modules, shallow pain | Candidate deepening opportunities and a refactor RFC | `/request-refactor-plan` or `/execute` |
+| `/improve-pipeline` | Pipeline-level lesson from real-world usage of the pack | GitHub issue in `chrislacey89/skills` with repo-wide improvement proposal | Review issue, then optional implementation in `chrislacey89/skills` |
 | `/ubiquitous-language` | Terminology ambiguity or competing domain terms | `UBIQUITOUS_LANGUAGE.md` with decisions register | Returns to the caller workflow |
 | `/ts-audit` | TypeScript or React files to audit | Structured findings report grouped by category | `/execute` or `/pre-merge` |
 | `/help` | Uncertainty about current pipeline position | Next-step recommendation with a one-line reason | The recommended next skill |
@@ -276,8 +277,10 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 - `/prd-to-issues` → `/execute`, with Ralph optionally running the AFK execution loop for unblocked slices, then QA and `/pre-merge`
 - `/execute` → `/pre-merge` after verification — auto-invoked at the end of Step 6 when Step 5's manual verification checklist ran and the user confirmed the "Ready for PR Review" item; AFK Ralph iterations and trivial-task flows that skipped Step 5 exit cleanly for manual `/pre-merge` invocation. `/execute` delegates to `/tdd` when backend work benefits from strict red-green-refactor.
 - `/pre-merge` → merge → `/compound`
+- `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about the pipeline pack itself rather than the downstream project; `/improve-pipeline` is advisory and files against `chrislacey89/skills`
 - `/qa` is the single entry point for bug conversations and feeds bug work back into `/execute`; it delegates per-issue to `/triage-issue` when a specific bug needs root-cause diagnosis, then returns to its own loop
 - `/request-refactor-plan` and `/improve-codebase-architecture` produce refactor work that can re-enter at `/execute`
+- `/improve-pipeline` captures pipeline-pack improvement proposals as GitHub issues in `chrislacey89/skills`, then optionally flows into reviewed implementation of the named repo changes
 - `/ts-audit` produces type-safety findings that can feed into `/execute` for fixes or inform `/pre-merge` architectural review
 - `/help` reads repo state and recommends the next pipeline skill with a one-line reason — advisory only, never runs the next skill itself
 - `/correct-course` diagnoses stale artifacts when an upstream assumption fails, walks the cleanup, and hands off to the earliest skill that needs to re-run
@@ -327,6 +330,8 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 ├── improve-codebase-architecture/  # Find deepening opportunities and spin them into refactor work
 │   ├── SKILL.md
 │   └── REFERENCE.md
+├── improve-pipeline/               # Capture pipeline-pack improvement proposals as GitHub issues in chrislacey89/skills
+│   └── SKILL.md
 ├── request-refactor-plan/SKILL.md  # Refactor RFC with tiny commits that can re-enter execution through /execute
 ├── ubiquitous-language/SKILL.md    # Domain glossary support that can sharpen shaping, QA, and refactor conversations
 ├── ts-audit/                       # Audit TypeScript code against Total TypeScript library references
@@ -338,7 +343,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 
 ### Ralph setup:
 
-`/execute` auto-invokes `/setup-ralph-loop` when it detects multi-slice GitHub-issue work (PRD, big-batch appetite, or multiple user stories) and no `ralph-once.sh` or `ralph.sh` exists in the repo root. The skill generates `ralph-once.sh` for supervised use and bounded `ralph.sh` for AFK use, adapted to the repo's real task source and feedback loops. You can also invoke `/setup-ralph-loop` directly if you want to set up Ralph before reaching `/execute`.
+`/execute` auto-invokes `/setup-ralph-loop` when it detects multi-slice GitHub-issue work (PRD, big-batch appetite, or multiple user stories) and no `ralph-once.sh` or `ralph.sh` exists in the repo root. The skill generates `ralph-once.sh` for supervised use and bounded `ralph.sh` adapted to the repo's real task source and feedback loops. You can also invoke `/setup-ralph-loop` directly if you want to set up Ralph before reaching `/execute`.
 
 A generated `ralph.sh` should follow Matt's pattern:
 
@@ -386,6 +391,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Write tests first | `/tdd` for strict red-green-refactor, usually delegated from `/execute` |
 | Run a QA session or report bugs | `/qa` — single entry point for bug conversations; files lightweight GitHub issues in domain language and delegates per-issue to `/triage-issue` when a specific bug needs root-cause diagnosis |
 | Review and create PR before merge | `/pre-merge` — creates PR with PRD lineage, runs architectural review |
+| Improve the pipeline pack itself | `/improve-pipeline` — capture a pipeline-level lesson as a GitHub issue in `chrislacey89/skills` after loading canonical pack context |
 | Investigate a specific bug deeply | Start with `/qa` — its Step 3.5 depth check delegates to `/triage-issue` for root-cause analysis, structural diagnosis, and a TDD fix plan that flows into `/execute` |
 | Plan a refactor | `/request-refactor-plan` — tiny commits RFC as GitHub issue, then implement via `/execute` |
 | Find architecture improvements | `/improve-codebase-architecture` — surface deepening opportunities that can become refactor work |
@@ -395,5 +401,4 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Clean up after ship | Delete `research.md`, close the PRD issue |
 | Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
 | Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research.md, milestones) and recommends the next skill with a one-line reason |
-| Back out of a stale artifact | `/correct-course` — names the earliest affected skill and walks the cleanup before you re-run it |
 | Audit knowledge base | Review `docs/solutions/` quarterly |
