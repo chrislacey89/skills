@@ -17,7 +17,7 @@ Do not treat it as part of the normal feature pipeline. It is a repo or user set
 
 ## What Gets Blocked
 
-- `git push` (all variants including `--force`)
+- `git push --force` / `git push -f` (regular pushes are allowed)
 - `git reset --hard`
 - `git clean -f` / `git clean -fd`
 - `git branch -D`
@@ -97,10 +97,14 @@ Ask if user wants to add or remove any patterns from the blocked list. Edit the 
 Run a quick test:
 
 ```bash
-echo '{"tool_input":{"command":"git push origin main"}}' | <path-to-script>
+# Should be BLOCKED (exit 2):
+echo '{"tool_input":{"command":"git push --force origin main"}}' | <path-to-script>
+
+# Should be ALLOWED (exit 0):
+echo '{"tool_input":{"command":"git push origin feature/my-branch"}}' | <path-to-script>
 ```
 
-Should exit with code 2 and print a BLOCKED message to stderr.
+The force-push command should exit with code 2 and print a BLOCKED message to stderr. The regular push should exit with code 0.
 
 ## Handoff
 
