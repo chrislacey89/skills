@@ -25,7 +25,7 @@ Use `/correct-course` when any of the following is true:
 - `/research` surfaced version changes or constraints that invalidate the `/shape` closing summary
 - `/write-a-prd` reveals the problem was misframed during shaping
 - `/prd-to-issues` reveals that the total work materially exceeds the stated appetite
-- `/execute` hits an error whose root cause is that `research.md` or the PRD is wrong
+- `/execute` hits an error whose root cause is that the archived research or the PRD is wrong
 - `/pre-merge` surfaces an architectural concern that warrants rework, not advisory findings
 - A GitHub issue has gone stale because the work it described has been reshaped or superseded
 
@@ -59,7 +59,7 @@ Based on the trigger, determine the **earliest skill whose output is now untrust
 | Trigger | Earliest affected skill |
 |---|---|
 | `/shape` assumption is wrong | `/shape` |
-| Version or API reality diverges from `research.md` | `/research` |
+| Version or API reality diverges from the archived research | `/research` |
 | Problem was misframed — solving symptom, not cause | `/shape` |
 | Appetite or no-gos need to change | `/write-a-prd` |
 | Solution direction is wrong but the problem and appetite still hold | `/write-a-prd` |
@@ -68,7 +68,7 @@ Based on the trigger, determine the **earliest skill whose output is now untrust
 | Slice is correct but execution approach hit a wall | `/execute` (not a backtrack — try a different approach) |
 | Architectural concern from `/pre-merge` warrants rework | `/execute`, possibly `/request-refactor-plan` first |
 
-Explore the repo to confirm. Read the PRD issue, any slice issues, `research.md`, and the relevant parts of `docs/solutions/`. The goal is to be specific: not "shaping is stale" but "the Ably-vs-Pusher decision in `research.md` is wrong because Ably raised its free-tier limits and Pusher dropped theirs."
+Explore to confirm. Read the PRD issue, any slice issues, the research archive entry for this feature, and the relevant parts of `docs/solutions/`. The goal is to be specific: not "shaping is stale" but "the Ably-vs-Pusher decision in the research is wrong because Ably raised its free-tier limits and Pusher dropped theirs."
 
 State the diagnosis to the user in one or two sentences and ask one question: **"Does that match what changed?"** If no, refine. If yes, proceed.
 
@@ -76,7 +76,7 @@ State the diagnosis to the user in one or two sentences and ask one question: **
 
 Now list every durable artifact that needs to be dealt with before forward progress can resume. Be specific — name the exact issue number, the exact file path. Common stale artifacts:
 
-- **`research.md`** — delete it if the earliest affected skill is `/shape` or `/research`; update it in place only if the research findings are still mostly correct and a small section needs revision
+- **Research archive entry** (`~/.claude/research/<repo-slug>/<feature-slug>-<date>.md`) — if the earliest affected skill is `/shape`, leave the archive entry in place; it is point-in-time history and cannot mislead downstream skills that no longer reference it. If the earliest affected skill is `/research`, run `/research` again to produce a new dated entry superseding the old one; the prior snapshot remains in the archive as context. Archive entries are not deleted during backtracking — they live outside the repo and cost nothing to keep.
 - **PRD GitHub issue** — update in place if the problem and appetite still hold; comment and close if the entire PRD is being reshaped
 - **Slice GitHub issues** — comment on each and close as superseded if the PRD is being reshaped; comment and leave open only if the specific slice is still valid
 - **Planning or container milestone** — usually leave open; the milestone's feature issues or slice issues are the real artifacts

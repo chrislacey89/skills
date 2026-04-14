@@ -74,13 +74,13 @@ Use when:
 - a new team member is onboarding and wants a recommendation grounded in actual repo state
 - you just want confirmation that your mental model of the next step matches what is actually durable in GitHub
 
-`/help` is advisory — it reads state (branch, PRs, issues, `research.md`, milestones) and recommends one next step. It does not run the recommended skill itself.
+`/help` is advisory — it reads state (branch, PRs, issues, research archive, milestones) and recommends one next step. It does not run the recommended skill itself.
 
 ### Start with `/correct-course`
 
 Use when:
 - an upstream artifact (research, PRD, slice decomposition) has been invalidated by new information
-- you need to clean up stale issues, `research.md`, or an in-flight PR before re-running an earlier pipeline skill
+- you need to clean up stale issues, supersede a stale research archive entry, or handle an in-flight PR before re-running an earlier pipeline skill
 - `/research` or `/pre-merge` surfaced a concern that warrants deliberate backtracking rather than patching forward
 
 `/correct-course` diagnoses the blast radius, walks artifact cleanup one decision at a time, and hands off to the earliest affected skill.
@@ -112,7 +112,7 @@ The pipeline stays the same, but the way you run a stage can change.
 ### AFK execution mode
 
 - Use when the next slice is already unblocked and legible from durable artifacts
-- The minimum preconditions are: a clear GitHub issue, correct dependencies, enough boundary-map detail to avoid interface invention, and any needed `research.md` or `docs/solutions/` context already linked or available
+- The minimum preconditions are: a clear GitHub issue, correct dependencies, enough boundary-map detail to avoid interface invention, and any needed research archive entry or `docs/solutions/` context already linked or available
 - `Ralph` is the AFK execution mode for `/execute`, not a separate pipeline branch
 - `/execute` auto-invokes `/setup-ralph-loop` when it detects multi-slice GitHub-issue work and no Ralph scripts exist — no manual setup needed
 
@@ -174,10 +174,10 @@ This pack prefers durable state in GitHub and temporary state only when it serve
 - PR lineage lives in GitHub PRs
 - compounded lessons live in `docs/solutions/`
 
-### Temporary or local artifacts
+### Durable per-user artifacts outside the repo
 
-- `research.md` exists only long enough to support shaping and implementation
-- skill-local reference files live next to the skill when they are specific to that skill
+- Research files live in `~/.claude/research/<repo-slug>/<feature>-<date>.md` — worktree- and branch-resilient, not committed to the repo, freshness judged via frontmatter `date` and `installed_versions_snapshot`
+- Skill-local reference files live next to the skill when they are specific to that skill
 
 ### What this pack avoids
 
@@ -220,7 +220,7 @@ For blank-project or major-tranche work, `/shape` can hand that closing summary 
 
 ### `/research`
 
-- `research.md` with verified docs, version checks, and recommended approach
+- An archived research file with verified docs, version checks, and recommended approach
 
 For milestone-planned work, `/research` should consume the selected feature issue only after it has been expanded into a `research-ready` brief.
 
@@ -247,7 +247,7 @@ For milestone-planned work, `/research` should consume the selected feature issu
 ## Operating tips
 
 - Use the written artifact from the previous step instead of relying on full conversation history.
-- Keep `research.md` temporary. If it no longer supports active work, delete it.
+- Research files live in `~/.claude/research/<repo>/…` outside the repo. They persist across features — let stale entries age naturally; the frontmatter `date` and `installed_versions_snapshot` are how future readers judge freshness.
 - Treat `docs/solutions/` as a compounding loop, not a dumping ground.
 - For milestone-planned work, do not run `/research` against a raw `roadmap bet`; promote the chosen feature issue to `research-ready` first.
 - Use helper skills only when their narrower rigor is actually needed.

@@ -67,13 +67,13 @@ grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
 ```
 If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
 
-**Research document** — Check if a `research.md` exists in the repo root or `plans/` directory:
+**Research document** — Check the durable per-user archive for a research file matching this feature. Derive `<repo-slug>` from the current git remote (e.g. `chrislacey89-skills`) and list the archive directory for this repo:
 ```bash
-ls research.md plans/research.md 2>/dev/null
+ls ~/.claude/research/<repo-slug>/ 2>/dev/null
 ```
-If a research document exists, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the research document in the pitch so Ralph reads it during implementation.
+Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature. Before trusting it, check the frontmatter `date` and `installed_versions_snapshot` — if either looks stale against current reality, flag it to the user. If a research document exists and is fresh, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the archive path in the pitch so Ralph reads it during implementation.
 
-**Artifact precedence:** When `research.md` and `docs/solutions/` disagree, `research.md` takes precedence — it was verified against installed versions. Surface the conflict to the user during the interview rather than silently choosing one.
+**Artifact precedence:** When the research file and `docs/solutions/` disagree, the research file takes precedence — it was verified against installed versions. Surface the conflict to the user during the interview rather than silently choosing one.
 
 ### 5. Interview with shaping discipline
 
@@ -269,9 +269,9 @@ Do NOT include specific file paths or code snippets. They may end up being outda
 
 ## Research Reference
 
-[Include only if a research.md exists]
+[Include only if a matching research archive entry exists]
 
-Technical research for this feature is documented in `research.md` (or `plans/research.md`). Key recommendations:
+Technical research for this feature is documented at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md` (per-user archive, outside the repo). Key recommendations:
 
 - [Recommended approach from research]
 - [Key constraint or tradeoff from research]

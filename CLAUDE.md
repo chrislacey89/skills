@@ -15,7 +15,7 @@ This repo is not an application — there is no build system, test runner, or de
 Skills compose into an ordered pipeline for taking a feature from idea to shipped:
 
 ```
-/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → delete research.md
+/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → cleanup
 ```
 
 This summary is here so skill authors can keep handoffs consistent. For work that requires multiple independent PRDs, `/shape` may branch to `/create-milestone`, which creates a planning milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the default path at `/research`. For big-batch work (6 weeks) that fits a single PRD, `/write-a-prd` creates a lightweight container milestone and attaches the PRD issue to it; `/prd-to-issues` then propagates the milestone to all slice issues. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step. The canonical rationale, state model, and recovery rules live in `SYSTEM-OVERVIEW.md`.
@@ -37,7 +37,7 @@ Key interactions between skills:
 - `/write-a-prd` creates a container milestone for big-batch (6-week) work that fits a single PRD; `/prd-to-issues` propagates the milestone to all slice issues
 - `/research` invokes `/api-design-review` for higher-risk API contract work (new external APIs, contract changes, OAuth/webhook security, or unresolved paradigm choices)
 - `/write-a-prd` uses Shape Up's shaping discipline (appetite → solution → rabbit holes → no-gos), requires a lightweight API contract sketch for API-shaped work, and auto-invokes `/design-an-interface` or `/api-design-review` when the interface or contract is still uncertain; when the input issue came from `/create-milestone`, it expands the existing `research-ready` feature issue into the full PRD rather than creating a duplicate issue
-- `/execute` delegates to `/tdd` for backend code and consults `docs/solutions/` + `research.md` before implementation
+- `/execute` delegates to `/tdd` for backend code and consults `docs/solutions/` and the research archive entry (from `~/.claude/research/<repo-slug>/…`) before implementation
 - `/execute` auto-invokes `/pre-merge` at the end of Step 6 when Step 5's manual verification checklist ran and the user confirmed the "Ready for PR Review" item — this is the default HITL flow. AFK Ralph iterations skip Step 5 (no user to ask) and exit cleanly for the user to invoke `/pre-merge` manually after the batch. Trivial-task flows that took the `.claude/.tdd-skipped` exception also skip Step 5.
 - `/init-pipeline` is auto-invoked by `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing — scaffolds Claude Code hooks (TDD classification gate, git guardrails), pre-commit hooks, and package manager enforcement into the target project
 - `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
@@ -46,8 +46,8 @@ Key interactions between skills:
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
 - `/compound` runs after ship to capture lessons into `docs/solutions/` — this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes
 - `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about the pipeline pack itself rather than the downstream project; `/improve-pipeline` files a GitHub issue in `chrislacey89/skills` and is advisory until the user approves follow-on implementation
-- When backtracking to an earlier skill, stale artifacts (`research.md`, PRD issues, slice issues) must be explicitly updated or removed before proceeding forward — `/correct-course` is the invocable front door for this, and the canonical rules live in SYSTEM-OVERVIEW.md "Pipeline Recovery"
-- `/help` is the orientation skill — it reads repo state (branch, PRs, issues, `research.md`, milestones) and recommends the next pipeline skill with a one-line reason. It is advisory only and never invokes the recommended skill itself.
+- When backtracking to an earlier skill, stale artifacts (research archive entries, PRD issues, slice issues) must be explicitly updated or superseded before proceeding forward — `/correct-course` is the invocable front door for this, and the canonical rules live in SYSTEM-OVERVIEW.md "Pipeline Recovery". Archive entries are superseded by a new dated file, not deleted.
+- `/help` is the orientation skill — it reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next pipeline skill with a one-line reason. It is advisory only and never invokes the recommended skill itself.
 
 ## Invocation Roles
 
@@ -87,7 +87,7 @@ If a skill can branch, the branch condition should be explicit. Example: `/shape
 
 **State lives in GitHub, not the filesystem.** PRDs, milestones, work items, and bugs are GitHub issues or GitHub milestones. Milestones serve two procedural roles: container milestones (from `/write-a-prd` for single-PRD big-batch work) and planning milestones (from `/create-milestone` for multi-PRD tranches) — both are the same GitHub object. No `.gsd/` directories, no `STATE.md`, no `PLAN.md` per slice. The only persistent filesystem artifacts are skills themselves and `docs/solutions/`.
 
-**`research.md` is temporary.** Created by `/research`, referenced by the PRD and by `/execute` executions including Ralph's AFK loop, then deleted after the feature ships. Stale research actively harms agent performance.
+**Research lives in a per-user archive, not the repo.** `/research` writes to `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`, outside the working tree. It is referenced by the PRD and by `/execute` executions including Ralph's AFK loop, and persists after ship — branch switches, worktree cleanup, and `/compound` closeout do not touch it. Stale research still harms agent performance; the file's frontmatter (`date`, `installed_versions_snapshot`) exists so future readers can judge freshness before relying on it.
 
 ## Skill Structure
 

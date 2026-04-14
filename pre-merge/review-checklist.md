@@ -37,9 +37,10 @@ Used by `/pre-merge` during Phase 3. Eight dimensions, each independent. For eve
 
 **Violation patterns:**
 - New state files: `.gsd/`, `STATE.md`, `PLAN.md`, `CONTEXT.md`, `ROADMAP.md`, `SUMMARY.md`, `continue.md`, `UAT.md`
-- New state directories: `docs/brainstorms/`, `docs/plans/`, `docs/specs/`
-- Leftover `research.md` that should be deleted after ship (or flagged for deletion if the feature hasn't shipped yet)
+- New state directories: `docs/brainstorms/`, `docs/specs/`
 - Any new persistent markdown file that tracks state outside of GitHub issues or `docs/solutions/`
+
+Research files produced by `/research` live in the per-user archive at `~/.claude/research/<repo-slug>/…`, outside the repo. They are not a state-discipline violation because they never enter the working tree.
 
 **Out of scope:** Git history cleanliness (pre-commit hooks handle formatting and linting).
 

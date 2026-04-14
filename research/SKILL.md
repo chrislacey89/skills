@@ -81,7 +81,7 @@ Based on Phase 0 results, determine the research depth:
 - No external APIs or unfamiliar libraries involved
 - The approach is clear from the shape session
 
-For TARGETED depth: write a short research.md (20-50 lines) containing the version check results, any relevant past solutions from docs/solutions/, and a confirmation that the planned approach is valid for the installed versions. Skip the full template sections (Don't Hand-Roll, Options Evaluated, etc.). Move on to Phase 5.
+For TARGETED depth: write a short research document (20-50 lines) containing the version check results, any relevant past solutions from docs/solutions/, and a confirmation that the planned approach is valid for the installed versions. Skip the full template sections (Don't Hand-Roll, Options Evaluated, etc.). Move on to Phase 5.
 
 **STANDARD (10-20 min)** — Use when:
 - Integrating with a familiar external service using a new feature
@@ -111,7 +111,7 @@ You may also invoke it for internal APIs with multiple independent consumers whe
 
 Do not invoke it for ordinary implementation work that merely calls an API without shaping the contract.
 
-If `/api-design-review` runs, incorporate its verdict into `research.md` rather than duplicating a second full API review.
+If `/api-design-review` runs, incorporate its verdict into the research document rather than duplicating a second full API review.
 
 ### Phase 2: Establish Constraints
 
@@ -173,7 +173,29 @@ For API-shaped work, explicitly document:
 
 ### Phase 5: Write the Research Document
 
-Write the research document to a `research.md` file in the repo root (or `plans/` directory if one exists). **Include only sections that have real content.** A TARGETED research doc might be 20 lines. A DEEP one might be 300. This document is the compressed handoff to `/write-a-prd` — once written, the downstream skill works from this file, not from the raw research exploration. If this session is running long, suggest starting `/write-a-prd` in a fresh session using `research.md` as input.
+Write the research document to a durable, per-user archive outside the repo working tree:
+
+```
+~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md
+```
+
+Where `<repo-slug>` is `owner-name` derived from the git remote (e.g. `chrislacey89-skills`), `<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date. Create intermediate directories if they do not exist.
+
+Start the file with YAML frontmatter so future consumers can judge freshness:
+
+```yaml
+---
+date: 2026-04-14
+repo: <owner/repo>
+feature: <short phrase>
+installed_versions_snapshot:
+  - <package>@<version>   # list only the key dependencies this research pinned against
+---
+```
+
+**Why outside the repo:** the archive is per-user working memory, not team-shared artifact. Branch switches, worktree cleanup, and `.gitignore` hygiene cannot accidentally destroy it. It is not committed to the project and is never visible to collaborators.
+
+**Include only sections that have real content.** A TARGETED research doc might be 20 lines. A DEEP one might be 300. This document is the compressed handoff to `/write-a-prd` — once written, the downstream skill works from this file, not from the raw research exploration. If this session is running long, suggest starting `/write-a-prd` in a fresh session using the archive path as input.
 
 #### Emoji Legend
 
@@ -333,22 +355,20 @@ Present the research document to the user. Then walk through these review questi
 3. Any version surprises that change your thinking?
 4. Are you comfortable proceeding to PRD with this recommendation?
 
-Do not present all four questions at once. Iterate on each answer until the user is satisfied, then commit the research.md to git.
+Do not present all four questions at once. Iterate on each answer until the user is satisfied. The research file is saved to the archive path outside the repo — do not commit it to git.
 
 ## Handoff
 
 - **Expected input:** clarified problem framing from `/shape`, including choices, assumptions, impositions, and structural signals
-- **Produces:** `research.md`, verified version and documentation guidance, and a clearer estimate-readiness posture
+- **Produces:** an archived research file at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`, verified version and documentation guidance, and a clearer estimate-readiness posture
 - **May invoke:** `/api-design-review` when contract risk is high enough that the API shape needs focused scrutiny before shaping continues
 - **Comes next by default:** `/write-a-prd`
 
 ## Lifecycle
 
-**This file is temporary.** It exists to serve the PRD and Ralph loop, then gets deleted.
+**The research file is a point-in-time snapshot.** It exists to serve the PRD and Ralph loop during active work, and then persists as durable per-user context for future planning in the same area.
 
-- Reference the research.md path in your PRD so Ralph reads it during implementation
-- After the feature ships and QA passes, delete research.md from the repo
-- If you need it later, it's in the git history
-- Stale research actively harms agent performance — a research.md that recommends Ably v1.2 when v2.0 has breaking changes will steer Ralph in the wrong direction
-
-The user is responsible for deleting research.md after the feature ships. If you notice a research.md that doesn't correspond to any open PRD or issue, flag it to the user for deletion.
+- Reference the archive path in your PRD so Ralph reads it during implementation.
+- After the feature ships, the archive entry persists automatically — do not delete it. Branch switches, worktree cleanup, and `/compound`'s closeout step cannot touch it because it lives outside the repo.
+- Stale research actively harms agent performance — a research file that recommends Ably v1.2 when v2.0 has breaking changes will steer Ralph in the wrong direction. The frontmatter `date` and `installed_versions_snapshot` let future readers judge whether the snapshot is still trustworthy before they rely on it.
+- This skill does not yet auto-consult prior archive entries during Phase 0 — that capability is a separate follow-on. For now, the archive is simply durable storage that won't be lost to ordinary git workflow.

@@ -31,14 +31,14 @@ The pipeline order is the default path, not a prison. `Ralph` is the AFK executi
 **Artifact precedence.** When a skill consults multiple artifacts, resolve conflicts using this priority order:
 
 1. Working code in the repository (ground truth)
-2. `research.md` (verified against installed versions, most recently produced)
+2. The research archive entry for this feature (verified against installed versions at the `date` in its frontmatter)
 3. `docs/solutions/` (compounded knowledge, possibly stale)
 4. Framework reference skills (general best practices)
 5. Model training data (least reliable for version-specific details)
 
-When `research.md` and `docs/solutions/` disagree, `research.md` wins because it was produced more recently and verified against installed versions. Flag the conflict to the user rather than silently choosing. Load `docs/solutions/` on demand — grep for relevant keywords first, read only matching files — rather than loading everything upfront.
+When the research archive entry and `docs/solutions/` disagree, the research entry wins because it was produced more recently and verified against installed versions — subject to the `date` and `installed_versions_snapshot` in its frontmatter still being plausibly current. Flag the conflict to the user rather than silently choosing. Load `docs/solutions/` on demand — grep for relevant keywords first, read only matching files — rather than loading everything upfront.
 
-**Planning-chain compression.** Each pipeline handoff has a compression artifact: the closing summary (`/shape`), `research.md` (`/research`), the PRD issue (`/write-a-prd`). The downstream skill should work from the written artifact, not from the full prior conversation. If a session is running long after multiple planning skills, start the next pipeline step in a fresh session using the written artifact as its entry point.
+**Planning-chain compression.** Each pipeline handoff has a compression artifact: the closing summary (`/shape`), the archived research file (`/research`), the PRD issue (`/write-a-prd`). The downstream skill should work from the written artifact, not from the full prior conversation. If a session is running long after multiple planning skills, start the next pipeline step in a fresh session using the written artifact as its entry point.
 
 ### Step 1: /shape (Matt's, enhanced)
 
@@ -75,7 +75,7 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 **Phase 0 (always runs, 30-60 seconds):** Reads your package.json / lockfile, identifies which dependencies this feature touches, checks for breaking changes between installed versions and latest, flags any stale API patterns. This alone catches the middleware→proxy class of errors.
 
 **Auto-calibration based on Phase 0:**
-- **TARGETED (2-5 min):** No version surprises, extending familiar patterns. Output is a 20-line research.md confirming the approach is valid.
+- **TARGETED (2-5 min):** No version surprises, extending familiar patterns. Output is a 20-line research file confirming the approach is valid.
 - **STANDARD (10-20 min):** One dependency has a version mismatch, or a single technical decision needs evaluation.
 - **DEEP (20-30 min):** Significant version mismatches, unfamiliar external services, multiple valid approaches.
 
@@ -88,7 +88,7 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Staleness check:** When consulting `docs/solutions/`, `/research` checks the `volatility` field and date. Volatile solutions older than 90 days, or solutions whose Shelf Life condition appears met, are flagged as potentially stale before being incorporated.
 
-**Output:** One `research.md` file in the repo root. Referenced in the PRD. **Deleted after the feature ships.**
+**Output:** One research file in the per-user archive at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`, outside the repo. Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot` so future readers can judge freshness. Referenced in the PRD. Persists after ship — the archive is worktree- and branch-resilient and is not deleted during cleanup or backtracking.
 
 **Time:** 2-30 min active depending on calibrated depth.
 
@@ -130,7 +130,7 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Key enhancement to /execute:** Branch isolation gate. Before starting any implementation, `/execute` verifies the current branch is appropriate — not a stale feature branch from previous work. If worktrunk (`wt`) is available, it uses `wt switch --create` to create an isolated worktree + branch from the base branch. Otherwise, a plain `git checkout -b` from the base branch.
 
-**Key enhancement to /execute:** Now consults `docs/solutions/` and `research.md` before implementation, so past lessons and technical decisions don't need re-discovery each iteration.
+**Key enhancement to /execute:** Now consults `docs/solutions/` and the research archive entry for this feature before implementation, so past lessons and technical decisions don't need re-discovery each iteration.
 
 **Key enhancement to /execute:** When a project uses Next.js or React, Ralph loads `/vercel-react-best-practices`, `/vercel-composition-patterns`, `/next-best-practices`, and `/next-cache-components` before implementation so framework guidance is present in every iteration.
 
@@ -174,11 +174,11 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Skill:** Custom `/compound` skill (enhanced with Living Documentation principles).
 
-### Step 9: Delete research.md
+### Step 9: Cleanup
 
-**What it does:** Removes the temporary research file now that the feature has shipped. Stale research is worse than no research.
+**What it does:** Close the PRD issue and any remaining slice issues as shipped, and confirm the research archive entry's frontmatter still reflects the versions/decisions that landed (update `installed_versions_snapshot` if a version bumped during implementation). The archive entry itself persists outside the repo and is never deleted at this step — stale-trust protection lives in the frontmatter, not in deletion.
 
-**Output:** Clean repo.
+**Output:** Closed issues. Archive entry retained as durable per-user context for future planning in the same area.
 
 ### Pipeline Recovery
 
@@ -187,7 +187,7 @@ The pipeline described above is the forward path. This section covers what happe
 **When backtracking to an earlier skill:**
 
 - State which skill you are returning to and why.
-- If the backtrack invalidates a written artifact: delete it (`research.md`), update in place (PRD issue body), or close with a comment explaining the backtrack (slice issues). Do not leave stale artifacts for downstream skills to consume.
+- If the backtrack invalidates a written artifact: supersede it (re-run `/research` to produce a new dated archive entry — do not delete prior entries), update in place (PRD issue body), or close with a comment explaining the backtrack (slice issues). Do not leave stale artifacts for downstream skills to consume.
 - Scope the re-run to what changed — do not restart the skill from scratch. Example: "We shaped X, but Y was wrong, so we are re-researching Z."
 - After the re-run, proceed forward through the pipeline again from that point.
 
@@ -212,7 +212,7 @@ The pipeline described above is the forward path. This section covers what happe
 | Work items (slices) | GitHub issues with blocking relationships | Native kanban, Ralph reads them |
 | QA bugs | GitHub issues | Created during manual QA, closed by Ralph |
 | Decisions register | Ubiquitous language doc (decisions section) | Co-located with terminology, single source of truth |
-| Technical research | Temporary `research.md` in repo | Claude Code reads it easily; deleted after ship |
+| Technical research | Per-user archive at `~/.claude/research/<repo-slug>/<feature>-<date>.md` | Worktree- and branch-resilient; outside the repo; persists as durable planning context across features |
 | Institutional knowledge | `docs/solutions/` in repo | Compounds over time, consulted during planning |
 | Workflow definitions | `.claude/skills/` in repo | Composable, load-on-demand, version-controlled |
 
@@ -221,7 +221,7 @@ The pipeline described above is the forward path. This section covers what happe
 - No `.gsd/` directory
 - No `STATE.md`, `ROADMAP.md`, `CONTEXT.md`, `PLAN.md` per slice
 - No `progress.txt` as durable task state
-- No `docs/brainstorms/`, `docs/plans/`, `docs/specs/`
+- No `docs/brainstorms/`, `docs/specs/` (research lives in the per-user archive outside the repo, not under `docs/`)
 - No monolithic AGENTS.md consuming 36K tokens
 
 ---
@@ -247,7 +247,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 |---|---|---|---|
 | `/shape` | Fuzzy problem, unclear scope | Shared understanding — choices, assumptions, impositions, signals | `/research` (or `/create-milestone` for multi-PRD work) |
 | `/create-milestone` | `/shape` closing summary for a multi-PRD tranche | GitHub milestone plus sequenced feature issues | `/research` on a `research-ready` feature |
-| `/research` | Clarified problem from `/shape` | `research.md` with verified versions and doc links | `/write-a-prd` (may invoke `/api-design-review`) |
+| `/research` | Clarified problem from `/shape` | Archived research file at `~/.claude/research/<repo>/<feature>-<date>.md` with verified versions and doc links | `/write-a-prd` (may invoke `/api-design-review`) |
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
 | `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
 | `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` (auto-invoked after Step 5 PR-review confirmation) |
@@ -402,7 +402,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Capture lessons learned | `/compound` after feature ships or after a high-value bug fix |
 | Define domain terms | `/ubiquitous-language` to build or update the glossary + decisions register, then reuse that language in shaping, QA, and issue writing |
 | Record a decision | Add a row to the decisions register in ubiquitous language doc |
-| Clean up after ship | Delete `research.md`, close the PRD issue |
+| Clean up after ship | Close the PRD issue and any remaining slice issues; the research archive entry persists outside the repo and is not deleted |
 | Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
-| Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research.md, milestones) and recommends the next skill with a one-line reason |
+| Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next skill with a one-line reason |
 | Audit knowledge base | Review `docs/solutions/` quarterly |
