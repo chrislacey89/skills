@@ -235,6 +235,8 @@ Append these lines if not already present:
 .claude/.ralph-checked
 ```
 
+`.claude/.ralph-checked` is reserved here but created by `/setup-ralph-loop`, which is auto-invoked by `/execute` when a multi-slice task needs AFK bounds or may be run manually. `/init-pipeline` does not create the marker itself.
+
 ## Verification
 
 Before considering setup complete, check:
@@ -254,4 +256,4 @@ Before considering setup complete, check:
 - **Produces:** complete enforcement infrastructure — Claude Code hooks, git guardrails, pre-commit hooks using detected or user-confirmed tools
 - **Auto-invoked by:** `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing
 - **Invokes:** `/git-guardrails-claude-code` (project scope), `/setup-pre-commit`
-- **Supports downstream:** `/tdd` (marker creation), `/execute` (marker cleanup), `/setup-ralph-loop` (marker creation)
+- **Supports downstream:** `/tdd` (marker creation), `/execute` (marker cleanup); reserves `.claude/.ralph-checked` for `/setup-ralph-loop`, which creates the marker itself (auto-invoked by `/execute` for multi-slice work, or run manually)
