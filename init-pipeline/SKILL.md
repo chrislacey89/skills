@@ -24,30 +24,45 @@ This blocks dangerous git commands (`git push`, `git reset --hard`, `git clean -
 
 ### 2. TDD classification gate (Claude Code hook)
 
-Create `.claude/hooks/enforce-classification.sh` and make it executable. This blocks Write/Edit to `.ts`/`.tsx` implementation files unless the `/execute` Step 3 classification gate has been passed.
+Create `.claude/hooks/enforce-classification.sh` and make it executable. This blocks Write/Edit to implementation files unless the `/execute` Step 3 classification gate has been passed.
 
-The hook checks for either `.claude/.tdd-active` (TDD invoked) or `.claude/.tdd-skipped` (visual frontend, explicitly opted out). No path checking — it enforces "did you go through the gate?"
+The hook checks for either `.claude/.tdd-active` (TDD invoked) or `.claude/.tdd-skipped` (visual frontend, explicitly opted out). No path checking beyond the trigger surface — it enforces "did you go through the gate?"
+
+**Install-time: ask which file patterns constitute implementation code.** Before scaffolding the hook, present the user with the default include list and ask:
+
+> "The TDD classification gate fires on Write/Edit of files matching a pattern list. Default: `*.ts, *.tsx, *.astro, *.py, *.go, *.rb, *.java, *.rs, *.js, *.jsx, *.vue, *.svelte`. Over-gating is acceptable — classification is a quick decision at the top of /execute, though backend/behavior-heavy matches will trigger a full /tdd cycle. Accept the default, or customize for this project?"
+
+Use the confirmed list (default or customized) to populate the `IMPL_PATTERNS` array in the hook body below. Over-gating is acceptable — the cost of an extra classification prompt is lower than the cost of silent under-fire on a polyglot project. If `/init-pipeline` is running non-interactively (auto-invoked by `/execute` Step 0), accept the default list and record that fact in the hook body via a leading comment.
+
+**Skip logic stays extension-agnostic.** Tests, type declarations, and config files are detected by path substring (`*test*`, `*spec*`, `.d.ts`, `.config.*`) rather than per-language expansion.
 
 ```bash
 #!/bin/bash
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
-# Only enforce for TypeScript files (not test files, not type declarations, not config)
-if [[ "$FILE_PATH" == *.ts || "$FILE_PATH" == *.tsx ]]; then
-  # Skip test files and type declarations
-  if [[ "$FILE_PATH" == *test* || "$FILE_PATH" == *spec* || "$FILE_PATH" == *.d.ts ]]; then
-    exit 0
-  fi
-  # Skip config files (drizzle.config, vite.config, etc.)
-  if [[ "$FILE_PATH" == *.config.* ]]; then
-    exit 0
-  fi
-  # Check for classification markers
-  if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ]; then
-    echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy) or create .claude/.tdd-skipped (visual frontend)."}' >&2
-    exit 2
-  fi
+# Implementation patterns — populated at install time from the user's answer to
+# the /init-pipeline trigger-surface question. Over-gating is intended.
+IMPL_PATTERNS=("*.ts" "*.tsx" "*.astro" "*.py" "*.go" "*.rb" "*.java" "*.rs" "*.js" "*.jsx" "*.vue" "*.svelte")
+
+MATCHED=0
+for pattern in "${IMPL_PATTERNS[@]}"; do
+  if [[ "$FILE_PATH" == $pattern ]]; then MATCHED=1; break; fi
+done
+if [ $MATCHED -eq 0 ]; then exit 0; fi
+
+# Skip test files and type declarations (extension-agnostic)
+if [[ "$FILE_PATH" == *test* || "$FILE_PATH" == *spec* || "$FILE_PATH" == *.d.ts ]]; then
+  exit 0
+fi
+# Skip config files (drizzle.config, vite.config, etc.)
+if [[ "$FILE_PATH" == *.config.* ]]; then
+  exit 0
+fi
+# Check for classification markers
+if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ]; then
+  echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy) or create .claude/.tdd-skipped (visual frontend)."}' >&2
+  exit 2
 fi
 exit 0
 ```
@@ -242,6 +257,7 @@ Append these lines if not already present:
 Before considering setup complete, check:
 
 - [ ] `.claude/hooks/enforce-classification.sh` exists and is executable
+- [ ] Hook's `IMPL_PATTERNS` array matches the project's implementation surface as confirmed during install (default list or customized answer)
 - [ ] `.claude/hooks/block-dangerous-git.sh` exists and is executable
 - [ ] `.claude/settings.json` has both PreToolUse hooks configured
 - [ ] If quality gate accepted: `.claude/hooks/quality-gate.sh` exists, is executable, and PostToolUse hook is in settings
