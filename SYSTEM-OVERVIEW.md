@@ -197,6 +197,8 @@ The pipeline described above is the forward path. This section covers what happe
 - If `/pre-merge` reveals architectural concerns serious enough to warrant rework, backtrack to `/execute`.
 - Do not silently swallow errors or continue forward when the underlying approach is broken.
 
+**Forward failure: `/execute` on a PRD issue.** A common misroute is invoking `/execute` directly on a shaped PRD issue that was never decomposed via `/prd-to-issues`. `/execute`'s Step 0 issue-shape detection gate catches this: if the task issue has shaped-pitch markers (Appetite / Rabbit Holes / User Stories / Implementation Decisions) and no `Decomposed into: #…` comment from `/prd-to-issues`, `/execute` halts and routes to `/prd-to-issues`. After decomposition, re-invoke `/execute` on a specific child slice — not the PRD.
+
 ---
 
 ## Where State Lives

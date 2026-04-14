@@ -55,6 +55,14 @@ install = "pnpm install"
 
 **Always — per-session harness reminder:** shell cwd resets to the session's project root after every Bash command. Prefix each Bash call with `cd <worktree-path> && …` or set the command's working directory explicitly. This applies regardless of how the worktree was created.
 
+**Issue-shape detection gate.** If the task is a GitHub issue, verify it is a slice (implementation-ready), not an undecomposed PRD. Run `gh issue view <n> --comments` and check for a comment matching `^Decomposed into: #\d+`.
+
+- If such a comment exists: proceed. The PRD has been decomposed; the operator is presumably working on one of its child slices (and should have supplied that slice's number, not the PRD's).
+- If no such comment exists AND the issue body contains shaped-pitch markers (sections named `Appetite`, `Rabbit Holes`, `No-gos`, `User Stories`, or `Implementation Decisions`): halt. This is an undecomposed PRD. Invoke `/prd-to-issues <this-issue-number>` to produce implementation-ready slices, then restart `/execute` against one of the child slice issues.
+- If multiple `Decomposed into:` comments exist, read the most recent; `/prd-to-issues` is responsible for ensuring only one is authoritative.
+
+Skip this gate for one-off tasks not tied to a GitHub issue.
+
 **Ralph auto-detection gate.** Evaluate all three conditions:
 
 - [ ] The task comes from a GitHub issue (not a one-off verbal request)

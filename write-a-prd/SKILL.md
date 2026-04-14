@@ -286,6 +286,10 @@ The following documented solutions informed this pitch:
 
 - `docs/solutions/<path>` — [What lesson was applied]
 
+---
+
+**Next step:** run `/prd-to-issues <this-issue-number>` to decompose this PRD into implementation-ready slices with boundary maps. Do not invoke `/execute` directly on this issue — it is a shaped pitch, not a slice.
+
 </pitch-template>
 
 ## Handoff
