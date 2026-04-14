@@ -112,7 +112,7 @@ A strong handoff keeps the next skill from re-deriving intent.
 
 ### `/prd-to-issues` → `/execute`
 
-- **Expected input:** an unblocked slice issue with a boundary map, dependency context, and any linked `research.md`
+- **Expected input:** an unblocked slice issue with a boundary map, dependency context, and any linked research archive entry
 - **Produces:** verified implementation work and issue context for the next reviewer or AFK iteration
 - **Comes next by default:** `/pre-merge`
 
