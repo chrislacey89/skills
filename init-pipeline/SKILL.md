@@ -30,7 +30,7 @@ The hook checks for either `.claude/.tdd-active` (TDD invoked) or `.claude/.tdd-
 
 **Install-time: ask which file patterns constitute implementation code.** Before scaffolding the hook, present the user with the default include list and ask:
 
-> "The TDD classification gate fires on Write/Edit of files matching a pattern list. Default: `*.ts, *.tsx, *.astro, *.py, *.go, *.rb, *.java, *.rs, *.js, *.jsx, *.vue, *.svelte`. Over-gating is fine — classification is a one-line answer. Accept the default, or customize for this project?"
+> "The TDD classification gate fires on Write/Edit of files matching a pattern list. Default: `*.ts, *.tsx, *.astro, *.py, *.go, *.rb, *.java, *.rs, *.js, *.jsx, *.vue, *.svelte`. Over-gating is acceptable — classification is a quick decision at the top of /execute, though backend/behavior-heavy matches will trigger a full /tdd cycle. Accept the default, or customize for this project?"
 
 Use the confirmed list (default or customized) to populate the `IMPL_PATTERNS` array in the hook body below. Over-gating is acceptable — the cost of an extra classification prompt is lower than the cost of silent under-fire on a polyglot project. If `/init-pipeline` is running non-interactively (auto-invoked by `/execute` Step 0), accept the default list and record that fact in the hook body via a leading comment.
 
