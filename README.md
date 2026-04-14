@@ -38,7 +38,7 @@ npx skills@latest update   # pull latest versions
 /shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → cleanup
 ```
 
-The pipeline is the default path, not a prison. Skills can backtrack when assumptions fail or branch to helper and side-route skills when the work demands it. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the normal pipeline at `/research`. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step.
+The pipeline is the default path, not a prison. Skills can backtrack when assumptions fail or branch to helper and side-route skills when the work demands it. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the normal pipeline at `/research`. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step — it stops on repeated failure *or* repeated non-progress, whichever trips first.
 
 ## Skills
 

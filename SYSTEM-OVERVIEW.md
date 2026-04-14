@@ -138,6 +138,8 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Error forwarding between iterations:** If a Ralph iteration fails (build breaks, tests fail, verification fails), the GitHub issue comment should include the exact error output so the next iteration can diagnose rather than repeat. If two consecutive iterations fail on the same issue with the same error class, Ralph should stop and flag the issue for human review rather than continuing to retry.
 
+**Plateau detection (second circuit breaker):** The repeated-failure rule above is a circuit breaker on the *error* signal. A second circuit breaker trips on the *progress* signal. Borrowing Shape Up's Hill Chart vocabulary, each AFK iteration should move the active slice uphill (resolving unknowns) or downhill (executing). An iteration counts as progress only if at least one unmet acceptance criterion, failing check, or unresolved unknown transitions to resolved. Code churn without any such transition is a stationary dot. If two consecutive iterations on the same slice produce stationary dots, Ralph should stop and escalate — same bounded-retry shape as the failure rule. Hysteresis: a single recovering iteration (one resolved unknown or newly-passing check) resets the stationary counter.
+
 **Output:** Commits on the feature branch. GitHub issues closed as completed.
 
 **Time:** 5-15 min active (launching + reviewing), 30-120 min AFK.

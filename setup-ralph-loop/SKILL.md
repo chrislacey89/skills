@@ -164,6 +164,7 @@ The prompt should say Ralph must:
 - prefer risky slices early when unblocked
 - leave exact error output in issue comments when blocked
 - stop and escalate after repeated failure instead of retrying forever
+- stop and escalate after repeated non-progress (plateau), not just repeated failure — non-progress means two consecutive iterations on the same slice where no unmet acceptance criterion, failing check, or unresolved unknown transitioned to resolved; one recovering iteration resets the counter. See `/execute` "AFK progress and plateau detection" and SYSTEM-OVERVIEW.md for the full rule.
 
 If the repo is clearly long-lived production code, say so explicitly in the prompt.
 

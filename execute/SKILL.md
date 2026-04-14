@@ -318,6 +318,18 @@ If you cannot complete the task in this context window, leave a comment on the G
 
 If the error suggests the approach from `research.md` or the PRD is wrong, say so in the comment — this is a signal to backtrack, not to keep retrying the same approach.
 
+**AFK progress and plateau detection.** When running under Ralph, progress is *epistemic state advancement*, not activity. An iteration counts as progress only if at least one of these transitions from unresolved to resolved:
+
+- an unmet acceptance criterion on the active slice
+- a failing check (typecheck, test, or verification gate) becoming a passing check
+- a named unknown or rabbit hole from `research.md` or the PRD being closed
+
+Code churn without such a transition is a stationary dot. Red flags: the same slice staying active across multiple iterations, tests still failing but "in different ways," recurring error classes with superficial code rewrites, no acceptance checkbox or gate advancing.
+
+**Plateau stop rule.** If two consecutive iterations on the same slice produce stationary dots, stop and leave an issue comment (same shape as the repeated-failure comment above) naming what did *not* advance. Do not start a third iteration. Hysteresis: a single recovering iteration — at least one of the transitions above — resets the stationary counter. This rule complements the existing repeated-failure rule; it is *not* a replacement.
+
+This applies to AFK Ralph iterations only. HITL `/execute` runs are paced by user judgment and do not need the heuristic.
+
 ## Handoff
 
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
