@@ -94,7 +94,29 @@ If a gap is found, don't just document it in this slice's `Consumes`. File a pos
 
 Do not force detailed schedule estimates into each issue. The goal is to surface slices that are still too ambiguous for credible commitment.
 
-### 5. Quiz the User
+### 5. Derive the Coverage Matrix
+
+**Skip this step when the PRD decomposes into a single slice.** For single-slice PRDs the boundary map + user-stories-covered field already serve as coverage; a matrix would be pure ceremony.
+
+For multi-slice PRDs, derive a requirement-to-slice coverage view from the PRD's existing user stories. This is a **derived view**, not a hand-maintained spec — its single source of truth is the PRD issue body. You regenerate the view from the PRD; you never edit the view directly.
+
+For each user story in the PRD, classify and map it:
+
+| PRD commitment | MWI | Covered by |
+|----------------|-----|------------|
+| User story 1 ("As a user, I want X so that Y") | **Must** | Slice #2, Slice #4 |
+| User story 2 ("As a user, I want Z so that W") | Want | Slice #3 |
+| User story 3 ("As a user, I want Q so that R") | ~Tilde | — (consciously cut) |
+
+- **Must** — comes from the PRD's *Must-haves* section. Every Must needs at least one covering slice before issue creation.
+- **Want** — comes from the PRD's *Nice-to-haves (~)* section. Unmapped Wants are acceptable but get surfaced as a warning at the Quiz step.
+- **~Tilde** — a Nice-to-have the user is consciously cutting under the appetite. No coverage required; silent.
+
+**Unmapped-Must backpressure.** Before proceeding to the Quiz step, halt if any Must is unmapped. Surface the list of unmapped Musts to the user and ask whether to (a) add a new slice covering them, (b) extend an existing slice to cover them, or (c) demote the commitment in the PRD (edit the PRD issue body, then regenerate this view). Do not create slice issues with unmapped Musts.
+
+**Matrix-generation difficulty is a PRD-quality signal.** If many commitments resist clean classification or mapping — several Musts that could plausibly belong to any of three slices, or several items that feel like they are neither Must nor Want — *report this to the user*, do not push structure back into the PRD. Per Shape Up's roughness discipline, PRDs stay rough; matrix noise is the signal that the PRD is under-specified in one area, and the fix is PRD refinement (or accepting the rough classification), not PRD restructuring to feed the matrix.
+
+### 6. Quiz the User
 
 Present the proposed breakdown as a numbered list. For each slice, show:
 
@@ -121,7 +143,7 @@ Ask the user:
 
 Iterate until the user approves the breakdown.
 
-### 6. Create the GitHub Issues
+### 7. Create the GitHub Issues
 
 For each approved slice, create a GitHub issue using `gh issue create`. Use the issue body template below.
 
@@ -188,7 +210,7 @@ Reference by number from the parent PRD:
 
 Do not close or modify the PRD *body*. A decomposition-linking comment on the parent PRD issue is allowed — and required (see next step).
 
-### 7. Link decomposition on the parent PRD
+### 8. Link decomposition on the parent PRD
 
 After all slice issues are created, post a single comment on the parent PRD issue in the form:
 
@@ -200,7 +222,7 @@ This comment is the signal downstream skills read to know the PRD has been decom
 
 If a PRD is re-decomposed later (e.g., after `/correct-course`), post a new `Decomposed into:` comment; readers consume the most recent one. Keeping only one authoritative comment is this skill's responsibility.
 
-### 8. Summary
+### 9. Summary
 
 After all issues are created, present a summary showing:
 
@@ -208,9 +230,10 @@ After all issues are created, present a summary showing:
 - Dependency graph (which issues block which)
 - Suggested implementation order
 - The boundary map across all slices (a quick-reference view of what flows between them)
+- The Coverage Matrix (multi-slice PRDs only) — a quick-reference view of which PRD commitments each slice addresses
 - If a milestone was used: "All N issues attached to milestone: [milestone name]"
 
-This summary helps the user (and Ralph) understand the full picture before execution begins.
+This summary helps the user (and Ralph) understand the full picture before execution begins. The Coverage Matrix remains a derived view — future readers regenerate it from the PRD issue body and the slice issues' `User Stories Addressed` sections rather than reading a stored matrix file.
 
 ## Handoff
 

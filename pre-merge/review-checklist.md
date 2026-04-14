@@ -73,7 +73,24 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 
 ---
 
-## 5. Test Quality
+## 5. Coverage Matrix Reconciliation (multi-slice PRD PRs only)
+
+**Principle:** Every PRD Must-commitment should be covered by at least one shipped slice. Wants may be consciously cut. ~Tildes are already cut by definition.
+
+**Procedure.** If this PR closes the last slice in a multi-slice PRD, regenerate the Coverage Matrix: read the PRD issue body, classify each user story (Must / Want / ~Tilde), and check each slice issue's `User Stories Addressed` section to see which slice covers which commitment. Compare against the set of *merged* slices.
+
+This is a **reconciliation test, not a gate.** Block only on unmapped Musts. Warn on unmapped Wants. Accept unmapped ~Tildes silently.
+
+**Violation patterns:**
+- **Unmapped Must (Blocker):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. This blocks merge.
+- **Unmapped Want (Concern/Warning):** A Want-commitment in the PRD has no merged slice covering it. Surface as a warning — the scope hammer may have cut it consciously; confirm with the user and add a `Scope Notes` entry if so.
+- **Renegotiation not recorded:** A commitment was consciously cut or added mid-cycle but the PRD issue body was not edited to reflect the new state. The matrix is a derived view; the PRD is the single source of truth. Flag for update.
+
+**Out of scope:** Single-slice PRDs (no matrix derived). Boundary-map contract checks (Dimension 4). Whether Musts were correctly classified during `/prd-to-issues` (that conversation happens there, not here).
+
+---
+
+## 6. Test Quality
 
 **Principle:** Tests verify behavior through public interfaces, not implementation details. Tests should survive internal refactors unchanged.
 
@@ -88,7 +105,7 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 
 ---
 
-## 6. docs/solutions/ Adherence
+## 7. docs/solutions/ Adherence
 
 **Principle:** Past lessons should inform current work. If the implementation touches areas with documented solutions, it should follow those patterns or consciously update them.
 
@@ -101,7 +118,7 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 
 ---
 
-## 7. Runtime Initialization (Schema/Config/CLI PRs only)
+## 8. Runtime Initialization (Schema/Config/CLI PRs only)
 
 **Principle:** Code that builds and passes tests is not necessarily code that runs correctly. When a slice changes database schema, migrations, environment configuration, server initialization, or ships a CLI/orchestration entrypoint with a dry-run mode, the actual production path must work — not just the build, the test suite, or the dry-run shortcut.
 
@@ -115,11 +132,11 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 - Silent env-var fallback — code reads an optional env var and falls back to a stub or no-op when unset, without logging a warning or failing loudly. Production operators have no discoverable way to learn the var exists until something visibly breaks (or worse, silently does nothing).
 - Placeholder wired as production default — a function named or documented as a placeholder, stub, TODO, or follow-up is used as the default binding in a production code path without a fail-fast guard. If a non-dry run would silently produce garbage, **flag it as a Concern, not a Suggestion**.
 
-**Out of scope:** Whether the schema design is optimal (that's Dimension 1). Whether tests are sufficient (that's Dimension 5).
+**Out of scope:** Whether the schema design is optimal (that's Dimension 1). Whether tests are sufficient (that's Dimension 6).
 
 ---
 
-## 8. Fix Completeness (Bug-Fix PRs only)
+## 9. Fix Completeness (Bug-Fix PRs only)
 
 **Principle:** A correction removes the defect; a workaround suppresses the failure while the defect remains. Corrections are complete; workarounds are technical debt that must be tracked.
 
@@ -130,7 +147,7 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 - Missing regression test — a bug fix without a test that would have caught the original failure
 - Lone instance fix — the defect pattern exists in multiple locations but only one was fixed; search for structurally similar code
 
-**Out of scope:** Whether the fix is architecturally optimal (that's Dimension 1). Whether tests are well-written (that's Dimension 5).
+**Out of scope:** Whether the fix is architecturally optimal (that's Dimension 1). Whether tests are well-written (that's Dimension 6).
 
 ---
 

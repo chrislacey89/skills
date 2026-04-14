@@ -283,6 +283,8 @@ Present the checklist:
 
 If the task originated from a GitHub issue or PRD with acceptance criteria, read them and generate a concrete verification step for each one. Each step should tell the user exactly what to do and what to expect — not just restate the criterion.
 
+If the slice issue has a `User Stories Addressed` section referencing the parent PRD, read the parent PRD user stories the slice claims to cover. Derived matrix entries (from `/prd-to-issues` Step 5) surface here as verification targets — each mapped commitment needs a concrete step the user can check. Unmapped commitments from the slice are not in scope for this checklist; they belong to other slices or to the post-merge `/pre-merge` reconciliation.
+
 Example — if the AC says "user can reset their password via email":
 - [ ] Go to /login → click "Forgot password" → enter test email → confirm reset email arrives → follow link → set new password → log in with new password
 
