@@ -36,6 +36,25 @@ Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the probl
 
 Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
 
+**After creating the worktree, set it up.** A new worktree inherits tracked files but not git-ignored ones (`.env.local`, per-worktree deps, build caches). Two paths:
+
+**Preferred — configure once via worktrunk hooks** (`.config/wt.toml` in the project):
+
+```toml
+[pre-start]
+copy = "wt step copy-ignored"
+install = "pnpm install"
+```
+
+`pre-start` hooks are blocking — the worktree is not reported ready until they finish. Use `pre-start` (not `post-start`) for both, because `post-start` runs in the background and subsequent commands that need `.env.local` or `node_modules` will race the hook. See `/worktrunk` for the full recipe. One-time per project.
+
+**Fallback — manual setup for plain `git worktree add`** (no worktrunk):
+
+- `cp <source-repo>/.env.local <worktree>/.env.local` (and any other git-ignored config the project uses).
+- Run the project's install command (`pnpm install`, `npm ci`, `pip install -r requirements.txt`, etc.) from the worktree.
+
+**Always — per-session harness reminder:** shell cwd resets to the session's project root after every Bash command. Prefix each Bash call with `cd <worktree-path> && …` or set the command's working directory explicitly. This applies regardless of how the worktree was created.
+
 **Ralph auto-detection gate.** Evaluate all three conditions:
 
 - [ ] The task comes from a GitHub issue (not a one-off verbal request)
@@ -144,6 +163,7 @@ Do not accumulate all changes into one commit. Commit after each self-contained 
 - A wiring change (route registration, dependency injection, config)
 - A refactor that improves structure without changing behavior
 - A migration or seed file
+- A cross-file type or interface refactor whose intermediate per-file steps would leave typecheck broken — the whole ripple is one logical unit
 
 After completing each logical unit:
 
