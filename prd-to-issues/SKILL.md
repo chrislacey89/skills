@@ -102,8 +102,8 @@ For multi-slice PRDs, derive a requirement-to-slice coverage view from the PRD's
 
 For each user story in the PRD, classify and map it:
 
-| PRD commitment | MWI | Covered by |
-|----------------|-----|------------|
+| PRD commitment | Classification | Covered by |
+|----------------|----------------|------------|
 | User story 1 ("As a user, I want X so that Y") | **Must** | Slice #2, Slice #4 |
 | User story 2 ("As a user, I want Z so that W") | Want | Slice #3 |
 | User story 3 ("As a user, I want Q so that R") | ~Tilde | — (consciously cut) |
