@@ -112,6 +112,8 @@ Do not silently absorb the gap — leave a breadcrumb for the next slice.
 
 Skip this gate for one-off tasks, sibling slices still being planned, or issues without upstream `Consumes` entries.
 
+This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror check for *externally-resolvable* declarations — package names, public API symbols, and pinned versions against the research snapshot — runs at `/pre-merge` Dimension 4 under "Spec-reality check." Step 0 sees the registry at slice-start; `/pre-merge` sees it at merge time. Both windows are intentional; do not widen this gate to duplicate the review-time check.
+
 ### 1. Understand the Task
 
 Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understand the relevant files, patterns, and conventions. If the task is ambiguous, ask the user to clarify scope before proceeding.
@@ -203,6 +205,16 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - Exports are present (not just declared but actually exported)
 - Imports between modules are wired correctly (not importing from a path that doesn't resolve)
 - Implementation is substantive (not stubs, not console.log placeholders, not TODO comments where real code should be)
+
+**Deletion Completeness (only when the slice body contains a `### Deletes` section).** For each deleted module, enumerate its external consumer surfaces — the symbolic names callers were taught to emit for it to consume, beyond its exports. Typical surfaces:
+
+- DOM data-attributes the module read (`data-*`)
+- CSS class names and selectors the module applied or queried
+- Global or custom event names (`addEventListener('foo-bar')`, `dispatchEvent(new CustomEvent('foo-bar'))`)
+- `window`, `localStorage`, or `sessionStorage` keys
+- Route names, config keys, or feature-flag names the module owned
+
+Infer surfaces from the module body as it existed before deletion (git show, or the `Deletes` bullet's accompanying notes). Grep the merged tree for each surface across every source-text file type the project uses — templates, source code, styles, config, docs. Do not restrict to a fixed extension list; the relevant surfaces depend on the stack (`.py`/`.rb`/`.go`/`.rs` for imports, `.vue`/`.svelte`/`.astro`/`.tsx` for templates, `.css`/`.scss`/`.sass`/`.less`/`.styl` for styles, `.yml`/`.toml`/`.json` for config, `.md`/`.mdx` for docs that ship). Zero matches required to pass. Non-zero matches: restore the module, migrate the consumers, or declare them as intentionally inert and track the cleanup as a follow-up slice. Imports alone are the narrowest possible definition of "consumer"; the surface may be wider.
 
 #### Tier 2: Command Verification
 - Tests pass (not just "no test failures" — confirm tests actually exist and ran)
