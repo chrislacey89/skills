@@ -59,6 +59,7 @@ Research files produced by `/research` live in the per-user archive at `~/.claud
 - Missing Produces — a slice exports something that downstream slices depend on, but it wasn't listed in Produces
 - Phantom dependencies — a package added to `package.json` (or equivalent manifest) in this diff but never imported in any source file. Front-loaded decisions from `research.md` or the PRD that were recommended but never materialized in the implementation. These should be removed from the manifest before subsequent slices inherit them as implicit constraints.
 - Upstream-produced but unverified — this PR consumes a symbol from an already-closed upstream slice, but the symbol doesn't exist at the declared path or has a different shape than declared. This is not the reviewee's defect, but it should still be flagged as a Concern with a recommendation to correct the upstream issue.
+- Deletion orphans — this PR (or an upstream slice it consumes from) declared a `### Deletes` section and removed the module, but consumer surfaces the module owned remain referenced in the merged tree: DOM data-attributes, CSS class names, global event names, storage keys, route names, or feature-flag names. The DOM and CSS silently ignore dead references, so this slips past imports-only verification. The remedy is to sweep the consumers or restore the module — not to leave inert wiring in place.
 
 **Verification procedure (not eyeballing):**
 

@@ -204,6 +204,16 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - Imports between modules are wired correctly (not importing from a path that doesn't resolve)
 - Implementation is substantive (not stubs, not console.log placeholders, not TODO comments where real code should be)
 
+**Deletion Completeness (only when the slice body contains a `### Deletes` section).** For each deleted module, enumerate its external consumer surfaces — the symbolic names callers were taught to emit for it to consume, beyond its exports. Typical surfaces:
+
+- DOM data-attributes the module read (`data-*`)
+- CSS class names and selectors the module applied or queried
+- Global or custom event names (`addEventListener('foo-bar')`, `dispatchEvent(new CustomEvent('foo-bar'))`)
+- `window`, `localStorage`, or `sessionStorage` keys
+- Route names, config keys, or feature-flag names the module owned
+
+Infer surfaces from the module body as it existed before deletion (git show, or the `Deletes` bullet's accompanying notes). Grep the merged tree for each surface across `.astro`, `.tsx`, `.ts`, `.js`, `.css`, `.scss`, `.html`. Zero matches required to pass. Non-zero matches: restore the module, migrate the consumers, or declare them as intentionally inert and track the cleanup as a follow-up slice. Imports alone are the narrowest possible definition of "consumer"; the surface may be wider.
+
 #### Tier 2: Command Verification
 - Tests pass (not just "no test failures" — confirm tests actually exist and ran)
 - Test wall-clock duration didn't unexpectedly jump. A sudden multi-second increase in a previously fast test, especially after adding retry, sleep, backoff, or interval code, signals a real-time primitive was introduced without being injected. See `/tdd` § Timing-coupled primitives. Fix via injection, not `testTimeout` bumps.
