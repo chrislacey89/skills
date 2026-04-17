@@ -1,6 +1,6 @@
 # Example Pipeline Artifacts
 
-This document shows what good pipeline artifacts look like in this pack.
+This document shows what good pipeline artifacts look like in Skill Kit.
 
 It is intentionally small. Use it as a pattern reference, not as a template that must be copied mechanically.
 

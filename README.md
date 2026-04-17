@@ -1,10 +1,10 @@
-# Skills
+# Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
 ![Skills](https://img.shields.io/badge/skills-23-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-A pipeline-first Claude Code skills pack for structured feature delivery. 23 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 23 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -25,7 +25,7 @@ npx skills@latest check    # see what changed upstream
 npx skills@latest update   # pull latest versions
 ```
 
-## What this pack optimizes for
+## What Skill Kit optimizes for
 
 - **GitHub-native state** — PRDs, slices, QA bugs, and lineage live in GitHub issues and PRs, not a sprawling local planning filesystem.
 - **Explicit handoffs** — skills declare what they expect, what they produce, and what comes next.
@@ -91,7 +91,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 
 ## Repo guide
 
-- **[docs/using-this-pack.md](docs/using-this-pack.md)** — how to operate the pack end-to-end
+- **[docs/using-this-pack.md](docs/using-this-pack.md)** — how to operate Skill Kit end-to-end
 - **[SYSTEM-OVERVIEW.md](SYSTEM-OVERVIEW.md)** — workflow philosophy, state model, and detailed pipeline rationale
 - **[CLAUDE.md](CLAUDE.md)** — editing conventions for agents working on this repository itself
 - **[docs/skill-anatomy.md](docs/skill-anatomy.md)** — structure and quality bar for `SKILL.md` files

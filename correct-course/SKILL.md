@@ -115,7 +115,7 @@ Suggest starting the next skill in a fresh session if the conversation has been 
 - **Not a bug triage tool.** If the trigger is a failing test or a runtime error, use `/qa` first to diagnose whether it is a bug or a stale-artifact problem (`/qa`'s per-issue depth check delegates to `/triage-issue` when root cause is needed).
 - **Not a refactor planner.** If the trigger is architectural pain with no stale upstream artifact, use `/improve-codebase-architecture` or `/request-refactor-plan`.
 - **Not a full re-run.** A good correction scopes the re-run to what changed, not to everything. "We shaped X, but Y was wrong, so we are re-researching Z" is the target.
-- **Not a replacement for reading `SYSTEM-OVERVIEW.md`.** The Pipeline Recovery section is still the canonical reference for what backtracking means in this pack. This skill makes that reference invocable.
+- **Not a replacement for reading `SYSTEM-OVERVIEW.md`.** The Pipeline Recovery section is still the canonical reference for what backtracking means in Skill Kit. This skill makes that reference invocable.
 
 ## Handoff
 

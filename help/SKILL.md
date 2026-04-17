@@ -7,7 +7,7 @@ description: "Side-route orientation skill. Use when the user asks 'what's next'
 
 Read the current repo state and recommend the next pipeline step. This skill does not do any work itself — it orients the user by pointing to the right next skill, citing the state it observed so the recommendation can be overruled.
 
-This is the front door for users who are returning to a repo after a break, onboarding to the pack for the first time, or stuck mid-pipeline and unsure which skill to invoke next.
+This is the front door for users who are returning to a repo after a break, onboarding to Skill Kit for the first time, or stuck mid-pipeline and unsure which skill to invoke next.
 
 ## Invocation Position
 
@@ -15,7 +15,7 @@ This is a side-route skill. It reconnects to the main pipeline at whichever skil
 
 Use `/help` when:
 
-- The user is starting a session in a repo that already uses this pack and wants to know where they are in the pipeline
+- The user is starting a session in a repo that already uses Skill Kit and wants to know where they are in the pipeline
 - The user has been away from a feature for a while and needs a refresher on what state the work is in
 - A new team member is learning the pipeline and wants guidance rather than reading all of `SYSTEM-OVERVIEW.md`
 - The user explicitly asks "what should I do next?" or "where am I?"
@@ -46,7 +46,7 @@ fi
 echo "base=$BASE_BRANCH"
 ```
 
-Do not hardcode `main` or `master` — not every repo uses them (this pack's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name). If `origin/HEAD` is not set and none of the fallback candidates exist, ask the user for the base branch name before continuing.
+Do not hardcode `main` or `master` — not every repo uses them (Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name). If `origin/HEAD` is not set and none of the fallback candidates exist, ask the user for the base branch name before continuing.
 
 **Phase 1b — gather the snapshot (run in parallel, each call independent):**
 

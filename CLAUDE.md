@@ -2,11 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Use this file when editing the skills pack itself. For a quick overview of the repository, read `README.md`. For the deeper workflow philosophy and detailed delivery model, read `SYSTEM-OVERVIEW.md`.
+Use this file when editing Skill Kit itself. For a quick overview of the repository, read `README.md`. For the deeper workflow philosophy and detailed delivery model, read `SYSTEM-OVERVIEW.md`.
 
 ## What This Repository Is
 
-A personal directory of Claude Code skills — composable workflow steps that form a feature development pipeline. Skills are installed globally for Claude Code via `npx skills@latest add chrislacey89/skills --skill '*' --agent claude-code --global -y`.
+Skill Kit is a personal directory of Claude Code skills — composable workflow steps that form a feature development pipeline. Skills are installed globally for Claude Code via `npx skills@latest add chrislacey89/skills --skill '*' --agent claude-code --global -y`.
 
 This repo is not an application — there is no build system, test runner, or deployment target. Each subdirectory contains a `SKILL.md` (with YAML frontmatter for `name` and `description`) and optional reference files.
 
@@ -45,7 +45,7 @@ Key interactions between skills:
 - `/prd-to-issues` produces boundary maps (Produces/Consumes) that `/execute` reads to understand interfaces
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
 - `/compound` runs after ship to capture lessons into `docs/solutions/` — this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes
-- `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about the pipeline pack itself rather than the downstream project; `/improve-pipeline` files a GitHub issue in `chrislacey89/skills` and is advisory until the user approves follow-on implementation
+- `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about Skill Kit itself rather than the downstream project; `/improve-pipeline` files a GitHub issue in `chrislacey89/skills` and is advisory until the user approves follow-on implementation
 - When backtracking to an earlier skill, stale artifacts (research archive entries, PRD issues, slice issues) must be explicitly updated or superseded before proceeding forward — `/correct-course` is the invocable front door for this, and the canonical rules live in SYSTEM-OVERVIEW.md "Pipeline Recovery". Archive entries are superseded by a new dated file, not deleted.
 - `/help` is the orientation skill — it reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next pipeline skill with a one-line reason. It is advisory only and never invokes the recommended skill itself.
 

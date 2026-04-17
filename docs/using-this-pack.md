@@ -1,12 +1,12 @@
-# Using This Pack
+# Using Skill Kit
 
-This guide explains how to use this repository as a pipeline-first skills pack.
+This guide explains how to use Skill Kit as a pipeline-first skills pack.
 
 If you want a quick repo overview, read `../README.md`. If you want the deeper rationale for why the workflow is shaped this way, read `../SYSTEM-OVERVIEW.md`. If you want concrete examples of good slice sequences, boundary maps, and handoffs, read `example-pipeline-artifacts.md`. If you want to edit or author skills, read `skill-anatomy.md` and `../CLAUDE.md`.
 
-## What this pack is for
+## What Skill Kit is for
 
-This pack is built for feature delivery where:
+Skill Kit is built for feature delivery where:
 - planning state should live in GitHub issues and PRs
 - research should be verified before shaping
 - implementation should follow explicit handoffs
@@ -163,7 +163,7 @@ These are setup or safety tasks, not normal delivery stages:
 
 ## Artifacts and where state lives
 
-This pack prefers durable state in GitHub and temporary state only when it serves a narrow purpose.
+Skill Kit prefers durable state in GitHub and temporary state only when it serves a narrow purpose.
 
 ### Durable state
 
@@ -179,7 +179,7 @@ This pack prefers durable state in GitHub and temporary state only when it serve
 - Research files live in `~/.claude/research/<repo-slug>/<feature>-<date>.md` — worktree- and branch-resilient, not committed to the repo, freshness judged via frontmatter `date` and `installed_versions_snapshot`
 - Skill-local reference files live next to the skill when they are specific to that skill
 
-### What this pack avoids
+### What Skill Kit avoids
 
 - large local planning forests like `.gsd/`
 - per-task state files that drift out of sync
@@ -255,7 +255,7 @@ For milestone-planned work, `/research` should consume the selected feature issu
 - `/execute` handles pipeline enforcement setup automatically via `/init-pipeline` when Claude Code hooks are missing. This scaffolds TDD classification gates, git guardrails, and pre-commit hooks (detecting existing tools first). You can also invoke `/init-pipeline` directly.
 - Keep side-route skills tied back to the main flow so work does not drift.
 
-## If you are editing the pack itself
+## If you are editing Skill Kit itself
 
 Read these in order:
 - `../README.md`

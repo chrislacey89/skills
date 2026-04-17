@@ -14,7 +14,7 @@ Scaffold pipeline enforcement infrastructure into the current project: Claude Co
 
 ## What it sets up
 
-All files are created in the **target project**, not in the skills repo.
+All files are created in the **target project**, not in the Skill Kit repo.
 
 ### 1. Git guardrails (Claude Code hook)
 

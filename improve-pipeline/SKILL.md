@@ -55,7 +55,7 @@ This skill exists to close that loop deliberately. It converts a field incident 
 The GitHub issue target is always `chrislacey89/skills`. Never infer a different target from the current workspace, the downstream project's git remote, or whichever repository the incident happened in.
 
 Before analyzing the incident or filing anything, load the minimum canonical context for `chrislacey89/skills`:
-- `README.md` — quick orientation to what this pack is
+- `README.md` — quick orientation to what Skill Kit is
 - `SYSTEM-OVERVIEW.md` — pipeline philosophy, state model, and handoffs
 - `CLAUDE.md` — rules for editing this repo itself
 - `docs/skill-anatomy.md` — the quality bar for skill changes
