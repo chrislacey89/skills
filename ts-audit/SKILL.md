@@ -79,6 +79,7 @@ Work through each file and check against the loaded references. The categories b
 - `as` type assertions that bypass narrowing — could the code use a type guard or discriminated union instead?
 - Missing return type annotations on exported/public functions
 - Loose `string` or `number` where branded types would prevent value confusion
+- **Library-callback return wrapper types without `satisfies`.** A local type that wraps a library-provided callback's return (agent hooks, middleware, proxy, tool handlers, render props, lifecycle methods) and gets returned from the callback as a typed variable. TS excess-property check does not run on returns of typed values — fields not declared by the library's signature are silently dropped at runtime. Remedy: end the returned object expression with `satisfies LibraryReturnType`, return a fresh object literal, or derive the local type via `ReturnType<…>` / `Parameters<…>`. Cite: ts-essentials Rule 31, "Use `satisfies` for type validation without losing inference precision."
 
 ### Generics (ts-generics)
 
