@@ -17,6 +17,12 @@ sources:
 This skill produces a shaped pitch — a PRD that's rough enough for builder judgment, solved enough to ship, and bounded by an explicit time appetite. Follow the steps below, adapting depth to the work but not skipping the checks that establish appetite, current code reality, institutional knowledge, and handoff readiness.
 
 > **One question per turn.** Throughout this skill's interview, ask one question at a time and wait for the user's answer before asking the next. Never present multiple questions in a single message, even when they are short.
+>
+> **Prefer single-select.** Use single-select multiple choice when the user is choosing one direction, one priority, or one next step.
+>
+> **Use multi-select rarely.** Reserve it for compatible sets — goals, constraints, non-goals, success criteria — that can all coexist. If prioritization matters, follow up asking which selected item is primary.
+>
+> **Use the platform's question tool when available.** In Claude Code, use `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise, present numbered options in chat and wait for the user's reply before proceeding.
 
 ## Invocation Position
 

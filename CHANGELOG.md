@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — Interaction rules for shaping / requirements / research skills
+
+Extends each shaping-and-research skill's `> **One question per turn.**` blockquote with three new rules: **prefer single-select** multiple choice for direction/priority/next-step questions; **use multi-select rarely and intentionally** for compatible sets (with a follow-up on primary when prioritization matters); and **use the platform's question tool when available** (`AskUserQuestion` in Claude Code, `request_user_input` in Codex, `ask_user` in Gemini, falling back to numbered options in chat). Added to the six skills that already had the single-line blockquote — `/shape`, `/research`, `/write-a-prd`, `/correct-course`, `/create-milestone`, `/improve-pipeline`. Also added fresh blocks to `/qa`, `/triage-issue`, and `/ubiquitous-language` where interviewing happens but the rule wasn't codified. `/qa` Step 1 wording rewritten from "Ask **at most 2-3 short clarifying questions**" to "Ask up to 2–3 short clarifying questions **one at a time**" so it aligns with the new blockquote. `CLAUDE.md` §Conversational Principles is unchanged — the canonical single-sentence rule stays global, and the expanded guidance lives per-skill at the point of use.
+
 ## v1.7.0 — Research archive, PRD-shape gate, plateau detection, Coverage Matrix
 
 Seven improve-pipeline issues shipped in one batch after real-world friction from Fulcra and civic-mirror engagements, plus two worktree fixes. The through-line: close feedback loops the pack was missing (forward-failure routing, progress signals, requirement traceability), and move one load-bearing artifact (`research.md`) out of the path of destructive git operations. Every change was scoped via the `/improve-pipeline` advocate/skeptic/mediator workflow before landing; each closed the original GitHub issue.

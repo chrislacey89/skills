@@ -21,6 +21,14 @@ Use `/ubiquitous-language` when terminology is fuzzy, stakeholders are using con
 
 Do not use it as a substitute for feature shaping or implementation. Its job is to improve the language of those workflows, not replace them.
 
+> **One question per turn.** When walking a workflow story or proposing canonical terms, ask one question at a time and wait for the user's answer before asking the next. Language work is a conversation, not a questionnaire.
+>
+> **Prefer single-select.** Use single-select multiple choice when the user is choosing one direction, one priority, or one next step.
+>
+> **Use multi-select rarely.** Reserve it for compatible sets — goals, constraints, non-goals, success criteria — that can all coexist. If prioritization matters, follow up asking which selected item is primary.
+>
+> **Use the platform's question tool when available.** In Claude Code, use `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise, present numbered options in chat and wait for the user's reply before proceeding.
+
 ## Process
 
 1. **Walk one workflow as a story** before extracting terms. Ask for one concrete story in the form "[who] does [what] using [tool]." Treat the nouns in the story as term candidates and the verbs as behavior candidates.

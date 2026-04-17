@@ -13,6 +13,12 @@ Always run this skill after /shape and before /write-a-prd. It auto-calibrates d
 This is also the first anti-anchoring checkpoint in the workflow. If the user or an earlier conversation introduced a date, budget, or confidence claim, clarify whether it is a **target**, an **estimate**, or a **commitment** before carrying it forward into the PRD.
 
 > **One question per turn.** When confirming constraints, reviewing findings, or asking the user anything, ask one question at a time and wait for the answer before asking the next. Never present a batch of questions as a numbered or bulleted list.
+>
+> **Prefer single-select.** Use single-select multiple choice when the user is choosing one direction, one priority, or one next step.
+>
+> **Use multi-select rarely.** Reserve it for compatible sets — goals, constraints, non-goals, success criteria — that can all coexist. If prioritization matters, follow up asking which selected item is primary.
+>
+> **Use the platform's question tool when available.** In Claude Code, use `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise, present numbered options in chat and wait for the user's reply before proceeding.
 
 ## Invocation Position
 

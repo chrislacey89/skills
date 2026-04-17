@@ -15,6 +15,12 @@ Run this skill when something has changed — new information, a failed assumpti
 This is the named, invocable form of the Pipeline Recovery rules in `SYSTEM-OVERVIEW.md`. Those rules still apply — this skill just gives them a front door.
 
 > **One question per turn.** Throughout this skill, ask one question at a time and wait for the user's answer before asking the next. Backtracking is a conversation, not a form.
+>
+> **Prefer single-select.** Use single-select multiple choice when the user is choosing one direction, one priority, or one next step.
+>
+> **Use multi-select rarely.** Reserve it for compatible sets — goals, constraints, non-goals, success criteria — that can all coexist. If prioritization matters, follow up asking which selected item is primary.
+>
+> **Use the platform's question tool when available.** In Claude Code, use `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise, present numbered options in chat and wait for the user's reply before proceeding.
 
 ## Invocation Position
 

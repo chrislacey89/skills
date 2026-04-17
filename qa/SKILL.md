@@ -15,11 +15,19 @@ Use `/qa` when the user is testing behavior, reporting bugs conversationally, or
 
 Do not use it when the task is already a concrete, well-scoped implementation task ready for `/execute`.
 
+> **One question per turn.** When clarifying a reported bug, ask one question at a time and wait for the answer before asking the next. Do not over-interview — two or three short questions is usually enough, but they are asked *sequentially*, never as a batched list.
+>
+> **Prefer single-select.** Use single-select multiple choice when the user is choosing one direction, one priority, or one next step.
+>
+> **Use multi-select rarely.** Reserve it for compatible sets — goals, constraints, non-goals, success criteria — that can all coexist. If prioritization matters, follow up asking which selected item is primary.
+>
+> **Use the platform's question tool when available.** In Claude Code, use `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise, present numbered options in chat and wait for the user's reply before proceeding.
+
 ## For each issue the user raises
 
 ### 1. Listen and lightly clarify
 
-Let the user describe the problem in their own words. Ask **at most 2-3 short clarifying questions** focused on:
+Let the user describe the problem in their own words. Ask up to 2–3 short clarifying questions **one at a time**, focused on:
 
 - What they expected vs what actually happened
 - Steps to reproduce (if not obvious)

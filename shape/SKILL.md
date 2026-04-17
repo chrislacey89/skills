@@ -19,6 +19,12 @@ This skill applies structured requirements discovery to prevent the most expensi
 Output is shared understanding in the conversation. No file is produced. This normally feeds into `/research` and later `/write-a-prd`, but for work that requires multiple independent PRDs it can instead hand off to `/create-milestone`.
 
 > **One question per turn.** Throughout every phase of this skill, ask one question at a time and wait for the user's answer before asking the next. Never batch questions into a list. This is a conversation, not a questionnaire.
+>
+> **Prefer single-select.** Use single-select multiple choice when the user is choosing one direction, one priority, or one next step.
+>
+> **Use multi-select rarely.** Reserve it for compatible sets — goals, constraints, non-goals, success criteria — that can all coexist. If prioritization matters, follow up asking which selected item is primary.
+>
+> **Use the platform's question tool when available.** In Claude Code, use `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise, present numbered options in chat and wait for the user's reply before proceeding.
 
 Use `/shape` when the problem, user needs, or scope boundaries are still fuzzy and you need shared understanding before doing technical research or shaping. This applies both to ordinary feature work and to larger app-sized or tranche-sized outcomes that may later branch to `/create-milestone`.
 
