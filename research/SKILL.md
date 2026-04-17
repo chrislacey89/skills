@@ -102,6 +102,21 @@ For TARGETED depth: write a short research document (20-50 lines) containing the
 
 Tell the user which depth was selected and why. If they disagree, adjust.
 
+### Phase 1.25: Library Callback Contracts
+
+**Only runs when the feature implements a library-provided callback surface.** Triggers include: agent `prepareStep`/`onStepFinish`/`before*`/`after*` hooks, Express/Koa/Next middleware and proxy functions, AI SDK tool `execute` handlers, render props and higher-order components, lifecycle methods, interceptors, or any other shape where the library hands the application a callback to implement.
+
+Phase 0 verifies APIs the feature **calls**. Most features stop there. When the feature also **implements** a callback the library defines, TypeScript's excess-property check does not run on returned values typed against local wrapper interfaces — any field the library's signature does not declare is silently discarded at runtime, even when the build passes. Pin the contract here, once, so `/write-a-prd` cannot codify a non-existent mechanism and `/execute` cannot wrap the return in a superset type.
+
+For each callback the feature will implement:
+
+1. **Open the installed type definition.** Grep `node_modules/<library>/**/*.d.ts` (or the equivalent for the language) for the callback's type name. Note the file path and line number.
+2. **Record the accepted return shape verbatim.** Paste the return-type declaration — every field, optional marker, and union arm. Do not paraphrase.
+3. **Name the replace-vs-merge semantics.** If the return includes a field that hands the library a collection (system messages, headers, tools, middleware stack), confirm in the library source whether the library **replaces** the existing collection with your return or **merges** into it. Replace semantics are the highest-risk class: the callback must reconstruct whatever it wants preserved.
+4. **Flag any wrapper-type plans.** If the shape session imagined a mechanism (e.g. "inject via system override") that doesn't appear in the recorded shape, flag it as a design-time veto for the PRD. Do not downgrade to "we'll figure it out in `/execute`."
+
+This step is gated — it only runs when a callback surface is in play — so Phase 0's 30–60s budget is preserved for features that only call libraries.
+
 ### Phase 1.5: API-Shaped Work Check
 
 After selecting depth, determine whether the feature needs focused API contract review.
@@ -196,6 +211,13 @@ repo: <owner/repo>
 feature: <short phrase>
 installed_versions_snapshot:
   - <package>@<version>   # list only the key dependencies this research pinned against
+callback_contracts_snapshot:
+  # Only present when Phase 1.25 ran. One entry per library callback this feature implements.
+  # - callback: <library>.<callback-name>
+  #   file: node_modules/<library>/.../<file>.d.ts
+  #   line: <line-number>
+  #   accepted_fields: [<field1>, <field2>, ...]
+  #   collection_semantics: replace | merge | n/a
 ---
 ```
 
@@ -294,6 +316,23 @@ When referencing specific APIs, always link to docs:
 - **Operations:** [The concrete operations the API must support]
 - **Compatibility:** Additive / Potentially breaking / Breaking
 - **API review verdict:** Proceed / Proceed with constraints / Revise before implementation
+
+## Library Callback Contracts
+
+[Include only when Phase 1.25 ran — this feature implements a library-provided callback.]
+
+For each callback the feature implements:
+
+### `<library>.<callbackName>`
+
+- **Type definition:** `node_modules/<library>/.../<file>.d.ts:<line>`
+- **Accepted return shape (verbatim from installed .d.ts):**
+  ```ts
+  // paste the return-type declaration as written in the installed library
+  ```
+- **Collection-field semantics:** [replace / merge / n/a — e.g. "`systemMessages` replaces the full system-message list; the callback must concat the library's passed-in `systemMessages` arg to preserve advisor persona"]
+- **Fields commonly imagined but not accepted:** [list any fields the shape or PRD draft referenced that don't appear in the accepted shape. If none, omit.]
+- **Downstream rule:** Any boundary-map Produces entry in the PRD that references this callback must cite this snapshot by file:line.
 
 ## 🚫 Don't Hand-Roll
 
