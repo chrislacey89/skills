@@ -101,6 +101,8 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 **TypeScript projects:** For branches with significant `.ts` or `.tsx` changes, mention that `/ts-audit` can be run on the changed files for type-safety analysis that complements the architectural review. Do not invoke it automatically — note it as an option. Example: "For deeper TypeScript analysis, consider running `/ts-audit` on the changed files."
 
+**Verify, don't suspect — library callback semantics.** When a finding turns on how a library treats a value the application hands it (return from a callback, object passed to a hook, systemMessages/tools/middleware collection semantics), the sub-agent must cite the installed type definition — `node_modules/<library>/**/*.d.ts` file path and line — in the finding. If a research archive entry exists for this feature, prefer its `callback_contracts_snapshot` (see `research/SKILL.md` Phase 1.25). Hedged language ("if the library replaces X rather than merges", "if this field is accepted") without a source citation is not acceptable for this class of finding — the proof is one grep away and the failure mode is runtime-invisible. Either cite the source and classify as Observation/Suggestion/Concern per the severity rules, or downgrade to a named follow-up with an explicit "verify before merge" action.
+
 ### Phase 4: Present Findings
 
 Combine findings from all dimensions (or sub-agents).

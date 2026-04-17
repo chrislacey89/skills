@@ -118,6 +118,7 @@ After all tests pass, look for [refactor candidates](refactoring.md):
 - [ ] Apply SOLID principles where natural
 - [ ] Consider what new code reveals about existing code
 - [ ] Run tests after each refactor step
+- [ ] **[TypeScript projects, when implementing a library-provided callback]** If the refactor produced a local wrapper type for the callback's return (e.g. `AdjacentStepOverrides` for a Mastra `prepareStep` return), anchor the return to the library's declared shape using `satisfies LibraryReturnType` on the object expression, or return a fresh object literal, or derive the local type via `ReturnType<typeof libraryCallback>` / `Parameters<…>`. Do **not** return a typed local variable. TypeScript's excess-property check does not run on returns of typed values, so any field not declared by the library's signature is silently dropped at runtime — build passes, tests pass, the library never sees the field. This is the failure mode `/research` Phase 1.25 and `/pre-merge` Dim 8 backstop, but `satisfies` at refactor time closes the gap at compile time. Cite: ts-essentials Rule 31, "Use `satisfies` for type validation without losing inference precision."
 
 **Never refactor while RED.** Get to GREEN first.
 

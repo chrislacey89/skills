@@ -214,6 +214,8 @@ Describe what changes from the user's perspective. Where it helps, describe the 
 
 If the problem has a clear structural driver, state it briefly here — enough to explain why this approach addresses the condition producing the pain rather than only the nearest symptom.
 
+If the solution designs against a library-provided callback (agent hooks, middleware, lifecycle methods, tool handlers), cite the **Library Callback Contracts** snapshot from `research.md` (Phase 1.25) by file:line. Do not describe the mechanism as "inject via X" or "pass Y" unless X and Y appear verbatim in the accepted return shape. An imagined mechanism that doesn't exist in the library's `.d.ts` is the class of drift `/research`'s Phase 1.25 exists to prevent.
+
 ## Rabbit Holes
 
 Named risks with one-line pre-decided resolutions. These are the unknowns that could cause a 6-week project to take 18 weeks if left unexamined. By naming them here with a resolution, the builder doesn't have to make these calls under deadline pressure.

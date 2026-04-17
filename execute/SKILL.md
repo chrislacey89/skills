@@ -164,6 +164,8 @@ If `/tdd` is not available, follow this minimum discipline:
 
 Do not write all tests upfront — write one, make it pass, then move to the next.
 
+**[TypeScript projects] Library callback returns.** When a logical unit implements a callback the library asks the application to provide (agent hooks, middleware, proxy, tool handlers, render props, lifecycle methods), anchor the returned value to the library's declared return type with `satisfies LibraryReturnType`, a fresh object literal, or a derived type (`ReturnType<typeof …>`). Never return a typed local variable — TypeScript's excess-property check does not run on returns of typed values, so fields the library's signature does not declare are silently dropped at runtime. See `/tdd` Refactor step for the full rationale; if a `research.md` exists with a Library Callback Contracts snapshot (Phase 1.25), use its accepted-fields list as the pinned source.
+
 #### Commit after each logical unit
 
 Do not accumulate all changes into one commit. Commit after each self-contained unit of progress. A logical unit is the smallest change that leaves the codebase in a working state — typecheck passes, tests pass, nothing is half-wired. Examples:
