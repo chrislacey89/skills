@@ -77,6 +77,32 @@ This phase takes 30-60 seconds and catches the most dangerous class of errors: s
    ⚠ VERSION ALERT: Drizzle ORM 0.35+ — schema definition API changed significantly from 0.28.
    ```
 
+6. **Spec-anchor check (intra-repo claims).** Steps 1–5 verify external dependencies. Step 6 verifies internal ones — concrete repo identifiers carried in from `/shape` that the PRD will treat as ground truth. The same false-confidence failure mode applies: a model can name a file path, table, function, exported symbol, or test file that doesn't exist, and downstream skills will inherit the phantom anchor as a contract.
+
+   Enumerate the identifiers `/shape` referenced — file paths, schema/table names, function or type names, test files, named patterns ("the existing X loader," "the canonical Y format"). For each, confirm it resolves in the current repo:
+
+   ```bash
+   # File path or directory
+   test -e <path> || echo "MISSING: <path>"
+
+   # Exported symbol (function, type, class, const)
+   rg -n --type ts "export (function|const|class|interface|type) <name>\b"
+
+   # Schema table or named structure
+   rg -n "<table_name>" drizzle/schema.ts  # or equivalent for the project
+   ```
+
+   Flag every identifier that doesn't resolve, and flag every *vague-noun* reference that resists grepping ("the chunks table" without a name, "the existing pipeline tests" without a path, "the same loader path the reranker uses" without a function). Vague nouns are the canonical site of spec-rot — they survive `/execute` Step 0's Consumes-verification gate (which only fires on named symbols) and only surface at `/pre-merge`. Resolve each by either pinning the exact identifier or rewriting the claim in terms that don't pretend an entity exists.
+
+   Format mismatches as spec alerts so they are visually distinct from version alerts:
+
+   ```
+   ⚠ SPEC ALERT: PRD references "knowledge_chunks table" — no such table in drizzle/schema.ts. Closest match: knowledgeObjects (chunks generated in-memory by src/scripts/embed-knowledge.ts).
+   ⚠ SPEC ALERT: PRD says "mirroring existing pipeline tests" — no test file exists at src/mastra/rag/*.test.ts. Pattern is invented, not extended.
+   ```
+
+   Keep this within Phase 0's 30–60s budget — only check identifiers actually surfaced in `/shape`, not every name in the repo.
+
 ### Phase 1: Auto-Calibrate Depth
 
 Based on Phase 0 results, determine the research depth:
