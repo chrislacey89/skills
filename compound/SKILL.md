@@ -119,7 +119,7 @@ Determine the category for filing. Use the most specific category that fits:
 
 Create the document in `docs/solutions/<category>/`. Use the template below.
 
-**Before writing the Root Cause section**, apply two tests. First: was the outcome a predictable consequence of the decision, or did it depend on conditions that weren't available to reason about at decision time? If unpredictable from the decision, the lesson belongs in Context (what you now know about the environment), not Prevention (what to do differently next time). Second: under what conditions would this lesson mislead a future agent? If you can't name a condition that would make the lesson wrong, tighten it until it's falsifiable or drop it.
+**Before writing the Root Cause section**, apply two tests. First: was the outcome a predictable consequence of the decision, or did it depend on conditions that weren't available to reason about at decision time? If unpredictable from the decision, the lesson belongs in Context (what you now know about the environment), not Prevention (what to do differently next time). Second: under what conditions would this lesson mislead a future agent? If you can't name a condition that would make the lesson wrong, tighten it until it's falsifiable or drop it. For Pattern and Structure lessons, record the answer in the Rule Scope section of the template so future `/research` consumers can pattern-match their own work's shape against the preconditions without re-deriving them from prose.
 
 **Ensure the directory exists:**
 ```bash
@@ -166,6 +166,16 @@ volatility: evergreen | stable | volatile
 
 - **Level:** Event / Pattern / Structure
 - **Feedback loop or delay:** [If applicable, what reinforcing loop, balancing loop, missing feedback, or delayed effect made this likely?]
+
+## Rule Scope
+
+*Required for Pattern and Structure lessons. Optional for Event lessons — include only when the event's Solution embeds a transferable rule.*
+
+[State the structural conditions under which the Solution's recommendation is correct, so a future `/research` consumer can pattern-match against their own work's shape without re-deriving the preconditions from prose. Be specific about shape, not just keywords — a 2-step agent loop with a terminal forced tool is a different shape from a 3-step loop where the same tool is non-terminal, even though both mention the same tool name. Note where the rule inverts if the conditions differ, and cross-reference sibling docs that cover the inverted or adjacent shape.]
+
+- **Applies when:** [Structural preconditions — e.g., "the forced tool is terminal in the agent loop", "the callback replaces rather than merges the collection", "the component is a client component rendered inside an RSC boundary"]
+- **Inverts or does not apply when:** [The shapes where following this recommendation would produce the opposite of the intended outcome, or simply not help — e.g., "for N+1-step loops where the tool is non-terminal, the `stopWhen` list must exclude it; see `<sibling-doc>`"]
+- **Sibling docs:** [Links to `docs/solutions/` entries covering adjacent or inverted shapes, if any exist]
 
 ## Solution
 
