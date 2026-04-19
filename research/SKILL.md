@@ -141,6 +141,8 @@ grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
 
 If relevant solutions exist, read them and incorporate their lessons. Note which past pitfalls or patterns apply. This is the compounding benefit — past work makes future research faster and more accurate.
 
+**Scope check before transfer.** When a loaded solution doesn't state explicit scope or preconditions (the `Rule Scope` section added by `/compound`), or when its stated scope doesn't match the current work's structural shape, re-derive the recommendation from first principles rather than transferring it. A rule correct for a 2-step agent loop with a terminal forced tool can invert for a 3-step loop where the same tool is non-terminal — keyword match is not shape match. Verify the shape, don't skip the check.
+
 **Staleness check:** When reading a `docs/solutions/` file, check its `volatility` YAML field and `date`. If `volatile` and older than 90 days, or if the Shelf Life condition appears to have been met, note it as potentially stale before incorporating its lessons. Flag stale docs to the user — they should be updated or deleted.
 
 ### Phase 4: Research
