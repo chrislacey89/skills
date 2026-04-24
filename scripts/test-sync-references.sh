@@ -71,7 +71,13 @@ set +e
 rc=$?
 set -e
 assert_exit 0 "$rc" "sync succeeds"
-[[ -f "$dir/consumer/references/thing.md" ]] && pass=$((pass + 1)) && printf '  ok   destination created\n' || { fail=$((fail + 1)); printf '  FAIL destination not created\n'; }
+if [[ -f "$dir/consumer/references/thing.md" ]]; then
+    printf '  ok   destination created\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL destination not created\n'
+    fail=$((fail + 1))
+fi
 set +e
 (cd "$dir" && bash scripts/sync-skill-references.sh --check >/dev/null)
 rc=$?
@@ -86,7 +92,13 @@ set +e
 rc=$?
 set -e
 assert_exit 0 "$rc" "second sync succeeds"
-(cd "$dir" && bash scripts/sync-skill-references.sh --check >/dev/null) && pass=$((pass + 1)) && printf '  ok   still green after second sync\n' || { fail=$((fail + 1)); printf '  FAIL --check failed after second sync\n'; }
+if (cd "$dir" && bash scripts/sync-skill-references.sh --check >/dev/null); then
+    printf '  ok   still green after second sync\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL --check failed after second sync\n'
+    fail=$((fail + 1))
+fi
 
 # -----------------------------------------------------------------------------
 
@@ -166,7 +178,13 @@ set +e
 rc=$?
 set -e
 assert_exit 0 "$rc" "sync ignores comments and blank lines"
-[[ -f "$dir/consumer/references/thing.md" ]] && pass=$((pass + 1)) && printf '  ok   valid entry still synced\n' || { fail=$((fail + 1)); printf '  FAIL valid entry not synced\n'; }
+if [[ -f "$dir/consumer/references/thing.md" ]]; then
+    printf '  ok   valid entry still synced\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL valid entry not synced\n'
+    fail=$((fail + 1))
+fi
 
 # -----------------------------------------------------------------------------
 
