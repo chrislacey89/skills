@@ -193,6 +193,8 @@ Research the codebase and relevant technologies. Use sub-agents in parallel when
 1. **Explore relevant existing code** — What patterns exist? What integration points are available? What constraints does the current architecture impose?
 2. **Fetch current documentation** — If Context7 MCP is available, use `resolve_library` and `get_library_docs` for the specific installed version. If not, use web search targeting official docs for the installed version — never the "latest" version unless it matches what's installed. Also check for `llms.txt` at the library's documentation site.
 3. **Verify every API reference** — Do NOT trust training data for any framework API call. Every API method, import path, file convention, or function signature in your research output must trace back to either: (a) the installed version's official documentation, (b) a verified web search result, or (c) existing working code in the current codebase. If you cannot verify an API reference, mark it explicitly: "⚠ UNVERIFIED — could not confirm this API exists in [version]."
+
+   **Calibrate filed-issue evidence.** When a citation originates from a filed GitHub issue (or equivalent bug tracker), verify (a) the issue state (open/closed), (b) whether a fix has shipped and in which released version, and (c) whether the current official docs for the installed version contradict the issue. Canonical current docs outrank filed issues when they conflict; closed or resolved issues are not evidence of current state unless you explicitly read the resolution. A filed issue is a hypothesis about a point in time, not a verdict about now — the cheapest counterfactual is to read the current docs page for the feature the issue describes.
 4. **Evaluate each option against constraints** — Score each option against the constraints from Phase 2. Be explicit about which constraints each option satisfies or violates.
 
 For each option investigated, ask:
@@ -410,6 +412,9 @@ For each callback the feature implements:
 
 **⚠️ Partially verified (community source, or version not exactly matched):**
 - [Source title](URL) — [What was learned, caveat]
+
+**⚠️ Historical / resolved issue (was true when filed, not current state):**
+- [Source title](URL) — [What was once true, when it was resolved, and why it is retained here as context rather than evidence]
 
 **❓ Unverified (blog post, may be outdated, or no doc link found):**
 - [Source title](URL) — [What was learned, risk]
