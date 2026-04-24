@@ -113,10 +113,13 @@ Create a GitHub issue using `gh issue create` with the template below. Do NOT as
 
 ## Problem
 
-A clear description of the bug or issue, including:
+Open with a short plain-language walkthrough (usually a single paragraph) that frames the bug for a reader who doesn't have the codebase in their head: what part of the system this touches in domain terms, what the user or system was trying to do, and why the failure matters. Then the concrete details:
+
 - What happens (actual behavior)
 - What should happen (expected behavior)
 - How to reproduce (if applicable)
+
+Skip the walkthrough only for narrow, self-evident failures whose domain meaning is obvious from the stack trace. See `docs/writing-for-humans.md` for the shape and revision bar.
 
 ## Root Cause Analysis
 
