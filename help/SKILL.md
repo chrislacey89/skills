@@ -17,14 +17,14 @@ Use `/help` when:
 
 - The user is starting a session in a repo that already uses Skill Kit and wants to know where they are in the pipeline
 - The user has been away from a feature for a while and needs a refresher on what state the work is in
-- A new team member is learning the pipeline and wants guidance rather than reading all of `SYSTEM-OVERVIEW.md`
+- A new team member is learning the pipeline and wants guidance rather than reading all of `references/SYSTEM-OVERVIEW.md`
 - The user explicitly asks "what should I do next?" or "where am I?"
 
 Do not use `/help`:
 
 - To actually run the recommended skill — `/help` only recommends; the user runs the next skill themselves
 - When the user already knows the next step and just wants to execute
-- As a substitute for reading `SYSTEM-OVERVIEW.md` when the question is conceptual rather than state-specific
+- As a substitute for reading `references/SYSTEM-OVERVIEW.md` when the question is conceptual rather than state-specific
 - For tasks unrelated to the feature pipeline (bug fixes with no upstream artifacts, one-off cleanups)
 
 ## Process
@@ -151,7 +151,7 @@ If the user responds with "that's wrong, I'm actually doing X," do not re-run th
 ## What This Skill is NOT
 
 - **Not a task tracker.** GitHub issues and PRs are the task tracker. This skill reads that state, it does not replace it.
-- **Not a replacement for `SYSTEM-OVERVIEW.md`.** If the user is asking conceptual questions about how the pipeline works, point them at `SYSTEM-OVERVIEW.md` and `docs/using-this-pack.md` instead of improvising an explanation.
+- **Not a replacement for the pipeline overview.** If the user is asking conceptual questions about how the pipeline works, pull the relevant sections from `references/SYSTEM-OVERVIEW.md` and `references/using-this-pack.md` (bundled alongside this skill) rather than improvising. For deeper reading, point the user at the repo originals: <https://github.com/chrislacey89/skills/blob/main/SYSTEM-OVERVIEW.md> and <https://github.com/chrislacey89/skills/blob/main/docs/using-this-pack.md>.
 - **Not a wizard.** It does not walk the user through shaping, research, or planning. It tells them which skill to start and gets out of the way.
 
 ## Handoff

@@ -119,7 +119,7 @@ Open with a short plain-language walkthrough (usually a single paragraph) that f
 - What should happen (expected behavior)
 - How to reproduce (if applicable)
 
-Skip the walkthrough only for narrow, self-evident failures whose domain meaning is obvious from the stack trace. See `docs/writing-for-humans.md` for the shape and revision bar.
+Skip the walkthrough only for narrow, self-evident failures whose domain meaning is obvious from the stack trace. See `references/writing-for-humans.md` for the shape and revision bar.
 
 ## Root Cause Analysis
 

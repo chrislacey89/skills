@@ -58,3 +58,33 @@ jobs:
           if [ $errors -gt 0 ]; then
             exit 1
           fi
+
+  check-skill-references:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify bundled skill references are in sync
+        run: bash scripts/sync-skill-references.sh --check
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: shellcheck scripts/*.sh
+
+  script-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run sync-skill-references test suite
+        run: bash scripts/test-sync-references.sh
+
+      - name: Run verify-install test suite
+        run: bash scripts/test-verify-install.sh

@@ -1,0 +1,23 @@
+# skill-references.manifest
+#
+# Which repo-root / docs/ files get bundled into which skill's references/
+# directory at install time. The `skills` npm CLI only ships files that
+# live inside an individual skill directory, so anything a skill needs to
+# read at runtime must be mirrored here and synced via
+# scripts/sync-skill-references.sh.
+#
+# Format: one entry per line, whitespace-separated:
+#     <source-path-relative-to-repo-root>  <consuming-skill-directory>
+# Lines beginning with `#` and blank lines are ignored.
+
+SYSTEM-OVERVIEW.md              help
+SYSTEM-OVERVIEW.md              correct-course
+SYSTEM-OVERVIEW.md              setup-ralph-loop
+SYSTEM-OVERVIEW.md              improve-pipeline
+docs/writing-for-humans.md      pre-merge
+docs/writing-for-humans.md      triage-issue
+docs/writing-for-humans.md      prd-to-issues
+docs/writing-for-humans.md      qa
+docs/writing-for-humans.md      improve-pipeline
+docs/skill-anatomy.md           improve-pipeline
+docs/using-this-pack.md         help

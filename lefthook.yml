@@ -1,0 +1,27 @@
+# Lefthook — local git hooks. Install with `brew install lefthook` (or see
+# https://github.com/evilmartians/lefthook for other platforms), then run
+# `lefthook install` once per clone. Hooks run from CI regardless, so local
+# lefthook is an early-warning layer, not a gate.
+#
+# Pre-commit is kept to the cheap checks (<1s). The full test suites run on
+# pre-push so a bad commit can still be fixed up locally without rewriting
+# against CI.
+
+pre-commit:
+  parallel: true
+  commands:
+    sync-references-check:
+      run: bash scripts/sync-skill-references.sh --check
+    shellcheck:
+      glob: "scripts/*.sh"
+      run: shellcheck {staged_files}
+
+pre-push:
+  parallel: true
+  commands:
+    sync-script-tests:
+      run: bash scripts/test-sync-references.sh
+    verify-install-script-tests:
+      run: bash scripts/test-verify-install.sh
+    shellcheck-all:
+      run: shellcheck scripts/*.sh
