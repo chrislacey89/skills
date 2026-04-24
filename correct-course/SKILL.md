@@ -12,7 +12,7 @@ sources:
 
 Run this skill when something has changed — new information, a failed assumption, a reshaped scope — and the current pipeline artifact can no longer be trusted. `/correct-course` diagnoses the blast radius, names the earliest skill that needs to re-run, and walks you through cleaning up stale artifacts before forward motion resumes.
 
-This is the named, invocable form of the Pipeline Recovery rules in `SYSTEM-OVERVIEW.md`. Those rules still apply — this skill just gives them a front door.
+This is the named, invocable form of the Pipeline Recovery rules in `references/SYSTEM-OVERVIEW.md` (bundled alongside this skill). Those rules still apply — this skill just gives them a front door.
 
 > **One question per turn.** Throughout this skill, ask one question at a time and wait for the user's answer before asking the next. Backtracking is a conversation, not a form.
 >
@@ -121,7 +121,7 @@ Suggest starting the next skill in a fresh session if the conversation has been 
 - **Not a bug triage tool.** If the trigger is a failing test or a runtime error, use `/qa` first to diagnose whether it is a bug or a stale-artifact problem (`/qa`'s per-issue depth check delegates to `/triage-issue` when root cause is needed).
 - **Not a refactor planner.** If the trigger is architectural pain with no stale upstream artifact, use `/improve-codebase-architecture` or `/request-refactor-plan`.
 - **Not a full re-run.** A good correction scopes the re-run to what changed, not to everything. "We shaped X, but Y was wrong, so we are re-researching Z" is the target.
-- **Not a replacement for reading `SYSTEM-OVERVIEW.md`.** The Pipeline Recovery section is still the canonical reference for what backtracking means in Skill Kit. This skill makes that reference invocable.
+- **Not a replacement for the Pipeline Recovery reference.** The Pipeline Recovery section of `references/SYSTEM-OVERVIEW.md` is still the canonical description of what backtracking means in Skill Kit — this skill makes that reference invocable. For deeper reading, the repo original is at <https://github.com/chrislacey89/skills/blob/main/SYSTEM-OVERVIEW.md>.
 
 ## Handoff
 

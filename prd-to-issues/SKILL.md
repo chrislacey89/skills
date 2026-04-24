@@ -158,7 +158,7 @@ Create issues in dependency order (blockers first) so you can reference real iss
 
 ## What to Build
 
-A concise description of this vertical slice. Describe the end-to-end behavior, not layer-by-layer implementation. Reference specific sections of the parent PRD rather than duplicating content. The plain-language walkthrough of the feature lives in the parent PRD (see `docs/writing-for-humans.md`); slice bodies stay contract-focused so they complement the PRD instead of restating it.
+A concise description of this vertical slice. Describe the end-to-end behavior, not layer-by-layer implementation. Reference specific sections of the parent PRD rather than duplicating content. The plain-language walkthrough of the feature lives in the parent PRD (see `references/writing-for-humans.md`); slice bodies stay contract-focused so they complement the PRD instead of restating it.
 
 ## Boundary Map
 

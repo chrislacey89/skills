@@ -58,3 +58,11 @@ jobs:
           if [ $errors -gt 0 ]; then
             exit 1
           fi
+
+  check-skill-references:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify bundled skill references are in sync
+        run: bash scripts/sync-skill-references.sh --check

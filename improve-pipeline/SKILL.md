@@ -60,11 +60,11 @@ This skill exists to close that loop deliberately. It converts a field incident 
 
 The GitHub issue target is always `chrislacey89/skills`. Never infer a different target from the current workspace, the downstream project's git remote, or whichever repository the incident happened in.
 
-Before analyzing the incident or filing anything, load the minimum canonical context for `chrislacey89/skills`:
-- `README.md` — quick orientation to what Skill Kit is
-- `SYSTEM-OVERVIEW.md` — pipeline philosophy, state model, and handoffs
-- `CLAUDE.md` — rules for editing this repo itself
-- `docs/skill-anatomy.md` — the quality bar for skill changes
+Before analyzing the incident or filing anything, load the minimum canonical context for `chrislacey89/skills`. When working inside the skills repo, read the repo-root originals; when invoked from a downstream project, read the bundled copies beside this skill:
+- `README.md` — quick orientation to what Skill Kit is (repo-only; not bundled)
+- `references/SYSTEM-OVERVIEW.md` (or repo-root `SYSTEM-OVERVIEW.md`) — pipeline philosophy, state model, and handoffs
+- `CLAUDE.md` — rules for editing this repo itself (repo-only; not bundled)
+- `references/skill-anatomy.md` (or repo-root `docs/skill-anatomy.md`) — the quality bar for skill changes
 
 Then read:
 - the skill most closely related to the incident
@@ -131,7 +131,7 @@ Never evaluate a proposed pipeline change in isolation.
 
 Before recommending edits, inspect the full repository surface area that could be affected:
 
-- `SYSTEM-OVERVIEW.md`
+- `SYSTEM-OVERVIEW.md` (or `references/SYSTEM-OVERVIEW.md` when invoked outside the skills repo)
 - the skill that appears closest to the incident
 - adjacent skills with overlapping responsibilities
 - any checklists, docs, or templates that encode the same guidance elsewhere
@@ -384,7 +384,7 @@ After implementation, report:
 A run of `/improve-pipeline` is not complete until all of the following are true:
 
 - the target repo was explicitly treated as `chrislacey89/skills`
-- the canonical context was loaded from `README.md`, `SYSTEM-OVERVIEW.md`, `CLAUDE.md`, and `docs/skill-anatomy.md`
+- the canonical context was loaded from `README.md`, `SYSTEM-OVERVIEW.md` (or `references/SYSTEM-OVERVIEW.md`), `CLAUDE.md`, and `docs/skill-anatomy.md` (or `references/skill-anatomy.md`)
 - the nearest affected skill and adjacent overlapping skills were reviewed
 - `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating

@@ -124,3 +124,13 @@ When modifying a skill:
 - If a skill reconnects to the main pipeline, say exactly where it reconnects
 - If a skill advances an issue through lifecycle states, define those states and the minimum content required to move between them
 - If a skill can run HITL or AFK, say which mode is expected by default and what durable artifacts must exist before AFK execution is safe
+
+## Shared reference files
+
+The `skills` npm CLI installs each skill as a self-contained directory under `~/.claude/skills/<skill>/`. It does **not** copy repo-root files (`SYSTEM-OVERVIEW.md`) or sibling top-level directories (`docs/`). Any skill that needs to read those at runtime must bundle its own copy inside `<skill>/references/`.
+
+When editing a skill:
+- If you add a reference to `SYSTEM-OVERVIEW.md` or anything in `docs/` (other than `docs/solutions/`, which is a downstream-project artifact), add a `source  consuming-skill` line to `scripts/skill-references.manifest` and run `bash scripts/sync-skill-references.sh`.
+- Point the skill body at the bundled path (`references/<file>.md`), not the repo-root path, so the instruction is valid post-install.
+- Canonical content lives at the repo root / in `docs/`. Never edit a `<skill>/references/*.md` copy directly — it will be overwritten by the next sync.
+- The `check-skill-references` CI job runs `scripts/sync-skill-references.sh --check` on every PR and fails if a bundled copy has drifted.
