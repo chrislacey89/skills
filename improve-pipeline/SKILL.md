@@ -65,6 +65,7 @@ Before analyzing the incident or filing anything, load the minimum canonical con
 - `references/SYSTEM-OVERVIEW.md` (or repo-root `SYSTEM-OVERVIEW.md`) — pipeline philosophy, state model, and handoffs
 - `CLAUDE.md` — rules for editing this repo itself (repo-only; not bundled)
 - `references/skill-anatomy.md` (or repo-root `docs/skill-anatomy.md`) — the quality bar for skill changes
+- `references/writing-for-humans.md` (or repo-root `docs/writing-for-humans.md`) — the plain-language walkthrough shape and revision bar for the issue body
 
 Then read:
 - the skill most closely related to the incident
@@ -246,6 +247,8 @@ Example:
 
 `[improve-pipeline] Clarify execute skill boundary for behavior-heavy frontend work`
 
+The `## Field Incident` and `## Why This Is a Pipeline Problem` sections carry the plain-language walkthrough for this artifact — a reader picking up the issue six months from now should be able to follow what happened and why it matters without opening the downstream repo. Meet the shape and revision bar in `references/writing-for-humans.md` (bundled alongside this skill): domain setup in the user's own words, a front-loaded lede, each recommended change motivated, and a `**Why it matters:**` signpost. The analytical sections (`## Advocate Case`, `## Skeptic Case`, `## Mediator Verdict`) sit beside the walkthrough and stay as tight bullets or short paragraphs — they are not another walkthrough.
+
 Use this issue body template:
 
 ```markdown
@@ -384,7 +387,8 @@ After implementation, report:
 A run of `/improve-pipeline` is not complete until all of the following are true:
 
 - the target repo was explicitly treated as `chrislacey89/skills`
-- the canonical context was loaded from `README.md`, `SYSTEM-OVERVIEW.md` (or `references/SYSTEM-OVERVIEW.md`), `CLAUDE.md`, and `docs/skill-anatomy.md` (or `references/skill-anatomy.md`)
+- the canonical context was loaded from `README.md`, `SYSTEM-OVERVIEW.md` (or `references/SYSTEM-OVERVIEW.md`), `CLAUDE.md`, `docs/skill-anatomy.md` (or `references/skill-anatomy.md`), and `docs/writing-for-humans.md` (or `references/writing-for-humans.md`)
+- the `## Field Incident` and `## Why This Is a Pipeline Problem` sections meet the walkthrough shape and revision bar in `references/writing-for-humans.md`
 - the nearest affected skill and adjacent overlapping skills were reviewed
 - `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating
