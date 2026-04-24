@@ -134,3 +134,23 @@ When editing a skill:
 - Point the skill body at the bundled path (`references/<file>.md`), not the repo-root path, so the instruction is valid post-install.
 - Canonical content lives at the repo root / in `docs/`. Never edit a `<skill>/references/*.md` copy directly — it will be overwritten by the next sync.
 - The `check-skill-references` CI job runs `scripts/sync-skill-references.sh --check` on every PR and fails if a bundled copy has drifted.
+
+## Local dev setup
+
+Install Lefthook (`brew install lefthook` or see <https://github.com/evilmartians/lefthook>) and ShellCheck (`brew install shellcheck`), then run `lefthook install` once per clone. This wires:
+
+- **Pre-commit** — runs `sync-skill-references.sh --check` and `shellcheck` on any staged shell script. Cheap (<1s), catches drift and shell gotchas before CI does.
+- **Pre-push** — runs the full `test-sync-references.sh` and `test-verify-install.sh` suites plus `shellcheck` across all scripts.
+
+Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The repo intentionally has no `package.json` — no JS/TS to tend — so Biome and other Node-ecosystem linters are out of scope until that changes.
+
+## Post-merge install verification
+
+After a change to the manifest or any shared reference file lands on `prod`, run a one-shot install check to confirm the install CLI still delivers what we expect:
+
+```
+npx skills@latest add chrislacey89/skills --skill '*' --agent claude-code --global -y
+scripts/verify-install.sh ~/.claude/skills
+```
+
+`verify-install.sh` exits 0 only if every manifest entry has a corresponding file under `<install-dir>/<skill>/references/`. This step is manual-only — it depends on live GitHub state and a published branch, so it's not part of per-PR CI.
