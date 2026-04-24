@@ -117,7 +117,7 @@ Use this template:
 
 ## Additional context
 
-[Any extra observations from the user or from codebase exploration that help frame the issue — e.g. "this only happens when using the Docker layer, not the filesystem layer" — use domain language but don't cite files]
+[A short plain-language walkthrough that frames the bug for a reader unfamiliar with the codebase: one paragraph of domain setup (what part of the system this touches, in the user's own words), the bug stated in plain English, and why it matters to a user or future maintainer. Skip the walkthrough for trivially-reproducible bugs with no domain nuance — a single line is fine there. Use domain language but don't cite files or line numbers. See `docs/writing-for-humans.md` for the shape and revision bar.]
 ```
 
 #### For a breakdown (multiple issues)

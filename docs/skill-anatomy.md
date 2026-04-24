@@ -165,6 +165,7 @@ Must be strongest on:
 - artifact production
 - branch and backtracking conditions
 - verification of produced work
+- artifact bodies that stand on their own for a reader unfamiliar with the codebase (see `writing-for-humans.md`)
 
 ### Invoked helper skills
 
