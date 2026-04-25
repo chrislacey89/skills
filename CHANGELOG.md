@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.9.0 — Multi-slice branching defaults: subtractive fix to `/execute`, `/pre-merge`, `SYSTEM-OVERVIEW.md`
+
+Closes #25. Removes the hardcoded base-branch prescriptions across three pipeline artifacts so multi-slice PRDs with `Consumes from #N` runtime dependencies can stack PRs (Hammant Ch. 13: multiple PRs per story) without `/execute`'s stale-branch heuristic fighting them or `/pre-merge`'s diff step targeting the wrong base.
+
+### Changes
+
+- **`/execute` Step 0** — softens "from the base branch" to "from the appropriate base." The appropriate base is the repo's base branch by default; for a slice with an unmerged `Consumes from #N` dependency, the appropriate base is that sibling slice's branch so the stacked PR can target the sibling's PR. Stale-branch suspicion gains an explicit exception for sibling slice branches named in the current task's `Consumes from #N` declaration.
+- **`/pre-merge` Phase 1** — replaces hardcoded `git diff main...HEAD` and `git log main..HEAD` with the same detected-base pattern `/help` already uses (`git symbolic-ref refs/remotes/origin/HEAD` with fallback through `main`/`master`/`prod`/`trunk`). Also relevant for this very repo, whose default branch is `prod` — the prior pattern reported zero-line diffs locally.
+- **`/pre-merge` Phase 2** — `gh pr create` now passes `--base "$BASE_BRANCH"` so slice PRs target the detected base (override for stacked-PR slices that target a sibling).
+- **`SYSTEM-OVERVIEW.md`** — softens the Branch isolation gate enhancement note (no longer says "from the base branch") and changes singular "Output: Commits on the feature branch" to "feature branch(es)" to acknowledge multi-slice work.
+
+### Motivation
+
+Issue #25 went through `/improve-pipeline` twice. The original verdict prescribed a four-option (A/B/C/D) branching-strategy decision step in `/prd-to-issues` plus propagation across four other artifacts — a five-row recommendation set, all additions. PR #30 then added the subtraction lens to `/improve-pipeline` after empirical evidence that 18 of 18 prior issues proposed additions and zero proposed removals. Re-running the dialectic with subtraction as a first-class outcome surfaced that the strongest CD/Hammant/Accelerate-supported pattern for inter-coupled slices is feature-hiding (a coupling/slicing concern already handled by `/prd-to-issues` Step 4 orthogonality test plus the `Consumes from #N` contract), and that the actual wins are removing the wrong defaults — not adding a strategy-decision ceremony. The verdict direction (Proceed narrowly) and the library analysis (CD / Hammant / Accelerate) are unchanged; only the prescription's shape changes. The full A/B/C/D taxonomy remains useful as pedagogy in #25's body for reviewers and future agents who need to think through multi-slice integration; the pipeline does not record it as a decision artifact. This shipping shape is itself a test of PR #30 — `/improve-pipeline` self-applying the lens it just gained.
+
 ## v1.8.0 — Install-shippable shared references + interaction rules across interview skills
 
 Two changes land together. The headline is a structural fix to the pack's install output so skills stop pointing the agent at files the CLI never ships. The second is an extension of the per-skill "One question per turn" blockquote — queued unreleased since the shape-skills block first landed — that adds single-select / multi-select / platform-tool guidance across nine interview-driven skills. The through-line: make the pack's behavior the same on the author's machine and on a user's a month after install.

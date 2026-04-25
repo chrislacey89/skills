@@ -128,7 +128,7 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Key enhancement to /execute:** GSD's verification ladder. After tests pass, Ralph checks the actual outcomes — files exist, exports are real (not stubs), imports resolve, API endpoints respond, behavioral flows work. For slices touching schema, migrations, environment config, or new routes, a mandatory runtime startup check verifies that the dev database has the latest schema, the dev server boots from cold, and new routes load without 500 errors — tests that use in-memory databases are not sufficient. "All steps done" is NOT verification. For bug fixes, an additional gate classifies the fix as correction (removes the defect) or workaround (suppresses the failure), searches for structural siblings of the defect pattern, and confirms the corrupted state is no longer produced.
 
-**Key enhancement to /execute:** Branch isolation gate. Before starting any implementation, `/execute` verifies the current branch is appropriate — not a stale feature branch from previous work. If worktrunk (`wt`) is available, it uses `wt switch --create` to create an isolated worktree + branch from the base branch. Otherwise, a plain `git checkout -b` from the base branch.
+**Key enhancement to /execute:** Branch isolation gate. Before starting any implementation, `/execute` verifies the current branch is appropriate — not a stale feature branch from previous work. If worktrunk (`wt`) is available, it uses `wt switch --create` to create an isolated worktree + branch from the appropriate base. Otherwise, a plain `git checkout -b` from the appropriate base. The default is the repo's base branch; for a slice with an unmerged `Consumes from #N` dependency that produces symbols the new slice imports, the appropriate base is that sibling slice's branch (Hammant *Trunk-Based Development* Ch. 13 — multiple PRs per story).
 
 **Key enhancement to /execute:** Now consults `docs/solutions/` and the research archive entry for this feature before implementation, so past lessons and technical decisions don't need re-discovery each iteration.
 
@@ -140,7 +140,7 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Plateau detection (second circuit breaker):** The repeated-failure rule above is a circuit breaker on the *error* signal. A second circuit breaker trips on the *progress* signal. Borrowing Shape Up's Hill Chart vocabulary, each AFK iteration should move the active slice uphill (resolving unknowns) or downhill (executing). An iteration counts as progress only if at least one unmet acceptance criterion, failing check, or unresolved unknown transitions to resolved. Code churn without any such transition is a stationary dot. If two consecutive iterations on the same slice produce stationary dots, Ralph should stop and escalate — same bounded-retry shape as the failure rule. Hysteresis: a single recovering iteration (one resolved unknown or newly-passing check) resets the stationary counter.
 
-**Output:** Commits on the feature branch. GitHub issues closed as completed.
+**Output:** Commits on the feature branch(es). GitHub issues closed as completed.
 
 **Time:** 5-15 min active (launching + reviewing), 30-120 min AFK.
 

@@ -37,12 +37,18 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
    ```
    Parse boundary maps (Produces/Consumes sections) from each slice issue body.
 
-3. **Assess the diff:**
+3. **Detect the base branch and assess the diff:**
    ```bash
-   git diff main...HEAD --stat
-   git log --oneline main..HEAD
+   BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
+   if [ -z "$BASE_BRANCH" ]; then
+     for candidate in main master prod develop trunk; do
+       if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
+     done
+   fi
+   git diff "$BASE_BRANCH...HEAD" --stat
+   git log --oneline "$BASE_BRANCH..HEAD"
    ```
-   If no diff from main, tell the user there's nothing to review and stop.
+   For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target). If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
 
 ### Phase 2: Create the PR
 
@@ -51,7 +57,7 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
    gh pr list --head $(git branch --show-current) --json number,url
    ```
 
-2. **Create or update the PR.** Use `gh pr create` or `gh pr edit`.
+2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (override `--base` for stacked-PR slices to the sibling slice's branch) or `gh pr edit`.
 
 **PR body template (when PRD exists):**
 
