@@ -37,7 +37,7 @@ Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the probl
 - **Worktrunk** (if `wt` is available): `wt switch --create <branch-name>` — creates a new worktree + branch from the appropriate base and switches to it, giving full filesystem isolation. Use the `/worktrunk` skill for guidance.
 - **Plain git**: `git checkout <base> && git checkout -b <branch-name>` — creates a new branch from the appropriate base in the current working directory.
 
-The **appropriate base** is the repo's base branch (`main`, `prod`, `master`) by default. For a slice with an unmerged `Consumes from #N` dependency that produces symbols this slice imports, branch from that sibling slice's branch instead so the stacked PR can target the sibling's PR (Hammant *Trunk-Based Development* Ch. 13: multiple PRs per story; the sibling's PR must still merge to the base branch within 2 days).
+The **appropriate base** is the repo's own base branch by default — whatever the repo declares (`git symbolic-ref refs/remotes/origin/HEAD`). Do not assume `main`. For a slice with an unmerged `Consumes from #N` dependency that produces symbols this slice imports, branch from that sibling slice's branch instead so the stacked PR can target the sibling's PR (Hammant *Trunk-Based Development* Ch. 13: multiple PRs per story; the sibling's PR must still merge to the repo's base branch within 2 days).
 
 Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
 

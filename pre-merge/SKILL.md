@@ -41,7 +41,7 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
    ```bash
    BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
    if [ -z "$BASE_BRANCH" ]; then
-     for candidate in main master prod trunk; do
+     for candidate in main master prod develop trunk; do
        if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
      done
    fi
