@@ -123,6 +123,7 @@ Classify the finding:
 - **Local event** — belongs in the downstream repo, not here
 - **Pipeline pattern** — this repo should change because the same class of issue is likely to recur
 - **Pipeline structure** — the problem comes from a missing feedback loop, ambiguous ownership, overlapping skill boundaries, or contradictory repository guidance
+- **Redundant or counter-productive guidance** — already-present text whose removal or consolidation would improve repo coherence. Subtraction is a legitimate finding, not only addition.
 
 If the issue is only a Local event, stop and redirect to the downstream repo's normal documentation or `/compound` flow.
 
@@ -175,6 +176,7 @@ The Advocate should answer:
 - What pipeline problem is being solved?
 - Why does the current repository fail to address it?
 - What improvement would reduce future failures?
+- What instruction, section, or skill, if any, should be **removed or consolidated** to address this? Subtraction is a first-class option, not a fallback.
 - Why is the proposed change better than leaving the pipeline alone?
 - What exact files or skills likely need to change?
 
@@ -319,9 +321,11 @@ If no gap is identified, remove the Gap subsection rather than leaving a placeho
 
 ## Recommended Changes
 
-| Target file | Change | Why | Risk if skipped |
-|-------------|--------|-----|-----------------|
-| `path/to/file` | [Specific recommendation] | [Rationale] | [Consequence] |
+| Target file | Change type | Change | Why | Risk if skipped |
+|-------------|-------------|--------|-----|-----------------|
+| `path/to/file` | add \| modify \| remove \| consolidate | [Specific recommendation] | [Rationale] | [Consequence] |
+
+For any `remove` or `consolidate` row, add a `Text removed (with location):` line directly under the row quoting the exact text being cut and the section it lives in. This prevents Chesterton's-fence deletions and gives reviewers something concrete to evaluate.
 
 ## Non-Goals
 
@@ -393,6 +397,7 @@ A run of `/improve-pipeline` is not complete until all of the following are true
 - `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating
 - an issue was filed or updated in `chrislacey89/skills`, or filing was intentionally deferred with a stated reason
+- if the proposal recommends removal or consolidation, the issue cites the exact text being cut and the reason it is now redundant or counter-productive
 
 ## Repo-Wide Guardrails
 
@@ -403,6 +408,7 @@ A run of `/improve-pipeline` is not complete until all of the following are true
 - **Search before editing.** If a recommendation touches one skill, inspect adjacent skills and shared docs before changing anything.
 - **Name the blast radius.** Every proposal should say which files, skills, or conventions are affected.
 - **Prefer the smallest coherent fix.** Resist sprawling “while we are here” pipeline rewrites.
+- **Consider subtraction.** When the diagnosis is redundant, contradictory, or low-value guidance, the right fix is removal or consolidation, not another addition. Past invocations of this skill have skewed heavily toward additions; treat subtraction as a first-class outcome whenever the evidence supports it, and require equal evidence for it as for an addition.
 - **Keep project knowledge in the project.** If the lesson belongs in the downstream app repo, use that repo’s normal documentation flow instead.
 - **Capture findings in GitHub.** The default artifact is a GitHub issue in `chrislacey89/skills`, not a local proposal file.
 - **Do not trust the current workspace remote.** A downstream repo may be where the incident happened, but it is never the issue target for `/improve-pipeline`.
