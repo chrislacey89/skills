@@ -1,6 +1,9 @@
 ---
 name: execute
 description: "Primary pipeline execution step after /prd-to-issues or for clearly scoped implementation work. Use to build, verify, and commit a concrete slice, delegating to /tdd for backend work and behavior-heavy frontend logic when red-green-refactor will reduce risk. Not for shaping or pre-merge review."
+sources:
+  secondary:
+    - "The Checklist Manifesto — Atul Gawande"
 ---
 
 # Execute
@@ -53,7 +56,13 @@ install = "pnpm install"
 - `cp <source-repo>/.env.local <worktree>/.env.local` (and any other git-ignored config the project uses).
 - Run the project's install command (`pnpm install`, `npm ci`, `pip install -r requirements.txt`, etc.) from the worktree.
 
-**Always — per-session harness reminder:** shell cwd resets to the session's project root after every Bash command. Prefix each Bash call with `cd <worktree-path> && …` or set the command's working directory explicitly. This applies regardless of how the worktree was created.
+**Worktree setup checklist (DO-CONFIRM — perform each step, then verify before proceeding).** Applies regardless of how the worktree was created:
+
+- [ ] Git-ignored config copied — `.env.local` (and any other `.env.*`, `*.local`, or project-specific ignored config) exists in the worktree
+- [ ] Dependencies installed — install command (`pnpm install`, `npm ci`, etc.) ran without error in the worktree
+- [ ] cwd discipline set — shell cwd resets to the session's project root after every Bash command; every Bash call in this session will prefix `cd <absolute-worktree-path> &&`
+- [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
+- [ ] TDD marker absent — `.claude/.tdd-active` and `.claude/.tdd-skipped` do not exist in the worktree (fresh slate; Step 3 creates them)
 
 **Issue-shape detection gate.** If the task is a GitHub issue, verify it is a slice (implementation-ready), not an undecomposed PRD. Run `gh issue view <n> --comments` and check for a comment matching `^Decomposed into: #\d+`.
 

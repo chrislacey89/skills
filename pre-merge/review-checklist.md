@@ -79,6 +79,8 @@ For each `Produces` entry in the PR's slice issue:
 
 For each `Consumes` entry referencing an already-closed upstream slice, run the same check against the upstream's declared Produces. If the upstream export is missing or shape-drifted, note it and flag the upstream issue for correction.
 
+**For deletion orphan surfaces (only when the diff or any consumed upstream slice contains a `### Deletes` section):** Infer the deleted module's external consumer surfaces from the `Deletes` bullet notes or from `git show` of the deleted path. Grep the merged tree for each surface type across all source-text files — templates, source code, styles, config, docs. Zero matches required to pass. Non-zero matches: flag as Concern with the matched path and line. This mirrors the Tier 1 build-time check in `/execute`; its value here is catching surfaces the author missed at implementation time, now verified against the full merged tree.
+
 **Out of scope:** Whether the interfaces are well-designed or deep (Dimension 1 covers shallowness). Verifying that the upstream slice's *close state* was correct at merge time is handled by the Verification procedure above.
 
 ---

@@ -10,6 +10,7 @@ sources:
     - "Thinking in Systems — Donella Meadows"
     - "Release It! — Michael Nygard"
     - "Domain Storytelling — Hofer & Schwentner"
+    - "The Checklist Manifesto — Atul Gawande"
 ---
 
 # Shape
@@ -104,6 +105,15 @@ This is the heart of the interview — walking the decision tree one branch at a
 | `Speculative` | Could easily be wrong |
 
 Ask the user to confirm this classification. Anything marked as an Assumption is a direct input to the `/research` phase.
+
+**Close gate (DO-CONFIRM — verify before presenting the summary):**
+
+- [ ] Problem is stated without referencing any implementation or technology
+- [ ] At least one appetite or hard constraint is on record (time, scope, or cost boundary)
+- [ ] All three stakeholder roles have been named: who uses, who pays, who is affected
+- [ ] Every `Uncertain` or `Speculative` assumption has a stated research question attached
+
+If any item is unchecked, ask one targeted question to fill the gap before presenting the summary. Do not present an incomplete summary as a handoff.
 
 **This closing summary is the compressed handoff to `/research`.** If `/research` runs in this same session, it should work from this summary rather than re-reading the full interview transcript. If the interview ran long (20+ minutes), suggest the user start `/research` in a fresh session using this summary as context.
 
