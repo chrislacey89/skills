@@ -314,7 +314,7 @@ Example — if the AC says "user can reset their password via email":
 - [ ] Go to /login → click "Forgot password" → enter test email → confirm reset email arrives → follow link → set new password → log in with new password
 
 After the generated steps, always include:
-- [ ] Scope matches what was asked — no unasked-for additions, no missing pieces
+- [ ] Scope matches what was asked — no unasked-for additions, no missing pieces (this is the in-flight self-check; `/pre-merge`'s Surgical Scope dimension is the diff-time check that runs against the merged hunks)
 
 #### Ready for PR Review
 
