@@ -164,6 +164,31 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 
 ---
 
+## 10. Surgical Scope
+
+**Principle:** Every changed hunk should trace to the stated task. A diff is the answer to a question; the question was not "what else could be improved?"
+
+Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two hats; never wear both at once, because if something breaks you can no longer attribute the cause. Hunt & Thomas (Pragmatic Programmer): each pass must have a single purpose — interleaving makes failures unattributable. The check belongs at review time because by then the diff exists and the question "does this hunk belong?" is concrete rather than aspirational.
+
+**Applies to every diff regardless of PRD status.** Boundary Map Contracts (Dimension 4) and Coverage Matrix Reconciliation (Dimension 5) check plan-vs-actual *between slices*, and only fire when a PRD exists. This dimension checks scope drift *inside a single diff* — drive-by reformatting, speculative additions, adjacent fixes that weren't asked for — and runs whether or not the work went through `/prd-to-issues`.
+
+**Stated task source.** The "stated task" is, in priority order: the slice issue body, the PRD issue body, the bug issue or QA report, or — for one-off branches — the commit messages and branch name. If no stated task can be reconstructed, note that and skip the dimension; do not synthesize one.
+
+**Violation patterns:**
+- **Drive-by reformatting** — quote-style swaps, whitespace rewrites, brace-style changes in files the task didn't require touching
+- **Speculative additions** — type hints, docstrings, new abstractions, or parameter additions that the task didn't ask for and no test demands
+- **Adjacent fix-while-here** — patching a different bug or removing unrelated dead code in the same diff (file separately, even if the adjacent fix is correct)
+- **Style drift** — applying a personal style preference (preferred quote, preferred test framework idiom, preferred import order) to existing code the task didn't require touching
+- **Refactor-and-feature interleave** — Beck's "shame, shame": a behavior change and a structural cleanup in the same commit, leaving any future bisect unable to attribute regressions
+
+**Verification procedure — cited hunks, not yes/no.** A finding under this dimension must cite the file path and the hunk's starting line. *"Looks scope-creepy"* is not a finding; *"`utils/format.ts:42–58` adds type hints and renames `result` to `formatted` — neither is mentioned in the task statement"* is. If the dimension produces zero findings on a non-trivial diff, that is a real outcome — do not invent findings to fill the section, and do not rubber-stamp it (Meadows policy resistance: required sections that go unused get filled with filler; the cited-hunk requirement is the mitigation).
+
+**Out of scope:** Whether the diff is architecturally good (that's Dimension 1). Whether the scope of the *task itself* was right (that's `/shape` and `/write-a-prd`). Whether unmapped commitments exist between slices (that's Dimension 5).
+
+**Review-cadence note.** This dimension was added without a triggering incident, on principle grounds (Beck, Hunt & Thomas). If after a reasonable sample of PRs it produces zero or one finding per PR on average, it is policy-resistant filler and should be removed rather than left as ceremony.
+
+---
+
 ## Severity Classification
 
 - **Observation:** A pattern worth noting but no principle is violated. The reviewer noticed something the developer should be aware of. Example: "The auth module now exports 7 functions — not a violation, but approaching the threshold where consolidation might help."
