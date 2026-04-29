@@ -1,6 +1,6 @@
 # Review Checklist
 
-Used by `/pre-merge` during Phase 3 in both author-mode and reviewer-mode. Eight dimensions, each independent. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
+Used by `/pre-merge` during Phase 3 in both author-mode and reviewer-mode. Eleven dimensions, each independent. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
 
 In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comment drafts via `references/comment-craft.md` — the severity tier maps onto a Comment Signal prefix (`Concern` → `needs change:` / `needs rework:` / `align:`, `Suggestion` → `levelup:`, `Observation` → drop or `nitpick:`) and each blocking comment is shaped through Triple-R. The dimensions and severity rules below are unchanged across modes; comment-craft only governs how the findings are presented to the author.
 
@@ -188,6 +188,33 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 **Out of scope:** Whether the diff is architecturally good (that's Dimension 1). Whether the scope of the *task itself* was right (that's `/shape` and `/write-a-prd`). Whether unmapped commitments exist between slices (that's Dimension 5).
 
 **Review-cadence note.** This dimension was added without a triggering incident, on principle grounds (Beck, Hunt & Thomas). If after a reasonable sample of PRs it produces zero or one finding per PR on average, it is policy-resistant filler and should be removed rather than left as ceremony.
+
+---
+
+## 11. Review-friendly Size
+
+**Principle:** Code review effectiveness is bounded by reviewer engagement, and the variable with the strongest empirical support across independent research streams is diff size. Cohen et al.'s 2,500-review Cisco dataset shows defect detection drops sharply past 100–300 LOC per session and a 60-minute ceiling; Tacke documents engagement degradation past ~500 lines or ~20 files; Rigby's 13-project study (Microsoft, AMD, Android, Chrome OS, Apache, Linux) found medians of 11–78 LOC. Three independent streams converging on one variable.
+
+**Applies to every diff regardless of PRD status.** Tracer-bullet slices (the first slice in a PRD's decomposition that intentionally cuts wide to prove end-to-end architecture) are exempt — the signal does not fire on them. Identify the tracer from the slice issue body or its position in the PRD's `Decomposed into:` comment; if ambiguous, assume non-tracer rather than silently exempting.
+
+**Three-band severity (drawn from convergent literature, not invented):**
+
+- **Observation: >300 LOC.** Cohen's upper bound. Above this, defect-detection rate begins to fall; worth naming so the author knows reviewer attention is being spent.
+- **Suggestion: >500 LOC OR >20 files.** Tacke's engagement threshold. Above either, reviewer focus tends to collapse into momentum approval. Recommend splitting into stacked PRs or scheduling reviewer attention across multiple sittings.
+- **Concern: >800 LOC AND multi-domain scope.** The catastrophic-engagement zone where all three sources agree review effectiveness degrades severely. "Multi-domain" means three or more conceptually independent areas in the same diff (e.g., schema + API + UI + migration; or backend handler + frontend component + infra config).
+
+**Distinct from Dimension 10 (Surgical Scope).** Dimension 10 asks whether each hunk traces to the task — its remedy is *trim*. Dimension 11 asks whether the diff is reviewable in one session — its remedy is *split into stacked PRs* or *chunk reviewer attention across multiple sittings*. A diff can be tightly scoped (no Dim 10 finding) and still oversize (Dim 11 fires); a diff can be small but scope-creepy (Dim 10 fires, Dim 11 silent). Both can fire on the same diff for different reasons.
+
+**Verification procedure — cited counts, not impressions:**
+
+1. Read the diff stat from Phase 1 — `git diff "$BASE_BRANCH...HEAD" --stat` in author-mode, or the file count and additions/deletions from `gh pr view --json` / `gh pr diff` in reviewer-mode. Cite the actual numbers in the finding.
+2. Compare line count and file count against the bands above. Use additions + deletions, not net change — a 600-add / 400-delete diff is a 1,000-line review burden, not a 200-line one.
+3. If the Concern band may fire, enumerate the conceptual areas touched (e.g., "schema, API handler, React component, migration script") and confirm three or more independent areas before classifying as Concern. Two-domain >800 LOC diffs land at Suggestion, not Concern.
+4. If the slice is the tracer (per the issue body or PRD decomposition order), suppress the finding regardless of band; note in the findings output that the dimension was suppressed under the tracer exemption so the suppression is visible rather than silent.
+
+**Out of scope:** Whether the *task* was right-sized (that's `/shape` and `/write-a-prd`). Whether each hunk traces to the task (that's Dimension 10). Whether the slice was decomposed correctly upstream (that's `/prd-to-issues` Step 6, which carries the mirror size question at planning time). Defect-density metrics or per-reviewer pace tracking — Cohen explicitly warns against weaponizing review metrics for performance evaluation.
+
+**Review-cadence note.** Added on convergent empirical grounds (Cohen 2006, Tacke 2024, Rigby 2013), not from a triggering incident. Same falsification rule as Surgical Scope: if after a reasonable sample of PRs the signal fires <10% of the time on diffs that had no other reported review issue, it is policy-resistant filler and should be removed rather than left as ceremony.
 
 ---
 
