@@ -505,11 +505,20 @@ Present the research document to the user. Then walk through these review questi
 1. Does the recommended approach match your instinct?
 2. Are there options I missed that you'd like investigated?
 3. Any version surprises that change your thinking?
-4. Are you comfortable proceeding to PRD with this recommendation?
+4. Where do you want to run `/write-a-prd` — **here** (continue in this session) or in a **fresh session** using the printed handoff line below?
 
-Do not present all four questions at once. Iterate on each answer until the user is satisfied.
+Do not present all four questions at once. Iterate on each answer until the user is satisfied. Question 4 has exactly two answers — do not improvise a third option ("not yet", "later"). If the user is not ready to proceed, return to questions 1–3 to surface what is missing.
 
 In archive mode, the research file is saved outside the repo — do not commit it to git. In spike-issue mode, the research lives as a closed GitHub issue and a session-local cache copy at the archive path; do not commit the cache copy either.
+
+**At the end of Phase 6, print the runtime handoff line:**
+
+```
+**Next session:** /write-a-prd <feature-name>
+**Input:** <archive-path-or-spike-issue-url>
+```
+
+For archive mode, the input is the absolute path under `~/.claude/research/<repo-slug>/`. For spike-issue mode, the input is the closed GitHub issue URL. Print this line whether the user chose to continue here or in a fresh session — the line is the durable handoff either way.
 
 ## Handoff
 

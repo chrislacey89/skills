@@ -167,6 +167,15 @@ If a finding looks like a behavioral bug, note: "Consider running `/qa` to verif
 
 Omit any tier that has zero findings.
 
+**At the very end of Phase 4 output, print the runtime handoff line if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from:**
+
+```
+**Next session:** /compound
+**Input:** PR #<pr-number>
+```
+
+Substitute `<pr-number>` with the PR created in Phase 2. Skip the line when the work was a clean execution of a pre-shaped plan with no surprises, rework, or non-obvious decisions — the issue body and PR description already carry that record, and a `docs/solutions/` entry with no reusable lesson trains future readers to skim. When in doubt, skip. Signals that a lesson is worth capturing: a tricky bug whose root cause was non-obvious, a Rabbit Hole from the PRD that actually bit, an architectural decision with significant tradeoffs, or a pattern that should be reused. See `/compound`'s "When NOT to Use" for the full skip list.
+
 ## What This Skill is NOT
 
 - **Not a test runner.** Pre-commit hooks run tests, typecheck, and lint on every commit.
@@ -179,4 +188,4 @@ Omit any tier that has zero findings.
 - **Expected input:** verified implementation work that is ready for review and PR creation
 - **Produces:** a PR with lineage plus an architectural review readout
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
-- **Comes next by default:** merge, then `/compound`
+- **Comes next by default:** merge. Then `/compound` only when a durable lesson emerged worth capturing in `docs/solutions/` — skip it when the work was a clean execution of a pre-shaped plan

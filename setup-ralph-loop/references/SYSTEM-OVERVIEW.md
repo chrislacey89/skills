@@ -40,6 +40,15 @@ When the research artifact and `docs/solutions/` disagree, the research artifact
 
 **Planning-chain compression.** Each pipeline handoff has a compression artifact: the closing summary (`/shape`), the archived research file (`/research`), the PRD issue (`/write-a-prd`). The downstream skill should work from the written artifact, not from the full prior conversation. If a session is running long after multiple planning skills, start the next pipeline step in a fresh session using the written artifact as its entry point.
 
+**Runtime handoff line.** Every primary pipeline skill prints a `**Next session:**` block at the end of its closing output, in this exact shape:
+
+```
+**Next session:** /<next-skill> [arg]
+**Input:** <artifact path, issue or PR number, or "use the closing summary above">
+```
+
+It is one short block — not a new section, not a paragraph, not a copy-paste cheat sheet — and it draws its data from the skill's existing `## Handoff` section. The skill at the end of the loop (`/compound`) prints `**Loop closed.** Next: /help when you return to this repo` instead.
+
 ### Step 1: /shape (Matt's, enhanced)
 
 **What it does:** Interviews you relentlessly about the feature or tranche until every branch of the decision tree is resolved.
@@ -273,7 +282,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
 | `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
 | `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` (auto-invoked after Step 5 PR-review confirmation) |
-| `/pre-merge` | Verified implementation ready to review | PR with lineage plus architectural review readout | Merge, then `/compound` |
+| `/pre-merge` | Verified implementation ready to review | PR with lineage plus architectural review readout | Merge, then `/compound` only when a durable lesson emerged |
 | `/compound` | Shipped work or meaningful lesson from review or QA | `docs/solutions/` entry with volatility and Shelf Life | Future `/research` and `/write-a-prd` consult it |
 | `/api-design-review` | API-shaped uncertainty from `/research` or `/write-a-prd` | Contract verdict, compatibility class, must-lock decisions | Returns to the calling skill |
 | `/design-an-interface` | Module problem with multiple plausible shapes | Contrasted interface options with a recommendation | Returns to caller (usually `/write-a-prd`) |

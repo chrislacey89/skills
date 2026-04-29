@@ -346,6 +346,15 @@ rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.td
 
 **Auto-invoke `/pre-merge`.** If Step 5 ran and the user confirmed the "Ready for PR Review" item, invoke `/pre-merge` now. If the task originated from a PRD issue, pass the issue number so `/pre-merge` can gather slice lineage and verify boundary map contracts without asking the user for it again. If the user answered "no" to the PR review item, or Step 5 was skipped entirely (AFK Ralph iterations, trivial-task flows that never reached a user checklist), `/execute` exits here and the user invokes `/pre-merge` manually when ready.
 
+**Print the runtime handoff line.** Whether `/pre-merge` is auto-invoked or the user is exiting to invoke it manually later, print the line so a fresh session can open by copy-paste:
+
+```
+**Next session:** /pre-merge
+**Input:** the verified commits on branch <branch-name>
+```
+
+Substitute `<branch-name>` with the actual branch the commits live on (`git branch --show-current`).
+
 If you cannot complete the task in this context window, leave a comment on the GitHub issue with:
 
 - What was done

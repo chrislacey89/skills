@@ -119,6 +119,15 @@ If any item is unchecked, ask one targeted question to fill the gap before prese
 
 For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features that each need their own research-PRD cycle — use this same closing summary as the compressed handoff to `/create-milestone` instead. `/create-milestone` should use it to define a GitHub milestone, feature sequencing, and the first feature to promote from `roadmap bet` to `research-ready`. Note: a blank project or large-scope effort that is still one cohesive product stays on the default path; `/write-a-prd` will create a container milestone for big-batch work.
 
+**At the end of the closing summary, print the runtime handoff line** (default path):
+
+```
+**Next session:** /research <feature-slug>
+**Input:** paste the closing summary above
+```
+
+For the milestone branch, print `/create-milestone <feature-slug>` instead of `/research <feature-slug>` on the first line; the input remains the closing summary.
+
 ## Handoff
 
 Hand off to `/research` by default. For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features that each need their own research-PRD cycle — branch to `/create-milestone` instead. Big-batch work (6 weeks) that fits a single PRD stays on the default path and gets a container milestone from `/write-a-prd`. Treat assumptions by confidence tag: `Uncertain` and `Speculative` assumptions are first-priority research targets because they carry the most downstream risk. `Likely` assumptions can usually be confirmed during PRD writing. `Established` assumptions need only targeted verification.

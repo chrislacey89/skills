@@ -236,6 +236,15 @@ After all issues are created, present a summary showing:
 
 This summary helps the user (and Ralph) understand the full picture before execution begins. The Coverage Matrix remains a derived view — future readers regenerate it from the PRD issue body and the slice issues' `User Stories Addressed` sections rather than reading a stored matrix file.
 
+**At the end of the summary, print the runtime handoff line** naming the first unblocked slice (the slice with no `Blocked by` entry, or the lowest-numbered such slice when several qualify):
+
+```
+**Next session:** /execute #<first-unblocked-slice-number>
+**Input:** the slice issue body
+```
+
+If every slice declares `Blocked by`, surface the dependency cycle to the user before printing — do not pick arbitrarily.
+
 ## Handoff
 
 - **Expected input:** a shaped PRD issue with clear user stories, rabbit holes, and no-gos

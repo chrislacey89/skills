@@ -42,6 +42,8 @@ Without this step, you've done traditional engineering with AI assistance. The f
 - For trivial fixes (typo corrections, simple config changes)
 - When the solution is already well-documented in official library docs
 - When the lesson is project-specific but you're about to deprecate that code
+- When the work was a clean execution of a pre-shaped plan — no surprises, no rework, no non-obvious decisions. The issue body and PR description already carry that record; a `docs/solutions/` entry with no reusable lesson trains future readers to skim
+- When in doubt — skipping costs nothing because the issue and PR persist in GitHub. Capturing a low-value lesson costs future planners' attention every time they consult `docs/solutions/`
 
 ## Execution Flow
 
@@ -267,7 +269,7 @@ git commit -m "docs: compound — <brief description of what was learned>"
 
 ### Phase 6: Report
 
-Tell the user what was captured:
+Tell the user what was captured, then print the loop-closed line:
 
 ```
 Compounded: docs/solutions/<category>/<filename>.md
@@ -275,7 +277,11 @@ Compounded: docs/solutions/<category>/<filename>.md
 Key lesson: [One sentence summary of the most important takeaway]
 
 This will be consulted automatically during future /research and /write-a-prd sessions.
+
+**Loop closed.** Next: /help when you return to this repo.
 ```
+
+`/compound` is the end of the loop, so it does not print a `**Next session:**` line — the loop-closed line is the runtime-handoff equivalent. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
 
 ## Maintenance
 
