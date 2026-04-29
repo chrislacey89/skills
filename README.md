@@ -78,7 +78,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | Skill | Description |
 |-------|-------------|
 | [qa](qa/) | Single entry point for bug conversations; files lightweight issues and delegates per-issue to `/triage-issue` for deep diagnosis |
-| [pre-merge](pre-merge/) | Create the PR and run an architectural review before merge |
+| [pre-merge](pre-merge/) | Author-mode: create the PR and run an architectural review before merge. Reviewer-mode (`--pr <n>`): review someone else's PR and draft comment text |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
 
