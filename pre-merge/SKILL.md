@@ -20,7 +20,7 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
 
 ## Modes
 
-`/pre-merge` runs in one of two modes. Both reuse Phase 3's 10 architectural review dimensions (`review-checklist.md`); they differ in what they consume and what they produce.
+`/pre-merge` runs in one of two modes. Both reuse Phase 3's 11 architectural review dimensions (`review-checklist.md`); they differ in what they consume and what they produce.
 
 - **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4). This is the mode auto-invoked by `/execute` Step 6.
 - **Reviewer-mode** — invoked as `/pre-merge --pr <number>` against a PR you did not author. The skill skips PR creation (the PR already exists) and produces *draft comment text* (Phase 4) for you to review and post, structured per `references/comment-craft.md` (5P gate, Triple-R, Comment Signals, MMG Exchange).
@@ -121,12 +121,12 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 ### Phase 3: Architectural Review
 
-Consult `review-checklist.md` for the review dimensions and their violation patterns. The 10 dimensions run identically in both modes — the `diff` they read is the local `git diff "$BASE_BRANCH...HEAD"` in author-mode and the `gh pr diff <pr-number>` output in reviewer-mode.
+Consult `review-checklist.md` for the review dimensions and their violation patterns. The 11 dimensions run identically in both modes — the `diff` they read is the local `git diff "$BASE_BRANCH...HEAD"` in author-mode and the `gh pr diff <pr-number>` output in reviewer-mode.
 
 **Small diff** (< 200 changed lines, < 10 files): run all dimensions sequentially in the main agent.
 
 **Larger diff**: spawn two sub-agents in parallel:
-- **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope
+- **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope, Review-friendly Size
 - **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
 
 Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format.
@@ -136,6 +136,8 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 **Dimension 7 (Runtime Initialization) only runs if the diff includes schema files, migration files, environment config, or server startup code.** Without infrastructure changes, there is nothing to verify.
 
 **Surgical Scope runs on every diff.** Where Dimensions 4 and 5 check plan-vs-actual between slices (PRD-gated), Surgical Scope checks scope drift inside a single diff — drive-by reformatting, speculative additions, adjacent fixes — and applies whether or not the work went through `/prd-to-issues`. Findings under this dimension must cite the file path and hunk start line; "looks scope-creepy" is not a finding.
+
+**Dimension 11 (Review-friendly Size) runs on every diff.** It checks whether the diff stays within the convergent engagement bands documented in `review-checklist.md` (>300 LOC Observation, >500 LOC or >20 files Suggestion, >800 LOC + multi-domain Concern). Tracer-bullet slices are exempt — note the suppression in the findings rather than silently skipping. The signal is about *reviewer load*, not scope drift, so it is distinct from Dimension 10 even when both fire on the same diff.
 
 **Dimension 6 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
 
