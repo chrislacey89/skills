@@ -12,7 +12,20 @@ sources:
 
 Explore a codebase like an AI would, surface architectural friction, discover opportunities for improving testability, and propose module-deepening refactors as GitHub issue RFCs.
 
-A **deep module** (John Ousterhout, "A Philosophy of Software Design") has a small interface hiding a large implementation. Deep modules are more testable, more AI-navigable, and let you test at the boundary instead of inside.
+A **deep module** (John Ousterhout, "A Philosophy of Software Design") has a small interface hiding a large implementation. Deep modules are more testable, more AI-navigable, and let you test at the seam instead of inside.
+
+## Working vocabulary
+
+Use these terms exactly when describing architectural opportunities, in conversation with the user, in candidate write-ups, and in the resulting RFC issue. Do not drift into "component," "service," "API," or "boundary" — they read as synonyms but each one hides a different design decision and the slippage compounds across recommendations.
+
+- **Module** — a unit of code that callers interact with through a stable interface. Files, classes, packages, or directories can all be modules; the test is whether something on the outside depends on something on the inside.
+- **Interface** — the surface a module presents to callers: types, methods, parameters, return shapes, errors. Not the implementation.
+- **Implementation** — the code behind the interface that callers do not see and should not depend on.
+- **Depth** — the ratio of implementation hidden to interface exposed. Deep = a lot hidden behind a narrow surface; shallow = the interface is nearly as complex as the body.
+- **Seam** — a place in the codebase where one module ends and another begins. Tests are written *at* seams; refactors *move* them.
+- **Adapter** — a concrete implementation of an interface that bridges to a specific technology, transport, or external service. In-memory adapters serve tests; HTTP/SDK/queue adapters serve production.
+- **Leverage** — how much downstream work a single change at this seam buys. Deepening a high-leverage module simplifies many callers; deepening a low-leverage one moves complexity around without saving anyone work.
+- **Locality** — how much a reader must hold in working memory to understand a module. High locality = fewer files and fewer hops to grasp the behavior.
 
 ## Invocation Position
 
@@ -40,12 +53,20 @@ The friction you encounter IS the signal.
 
 ### 2. Present candidates
 
-Present a numbered list of deepening opportunities. For each candidate, show:
+Before adding a candidate to the list, run two filters. Both compress otherwise-judgmental architecture decisions into checks that anyone reading the recommendation can re-run.
 
-- **Cluster**: Which modules/concepts are involved
+- **Deletion test.** Imagine the candidate module deleted in place. Where does its complexity go? If the complexity vanishes — callers were doing the real work and the module was a pass-through that just renamed things — the candidate is a real deepening target. If the complexity concentrates across N callers — they would each need to re-derive what the module was doing — the module is already carrying real abstraction; leave it alone. A pass-through whose deletion makes callers simpler is a shallow module hiding behind a thin name.
+- **Two-adapters rule** (only when the candidate's design would introduce a new seam — i.e., add an interface that did not exist before). Confirm there are at least two real adapters: production *and* test, or two production transports. One adapter is a hypothetical seam — speculative generality with no second user — and should be deferred until a second consumer exists. Two adapters is a real seam worth defining.
+
+Candidates that fail either filter are noted as "considered and rejected" with the reason, not silently dropped — the rejection is part of the recommendation.
+
+Present a numbered list of the candidates that pass. For each, show:
+
+- **Cluster**: Which modules are involved
 - **Why they're coupled**: Shared types, call patterns, co-ownership of a concept
+- **Depth signal**: One sentence summarizing what the Deletion test surfaced (what hides behind the current interface, or what the pass-through shows)
 - **Dependency category**: See [REFERENCE.md](REFERENCE.md) for the four categories
-- **Test impact**: What existing tests would be replaced by boundary tests
+- **Test impact**: What existing tests would be replaced by seam tests at the deepened module's interface
 
 Do NOT propose interfaces yet. Ask the user: "Which of these would you like to explore?"
 
@@ -70,7 +91,7 @@ Prompt each sub-agent with a separate technical brief (file paths, coupling deta
 - Agent 1: "Minimize the interface — aim for 1-3 entry points max"
 - Agent 2: "Maximize flexibility — support many use cases and extension"
 - Agent 3: "Optimize for the most common caller — make the default case trivial"
-- Agent 4 (if applicable): "Design around the ports & adapters pattern for cross-boundary dependencies"
+- Agent 4 (if applicable): "Design around the ports & adapters pattern for dependencies that cross a process or network seam"
 
 Each sub-agent outputs:
 
