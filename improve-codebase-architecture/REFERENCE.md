@@ -64,7 +64,7 @@ Which category applies and how dependencies are handled:
 
 ## Testing Strategy
 
-- **New boundary tests to write**: describe the behaviors to verify at the interface
+- **New seam tests to write**: describe the behaviors to verify at the interface
 - **Old tests to delete**: list the shallow module tests that become redundant
 - **Test environment needs**: any local stand-ins or adapters required
 
