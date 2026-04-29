@@ -47,7 +47,7 @@ When the research artifact and `docs/solutions/` disagree, the research artifact
 **Input:** <artifact path, issue or PR number, or "use the closing summary above">
 ```
 
-The block surfaces existing handoff data (skill identity, compression artifact) at the decision point so a developer running a long session can move to a fresh session by copy-paste rather than by remembering. It is one short block — not a new section, not a paragraph, not a copy-paste cheat sheet — and it draws its data from the skill's existing `## Handoff` section. The skill at the end of the loop (`/compound`) prints `**Loop closed.** Next: /help when you return to this repo` instead.
+It is one short block — not a new section, not a paragraph, not a copy-paste cheat sheet — and it draws its data from the skill's existing `## Handoff` section. The skill at the end of the loop (`/compound`) prints `**Loop closed.** Next: /help when you return to this repo` instead.
 
 ### Step 1: /shape (Matt's, enhanced)
 
