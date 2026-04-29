@@ -8,6 +8,7 @@ sources:
     - "Thinking in Bets — Annie Duke"
     - "The Fifth Discipline — Peter Senge"
     - "Release It! — Michael Nygard"
+    - "The Design of Everyday Things — Don Norman"
 ---
 
 # Improve Pipeline
@@ -105,7 +106,7 @@ Build a concise run breakdown:
 - which step amplified it
 - what the real cost was: rework, bad guidance, scope drift, false confidence, missed edge case, or user confusion
 
-Do not assume the nearest visible failure is the true pipeline cause. Separate the event from the structure producing it.
+Do not assume the nearest visible failure is the true pipeline cause. Separate the event from the structure producing it. Frame the incident as a design failure, not a user failure (Norman's Blame Reversal Principle) — "I forgot to X" is not an incident; "the skill made it easy to forget X" is.
 
 ### Phase 2: Prove It Is a Pipeline Problem
 
@@ -124,6 +125,7 @@ Classify the finding:
 - **Pipeline pattern** — this repo should change because the same class of issue is likely to recur
 - **Pipeline structure** — the problem comes from a missing feedback loop, ambiguous ownership, overlapping skill boundaries, or contradictory repository guidance
 - **Redundant or counter-productive guidance** — already-present text whose removal or consolidation would improve repo coherence. Subtraction is a legitimate finding, not only addition.
+- **Discipline-shaped fix in disguise** — the proposed remedy requires the user to remember, notice, or do something. Reclassify as Pipeline structure and look for a knowledge-in-the-world equivalent (default behavior, forcing function, structural placement) before adding instruction text. (Norman, knowledge in the world vs. in the head.)
 
 If the issue is only a Local event, stop and redirect to the downstream repo's normal documentation or `/compound` flow.
 
@@ -156,7 +158,7 @@ Pipeline proposals should be grounded in established software-engineering guidan
 Procedure:
 
 1. **Survey the index.** Run `/library` with no args to see the catalog, or `/library --search <keywords>` when the incident has a clear topical handle (e.g. `testing`, `code review`, `debugging`, `systems`, `deep modules`, `feedback loops`, `refactoring`, `domain`).
-2. **Select 1–3 relevant books.** Prefer books whose `description` or `tags` map directly to the incident type. Prefer books already cited in this skill's `sources:` frontmatter (Meadows, Duke, Senge, Nygard) when they are topically relevant so the skill's lineage and its live reasoning stay coherent.
+2. **Select 1–3 relevant books.** Prefer books whose `description` or `tags` map directly to the incident type. Prefer books already cited in this skill's `sources:` frontmatter (Meadows, Duke, Senge, Nygard, Norman) when they are topically relevant so the skill's lineage and its live reasoning stay coherent.
 3. **Load them.** Run `/library <name>` for each selected book and extract the concrete principle, checklist item, or failure mode that bears on the incident. Record these — they feed Phase 4 and the issue body.
 4. **Do not over-consult.** Loading books has a context cost. Stop at three unless the incident is genuinely cross-cutting.
 5. **Graceful degradation.** If `/library` is not installed or the index is empty, record "Library consultation: unavailable" and continue. Do not block filing.
@@ -196,6 +198,7 @@ The Skeptic should look for:
 - accidental complexity or extra ceremony
 - recommendations that would burden ordinary users who are not trying to improve the pipeline
 - evidence that the issue was downstream and not structural here
+- adds a feature whose cost is paid by every future user (Norman's featuritis, paired with Meadows policy resistance)
 
 The Skeptic should assume the cost of a bad pipeline change compounds across future usage.
 
