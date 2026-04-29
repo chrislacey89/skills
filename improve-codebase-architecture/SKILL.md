@@ -63,8 +63,7 @@ Candidates that fail either filter are noted as "considered and rejected" with t
 Present a numbered list of the candidates that pass. For each, show:
 
 - **Cluster**: Which modules are involved
-- **Why they're coupled**: Shared types, call patterns, co-ownership of a concept
-- **Depth signal**: One sentence summarizing what the Deletion test surfaced (what hides behind the current interface, or what the pass-through shows)
+- **Why they're coupled**: Shared types, call patterns, co-ownership of a concept — fold in a one-sentence summary of what the Deletion test surfaced (what hides behind the current interface, or what the pass-through shows)
 - **Dependency category**: See [REFERENCE.md](REFERENCE.md) for the four categories
 - **Test impact**: What existing tests would be replaced by seam tests at the deepened module's interface
 

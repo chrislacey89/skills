@@ -16,7 +16,7 @@ Dependencies that have local test stand-ins (e.g., PGLite for Postgres, in-memor
 
 ### 3. Remote but owned (Ports & Adapters)
 
-Your own modules across a network seam (microservices, internal services). Define an interface at the seam — "port" in ports-and-adapters terminology, but `Interface` in the pinned vocabulary. The deep module owns the logic; the transport is injected. Tests use an in-memory adapter. Production uses the real HTTP/gRPC/queue adapter.
+Your own modules deployed across a network seam (microservices, internal modules behind a transport). Define an interface at the seam — "port" in ports-and-adapters terminology, but Interface in the pinned vocabulary. The deep module owns the logic; the transport is injected. Tests use an in-memory adapter. Production uses the real HTTP/gRPC/queue adapter.
 
 Recommendation shape: "Define a shared interface, implement an HTTP adapter for production and an in-memory adapter for testing, so the logic can be tested as one deep module even though it's deployed across a network seam."
 
