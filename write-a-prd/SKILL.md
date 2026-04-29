@@ -73,13 +73,23 @@ grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
 ```
 If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
 
-**Research document** — Check the durable per-user archive for a research file matching this feature. Derive `<repo-slug>` from the current git remote (e.g. `chrislacey89-skills`) and list the archive directory for this repo:
-```bash
-ls ~/.claude/research/<repo-slug>/ 2>/dev/null
-```
-Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature. Before trusting it, check the frontmatter `date` and `installed_versions_snapshot` — if either looks stale against current reality, flag it to the user. If a research document exists and is fresh, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the archive path in the pitch so Ralph reads it during implementation.
+**Research document** — Find the most recent research artifact for this feature. The artifact may live in either of two places depending on the project's `research.storage` setting:
 
-**Artifact precedence:** When the research file and `docs/solutions/` disagree, the research file takes precedence — it was verified against installed versions. Surface the conflict to the user during the interview rather than silently choosing one.
+1. **Spike-issue mode** — search GitHub for closed `research`-labeled issues matching the feature:
+   ```bash
+   gh issue list --label research --state closed --search "<feature keywords>" --limit 5
+   ```
+   If a matching spike issue exists, read its body — the YAML frontmatter at the top carries the same `date` and `installed_versions_snapshot` fields the archive uses.
+
+2. **Archive mode** (default) — list the per-user archive for this repo. Derive `<repo-slug>` from the current git remote (e.g. `chrislacey89-skills`):
+   ```bash
+   ls ~/.claude/research/<repo-slug>/ 2>/dev/null
+   ```
+   Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature.
+
+Check both locations — a project that recently switched modes may still have artifacts in the old location. If both exist for the same feature, prefer the more recent `date` in frontmatter and surface the duplicate to the user. Before trusting any research artifact, check the frontmatter `date` and `installed_versions_snapshot` — if either looks stale against current reality, flag it to the user. If a research artifact exists and is fresh, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the canonical location (spike issue URL or archive path) in the pitch so `/execute` and Ralph can read it during implementation.
+
+**Artifact precedence:** When the research artifact and `docs/solutions/` disagree, the research artifact takes precedence — it was verified against installed versions. Storage location does not affect trust: a spike issue and an archive entry carry equivalent authority because their bodies are produced by the same `/research` skill against the same Phase 0/1 verification. Surface the conflict to the user during the interview rather than silently choosing one.
 
 ### 5. Interview with shaping discipline
 
@@ -279,14 +289,25 @@ Do NOT include specific file paths or code snippets. They may end up being outda
 
 ## Research Reference
 
-[Include only if a matching research archive entry exists]
+[Include only if a matching research artifact exists. Use the form that matches the project's `research.storage` mode.]
+
+**Spike-issue mode (preferred when present):**
+
+Technical research for this feature is documented in spike issue Refs #<spike-issue-number> (closed-on-creation snapshot, labeled `research`). Key recommendations:
+
+- [Recommended approach from research]
+- [Key constraint or tradeoff from research]
+
+Implementors should read the spike issue before starting work (`gh issue view <spike-issue-number>` works on any machine).
+
+**Archive mode (fallback when no spike issue exists):**
 
 Technical research for this feature is documented at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md` (per-user archive, outside the repo). Key recommendations:
 
 - [Recommended approach from research]
 - [Key constraint or tradeoff from research]
 
-Implementors should read the research document before starting work.
+Implementors should read the research document before starting work. Archive paths are not openable by readers other than the originating user — for cross-machine, multi-contributor, or public-audience PRDs, opt the project into spike-issue mode (see `/research` Phase 5a).
 
 ## Lessons from Past Solutions
 

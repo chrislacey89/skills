@@ -16,7 +16,7 @@ This is a primary pipeline skill used after `/prd-to-issues` has produced a conc
 
 Use `/execute` when the work is ready to build, verify, and commit.
 
-Use HITL `/execute` when the slice still needs active user judgment, supervision, or acceptance decisions during implementation. Use AFK `/execute` only when the next slice is already durable in GitHub, unblocked, and legible from its issue, boundary map, and any linked `research.md` or `docs/solutions/` context.
+Use HITL `/execute` when the slice still needs active user judgment, supervision, or acceptance decisions during implementation. Use AFK `/execute` only when the next slice is already durable in GitHub, unblocked, and legible from its issue, boundary map, and any linked research artifact (archive file or spike issue) or `docs/solutions/` context.
 
 See **Step 0: Prerequisites** below for the mandatory Ralph auto-detection and TDD marker gates.
 
@@ -129,7 +129,17 @@ This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror c
 
 Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understand the relevant files, patterns, and conventions. If the task is ambiguous, ask the user to clarify scope before proceeding.
 
-If a `research.md` exists in the repo root or `plans/` directory, read it — it contains cached technical research that should inform your approach. Do not re-research what has already been decided.
+**Read the research artifact for this feature.** The PRD's "Research Reference" section names where it lives — one of two locations depending on the project's `research.storage` mode:
+
+1. **Spike-issue mode** — the PRD references a closed `research`-labeled GitHub issue (`Refs #<spike-issue-number>`). Read it with:
+   ```bash
+   gh issue view <spike-issue-number>
+   ```
+   This works on any machine — fresh clones, CI sandboxes, recovered laptops, or contributor environments.
+
+2. **Archive mode** (default) — the PRD references `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`. Read the file directly. If you are running on a machine other than the one that produced the research, the file will not exist; flag this to the user and either re-run `/research` or proceed with explicit acknowledgment of the missing context.
+
+Some legacy PRDs may still reference `research.md` in the repo root or `plans/` — read it if present. Whatever the location, the research artifact contains cached technical research that should inform your approach. Do not re-research what has already been decided.
 
 Consult `docs/solutions/` for relevant past solutions before starting implementation:
 
@@ -139,7 +149,7 @@ grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
 
 If past solutions exist for this problem domain, incorporate their lessons and avoid their documented pitfalls.
 
-**Artifact precedence:** When `research.md` and `docs/solutions/` give conflicting guidance, follow `research.md` — it was verified against the current installed versions. If the conflict is significant enough that you are uncertain, flag it to the user before proceeding. Load `docs/solutions/` selectively: grep for relevant keywords first, then read only matching files.
+**Artifact precedence:** When the research artifact and `docs/solutions/` give conflicting guidance, follow the research artifact — it was verified against the current installed versions. Storage location does not affect trust: a spike issue and an archive entry carry equivalent authority. If the conflict is significant enough that you are uncertain, flag it to the user before proceeding. Load `docs/solutions/` selectively: grep for relevant keywords first, then read only matching files.
 
 ### 2. Plan the Implementation (optional)
 
@@ -175,7 +185,7 @@ If `/tdd` is not available, follow this minimum discipline:
 
 Do not write all tests upfront — write one, make it pass, then move to the next.
 
-**[TypeScript projects] Library callback returns.** When a logical unit implements a callback the library asks the application to provide (agent hooks, middleware, proxy, tool handlers, render props, lifecycle methods), anchor the returned value to the library's declared return type with `satisfies LibraryReturnType`, a fresh object literal, or a derived type (`ReturnType<typeof …>`). Never return a typed local variable — TypeScript's excess-property check does not run on returns of typed values, so fields the library's signature does not declare are silently dropped at runtime. See `/tdd` Refactor step for the full rationale; if a `research.md` exists with a Library Callback Contracts snapshot (Phase 1.25), use its accepted-fields list as the pinned source.
+**[TypeScript projects] Library callback returns.** When a logical unit implements a callback the library asks the application to provide (agent hooks, middleware, proxy, tool handlers, render props, lifecycle methods), anchor the returned value to the library's declared return type with `satisfies LibraryReturnType`, a fresh object literal, or a derived type (`ReturnType<typeof …>`). Never return a typed local variable — TypeScript's excess-property check does not run on returns of typed values, so fields the library's signature does not declare are silently dropped at runtime. See `/tdd` Refactor step for the full rationale; if the research artifact (archive file or spike issue) carries a Library Callback Contracts snapshot (`/research` Phase 1.25), use its accepted-fields list as the pinned source.
 
 #### Commit after each logical unit
 
@@ -343,13 +353,13 @@ If you cannot complete the task in this context window, leave a comment on the G
 - Any gotchas or tricky parts for the next iteration
 - If the failure was caused by an error (build failure, test failure, unexpected API behavior), include the exact error output — the next iteration benefits from the real error, not a summary
 
-If the error suggests the approach from `research.md` or the PRD is wrong, say so in the comment — this is a signal to backtrack, not to keep retrying the same approach.
+If the error suggests the approach from the research artifact or the PRD is wrong, say so in the comment — this is a signal to backtrack, not to keep retrying the same approach.
 
 **AFK progress and plateau detection.** When running under Ralph, progress is *epistemic state advancement*, not activity. An iteration counts as progress only if at least one of these transitions from unresolved to resolved:
 
 - an unmet acceptance criterion on the active slice
 - a failing check (typecheck, test, or verification gate) becoming a passing check
-- a named unknown or rabbit hole from `research.md` or the PRD being closed
+- a named unknown or rabbit hole from the research artifact or the PRD being closed
 
 Code churn without such a transition is a stationary dot. Red flags: the same slice staying active across multiple iterations, tests still failing but "in different ways," recurring error classes with superficial code rewrites, no acceptance checkbox or gate advancing.
 

@@ -60,7 +60,7 @@ Boundary maps are API contracts, not just dependency inventories — if a slice 
 For each slice, specify:
 
 - **Produces:** The concrete outputs — exported functions, types/interfaces, API endpoints, database tables, UI components. Include file paths and function signatures where possible.
-- **Consumes from #N:** What this slice needs from upstream slices — specific imports, API endpoints it calls, types it uses. Reference the producing slice by number.
+- **Consumes from #N:** What this slice needs from upstream slices — specific imports, API endpoints it calls, types it uses. Reference the producing slice by number. If the parent PRD's research lives in a `research`-labeled spike issue (see `/research` Phase 5d), you may also cite `Refs #<spike-issue-number>` here when the slice's interface decisions are bounded by a specific recommendation, callback contract, or version snapshot recorded in that spike. The `Refs #N` lineage syntax is the same one used elsewhere in the pipeline.
 - **Contract notes:** The success shape, error shape, compatibility posture, and any versioning readiness concerns that matter to downstream consumers.
 
 The boundary map prevents the most common multi-slice failure: slices that are each internally correct but don't actually wire together because they made incompatible assumptions about interfaces.
@@ -174,6 +174,7 @@ What this slice creates that downstream slices depend on:
 What this slice needs from upstream slices:
 
 - From #<issue-number>: `path/to/file.ts` → `importedFunction()`, `ImportedType`
+- Refs #<spike-issue-number>: research spike pinning the recommended approach or library callback contract this slice's interface depends on (cite only when a spike issue exists for this PRD's research and the slice is bounded by a specific recommendation in it)
 
 Or "Nothing — this is a leaf node (no upstream dependencies)." if no dependencies.
 

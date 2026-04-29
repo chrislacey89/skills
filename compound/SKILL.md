@@ -232,6 +232,7 @@ volatility: evergreen | stable | volatile
 
 - [Link to GitHub issue or PR if applicable]
 - [Link to related docs/solutions/ files if they exist]
+- [Link to the research spike issue when one exists for this feature — `Refs #<spike-issue-number>`. This preserves the causal chain from research → PRD → slices → PR → compound, citable from any machine. If the project uses archive-mode research instead, omit this link — archive paths are openable only by the originating user, so they add no value to a `docs/solutions/` entry that may be read by others.]
 
 ## Shelf Life
 
