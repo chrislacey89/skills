@@ -40,6 +40,15 @@ When the research artifact and `docs/solutions/` disagree, the research artifact
 
 **Planning-chain compression.** Each pipeline handoff has a compression artifact: the closing summary (`/shape`), the archived research file (`/research`), the PRD issue (`/write-a-prd`). The downstream skill should work from the written artifact, not from the full prior conversation. If a session is running long after multiple planning skills, start the next pipeline step in a fresh session using the written artifact as its entry point.
 
+**Runtime handoff line.** Every primary pipeline skill prints a `**Next session:**` block at the end of its closing output, in this exact shape:
+
+```
+**Next session:** /<next-skill> [arg]
+**Input:** <artifact path, issue or PR number, or "use the closing summary above">
+```
+
+The block surfaces existing handoff data (skill identity, compression artifact) at the decision point so a developer running a long session can move to a fresh session by copy-paste rather than by remembering. It is one short block — not a new section, not a paragraph, not a copy-paste cheat sheet — and it draws its data from the skill's existing `## Handoff` section. The skill at the end of the loop (`/compound`) prints `**Loop closed.** Next: /help when you return to this repo` instead.
+
 ### Step 1: /shape (Matt's, enhanced)
 
 **What it does:** Interviews you relentlessly about the feature or tranche until every branch of the decision tree is resolved.

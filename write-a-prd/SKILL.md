@@ -319,7 +319,10 @@ The following documented solutions informed this pitch:
 
 ---
 
-**Next step:** run `/prd-to-issues <this-issue-number>` to decompose this PRD into implementation-ready slices with boundary maps. Do not invoke `/execute` directly on this issue — it is a shaped pitch, not a slice.
+**Next session:** /prd-to-issues #<this-issue-number>
+**Input:** the PRD issue body
+
+Do not invoke `/execute` directly on this issue — it is a shaped pitch, not a slice. Print the issue number explicitly so the next session can be opened by copy-paste rather than by fishing for it.
 
 </pitch-template>
 

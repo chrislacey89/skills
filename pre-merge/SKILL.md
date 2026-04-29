@@ -167,6 +167,15 @@ If a finding looks like a behavioral bug, note: "Consider running `/qa` to verif
 
 Omit any tier that has zero findings.
 
+**At the very end of Phase 4 output, print the runtime handoff line:**
+
+```
+**Next session:** /compound
+**Input:** PR #<pr-number>
+```
+
+Substitute `<pr-number>` with the PR created in Phase 2. Print this line whether or not the review surfaced concerns — `/compound` runs after merge regardless, and the line is the durable handoff for the post-ship session.
+
 ## What This Skill is NOT
 
 - **Not a test runner.** Pre-commit hooks run tests, typecheck, and lint on every commit.

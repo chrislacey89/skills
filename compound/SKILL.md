@@ -267,7 +267,7 @@ git commit -m "docs: compound — <brief description of what was learned>"
 
 ### Phase 6: Report
 
-Tell the user what was captured:
+Tell the user what was captured, then print the loop-closed line:
 
 ```
 Compounded: docs/solutions/<category>/<filename>.md
@@ -275,7 +275,11 @@ Compounded: docs/solutions/<category>/<filename>.md
 Key lesson: [One sentence summary of the most important takeaway]
 
 This will be consulted automatically during future /research and /write-a-prd sessions.
+
+**Loop closed.** Next: /help when you return to this repo.
 ```
+
+`/compound` is the end of the loop, so it does not print a `**Next session:**` line — the loop-closed line is the runtime-handoff equivalent. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
 
 ## Maintenance
 
