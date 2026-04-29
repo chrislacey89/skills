@@ -228,15 +228,36 @@ For API-shaped work, explicitly document:
 
 ### Phase 5: Write the Research Document
 
-Write the research document to a durable, per-user archive outside the repo working tree:
+The research document has two possible storage locations, selected per project. Both carry the same body and the same frontmatter — the difference is **where the file lives**, not what it contains. Pick the storage mode first, then write.
 
+#### Phase 5a: Select the Storage Mode
+
+Read the project-level config to determine where this research goes:
+
+```bash
+# Read the research.storage field from the project-local settings file.
+# Default to "archive" if the file or field is missing.
+jq -r '.research.storage // "archive"' .claude/settings.json 2>/dev/null || echo archive
 ```
-~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md
+
+The two modes:
+
+- **`archive`** (default) — write to a per-user filesystem path outside the repo working tree (`~/.claude/research/...`). Worktree- and branch-resilient, never committed, never visible to collaborators. Right for solo / single-machine / private projects.
+- **`spike-issue`** — file the research as a closed-on-creation GitHub issue in the same repo as the PRD, labeled `research`. Right for public, portfolio, OSS, transparency-themed, multi-contributor, or multi-machine projects where the PRD's audience is GitHub and the research must be openable by that audience without per-user setup. Spike issue visibility follows the repo's visibility — private repos produce private spikes.
+
+Tell the user which mode was selected and why (e.g., `"spike-issue mode: .claude/settings.json declares research.storage = spike-issue"`). If neither mode is configured, default to `archive` and proceed.
+
+To opt a project into spike-issue mode, add this to `.claude/settings.json` (Claude Code ignores fields outside its schema, so this is additive — Skill Kit owns the `research` namespace):
+
+```json
+{
+  "research": { "storage": "spike-issue" }
+}
 ```
 
-Where `<repo-slug>` is `owner-name` derived from the git remote (e.g. `chrislacey89-skills`), `<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date. Create intermediate directories if they do not exist.
+#### Phase 5b: Compose the Frontmatter
 
-Start the file with YAML frontmatter so future consumers can judge freshness:
+Both modes carry identical frontmatter so future readers can judge freshness regardless of where the file lives:
 
 ```yaml
 ---
@@ -255,7 +276,56 @@ callback_contracts_snapshot:
 ---
 ```
 
+#### Phase 5c — Archive mode (default): Write to the Per-User Archive
+
+When the storage mode is `archive`, write the research document to the per-user archive outside the repo working tree:
+
+```
+~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md
+```
+
+Where `<repo-slug>` is `owner-name` derived from the git remote (e.g. `chrislacey89-skills`), `<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date. Create intermediate directories if they do not exist.
+
 **Why outside the repo:** the archive is per-user working memory, not team-shared artifact. Branch switches, worktree cleanup, and `.gitignore` hygiene cannot accidentally destroy it. It is not committed to the project and is never visible to collaborators.
+
+When this mode is selected, skip Phase 5d. The PRD's Research Reference section will emit the archive path.
+
+#### Phase 5d — Spike-issue mode: File as a Closed GitHub Issue
+
+When the storage mode is `spike-issue`, file the research as a labeled, closed-on-creation GitHub issue in the same repo as the PRD will live. The PRD's Research Reference section will emit the issue URL (`Refs #N`) instead of an archive path.
+
+1. **Ensure the `research` label exists** (idempotent — first run creates it, subsequent runs are no-ops):
+
+   ```bash
+   gh label create research --color BFD4F2 --description "Research spike — closed-on-creation, frontmatter-pinned" 2>/dev/null || true
+   ```
+
+2. **Compose the issue body.** Take the entire research document (including the YAML frontmatter from Phase 5b) and use it as the issue body verbatim. Frontmatter inside the issue body is rendered as a code block by GitHub but remains machine-readable to downstream skills.
+
+3. **Create the issue and capture the URL:**
+
+   ```bash
+   SPIKE_URL=$(gh issue create \
+     --title "Research: <Feature Name> (<YYYY-MM-DD>)" \
+     --label research \
+     --body-file <path-to-temp-file-with-research-body>)
+   ```
+
+   Use a title format that makes the issue scannable in default issue lists: `Research: <feature> (<date>)`.
+
+4. **Close the issue immediately.** Closed-on-creation signals "research complete, point-in-time snapshot" — not "archive purged":
+
+   ```bash
+   gh issue close "$SPIKE_URL" --comment "Closed on creation — see body for the point-in-time research snapshot. Do not edit; supersede with a new dated spike issue if research changes."
+   ```
+
+5. **Cache locally for this session.** Also write the same body to the archive path (`~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`) so the rest of this session and any sibling tools that read the archive can find it. The spike issue is the canonical durable copy; the cache is a session convenience and may be safely overwritten on re-runs.
+
+6. **Emit both the spike URL and the cache path** when reporting the completed research, and note that the canonical home is the spike issue.
+
+**Why a spike issue:** lives outside the working tree (no destructive-git risk between write and push), reachable by the PRD's audience (`Refs #N` syntax), durable across machines (`gh issue view N` works anywhere), and labeled-and-closed so it stays out of `is:open` work-to-do views.
+
+**Mutability discipline:** the issue body is a point-in-time snapshot, not a living document. Do not edit it after creation. If research changes, file a new dated spike issue and update the PRD's Research Reference to point at the new one — the same superseded-by-new-dated-file rule the archive follows.
 
 **Include only sections that have real content.** A TARGETED research doc might be 20 lines. A DEEP one might be 300. This document is the compressed handoff to `/write-a-prd` — once written, the downstream skill works from this file, not from the raw research exploration. If this session is running long, suggest starting `/write-a-prd` in a fresh session using the archive path as input.
 
@@ -437,20 +507,25 @@ Present the research document to the user. Then walk through these review questi
 3. Any version surprises that change your thinking?
 4. Are you comfortable proceeding to PRD with this recommendation?
 
-Do not present all four questions at once. Iterate on each answer until the user is satisfied. The research file is saved to the archive path outside the repo — do not commit it to git.
+Do not present all four questions at once. Iterate on each answer until the user is satisfied.
+
+In archive mode, the research file is saved outside the repo — do not commit it to git. In spike-issue mode, the research lives as a closed GitHub issue and a session-local cache copy at the archive path; do not commit the cache copy either.
 
 ## Handoff
 
 - **Expected input:** clarified problem framing from `/shape`, including choices, assumptions, impositions, and structural signals
-- **Produces:** an archived research file at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`, verified version and documentation guidance, and a clearer estimate-readiness posture
+- **Produces:** a research artifact carrying verified version and documentation guidance plus an estimate-readiness posture. Storage location depends on the project's `research.storage` setting:
+  - **`archive`** (default): file at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`
+  - **`spike-issue`**: closed GitHub issue labeled `research` in the same repo as the PRD, plus a session-local cache copy at the archive path
 - **May invoke:** `/api-design-review` when contract risk is high enough that the API shape needs focused scrutiny before shaping continues
 - **Comes next by default:** `/write-a-prd`
 
 ## Lifecycle
 
-**The research file is a point-in-time snapshot.** It exists to serve the PRD and Ralph loop during active work, and then persists as durable per-user context for future planning in the same area.
+**The research artifact is a point-in-time snapshot.** It exists to serve the PRD and Ralph loop during active work, and then persists as durable context for future planning in the same area.
 
-- Reference the archive path in your PRD so Ralph reads it during implementation.
-- After the feature ships, the archive entry persists automatically — do not delete it. Branch switches, worktree cleanup, and `/compound`'s closeout step cannot touch it because it lives outside the repo.
-- Stale research actively harms agent performance — a research file that recommends Ably v1.2 when v2.0 has breaking changes will steer Ralph in the wrong direction. The frontmatter `date` and `installed_versions_snapshot` let future readers judge whether the snapshot is still trustworthy before they rely on it.
-- This skill does not yet auto-consult prior archive entries during Phase 0 — that capability is a separate follow-on. For now, the archive is simply durable storage that won't be lost to ordinary git workflow.
+- Reference the canonical location in your PRD (archive path or spike issue URL) so `/execute` and Ralph can read it during implementation.
+- After the feature ships, the artifact persists automatically — do not delete it. Branch switches, worktree cleanup, and `/compound`'s closeout step cannot touch the archive entry (it lives outside the repo) or the spike issue (it lives in GitHub).
+- Stale research actively harms agent performance — a research artifact that recommends Ably v1.2 when v2.0 has breaking changes will steer Ralph in the wrong direction. The frontmatter `date` and `installed_versions_snapshot` let future readers judge whether the snapshot is still trustworthy before they rely on it.
+- **Supersession, not editing.** If research changes, write a new dated artifact (new archive file, or new spike issue) and point the PRD at the new one. Do not edit the old artifact in place — the snapshot semantics depend on each artifact being immutable. Spike issues should not gain comments or body edits over time; the closed-on-creation state and the convention against edits are the substitute for the archive's filesystem-imposed immutability.
+- This skill does not yet auto-consult prior archive entries or prior spike issues during Phase 0 — that capability is a separate follow-on.

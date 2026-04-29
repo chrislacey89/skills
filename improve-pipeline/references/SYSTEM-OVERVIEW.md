@@ -31,12 +31,12 @@ The pipeline order is the default path, not a prison. `Ralph` is the AFK executi
 **Artifact precedence.** When a skill consults multiple artifacts, resolve conflicts using this priority order:
 
 1. Working code in the repository (ground truth)
-2. The research archive entry for this feature (verified against installed versions at the `date` in its frontmatter)
+2. The research artifact for this feature — per-user archive entry or closed `research`-labeled spike issue, depending on the project's `research.storage` setting (verified against installed versions at the `date` in its frontmatter; storage location does not affect trust)
 3. `docs/solutions/` (compounded knowledge, possibly stale)
 4. Framework reference skills (general best practices)
 5. Model training data (least reliable for version-specific details)
 
-When the research archive entry and `docs/solutions/` disagree, the research entry wins because it was produced more recently and verified against installed versions — subject to the `date` and `installed_versions_snapshot` in its frontmatter still being plausibly current. Flag the conflict to the user rather than silently choosing. Load `docs/solutions/` on demand — grep for relevant keywords first, read only matching files — rather than loading everything upfront.
+When the research artifact and `docs/solutions/` disagree, the research artifact wins because it was produced more recently and verified against installed versions — subject to the `date` and `installed_versions_snapshot` in its frontmatter still being plausibly current. The research artifact may live in either the per-user archive or as a closed `research`-labeled GitHub spike issue, depending on the project's `research.storage` setting; both carry equivalent authority because their bodies are produced by the same `/research` skill against the same Phase 0/1 verification. Storage location is a discoverability decision, not a trust decision. Flag the conflict to the user rather than silently choosing. Load `docs/solutions/` on demand — grep for relevant keywords first, read only matching files — rather than loading everything upfront.
 
 **Planning-chain compression.** Each pipeline handoff has a compression artifact: the closing summary (`/shape`), the archived research file (`/research`), the PRD issue (`/write-a-prd`). The downstream skill should work from the written artifact, not from the full prior conversation. If a session is running long after multiple planning skills, start the next pipeline step in a fresh session using the written artifact as its entry point.
 
@@ -88,7 +88,12 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Staleness check:** When consulting `docs/solutions/`, `/research` checks the `volatility` field and date. Volatile solutions older than 90 days, or solutions whose Shelf Life condition appears met, are flagged as potentially stale before being incorporated.
 
-**Output:** One research file in the per-user archive at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`, outside the repo. Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot` so future readers can judge freshness. Referenced in the PRD. Persists after ship — the archive is worktree- and branch-resilient and is not deleted during cleanup or backtracking.
+**Output:** One research artifact, location selected per project via `.claude/settings.json` `research.storage` (default `archive`):
+
+- **`archive`** — file at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`, outside the repo. Worktree- and branch-resilient. Right for solo / single-machine / private projects.
+- **`spike-issue`** — closed-on-creation GitHub issue in the same repo as the PRD, labeled `research`, with the same body and frontmatter the archive would carry. Reachable from any machine via `gh issue view`, citable from PRD/slice/PR/compound via `Refs #N`. Right for public, portfolio, OSS, transparency-themed, multi-contributor, or multi-machine projects.
+
+Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot` so future readers can judge freshness regardless of storage location. Referenced in the PRD. Persists after ship — neither location is touched during cleanup or backtracking. Supersession is by new dated artifact, never by editing the existing one.
 
 **Time:** 2-30 min active depending on calibrated depth.
 
@@ -176,9 +181,9 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 ### Step 9: Cleanup
 
-**What it does:** Close the PRD issue and any remaining slice issues as shipped, and confirm the research archive entry's frontmatter still reflects the versions/decisions that landed (update `installed_versions_snapshot` if a version bumped during implementation). The archive entry itself persists outside the repo and is never deleted at this step — stale-trust protection lives in the frontmatter, not in deletion.
+**What it does:** Close the PRD issue and any remaining slice issues as shipped, and confirm the research artifact's frontmatter still reflects the versions/decisions that landed. If a version bumped during implementation, supersede the existing artifact with a new dated one (new archive file, or new spike issue) rather than editing the existing one — snapshot semantics depend on each artifact being immutable. The original artifact persists (outside the repo for archive mode, in GitHub for spike-issue mode) and is never deleted at this step — stale-trust protection lives in the frontmatter and supersession discipline, not in deletion.
 
-**Output:** Closed issues. Archive entry retained as durable per-user context for future planning in the same area.
+**Output:** Closed issues. Research artifact retained as durable context for future planning in the same area.
 
 ### Pipeline Recovery
 
@@ -187,7 +192,7 @@ The pipeline described above is the forward path. This section covers what happe
 **When backtracking to an earlier skill:**
 
 - State which skill you are returning to and why.
-- If the backtrack invalidates a written artifact: supersede it (re-run `/research` to produce a new dated archive entry — do not delete prior entries), update in place (PRD issue body), or close with a comment explaining the backtrack (slice issues). Do not leave stale artifacts for downstream skills to consume.
+- If the backtrack invalidates a written artifact: supersede it (re-run `/research` to produce a new dated artifact — new archive file or new spike issue depending on the project's `research.storage` mode; do not delete prior artifacts and do not edit them in place), update in place (PRD issue body), or close with a comment explaining the backtrack (slice issues). Do not leave stale artifacts for downstream skills to consume.
 - Scope the re-run to what changed — do not restart the skill from scratch. Example: "We shaped X, but Y was wrong, so we are re-researching Z."
 - After the re-run, proceed forward through the pipeline again from that point.
 
@@ -229,7 +234,7 @@ A companion to Boundary Maps. The Boundary Map answers *what flows between slice
 | Work items (slices) | GitHub issues with blocking relationships | Native kanban, Ralph reads them |
 | QA bugs | GitHub issues | Created during manual QA, closed by Ralph |
 | Decisions register | Ubiquitous language doc (decisions section) | Co-located with terminology, single source of truth |
-| Technical research | Per-user archive at `~/.claude/research/<repo-slug>/<feature>-<date>.md` | Worktree- and branch-resilient; outside the repo; persists as durable planning context across features |
+| Technical research | Per-project, selected by `.claude/settings.json` `research.storage`. Default `archive` → per-user file at `~/.claude/research/<repo-slug>/<feature>-<date>.md`. Opt-in `spike-issue` → closed `research`-labeled GitHub issue in the same repo as the PRD | Storage location matches the project's audience flow without forcing a global rule. Archive is right for solo / single-machine / private work. Spike-issue is right for public, portfolio, OSS, multi-contributor, or multi-machine work where the PRD's audience reads via GitHub. Both carry the same frontmatter and equivalent authority |
 | Institutional knowledge | `docs/solutions/` in repo | Compounds over time, consulted during planning |
 | Workflow definitions | `.claude/skills/` in repo | Composable, load-on-demand, version-controlled |
 
@@ -264,7 +269,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 |---|---|---|---|
 | `/shape` | Fuzzy problem, unclear scope | Shared understanding — choices, assumptions, impositions, signals | `/research` (or `/create-milestone` for multi-PRD work) |
 | `/create-milestone` | `/shape` closing summary for a multi-PRD tranche | GitHub milestone plus sequenced feature issues | `/research` on a `research-ready` feature |
-| `/research` | Clarified problem from `/shape` | Archived research file at `~/.claude/research/<repo>/<feature>-<date>.md` with verified versions and doc links | `/write-a-prd` (may invoke `/api-design-review`) |
+| `/research` | Clarified problem from `/shape` | Research artifact with verified versions and doc links — per-user archive at `~/.claude/research/<repo>/<feature>-<date>.md` (default), or closed `research`-labeled GitHub spike issue when project opts in via `.claude/settings.json` `research.storage = spike-issue` | `/write-a-prd` (may invoke `/api-design-review`) |
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
 | `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
 | `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` (auto-invoked after Step 5 PR-review confirmation) |
@@ -419,7 +424,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Capture lessons learned | `/compound` after feature ships or after a high-value bug fix |
 | Define domain terms | `/ubiquitous-language` to build or update the glossary + decisions register, then reuse that language in shaping, QA, and issue writing |
 | Record a decision | Add a row to the decisions register in ubiquitous language doc |
-| Clean up after ship | Close the PRD issue and any remaining slice issues; the research archive entry persists outside the repo and is not deleted |
+| Clean up after ship | Close the PRD issue and any remaining slice issues; the research artifact persists (archive file outside the repo, or closed spike issue in GitHub) and is never deleted — supersede with a new dated artifact if research changes |
 | Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
 | Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next skill with a one-line reason |
 | Audit knowledge base | Review `docs/solutions/` quarterly |
