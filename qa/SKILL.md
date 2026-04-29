@@ -94,6 +94,26 @@ If Step 3 produced a breakdown, apply this depth decision to each sub-issue inde
 
 This step runs only for issues that stayed lightweight in Step 3.5. Issues that delegated to `/triage-issue` are already filed by that skill and skip this step.
 
+#### 4a. Closed-wontfix lookback (before filing)
+
+Before creating each issue, search closed `wontfix` issues for the same idea. Already-rejected enhancements resurfacing as fresh issues consume triage cycles every time:
+
+```bash
+gh issue list --state closed --label wontfix --search "<keywords from this report>"
+```
+
+Pick keywords from the user's own description and the domain language you learned in Step 2 — not internal module names. Run the search before each issue, not once per session.
+
+If a prior rejection surfaces:
+
+- If the new report adds genuinely new evidence (a stronger user case, a regression that wasn't there at rejection time, a constraint that has changed), reopen the prior issue and add the new evidence as a comment — do not file a duplicate.
+- If the new report is the same idea with no new evidence, link the prior closed issue back to the user with a one-sentence summary of why it was rejected, and ask whether they want to reopen with new evidence or accept the prior decision. Do not silently file a duplicate.
+- If unsure, link the prior issue in the new issue's body so the rejection rationale is one click away for the next reviewer.
+
+This is a process check, not an enforcement gate — closed-wontfix history is treated as durable state that lives in GitHub. Skill Kit deliberately does not maintain a parallel filesystem archive of rejected enhancements (per `SYSTEM-OVERVIEW.md` "State lives in GitHub, not the filesystem").
+
+#### 4b. Create the issue
+
 Create issues with `gh issue create`. Do NOT ask the user to review first — just file and share URLs.
 
 Issues must be **durable** — they should still make sense after major refactors. Write from the user's perspective.

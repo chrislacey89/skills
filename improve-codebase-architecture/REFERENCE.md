@@ -1,5 +1,7 @@
 # Reference
 
+This file goes deeper on dependency strategy, testing strategy, and the RFC issue template. The pinned working vocabulary lives in [SKILL.md](SKILL.md) — use those terms (Module, Interface, Implementation, Depth, Seam, Adapter, Leverage, Locality) here too.
+
 ## Dependency Categories
 
 When assessing a candidate for deepening, classify its dependencies:
@@ -14,20 +16,20 @@ Dependencies that have local test stand-ins (e.g., PGLite for Postgres, in-memor
 
 ### 3. Remote but owned (Ports & Adapters)
 
-Your own services across a network boundary (microservices, internal APIs). Define a port (interface) at the module boundary. The deep module owns the logic; the transport is injected. Tests use an in-memory adapter. Production uses the real HTTP/gRPC/queue adapter.
+Your own modules deployed across a network seam (microservices, internal modules behind a transport). Define an interface at the seam — "port" in ports-and-adapters terminology, but Interface in the pinned vocabulary. The deep module owns the logic; the transport is injected. Tests use an in-memory adapter. Production uses the real HTTP/gRPC/queue adapter.
 
-Recommendation shape: "Define a shared interface (port), implement an HTTP adapter for production and an in-memory adapter for testing, so the logic can be tested as one deep module even though it's deployed across a network boundary."
+Recommendation shape: "Define a shared interface, implement an HTTP adapter for production and an in-memory adapter for testing, so the logic can be tested as one deep module even though it's deployed across a network seam."
 
 ### 4. True external (Mock)
 
-Third-party services (Stripe, Twilio, etc.) you don't control. Mock at the boundary. The deepened module takes the external dependency as an injected port, and tests provide a mock implementation.
+Third-party services (Stripe, Twilio, etc.) you don't control. Mock at the seam. The deepened module takes the external dependency as an injected interface, and tests provide a mock adapter.
 
 ## Testing Strategy
 
 The core principle: **replace, don't layer.**
 
-- Old unit tests on shallow modules are waste once boundary tests exist — delete them
-- Write new tests at the deepened module's interface boundary
+- Old unit tests on shallow modules are waste once seam tests exist — delete them
+- Write new tests at the deepened module's interface
 - Tests assert on observable outcomes through the public interface, not internal state
 - Tests should survive internal refactors — they describe behavior, not implementation
 
@@ -58,11 +60,11 @@ Which category applies and how dependencies are handled:
 - **In-process**: merged directly
 - **Local-substitutable**: tested with [specific stand-in]
 - **Ports & adapters**: port definition, production adapter, test adapter
-- **Mock**: mock boundary for external services
+- **Mock**: mock adapter at the interface for external services
 
 ## Testing Strategy
 
-- **New boundary tests to write**: describe the behaviors to verify at the interface
+- **New seam tests to write**: describe the behaviors to verify at the interface
 - **Old tests to delete**: list the shallow module tests that become redundant
 - **Test environment needs**: any local stand-ins or adapters required
 
