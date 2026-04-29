@@ -42,6 +42,8 @@ Without this step, you've done traditional engineering with AI assistance. The f
 - For trivial fixes (typo corrections, simple config changes)
 - When the solution is already well-documented in official library docs
 - When the lesson is project-specific but you're about to deprecate that code
+- When the work was a clean execution of a pre-shaped plan — no surprises, no rework, no non-obvious decisions. The issue body and PR description already carry that record; a `docs/solutions/` entry with no reusable lesson trains future readers to skim
+- When in doubt — skipping costs nothing because the issue and PR persist in GitHub. Capturing a low-value lesson costs future planners' attention every time they consult `docs/solutions/`
 
 ## Execution Flow
 
