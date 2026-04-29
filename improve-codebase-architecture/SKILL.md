@@ -20,6 +20,8 @@ This is a side-route skill for architecture exploration rather than a default fe
 
 Use `/improve-codebase-architecture` when the user wants to find deeper structural improvements, identify shallow-module pain, or turn architectural friction into refactor opportunities.
 
+May also be invoked from `/triage-issue` when a bug exposes a missing test seam — i.e., the right call site for a regression test does not exist as a public, observable surface. In that case, bring the specific call-site pattern with you (the bug, the path it traverses, and why no current seam exercises it). The deepening candidate is the module that should expose that seam.
+
 Do not use it when the work is already a concrete implementation task for `/execute`, or when the next need is a specific refactor plan rather than exploratory architecture analysis — that belongs in `/request-refactor-plan`.
 
 ## Process

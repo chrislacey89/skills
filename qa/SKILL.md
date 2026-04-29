@@ -81,6 +81,8 @@ For each issue identified in Step 3, decide whether it can be filed lightweight 
 
 **When delegating to `/triage-issue`:**
 
+`/triage-issue` will require building a deterministic, agent-runnable feedback loop that reproduces the failure before any hypothesis work, then ranking 3-5 falsifiable hypotheses against that loop. Expect a longer cycle than a lightweight file — the discipline pays off on hard bugs by replacing guesswork with a measurable signal.
+
 1. State the decision and the reason to the user in one sentence — e.g. "This one looks like a regression and I can't form a hypothesis without reproducing it, so I'll switch to deep diagnosis for this issue."
 2. Run `/triage-issue` Steps 2–5 (reproduce, explore + diagnose, optional structural diagnosis, fix approach, TDD fix plan, issue creation) on this single bug.
 3. The issue created by `/triage-issue` **replaces** the lightweight issue Step 4 would otherwise have filed for this bug — do not file both.

@@ -39,9 +39,13 @@ Do NOT ask follow-up questions yet. Start investigating immediately.
 
 ### 2. Explore and diagnose
 
-**Reproduce first.** Before analyzing code, attempt to trigger the failure directly — run the relevant test, hit the endpoint, execute the failing command. If you can reproduce it, this reproduction is your ground truth for all subsequent analysis. If you cannot reproduce within 2 minutes, note what you tried and proceed to code analysis, but flag that the root cause is unconfirmed.
+**Construct a deterministic feedback loop first.** Before any code analysis or hypothesis work, build a fast, agent-runnable, pass/fail signal that reproduces the failure the user described. This is the highest-leverage activity in this skill — every later step is guessing without it. The loop can be a failing test, a `curl` returning the wrong status, a script that prints a known-wrong value, or whatever the stack supports. It must:
 
-Before reading code in detail, form a hypothesis about the cause and let that hypothesis guide exploration rather than wandering. If the evidence contradicts your hypothesis, revise it explicitly and keep narrowing.
+- Run on demand with no manual setup beyond a single command
+- Return a clear pass/fail outcome an agent can read
+- Reliably reproduce the failure the user described — not a similar-shaped failure
+
+**Do not proceed to hypothesis generation until the loop reproduces the failure.** Hypothesizing without a deterministic loop is guessing; Zeller's TRAFFIC framework names "Reproduce" and "Automate" as separate prerequisite steps for a reason, and they dominate time-to-fix on hard bugs. If you cannot construct a reproducing loop within ~5 minutes, stop and ask the user for the one missing input that would unblock reproduction (a specific value, flag, environment, or sequence). If reproduction is genuinely impossible (live-only failure, hardware-dependent race), say so explicitly in the issue and flag the diagnosis as best-effort code reading rather than silently proceeding.
 
 Use the Agent tool with subagent_type=Explore to deeply investigate the codebase. Your goal is to find:
 
@@ -56,7 +60,13 @@ Look at:
 - Recent changes to affected files (`git log` on relevant files)
 - Error handling in the code path
 - Similar patterns elsewhere in the codebase that work correctly
- 
+
+**Form falsifiable hypotheses before testing any one.** With the feedback loop in hand and the code path traced, list 3-5 ranked candidate causes. State each in falsifiable form:
+
+> If **X** is the cause, then changing **Y** will make the loop pass, and changing **Z** will make the failure worse or leave it unchanged.
+
+Rank by strength of evidence — recent changes to the suspect path, structural plausibility, prior incident patterns. Show the ranked list to the user in one short message before testing the top hypothesis. The user checkpoint is cheap and catches insights you cannot infer from code reading alone ("we just deployed a change to candidate #3" is a common save). Drive the loop against the top hypothesis, revise the ranking when evidence contradicts it, and avoid anchoring on the first plausible idea — Zeller's scientific-method recipe.
+
  ### 2.5. Structural Diagnosis
  
  If the bug is straightforwardly isolated (off-by-one, missing null check, typo), skip this section. Not every bug is systemic — structural diagnosis is for bugs where the root cause suggests a recurring condition.
@@ -80,7 +90,7 @@ If the structural diagnosis reveals a deeper architectural problem, note it in t
 
 ### 3. Identify the fix approach
 
-If you were able to reproduce the failure in Step 2, verify that your proposed fix actually suppresses it. If the fix does not suppress the failure, your root cause identification is wrong — return to Step 2. If you could not reproduce, state that the root cause is a best-effort analysis based on code reading.
+Run the proposed fix against the Step 2 feedback loop and confirm the loop now passes. If the loop still fails, your root cause identification is wrong — return to Step 2 and revise the hypothesis ranking. Only in the explicit "reproduction was genuinely impossible" branch from Step 2 may you skip this verification; in that case, restate that the root cause is a best-effort analysis based on code reading.
 
  Based on your investigation, determine:
  
@@ -92,6 +102,15 @@ If you were able to reproduce the failure in Step 2, verify that your proposed f
  - If you choose a symptomatic fix for pragmatic reasons, say so explicitly and note what fundamental fix would remove the condition instead of merely managing it.
 
 ### 4. Design TDD fix plan
+
+**Seam check first.** Before drafting cycles, confirm a regression test can be written at the *right* call site — a seam that exercises the real bug pattern, not a shallower stand-in. If the only available seam is too shallow (the bug lives in an inline closure inside a private method, only manifests through a global side effect with no public observer, or requires dependencies the production caller never injects), the regression test will encode false confidence.
+
+**Stop and treat that as the diagnosis output.** A regression test at the wrong seam is worse than no regression test — it locks in a false-positive guard. Note in the issue that the bug exposes a missing test seam, recommend `/improve-codebase-architecture` with the specific call-site pattern, and either:
+
+- Block this fix on the architectural work (preferred when the bug is structural in origin), or
+- Proceed with a clearly labeled workaround-class fix and a follow-up seam-creation issue (when operational pressure justifies it).
+
+This is Ousterhout's `rules-of-thumb` red-flag posture: when the right test is "too hard to write," the structure itself is the finding.
 
 Create a concrete, ordered list of RED-GREEN cycles. Each cycle is one vertical slice:
 
@@ -171,6 +190,6 @@ After creating the issue, print the issue URL and a one-line summary of the root
 
 - **Expected input:** a single reported bug, usually delegated from `/qa`'s per-issue depth check, that needs diagnosis before implementation
 - **Produces:** a GitHub issue with root-cause analysis, structural diagnosis when relevant, and a TDD fix plan — replaces the lightweight issue `/qa` would otherwise have filed for this bug
-- **May recommend:** `/improve-codebase-architecture` when the bug reveals a deeper structural pattern
+- **May recommend:** `/improve-codebase-architecture` when the bug reveals a deeper structural pattern, or when the Step 4 seam check finds no correct call site for a regression test
 - **Usually invoked by:** `/qa`
 - **Returns control to:** the calling `/qa` loop for the next observation, or `/execute` (often via `/tdd`) when the bug is ready to implement
