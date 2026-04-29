@@ -12,21 +12,31 @@ Create a GitHub PR linking back to the PRD and slice issues, then review the ful
 
 ## Invocation Position
 
-This is a primary pipeline skill used after implementation has been verified and before merging to main.
+This is a primary pipeline skill used after implementation has been verified and before merging to main, *or* when picking up someone else's PR for review.
 
-Use `/pre-merge` when the branch is ready for PR creation, architectural review, and final plan-to-code reconciliation.
+Use `/pre-merge` when the branch is ready for PR creation, architectural review, and final plan-to-code reconciliation. Use `/pre-merge --pr <number>` when you are reviewing a PR you did not author.
 
 Do not use it as a substitute for implementation verification, QA intake, or refactor planning. It assumes the work is already built and ready to review.
 
+## Modes
+
+`/pre-merge` runs in one of two modes. Both reuse Phase 3's 10 architectural review dimensions (`review-checklist.md`); they differ in what they consume and what they produce.
+
+- **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4). This is the mode auto-invoked by `/execute` Step 6.
+- **Reviewer-mode** — invoked as `/pre-merge --pr <number>` against a PR you did not author. The skill skips PR creation (the PR already exists) and produces *draft comment text* (Phase 4) for you to review and post, structured per `references/comment-craft.md` (5P gate, Triple-R, Comment Signals, MMG Exchange).
+
+If you are running on a branch other than the user's working branch and `--pr` was not provided, ask once whether the user means reviewer-mode against a specific PR number rather than guessing — auto-detection saves a keystroke but misclassifying mode produces draft comments that would have been local advisories or vice versa.
+
 ## When to Use
 
-- After QA passes and before merging a feature branch to main
-- After Ralph finishes AFK execution and you've verified behavior
-- For any branch you want reviewed before merge, even without a full pipeline run
+- **Author-mode:** after QA passes and before merging a feature branch to main; after Ralph finishes AFK execution and you've verified behavior; or for any branch you want reviewed before merge, even without a full pipeline run.
+- **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the 10-dimension architectural review to their diff and produce constructive comment text.
 
 ## Execution Flow
 
 ### Phase 1: Gather Context
+
+**Author-mode:**
 
 1. **Ask for the PRD issue number.** Accept "none" if this change didn't go through the full pipeline.
 
@@ -50,7 +60,22 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
    ```
    For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target). If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
 
+**Reviewer-mode (`--pr <number>`):**
+
+1. **Fetch the PR and its diff:**
+   ```bash
+   gh pr view <pr-number> --json number,title,headRefName,baseRefName,body,author,url,state
+   gh pr diff <pr-number>
+   ```
+   If the PR is already merged or closed, tell the user and stop — review comments on a closed PR are surfaced separately and rarely useful.
+
+2. **Identify the PRD issue from the PR body.** Look for `Closes #<n>`, `Refs #<n>`, or a `## PRD` section pointing at an issue. If found, run the same `gh issue view` + slice-issue search as author-mode step 2 to load PRD context and boundary maps. If the PR has no PRD lineage, treat it as the "no PRD" branch — Phase 3's PRD-gated dimensions (Boundary Map Contracts, Coverage Matrix Reconciliation) skip themselves.
+
+3. **Note the diff size and base branch from the PR JSON.** No local branch math — `gh pr diff` returns the merged-base-to-head diff directly. Do not try to check the PR out locally; you are reviewing the diff, not running it.
+
 ### Phase 2: Create the PR
+
+**Skip this phase entirely in reviewer-mode** — the PR already exists, you did not author it, and rewriting someone else's PR body is out of scope. Proceed to Phase 3.
 
 1. **Check for an existing PR:**
    ```bash
@@ -96,7 +121,7 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 ### Phase 3: Architectural Review
 
-Consult `review-checklist.md` for the review dimensions and their violation patterns.
+Consult `review-checklist.md` for the review dimensions and their violation patterns. The 10 dimensions run identically in both modes — the `diff` they read is the local `git diff "$BASE_BRANCH...HEAD"` in author-mode and the `gh pr diff <pr-number>` output in reviewer-mode.
 
 **Small diff** (< 200 changed lines, < 10 files): run all dimensions sequentially in the main agent.
 
@@ -124,7 +149,9 @@ Combine findings from all dimensions (or sub-agents).
 
 **Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
 
-Present in the terminal using three tiers:
+**Author-mode** prints terminal advisories (below). **Reviewer-mode** transforms those same findings into draft PR comment text (see "Reviewer-mode comment drafts" below) — same dimensions, same severity classification, different output shape.
+
+Present in the terminal using three tiers (author-mode):
 
 ```
 ## Architectural Review
@@ -176,16 +203,72 @@ Omit any tier that has zero findings.
 
 Substitute `<pr-number>` with the PR created in Phase 2. Skip the line when the work was a clean execution of a pre-shaped plan with no surprises, rework, or non-obvious decisions — the issue body and PR description already carry that record, and a `docs/solutions/` entry with no reusable lesson trains future readers to skim. When in doubt, skip. Signals that a lesson is worth capturing: a tricky bug whose root cause was non-obvious, a Rabbit Hole from the PRD that actually bit, an architectural decision with significant tradeoffs, or a pattern that should be reused. See `/compound`'s "When NOT to Use" for the full skip list.
 
+### Reviewer-mode comment drafts
+
+In reviewer-mode, transform the dimension findings into PR comment text per `references/comment-craft.md`. Output drafts to the terminal (clearly grouped) for the user to review and post — do **not** post comments directly via `gh pr comment` or `gh api` from this skill. The user is the editor of last resort; auto-posting comments on someone else's PR is hard-to-reverse and skips the human empathy pass that comment-craft is built around.
+
+For each finding, draft the comment using these rules. The full methodology is in `references/comment-craft.md`; this is the application:
+
+1. **Run the 5P gate per finding.** If the concern is unjustifiable, *Pass* (drop it from the draft set). If it is valid but out of scope for this PR, *Postpone* (surface as a "Suggested follow-up issue" line, not a PR comment). Only Propose-class findings become PR comments.
+
+2. **Map severity → Comment Signal.** Use `review-checklist.md`'s severity classification to pick the prefix:
+   - `Concern` → `needs change:` (small fix), `needs rework:` (major refactor), or `align:` (convention violation)
+   - `Suggestion` → `levelup:` (non-blocking improvement)
+   - `Observation` → either drop entirely (no action implied) or post as `nitpick:` if it warrants noting
+
+3. **Use Triple-R for action-requiring comments** (any blocking signal, plus most `levelup:`s). Request (transformation verb), Rationale (objective justification — cite the principle from `review-checklist.md`, the `.d.ts` line, the prior PR), Result (measurable end state).
+
+4. **Apply tone discipline.** Replace sentence-initial "you" with "we." Ask, don't command. Target the artifact, not the author.
+
+5. **Anchor each comment to a file path and line.** A PR comment without a code anchor is harder to act on than a terminal advisory; reuse the file/line citations the dimension findings already require (especially Surgical Scope's "cited hunks, not yes/no" rule).
+
+Output shape in the terminal:
+
+```
+## Reviewer-Mode Draft Comments — PR #<pr-number>
+
+### Per-line comments (paste at the cited code position)
+
+#### `path/to/file.ts:42`
+**`needs change:` Move helper into existing utility module**
+
+**Rationale** — the new `formatBillDate` in `src/pipeline/format.ts:42` duplicates `lib/dates/format.ts`'s shape. `pre-merge/review-checklist.md` Dim 1 (Deep Modules) flags this as information leakage between two modules holding the same protocol detail.
+
+**Result** — `formatBillDate` lives in `lib/dates/format.ts` and `src/pipeline/format.ts:42` imports it.
+
+---
+
+[next per-line comment]
+
+### Top-level review summary (paste as PR-level comment)
+
+[2-3 sentence summary of the review posture, naming the dimensions that ran and the highest-severity finding. Frame as collaborative, not adversarial — Rigby's "shippable code, not a defect tally."]
+
+### Suggested follow-up issues (5P-Postpone — do not post in this PR)
+
+- [Title] — out of scope for this PR; file as `<repo>/issues/new` if the team wants to track it
+- [Title] — same
+
+### Held back at 5P-Pass (no comments posted)
+
+- [One-line note per dropped concern with the reason — kept for the user's audit, not for the PR]
+```
+
+If after the 5P gate the per-line comment count is zero, the review may still produce a top-level approval comment — phrase it as collaborative ("ready to ship from a structural standpoint" rather than "LGTM"). Tacke notes that LGTM-only approvals are a code-review failure mode; if you ran the 10 dimensions and have nothing concrete to say, that result is meaningful and should at least name which dimensions were checked.
+
+If a disagreement is anticipated (e.g., the finding overturns a deliberate choice the author made), draft a single comment opening the MMG Exchange offline ("Can we sync briefly on the X tradeoff before I leave detailed comments?") rather than posting an objection thread on the PR.
+
 ## What This Skill is NOT
 
 - **Not a test runner.** Pre-commit hooks run tests, typecheck, and lint on every commit.
 - **Not a bug finder.** `/qa` files behavioral bugs as GitHub issues.
 - **Not a refactoring planner.** `/request-refactor-plan` produces RFC-style refactor proposals.
 - **Not a CI gate.** Findings are advisory. The user decides what to address before merging.
+- **Not an auto-poster.** Reviewer-mode produces draft comment text for the user to review and post; the skill does not call `gh pr comment` or `gh pr review` itself.
 
 ## Handoff
 
-- **Expected input:** verified implementation work that is ready for review and PR creation
-- **Produces:** a PR with lineage plus an architectural review readout
+- **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), or an existing PR number you want reviewed (reviewer-mode)
+- **Produces:** a PR with lineage plus an architectural review readout (author-mode), or draft PR comment text following `references/comment-craft.md` (reviewer-mode)
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
-- **Comes next by default:** merge. Then `/compound` only when a durable lesson emerged worth capturing in `docs/solutions/` — skip it when the work was a clean execution of a pre-shaped plan
+- **Comes next by default:** merge. Then `/compound` only when a durable lesson emerged worth capturing in `docs/solutions/` — skip it when the work was a clean execution of a pre-shaped plan. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/compound`
