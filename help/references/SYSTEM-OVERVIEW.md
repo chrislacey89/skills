@@ -282,7 +282,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
 | `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
 | `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` (auto-invoked after Step 5 PR-review confirmation) |
-| `/pre-merge` | Verified implementation ready to review | PR with lineage plus architectural review readout | Merge, then `/compound` only when a durable lesson emerged |
+| `/pre-merge` | Verified implementation ready to review (author-mode), or an existing PR number to review (reviewer-mode via `--pr <n>`) | PR with lineage plus architectural review readout (author-mode), or draft PR comment text shaped by `references/comment-craft.md` (reviewer-mode) | Merge, then `/compound` only when a durable lesson emerged |
 | `/compound` | Shipped work or meaningful lesson from review or QA | `docs/solutions/` entry with volatility and Shelf Life | Future `/research` and `/write-a-prd` consult it |
 | `/api-design-review` | API-shaped uncertainty from `/research` or `/write-a-prd` | Contract verdict, compatibility class, must-lock decisions | Returns to the calling skill |
 | `/design-an-interface` | Module problem with multiple plausible shapes | Contrasted interface options with a recommendation | Returns to caller (usually `/write-a-prd`) |
