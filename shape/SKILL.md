@@ -90,7 +90,7 @@ This is the heart of the interview — walking the decision tree one branch at a
 
 **Present a closing summary.** Before ending, summarize the decisions made in four categories:
 
-- **Choices** — decisions that are settled. The user chose these deliberately. Example: "We're building a real-time presence indicator for the lesson page." These are locked — downstream skills should not re-debate them.
+- **Choices** — decisions that are settled. The user chose these deliberately. Example: "We're building a real-time presence indicator for the lesson page." These are locked — downstream skills should not re-debate them. Classification schemes, scoring rubrics, taxonomies, role/permission matrices, and decision rules are Choices that must be **enumerated** in the summary, not named in the abstract — listing the categories or levels by name, not just by their count.
 - **Assumptions** — things we believe to be true but haven't verified. Tag each with a confidence level (see below). Example: "[Uncertain] We assume Ably's free tier handles our expected concurrent user count."
 - **Impositions** — external constraints we can't change. Example: "The app uses Next.js App Router; we can't switch frameworks."
 - **Structural signals** — recurring symptoms, delayed effects, missing feedback loops, or stakeholder goal conflicts that suggest the visible problem may not be the underlying one. Keep this list short and concrete. These are prompts for better `/research` and `/write-a-prd`, not a request to fully solve the system during the interview.
@@ -112,6 +112,7 @@ Ask the user to confirm this classification. Anything marked as an Assumption is
 - [ ] At least one appetite or hard constraint is on record (time, scope, or cost boundary)
 - [ ] All three stakeholder roles have been named: who uses, who pays, who is affected
 - [ ] Every `Uncertain` or `Speculative` assumption has a stated research question attached
+- [ ] If a classification scheme, rubric, taxonomy, or decision rule was discussed, its members are enumerated in the summary (not just referenced by count or label)
 
 If any item is unchecked, ask one targeted question to fill the gap before presenting the summary. Do not present an incomplete summary as a handoff.
 
