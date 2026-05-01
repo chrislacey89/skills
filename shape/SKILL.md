@@ -112,7 +112,7 @@ Ask the user to confirm this classification. Anything marked as an Assumption is
 - [ ] At least one appetite or hard constraint is on record (time, scope, or cost boundary)
 - [ ] All three stakeholder roles have been named: who uses, who pays, who is affected
 - [ ] Every `Uncertain` or `Speculative` assumption has a stated research question attached
-- [ ] If a classification scheme, rubric, taxonomy, or decision rule was discussed, its members are enumerated in the summary (not just referenced by count or label)
+- [ ] If a classification scheme, scoring rubric, taxonomy, role/permission matrix, or decision rule was discussed, its members are enumerated in the summary (not just referenced by count or label)
 
 If any item is unchecked, ask one targeted question to fill the gap before presenting the summary. Do not present an incomplete summary as a handoff.
 
