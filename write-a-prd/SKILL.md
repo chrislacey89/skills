@@ -286,7 +286,9 @@ A list of implementation decisions that were made. This can include:
 - API contracts
 - Specific interactions
 
-Do NOT include specific file paths or code snippets. They may end up being outdated very quickly.
+Do NOT include implementation snippets — loop bodies, error handling, helper function internals, configuration string literals. These drift the moment the builder makes a judgment call.
+
+DO render **locked contract shapes** in code form when the PRD's decision lives at the surface level: schema column lists (Drizzle, Prisma, SQL DDL), exported type aliases or interfaces, exported function signatures, structured input/output schemas (Zod, JSON Schema). The test is empirical: if a downstream pipeline step (`/prd-to-issues` Boundary Map, `/execute` Consumes verification, `/pre-merge` boundary-contract review) will grep for this identifier or shape, it is a contract shape and belongs in code. If no downstream step will inherit it verbatim, it is an implementation detail and stays prose or stays out. Contract-shape code drifts at the same rate as the PRD's renegotiation path — edit the PRD body and regenerate the Coverage Matrix, the same flow used for any other PRD content change.
 
 ## Research Reference
 
