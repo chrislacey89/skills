@@ -63,6 +63,33 @@ For each slice, specify:
 - **Consumes from #N:** What this slice needs from upstream slices — specific imports, API endpoints it calls, types it uses. Reference the producing slice by number. If the parent PRD's research lives in a `research`-labeled spike issue (see `/research` Phase 5d), you may also cite `Refs #<spike-issue-number>` here when the slice's interface decisions are bounded by a specific recommendation, callback contract, or version snapshot recorded in that spike. The `Refs #N` lineage syntax is the same one used elsewhere in the pipeline.
 - **Contract notes:** The success shape, error shape, compatibility posture, and any versioning readiness concerns that matter to downstream consumers.
 
+**Contract-shape rendering.** When the parent PRD locks a schema, type alias, function signature, or structured input/output shape in code form (per `/write-a-prd`'s Implementation Decisions guidance), the slice's `Produces` field should reference it by location rather than re-render it. Re-render only when the slice introduces a contract shape the PRD did not lock. This keeps the PRD as the single source of truth for locked contracts and avoids drift between two surface forms of the same artifact.
+
+Example — when the PRD's Implementation Decisions block locks a Drizzle schema:
+
+```ts
+// PRD #47 §Implementation Decisions
+export const dramaAssessments = sqliteTable("drama_assessments", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  meetingId: integer("meeting_id").notNull().references(() => meetings.id),
+  level: text().notNull(), // "routine" | "bumpy" | "heated" | "off-the-rails"
+  confidence: real().notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  model: text().notNull(),
+  headline: text().notNull(),
+  narrative: text().notNull(),
+  evidenceQuotes: text("evidence_quotes", { mode: "json" }).$type<string[]>().notNull(),
+  publishedAt: integer("published_at", { mode: "timestamp" }),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().default(sql`(unixepoch())`),
+}, (t) => [uniqueIndex("drama_assessments_meeting_prompt_model_unique").on(t.meetingId, t.promptVersion, t.model)]);
+```
+
+…the slice's `Produces` should read:
+
+> - `src/db/schema.ts` — adds `dramaAssessments` and `dramaCategoryScores` tables per PRD #47 §Implementation Decisions. No re-render here; consume the PRD's contract shape verbatim.
+
+If the slice introduces additional types not locked by the PRD (e.g. an internal `DramaLevel` union the schema's `level` column will be narrowed to in TS), render those in the slice's `Produces` as the slice is the owning home.
+
 The boundary map prevents the most common multi-slice failure: slices that are each internally correct but don't actually wire together because they made incompatible assumptions about interfaces.
 
 **Orthogonality test:** After drafting the boundary map, check each slice: if this slice's internal implementation changed entirely, would any other slice need to change? If yes, the boundary is drawn wrong — either merge the coupled slices, or extract the shared concern into its own slice. Slices that pass this test can be implemented in any order by Ralph without risk of one slice's decisions breaking another.
