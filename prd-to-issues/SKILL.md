@@ -68,7 +68,7 @@ For each slice, specify:
 Example — when the PRD's Implementation Decisions block locks a Drizzle schema:
 
 ```ts
-// PRD #47 §Implementation Decisions
+// PRD #<prd-issue-number> §Implementation Decisions
 export const dramaAssessments = sqliteTable("drama_assessments", {
   id: integer().primaryKey({ autoIncrement: true }),
   meetingId: integer("meeting_id").notNull().references(() => meetings.id),
@@ -86,7 +86,7 @@ export const dramaAssessments = sqliteTable("drama_assessments", {
 
 …the slice's `Produces` should read:
 
-> - `src/db/schema.ts` — adds `dramaAssessments` and `dramaCategoryScores` tables per PRD #47 §Implementation Decisions. No re-render here; consume the PRD's contract shape verbatim.
+> - `src/db/schema.ts` — adds `dramaAssessments` and `dramaCategoryScores` tables per PRD #<prd-issue-number> §Implementation Decisions. No re-render here; consume the PRD's contract shape verbatim.
 
 If the slice introduces additional types not locked by the PRD (e.g. an internal `DramaLevel` union the schema's `level` column will be narrowed to in TS), render those in the slice's `Produces` as the slice is the owning home.
 
