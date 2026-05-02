@@ -266,6 +266,14 @@ repo: <owner/repo>
 feature: <short phrase>
 installed_versions_snapshot:
   - <package>@<version>   # list only the key dependencies this research pinned against
+  # When the feature imports through a non-default subpath of a package that
+  # ships sibling subpaths backed by different runtime drivers (e.g.
+  # @libsql/client vs /http vs /sqlite3 vs /web; react-dom vs /client vs /server;
+  # drizzle-orm/libsql vs /better-sqlite3; @effect/platform vs -node), record
+  # the subpath as a first-class entry. Sibling subpaths are runtime-distinct
+  # even when their type signatures match, so a swap between them is a
+  # runtime-affecting change disguised as a type-only diff.
+  # - <package>/<subpath>@<version>   # constraint: <one-line runtime note, e.g. "HTTP-only — https: and libsql: URLs only">
 callback_contracts_snapshot:
   # Only present when Phase 1.25 ran. One entry per library callback this feature implements.
   # - callback: <library>.<callback-name>
