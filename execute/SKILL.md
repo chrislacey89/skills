@@ -99,7 +99,7 @@ If any of these is false, go through the normal classification gate. When in dou
 
 - Is the external service still available at the expected API and pricing tier?
 - Does the parent PRD's approach still hold given what you now know?
-- Are the packages this slice depends on still at compatible versions?
+- Are the packages this slice depends on still at compatible versions *and entrypoints*? A subpath swap (e.g. `pkg` → `pkg/http`, or any `pkg/<sub>` → `pkg/<other-sub>`) for a multi-runtime package is a runtime-affecting change disguised as a type-only diff — treat it as an assumption shift, not a free-pass type-equivalent edit.
 
 If all assumptions still hold, proceed to Step 1. If any assumption has changed, stop and flag it to the user — this slice needs a targeted `/research` + mini-PRD cycle before execution, not a patch during implementation. Do not proceed with stale assumptions and attempt to work around them mid-execution.
 
