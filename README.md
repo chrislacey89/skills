@@ -1,10 +1,10 @@
 # Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-23-blue)
+![Skills](https://img.shields.io/badge/skills-24-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 23 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 24 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -53,6 +53,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [prd-to-issues](prd-to-issues/) | Break PRD into vertical slices with boundary maps |
 | [design-an-interface](design-an-interface/) | Generate multiple radically different interface designs |
 | [api-design-review](api-design-review/) | Focused contract review for higher-risk API design decisions |
+| [prototype](prototype/) | Throwaway code that answers a question — LOGIC (state model), UI (layout variants), or FEASIBILITY (spike-solution discharge for `Uncertain` research assumptions) |
 
 ### Development
 
