@@ -217,6 +217,8 @@ Before leaving Phase 4, produce a lightweight estimation-readiness readout:
 
 The goal is not to create a scheduling ceremony. The goal is to prevent research findings from being summarized as false precision.
 
+**Discharging code-verifiable `Uncertain` assumptions.** When this phase produces an `Uncertain` (or `Speculative`) assumption whose verdict is cheaply settled by 10 lines of throwaway code — does the library actually expose this, does the streaming path emit partial tags, does this format render where we need it — name `/prototype` FEASIBILITY as the discharge route in the research document and (if appetite allows) run it before handing off to `/write-a-prd`. The verdict folds back into this artifact by downgrading the assumption tag, so the PRD inherits a verified premise instead of an unverified one. This is the assumption-scale rung of XP's test-first self-similar rhythm: TDD at the minute scale, FEASIBILITY at the assumption scale.
+
 For API-shaped work, explicitly document:
 
 - the API problem statement and impact statement
@@ -516,6 +518,8 @@ Present the research document to the user. Then walk through these review questi
 4. Where do you want to run `/write-a-prd` — **here** (continue in this session) or in a **fresh session** using the printed handoff line below?
 
 Do not present all four questions at once. Iterate on each answer until the user is satisfied. Question 4 has exactly two answers — do not improvise a third option ("not yet", "later"). If the user is not ready to proceed, return to questions 1–3 to surface what is missing.
+
+**Before handoff, name any remaining feasibility spikes.** If the document still carries `Uncertain` assumptions whose verdicts are cheaply code-verifiable and have not been discharged, list them under a short "Pending feasibility spikes" closing note and name `/prototype` FEASIBILITY as the discharge route. The PRD can still be written with those assumptions tagged — but the named discharge route makes it cheap for the next agent (or this one, in `/execute` Step 0) to settle them before mid-implementation. The cost-of-delay framing is XP's *Defect Cost Increase*: discharging at `/research` time costs minutes; the same assumption discovered at `/execute` time costs hours.
 
 In archive mode, the research file is saved outside the repo — do not commit it to git. In spike-issue mode, the research lives as a closed GitHub issue and a session-local cache copy at the archive path; do not commit the cache copy either.
 

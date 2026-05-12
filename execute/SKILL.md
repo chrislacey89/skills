@@ -105,6 +105,8 @@ If all assumptions still hold, proceed to Step 1. If any assumption has changed,
 
 Skip this gate entirely for one-off tasks without an "Assumptions from Parent PRD" section.
 
+**Un-discharged feasibility check (advisory).** If the task's research artifact (archive file or spike issue) still carries `Uncertain` or `Speculative` assumptions whose verdicts are cheaply settled by 10 lines of throwaway code — does the library actually expose this, does the streaming path emit partial tags, does this format render where we need it — surface them now and suggest `/prototype` FEASIBILITY before main implementation. This is advisory, not blocking (per XP's *slack* principle); the user may have a reason to proceed and discover the answer mid-implementation. But the cost asymmetry is real (XP's *Defect Cost Increase*): a spike at this moment costs minutes, while the same assumption discovered mid-implementation costs hours of pivot. State the un-discharged assumptions explicitly and let the user decide. Skip this check for one-off tasks without a research artifact or when every assumption is already tagged `Verified` / `Refuted`.
+
 **Consumes verification gate.** Only for issue-based slice work. If the task comes from a GitHub issue created by `/prd-to-issues`, and its `## Boundary Map` / `### Consumes` section references an already-closed upstream slice, spend 60 seconds verifying each listed symbol exists at the declared path in the current tree. This catches upstream boundary-map drift before implementation starts.
 
 For each Consumes entry:

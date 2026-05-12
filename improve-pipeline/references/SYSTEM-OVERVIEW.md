@@ -267,7 +267,7 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Handoff Table
@@ -289,6 +289,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/tdd` | Concrete behavior ready for red-green-refactor | Tested code increments via vertical cycles | Returns to caller (usually `/execute`) |
 | `/qa` | Observed user-facing failures or regressions — single entry for bug conversations | Durable GitHub bug issues in domain language; delegates per-issue to `/triage-issue` for deep bugs | `/execute` (or per-issue to `/triage-issue`) |
 | `/triage-issue` | Single bug delegated from `/qa`'s depth check, needing diagnosis before implementation | Root-cause issue with TDD fix plan, replacing the lightweight `/qa` issue for that bug. Built on a Zeller-style spine: deterministic feedback loop first, ranked falsifiable hypotheses, then a seam check that hands off to `/improve-codebase-architecture` when no correct test seam exists | Returns to the `/qa` loop, then `/execute` (often via `/tdd`), or `/improve-codebase-architecture` when the seam check fails |
+| `/prototype` | One question that needs throwaway code to answer — a state model to feel out (LOGIC), a layout to compare variants of (UI), or an `Uncertain` assumption to discharge with a focused spike (FEASIBILITY) | Captured answer in the calling skill's durable artifact (research assumption tag, ADR, commit message, NOTES.md) and the spike code deleted in the same change | Returns to the caller (usually `/research` for FEASIBILITY, or the user for LOGIC / UI) |
 | `/request-refactor-plan` | Refactor problem needing safer sequencing | GitHub issue with tiny-commit refactor plan | `/execute` |
 | `/improve-codebase-architecture` | Architectural friction, coupled modules, shallow pain | Candidate deepening opportunities and a refactor RFC | `/request-refactor-plan` or `/execute` |
 | `/improve-pipeline` | Pipeline-level lesson from real-world usage of Skill Kit | GitHub issue in `chrislacey89/skills` with repo-wide improvement proposal | Review issue, then optional implementation in `chrislacey89/skills` |
@@ -305,7 +306,8 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 
 - `/shape` → `/research` for work that fits a single PRD, or `/create-milestone` for work that requires multiple independent PRDs
 - `/create-milestone` → selected feature issue promoted from `roadmap bet` to `research-ready`, then `/research`
-- `/research` → `/write-a-prd` and conditionally `/api-design-review`
+- `/research` → `/write-a-prd` and conditionally `/api-design-review`; when an `Uncertain` assumption is cheaply code-verifiable, `/research` names `/prototype` FEASIBILITY as the discharge route before handoff
+- `/prototype` — kit-owned side-route with three branches (LOGIC for state models, UI for layout variants, FEASIBILITY for spike-solution feasibility verdicts). FEASIBILITY is named by `/research` (Phase 4 / Phase 6) and `/execute` (Step 0 advisory) as the discharge route for un-discharged `Uncertain` assumptions; the verdict folds back into the calling artifact and the spike code is deleted in the same change
 - `/write-a-prd` → `/prd-to-issues` (with optional container milestone for big-batch work) and conditionally `/design-an-interface` or `/api-design-review`
 - `/init-pipeline` is auto-invoked by `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing — scaffolds Claude Code hooks (TDD classification gate, git guardrails), pre-commit hooks, and package manager enforcement
 - `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
@@ -362,6 +364,11 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 │  ── SIDE ROUTES AND SUPPORTING PATHS ──────────────────────────────────
 │
 ├── qa/SKILL.md                     # Single entry point for bug conversations — files lightweight issues and delegates per-issue to /triage-issue when depth is needed
+├── prototype/                      # Kit-owned fork of Matt Pocock's /prototype with a third FEASIBILITY branch (spike-solution discharge for /research Uncertain assumptions)
+│   ├── SKILL.md
+│   ├── LOGIC.md
+│   ├── UI.md
+│   └── FEASIBILITY.md
 ├── improve-codebase-architecture/  # Find deepening opportunities and spin them into refactor work
 │   ├── SKILL.md
 │   └── REFERENCE.md
@@ -416,6 +423,8 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Start a new feature | `/shape` to establish what to build, then hand off to `/research` |
 | Plan a blank project or major tranche | `/shape`, then `/create-milestone` if the work requires multiple independent PRDs. If it fits one PRD (even if big-batch), stay on the default path — `/write-a-prd` creates a container milestone |
 | Research the technical approach | `/research` (always runs, depth auto-calibrated, invokes `/api-design-review` for higher-risk API contract work, then hands off to `/write-a-prd`) |
+| Verify a technical assumption before committing | `/prototype` FEASIBILITY — write a focused spike (one automated test, or a scratch route when visual confirmation is required), capture the verdict in the calling artifact (e.g. downgrade an `Uncertain` tag in the research doc), delete the spike in the same change |
+| Feel out a state model or compare layout variants | `/prototype` LOGIC (terminal app over a pure reducer/state machine) or `/prototype` UI (radically different variants on one route, switchable from a floating bar) |
 | Promote a milestone feature into the pipeline | Expand the selected feature issue from `roadmap bet` to `research-ready`, then run `/research` |
 | Write a shaped pitch | `/write-a-prd` → shaped pitch filed as GitHub issue (appetite → solution → rabbit holes → no-gos, includes API contract sketch when relevant, auto-invokes `/design-an-interface` or `/api-design-review` when needed, then hands off to `/prd-to-issues`) |
 | Break into work items | `/prd-to-issues` → GitHub issues with boundary maps that feed `/execute`; Ralph can run the AFK loop over unblocked issues |
