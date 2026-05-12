@@ -6,6 +6,7 @@ sources:
     - "Software Estimation — Steve McConnell"
   secondary:
     - "The Checklist Manifesto — Atul Gawande"
+    - "Extreme Programming Explained — Kent Beck"
 ---
 
 # Research
