@@ -8,6 +8,7 @@ sources:
     - "Unit Testing — Vladimir Khorikov"
     - "A Philosophy of Software Design — John Ousterhout"
     - "Refactoring — Martin Fowler"
+    - "Extreme Programming Explained — Kent Beck"
 ---
 
 # Test-Driven Development

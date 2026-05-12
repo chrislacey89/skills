@@ -4,6 +4,7 @@ description: "Primary pipeline execution step after /prd-to-issues or for clearl
 sources:
   secondary:
     - "The Checklist Manifesto — Atul Gawande"
+    - "Extreme Programming Explained — Kent Beck"
 ---
 
 # Execute
