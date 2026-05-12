@@ -22,7 +22,7 @@ Kent Beck's *Defect Cost Increase* names the cost curve directly: the longer an 
 
 XP's *test-first programming* operates self-similarly: TDD at the minute scale, FEASIBILITY spike at the assumption scale, themes at the quarter scale. FEASIBILITY is the assumption-scale rung — the spike *is* the question made executable, the verdict *is* the test's outcome, and the spike is deleted once the verdict is captured.
 
-Hunt & Thomas's distinction in *The Pragmatic Programmer* helps locate this against neighbouring shapes: **tracer bullets** are real-but-minimal end-to-end implementations that stay in the codebase; **prototypes** (LOGIC and UI in this skill) are throwaway code that explores a design question; **feasibility spikes** sit between — throwaway like a prototype, real-API like a tracer bullet, scoped to a single yes/no question. Beck's *spike solution* is the canonical primary name for the activity; tracer-bullet contrast is the supporting clarification.
+Hunt & Thomas's distinction in *The Pragmatic Programmer* helps locate this against neighboring shapes: **tracer bullets** are real-but-minimal end-to-end implementations that stay in the codebase; **prototypes** (LOGIC and UI in this skill) are throwaway code that explores a design question; **feasibility spikes** sit between — throwaway like a prototype, real-API like a tracer bullet, scoped to a single yes/no question. Beck's *spike solution* is the canonical primary name for the activity; tracer-bullet contrast is the supporting clarification.
 
 ## Process
 
@@ -112,7 +112,7 @@ The spike-solution narrowness defines what this branch refuses to cover:
 - **Spikes that grow features.** A spike that gains a second assertion, a third configuration, or a "while I'm here" tweak has stopped being a spike. Delete it and start over with a tighter question.
 - **Spikes that survive the change.** The deletion is part of the work, not a follow-up. A spike file on `main` after the verdict has been captured is a smell.
 - **Verdicts without questions.** "It works" is not a verdict. The verdict is the answer to *the question stated in step 1*. Without the question, the answer has no meaning to the next reader.
-- **Spikes for questions the docs already answer.** Read the docs first. Spike only when the docs are silent, ambiguous, or contradicted by behaviour. Otherwise the spike is busywork — a confirmation ritual that costs more than reading.
+- **Spikes for questions the docs already answer.** Read the docs first. Spike only when the docs are silent, ambiguous, or contradicted by behavior. Otherwise the spike is busywork — a confirmation ritual that costs more than reading.
 - **Spikes that wrap mocks.** A spike against a mocked library proves nothing about the real library. Hit the real surface.
 
 ## Related terminology
