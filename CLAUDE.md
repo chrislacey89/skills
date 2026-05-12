@@ -124,6 +124,7 @@ When modifying a skill:
 - If a skill reconnects to the main pipeline, say exactly where it reconnects
 - If a skill advances an issue through lifecycle states, define those states and the minimum content required to move between them
 - If a skill can run HITL or AFK, say which mode is expected by default and what durable artifacts must exist before AFK execution is safe
+- Use American English spelling throughout: *behavior* not *behaviour*, *color* not *colour*, *initialize* not *initialise*, *center* not *centre*, *optimize* not *optimise*, *neighbor* not *neighbour*, etc. When forking an upstream skill that uses British spelling, convert it in the same change. Exceptions: proper nouns, book titles, and quoted material keep their original spelling.
 
 ## Shared reference files
 
