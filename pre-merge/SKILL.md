@@ -3,6 +3,7 @@ name: pre-merge
 description: "Primary pipeline review step after verified implementation. Use to create a PR with lineage and run architectural review before merge. Not for QA intake, planning, or implementation work."
 sources:
   secondary:
+    - "Software Requirements — Karl Wiegers & Joy Beatty"
     - "The Checklist Manifesto — Atul Gawande"
 ---
 
