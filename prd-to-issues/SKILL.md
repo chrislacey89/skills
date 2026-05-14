@@ -5,8 +5,9 @@ sources:
   primary:
     - "The Pragmatic Programmer — Hunt & Thomas"
   secondary:
-    - "Software Estimation — Steve McConnell"
     - "Designing Web APIs — Jin, Sahni, Shevat"
+    - "Software Estimation — Steve McConnell"
+    - "Software Requirements — Karl Wiegers & Joy Beatty"
 ---
 
 # PRD to Issues
@@ -210,9 +211,12 @@ Or "Nothing — this is a leaf node (no upstream dependencies)." if no dependenc
 
 Mark policy-driven criteria with `[POLICY]` — these encode current business rules that may change independently of the feature logic.
 
+Mark quality-attribute criteria with `[QA-<attribute>]` where `<attribute>` is one of `PERF`, `RELI`, `SEC`, `USAB`, `MAINT`. These criteria carry the SMART quality-attribute discipline forward from the parent PRD's §Implementation Decisions — each must be specific, measurable, attainable, relevant, and time-bounded. Name the verification mechanism (load test, fault-injection test, log-capture assertion, etc.) so `/pre-merge` can verify implementation reflects the declared criterion.
+
 - [ ] Criterion 1
 - [ ] Criterion 2
 - [ ] `[POLICY]` Criterion that reflects a current business rule rather than a stable requirement
+- [ ] `[QA-PERF]` p95 search latency under 200ms with 100 concurrent users, verified by load test in this slice
 
 ## Assumptions from Parent PRD
 

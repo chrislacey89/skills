@@ -7,6 +7,7 @@ sources:
   secondary:
     - "A Philosophy of Software Design — John Ousterhout"
     - "Software Estimation — Steve McConnell"
+    - "Software Requirements — Karl Wiegers & Joy Beatty"
     - "Thinking in Bets — Annie Duke"
     - "Thinking in Systems — Donella Meadows"
     - "Writing Effective Use Cases — Alistair Cockburn"
@@ -150,11 +151,10 @@ Before writing the pitch, verify the shaped work has all three properties:
 - **Uncertainty is honest**: If timeline or scope pressure exists, the pitch distinguishes the appetite target from any current estimate or commitment. It does not present a single-point date with false precision while major unknowns remain unresolved.
 - **Complete**: Before writing, scan for commonly omitted work that isn't covered by the user stories or rabbit holes. Omitted work — not underestimated work — is the primary driver of scope overruns. AI agents amplify this: Ralph doesn't stay late to add error handling nobody mentioned. It ships without it. Scan this checklist (30 seconds — check for relevance, don't exhaustively discuss each item):
   - Named-but-not-enumerated product-semantic content (rubrics, classification schemes, scoring criteria, taxonomies, role/permission matrices, decision rules) — if the PRD references a classification scheme by name without listing its members, enumerate it in §Implementation Decisions or declare a No-go. Phrases like "the 7 categories" or "the 4 tiers" are false-precision flags: definite-article confidence with the content still in the user's head, not in the PRD body.
-  - Error handling, failure modes, and assertion strategy for each integration point — where should the system fail fast rather than propagate corrupted state silently? If `docs/solutions/` shows past defect clusters in modules this feature touches, name them as Rabbit Holes with monitoring or assertion resolutions.
+  - Quality attributes (performance, reliability, security, usability, maintainability) — for each attribute the feature implies, state a SMART criterion in §Implementation Decisions (Specific, Measurable, Attainable, Relevant, Time-bounded), or declare a No-go. If no test can be written, the requirement defaults to whatever the agent happens to implement. Recast vague concerns as testable criteria: "monitor backend paths" → "every backend path emits a structured log event with request_id, latency_ms, and outcome; verified by log-capture integration test in slice X"; "fail fast rather than propagate corrupted state silently" → "on schema validation failure at the X integration point, the writer throws within 50ms; verified by a forced-bad-row test in slice Y"; "the feature is fast enough" → "p95 search latency under 200ms with 100 concurrent users, verified by load test in slice X." If `docs/solutions/` shows past defect clusters in modules this feature touches, the SMART criterion is the assertion or monitoring that would have caught the prior defect.
   - Auth/permission changes for new endpoints or data access
   - Database migrations or schema changes
   - Loading, empty, and partial states (UI features)
-  - Monitoring, logging, or observability for new backend paths
   - Data backfill or migration of existing records
   - Deployment or environment changes (new env vars, feature flags)
   - Cleanup of code paths being replaced
