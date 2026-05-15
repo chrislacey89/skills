@@ -152,6 +152,7 @@ These support or re-enter the main flow:
 - `/ts-audit`
 - `/help` — orientation skill that reads repo state and recommends the next pipeline skill
 - `/correct-course` — invocable backtracking skill for when an upstream artifact has gone stale
+- `/handoff` — invocable session-compaction skill for when no inter-skill compression artifact fits (mid-skill, exploratory, or cross-agent handoff); writes a transient doc at a `mktemp` path rather than inside the repo
 
 ### Infrastructure skills
 

@@ -1,10 +1,10 @@
 # Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-25-blue)
+![Skills](https://img.shields.io/badge/skills-26-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 25 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 26 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -90,6 +90,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 |-------|-------------|
 | [help](help/) | Read repo state and recommend the next pipeline step |
 | [correct-course](correct-course/) | Diagnose stale artifacts and walk the cleanup before backtracking |
+| [handoff](handoff/) | Compact the current session into a transient handoff doc when no pipeline artifact fits |
 
 ## Repo guide
 
