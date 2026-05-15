@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.10.0 — Add `/mermaid` side-route utility skill
+
+Adds `/mermaid` as a self-contained side-route utility for generating Mermaid diagram source (23 diagram types) for embedding in PRDs, research notes, issues, and architecture proposals. Adapted from [WH-2099/mermaid-skill](https://github.com/WH-2099/mermaid-skill) (snapshot 2026-05-15), with the render-verification recipe from [WH-2099/mermaid-skill#5](https://github.com/WH-2099/mermaid-skill/pull/5) by @rajatarya folded into the workflow because silent Mermaid syntax errors in markdown viewers make eyeballing insufficient.
+
+### Changes
+
+- **`/mermaid` SKILL.md** — adapted to repo conventions: triggering-focused `description` (when to invoke, when not to, side-route role), `Invocation Position` explaining how it sits beside the pipeline rather than inside it, numbered `Workflow`, diagram-type → reference table for all 23 types, `Output Specification`, `Verification` section with an `awk`-extract + `npx mmdc` render recipe plus a 7-row parse-pitfalls table, and a `Handoff` block. Drops upstream's slash-prompt scaffolding (`$ARGUMENTS`, `allowed-tools`, `argument-hint`) since skills in this pack are tool-invoked rather than templated slash prompts. American-spelling pass.
+- **`/mermaid/references/`** — 30 syntax reference files (one per diagram type, plus theming/directives/layouts/math/tidy-tree/examples) copied verbatim from upstream. No manifest entry needed: the skill is fully self-contained, so the `scripts/skill-references.manifest` system doesn't apply.
+- **`README.md`** — skill count badge and intro line bumped 24 → 25; new `mermaid` row added under Planning & Design.
+
+### Motivation
+
+Mermaid diagrams show up across the pipeline — sequence diagrams in PRDs, flowcharts in research notes, ER diagrams in issue bodies, C4 diagrams in architecture proposals — and the pack previously had no skill that codified diagram-type selection, syntax reference reading, or render-verification. Without a structured skill, agents either skip the diagram, freelance the syntax from training data (which goes stale and breaks silently in markdown viewers), or produce visually plausible but unrenderable Mermaid blocks. Porting an existing well-scoped skill is faster than authoring one from scratch, and folding in #5's verification step closes the silent-failure mode the upstream PR author hit in practice — generated diagrams that look right in chat but render as broken parse errors in Obsidian / GitHub / VS Code. The skill is deliberately a side-route, not a pipeline step: it produces no GitHub artifact, advances no pipeline state, and returns control to the invoking skill or conversation when done.
+
 ## v1.9.0 — Multi-slice branching defaults: subtractive fix to `/execute`, `/pre-merge`, `SYSTEM-OVERVIEW.md`
 
 Closes #25. Removes the hardcoded base-branch prescriptions across three pipeline artifacts so multi-slice PRDs with `Consumes from #N` runtime dependencies can stack PRs (Hammant Ch. 13: multiple PRs per story) without `/execute`'s stale-branch heuristic fighting them or `/pre-merge`'s diff step targeting the wrong base.
