@@ -90,6 +90,8 @@ Rank by strength of evidence — recent changes to the suspect path, structural 
 
 If the structural diagnosis reveals a deeper architectural problem, note it in the issue for follow-up via `/improve-codebase-architecture`.
 
+**Feedback-loop diagram (optional).** If a system archetype applies (shifting the burden, drift to low performance, fixes that fail, or any other named archetype from the catalog), consider invoking `/mermaid` to render the causal-loop diagram and embed it in the issue. Meadows' archetypes are canonically drawn in the source material; rendering them as prose loses part of what makes the archetype transferable to a reader pattern-matching their own failure. Skip when the archetype is named but its loop is one short causal step that prose already captures cleanly.
+
 ### 3. Identify the fix approach
 
 Run the proposed fix against the Step 2 feedback loop and confirm the loop now passes. If the loop still fails, your root cause identification is wrong — return to Step 2 and revise the hypothesis ranking. Only in the explicit "reproduction was genuinely impossible" branch from Step 2 may you skip this verification; in that case, restate that the root cause is a best-effort analysis based on code reading.

@@ -248,6 +248,8 @@ Explicit exclusions. Silence means "in scope," so anything the builder might rea
 - **[Place Name]**: [affordance 1], [affordance 2] -> connects to [Other Place]
 - **[Other Place]**: [affordance 3] -> connects to ...
 
+[Diagram suggestion: if this Flow Sketch describes ≥3 steps or any branching UI, consider invoking `/mermaid` to render the flow as a flowchart and embed it alongside the bullet list. The list stays authoritative; the diagram is a reading aid for downstream `/prd-to-issues` decomposition and `/execute` sessions resuming cold. Skip when the flow is short and linear enough that the bullets are already the cleanest rendering.]
+
 ## User Stories
 
 ### Must-haves

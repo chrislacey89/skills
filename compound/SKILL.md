@@ -179,6 +179,8 @@ volatility: evergreen | stable | volatile
 - **Inverts or does not apply when:** [The shapes where following this recommendation would produce the opposite of the intended outcome, or simply not help — e.g., "for N+1-step loops where the tool is non-terminal, the `stopWhen` list must exclude it; see `<sibling-doc>`"]
 - **Sibling docs:** [Links to `docs/solutions/` entries covering adjacent or inverted shapes, if any exist]
 
+[Diagram suggestion: if Rule Scope describes conditional applicability with ≥3 distinguishable branches (multiple Applies-when shapes, or several Inverts-or-does-not-apply shapes that diverge in different directions), consider invoking `/mermaid` for a decision diagram showing which conditions route to which recommendation. Skip when the rule is binary (one Applies-when, one Inverts-when) — prose is already the cleanest rendering at that size.]
+
 ## Solution
 
 [The actual fix. Include before/after code when it helps.]

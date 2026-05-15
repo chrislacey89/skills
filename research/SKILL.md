@@ -488,6 +488,8 @@ For each callback the feature implements:
 
 - `path/to/file.ts` — [What it does and how it's relevant]
 
+[Diagram suggestion: if research surfaces a multi-module architecture (≥3 modules with non-trivial connections, or a layering or boundary the recommended approach must respect), consider invoking `/mermaid` to sketch it — a flowchart or C4 diagram — and embed the source in this section alongside the list. The archive entry is consumed by `/execute` and Ralph AFK loops resuming cold, where a visual reduces the reconstruction cost; the list stays authoritative for grepping by file path. Skip when the architecture is a single module or a flat 2-module hop.]
+
 ## 🔗 Sources
 
 [Every API reference above must trace to one of these. Grouped by confidence.]
