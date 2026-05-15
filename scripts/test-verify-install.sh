@@ -67,7 +67,7 @@ output="$(bash "$script" "$install_dir" 2>&1)"
 rc=$?
 set -e
 assert_exit 0 "$rc" "exit 0 when all files present"
-assert_contains "$output" "11 reference(s) present" "reports count"
+assert_contains "$output" "12 reference(s) present" "reports count"
 
 # -----------------------------------------------------------------------------
 
