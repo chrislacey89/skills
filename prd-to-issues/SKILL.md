@@ -122,6 +122,8 @@ If a gap is found, don't just document it in this slice's `Consumes`. File a pos
 
 Do not force detailed schedule estimates into each issue. The goal is to surface slices that are still too ambiguous for credible commitment.
 
+**Dependency-graph diagram (optional).** Before finalizing the boundary map, if it has ≥2 Produces/Consumes entries across the decomposition, consider invoking `/mermaid` to render the cross-slice dependency graph as a flowchart and embed it alongside the existing lists. The lists stay authoritative — the diagram is a reading aid for reviewers and resumed-session agents who otherwise have to mentally compile the bullet structure back into a graph. Skip the diagram when the boundary map is thin enough that the lists are already the cleanest rendering.
+
 ### 5. Derive the Coverage Matrix
 
 **Skip this step when the PRD decomposes into a single slice.** For single-slice PRDs the boundary map + user-stories-covered field already serve as coverage; a matrix would be pure ceremony.
