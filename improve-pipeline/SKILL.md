@@ -254,6 +254,8 @@ Example:
 
 The `## Field Incident` and `## Why This Is a Pipeline Problem` sections carry the plain-language walkthrough for this artifact — a reader picking up the issue six months from now should be able to follow what happened and why it matters without opening the downstream repo. Meet the shape and revision bar in `references/writing-for-humans.md` (bundled alongside this skill): domain setup in the user's own words, a front-loaded lede, each recommended change motivated, and a `**Why it matters:**` signpost. The analytical sections (`## Advocate Case`, `## Skeptic Case`, `## Mediator Verdict`) sit beside the walkthrough and stay as tight bullets or short paragraphs — they are not another walkthrough.
 
+**Before writing the Recommended Changes table.** For each row with a target file, open the file and confirm the proposed structure exists — a row that says "add a Quick Reference table entry" is only valid if the target file has a Quick Reference table. Substance and placement are decided in the same read, not in two passes. For proposals that add a new skill bundling a `docs/`-rooted reference, the table must include a `scripts/skill-references.manifest` row alongside the SKILL.md and discovery-doc rows; the bundled-references invariant in `CLAUDE.md` § Shared reference files requires it, and `scripts/sync-skill-references.sh --check` will fail at commit time otherwise.
+
 Use this issue body template:
 
 ```markdown
