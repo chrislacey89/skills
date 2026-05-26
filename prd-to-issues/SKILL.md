@@ -66,6 +66,8 @@ For each slice, specify:
 
 **Contract-shape rendering.** When the parent PRD locks a schema, type alias, function signature, or structured input/output shape in code form (per `/write-a-prd`'s Implementation Decisions guidance), the slice's `Produces` field should reference it by location rather than re-render it. Re-render only when the slice introduces a contract shape the PRD did not lock. This keeps the PRD as the single source of truth for locked contracts and avoids drift between two surface forms of the same artifact.
 
+**On the Consumes side**, the same principle applies in mirror: when a slice consumes a contract shape produced by a sibling slice in a typed language (TypeScript, Rust, Python-with-stubs), the slice's `Consumes` field should **name the symbol and its location** — e.g. "From #N: `RunEvalResult` exported by `src/evals/run-experiment.ts`" — rather than re-render the shape in prose. The implementing agent then derives the consumer-side type via `import type` (or the equivalent), and the type system enforces N=1 between producer and consumer at compile time. The carve-out is cross-language Consumes — when the consumer cannot import the producer's type (e.g. a workflow YAML consuming a TS-defined constant), name the shared identifier and treat the prose as the contract; downstream review (`/pre-merge` Dimension 1) is the safety net there.
+
 Example — when the PRD's Implementation Decisions block locks a Drizzle schema:
 
 ```ts
@@ -121,6 +123,12 @@ If a gap is found, don't just document it in this slice's `Consumes`. File a pos
 - If the decomposition revealed materially more work than the PRD implied, should the plan be reshaped or re-estimated before issue creation?
 
 Do not force detailed schedule estimates into each issue. The goal is to surface slices that are still too ambiguous for credible commitment.
+
+**Shape-sufficiency check.** For each new contract this slice introduces in `Produces` (Zod schema, exported type or interface, function signature, storage method parameter shape, server-function return type), confirm the *shape* is rendered as code in the issue body, not just the *name* listed. If only the name appears, render the shape inline before finalizing the boundary map.
+
+The audit is binary: shape present or absent. Shape correctness is evaluated at the §6 Quiz step; shape presence is the prerequisite that lets the Quiz step do its job.
+
+This check exists because PRDs frequently sketch contract shapes in prose without locking them in code form (e.g., "exports a Zod schema with category_scores keyed by …"). The Contract-shape rendering subsection above covers two cases — PRD locked in code (reference by location) and slice introduces a contract the PRD did not lock (re-render). The third case — PRD sketched in prose without locking in code — is where this check fires when the rule's "did not lock" wording is read narrowly. The slice issue is the durable contract `/execute` and `/pre-merge` inherit; the shape lives in code form in the slice's `Produces` regardless of the PRD's surface form for it.
 
 **Dependency-graph diagram (optional).** Before finalizing the boundary map, if it has ≥2 Produces/Consumes entries across the decomposition, consider invoking `/mermaid` to render the cross-slice dependency graph as a flowchart and embed it alongside the existing lists. The lists stay authoritative — the diagram is a reading aid for reviewers and resumed-session agents who otherwise have to mentally compile the bullet structure back into a graph. Skip the diagram when the boundary map is thin enough that the lists are already the cleanest rendering.
 

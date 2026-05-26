@@ -115,6 +115,7 @@ For each Consumes entry:
 1. If it names a file path — check the file exists.
 2. If it names a function, type, or exported symbol — grep for the export.
 3. If it names a shape (e.g. "Effect Layer", "Zod schema", "React component", "Context provider") — confirm the *shape* matches, not just the name. A pure helper function does not satisfy a claim of "Effect Layer." A plain object does not satisfy a claim of "Zod schema."
+4. If the Consumes entry names a typed symbol from a sibling slice (per `/prd-to-issues` Boundary Map guidance), confirm the consumer code derives its input type from the producer via `import type` (or the language's equivalent) rather than re-declaring the shape. A local re-declaration that happens to match the producer is a DRY violation that will silently drift when the producer evolves; the typed import is the structural fix that makes that drift class impossible.
 
 If any Consumes symbol is missing or wrong-shaped, **stop**. The upstream boundary map is stale. Choose one of:
 
