@@ -66,6 +66,8 @@ For each slice, specify:
 
 **Contract-shape rendering.** When the parent PRD locks a schema, type alias, function signature, or structured input/output shape in code form (per `/write-a-prd`'s Implementation Decisions guidance), the slice's `Produces` field should reference it by location rather than re-render it. Re-render only when the slice introduces a contract shape the PRD did not lock. This keeps the PRD as the single source of truth for locked contracts and avoids drift between two surface forms of the same artifact.
 
+**On the Consumes side**, the same principle applies in mirror: when a slice consumes a contract shape produced by a sibling slice in a typed language (TypeScript, Rust, Python-with-stubs), the slice's `Consumes` field should **name the symbol and its location** — e.g. "From #N: `RunEvalResult` exported by `src/evals/run-experiment.ts`" — rather than re-render the shape in prose. The implementing agent then derives the consumer-side type via `import type` (or the equivalent), and the type system enforces N=1 between producer and consumer at compile time. The carve-out is cross-language Consumes — when the consumer cannot import the producer's type (e.g. a workflow YAML consuming a TS-defined constant), name the shared identifier and treat the prose as the contract; downstream review (`/pre-merge` Dimension 1) is the safety net there.
+
 Example — when the PRD's Implementation Decisions block locks a Drizzle schema:
 
 ```ts
