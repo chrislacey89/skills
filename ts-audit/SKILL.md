@@ -68,6 +68,15 @@ Select which books to load based on what's in the target. This keeps context lea
 
 Read each selected SKILL.md (path: `{LIB}/books/<name>/SKILL.md`) into context. These contain lookup tables, decision matrices, and anti-pattern catalogs that form the audit criteria.
 
+**Also consult these companion skills when the target uses Zod** (these live in `~/.claude/skills/`, not the library):
+
+| Skill | Load when |
+|-------|-----------|
+| `/zod` | Any source file in target imports `zod` — covers schema design, `safeParse`, `z.infer`, refinements, transforms, codecs, branded types, and v3→v4 migration concerns |
+| `/zod-testing` | Test files in target import `zod` or reference zod schemas — covers schema correctness, error assertion patterns, `z.toJSONSchema()` snapshots, and mock-data generation |
+
+Read each companion skill's `SKILL.md` (path: `~/.claude/skills/<name>/SKILL.md`) and any rule files it points at. Treat them as authoritative for Zod-specific findings the same way Total TypeScript books are authoritative for general type-system findings.
+
 ## Step 3: Analyze the code
 
 Work through each file and check against the loaded references. The categories below describe what to look for — the specific rules come from the library references you just loaded.
@@ -115,6 +124,26 @@ Work through each file and check against the loaded references. The categories b
 - Mutually exclusive props modeled as optional booleans instead of discriminated unions
 - Event handlers manually typed instead of derived from React types
 
+### Zod Schema Validation (`/zod`) — files importing `zod`
+
+- `parse()` at trust boundaries where `safeParse()` would let the caller branch on validation failure without exceptions
+- Hand-maintained TypeScript types alongside a Zod schema where `z.infer<typeof Schema>` would derive them from a single source of truth
+- `z.nativeEnum()` in code targeting Zod v4 (removed — use `z.enum()` over the values, or `z.literal` unions)
+- String formats expressed as `.refine(...)` regex when Zod v4's first-class formats (`z.email()`, `z.url()`, `z.uuid()`, `z.iso.datetime()`, etc.) apply
+- `.refine()` chains that mask which check failed — splitting into multiple `.refine()` calls with distinct messages, or moving to `.superRefine()` with `ctx.addIssue`, surfaces clearer error paths
+- Reading `.error.format()` for programmatic handling where `.error.issues` (the flat array) is the v4-preferred shape
+- Untyped `try/catch` around `parse()` — the thrown value is `ZodError`, not generic; `safeParse` + discriminant check preserves the typed error channel
+- Schemas defined inside hot paths (request handlers, render bodies) that should be hoisted to module scope so they aren't reconstructed per call
+
+### Zod Schema Testing (`/zod-testing`) — test files referencing zod schemas
+
+- Schemas without tests covering both the **valid-input accept** path and the **invalid-input reject** path
+- Error assertions that check only `expect(result.success).toBe(false)` without asserting on `result.error.issues[i].code` or `path` — the test passes for any rejection reason, not the intended one
+- Mock data hand-rolled inline when `zod-schema-faker` (or equivalent) would generate conforming fixtures from the schema itself
+- Missing boundary-value tests for `.min()`/`.max()` constraints (off-by-one edges)
+- Snapshot tests of API response shapes that could use `z.toJSONSchema(Schema)` as a structural assertion instead of brittle object snapshots
+- Integration tests that hit handlers with raw objects when the same handler accepts schema-parsed input — the test bypasses the validation it's meant to exercise
+
 ### Testing Patterns (testing-fundamentals, advanced-vitest-patterns, mocking-techniques) — test files only
 
 - Mocking that could use dependency injection
@@ -135,6 +164,8 @@ After catching the obvious issues above, make a second pass specifically looking
 **From react-ts-patterns (if loaded):** Look for components wrapping HTML elements that don't use `ComponentProps<"element">` to forward props. Check for mutually exclusive prop combinations modeled as separate optional props instead of a discriminated union. Look for manual event handler types that could be derived from React's event types.
 
 **From testing books (if loaded):** Look for `test.extend()` fixture opportunities where multiple tests share the same setup. Check for typed mock patterns — are mocks losing type information? Look for API calls being mocked inline that should use MSW for more realistic testing. Check if Effect-based code is being tested via `runPromise` + `rejects.toThrow()` instead of `runPromiseExit` which preserves the typed error channel.
+
+**From `/zod`, `/zod-testing` (if loaded):** Look for places where a Zod schema *and* a manually-declared TS type describe the same shape — `z.infer<typeof Schema>` collapses the drift surface. Look for `parse()` calls at system boundaries (HTTP handlers, form submissions, env var parsing) where `safeParse()` would let the caller respond gracefully instead of throwing. Check for v3-isms in v4 code (`nativeEnum`, custom regex for emails/URLs, `.error.format()` for programmatic flow). In test files, check that error assertions inspect `issues[i].code`/`path` — not just `success === false` — so the test actually pins down which validation failed. Watch for schemas reconstructed inside hot paths (request handlers, render bodies) that should be hoisted to module scope, and for handler/integration tests that bypass the schema layer they exist to verify.
 
 The goal of this second pass is to surface at least 1-2 findings per loaded library that go beyond what a developer would catch from general TypeScript knowledge alone. If a library's patterns genuinely don't apply to the target code, that's fine — skip it. But look carefully before deciding nothing applies.
 
