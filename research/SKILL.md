@@ -69,6 +69,7 @@ This phase takes 30-60 seconds and catches the most dangerous class of errors: s
    - Changed function signatures (sync → async)
    - Changed file conventions (pages/ → app/)
    - Changed import paths
+   - **Young features:** features the feature-under-research depends on that the changelog or docs flag as "Added in X.Y" / `experimental` / `beta` / `alpha`, where the gap from X.Y to the installed version is small (rough heuristic: introduced within ~6 months of the installed version's release). Surface these as a `📦 YOUNG FEATURE` flag listing the affected feature names — they need an upstream-issue-tracker audit in Phase 4 step 3 before the recommendation is finalized. Docs describe what is *supposed* to work and types describe what *compiles*; only the issue tracker describes what is *currently broken in version X.Y against integration Z*.
 
 4. **Check CLAUDE.md / AGENTS.md.** Read any existing project context files for version constraints or conventions that override default patterns.
 
@@ -199,7 +200,9 @@ Research the codebase and relevant technologies. Use sub-agents in parallel when
 
    **Citation required in the written output.** For each verified claim, record one of the following in the research document itself — not only in your reasoning: an official docs URL at the verified version, a file path and line number from `node_modules/<library>/**/*.d.ts`, or a grep result showing the behavior in the project's codebase. "I confirmed this works" without a traceable citation is not verification. The citation is what makes the research auditable by `/write-a-prd` and `/execute`. If you cannot produce a citation, mark the claim as `Uncertain` and elevate it to Phase 2 as a first-priority constraint.
 
-   **Calibrate filed-issue evidence.** When a citation originates from a filed GitHub issue (or equivalent bug tracker), verify (a) the issue state (open/closed), (b) whether a fix has shipped and in which released version, and (c) whether the current official docs for the installed version contradict the issue. Canonical current docs outrank filed issues when they conflict; closed or resolved issues are not evidence of current state unless you explicitly read the resolution. A filed issue is a hypothesis about a point in time, not a verdict about now — the cheapest counterfactual is to read the current docs page for the feature the issue describes.
+   **Calibrate filed-issue evidence.** The upstream issue tracker is a first-class source for what is *currently broken* — not what an API is *supposed* to be. When Phase 0 surfaced a `📦 YOUNG FEATURE` flag, run `gh issue list -R <upstream> --search "<feature-keyword>" --state all --limit 20` (or the platform equivalent) before finalizing the recommendation. Audit both open issues and recently-closed ones (closed issues often surface official workarounds or alternative patterns). Fold findings into the Options Evaluated section — a buggy-on-the-current-runtime path is evidence that may flip the recommendation.
+
+   Then, regardless of whether the audit was proactive or a citation arrived from elsewhere: when a citation originates from a filed GitHub issue (or equivalent bug tracker), verify (a) the issue state (open/closed), (b) whether a fix has shipped and in which released version, and (c) whether the current official docs for the installed version contradict the issue. Canonical current docs outrank filed issues when they conflict; closed or resolved issues are not evidence of current state unless you explicitly read the resolution. A filed issue is a hypothesis about a point in time, not a verdict about now — the cheapest counterfactual is to read the current docs page for the feature the issue describes.
 4. **Evaluate each option against constraints** — Score each option against the constraints from Phase 2. Be explicit about which constraints each option satisfies or violates.
 
 For each option investigated, ask:
@@ -496,6 +499,9 @@ For each callback the feature implements:
 
 **✅ Verified (official docs, matches installed version):**
 - [Source title](URL) — [What was learned]
+
+**✅ Verified (upstream issue tracker):**
+- [Search URL or issue list URL] — Audited on YYYY-MM-DD. Reviewed <N> open + <M> recently-closed issues. [Summary of what surfaced, or "Zero relevant issues found at <URL> on <date>" if the audit was empty.]
 
 **⚠️ Partially verified (community source, or version not exactly matched):**
 - [Source title](URL) — [What was learned, caveat]
