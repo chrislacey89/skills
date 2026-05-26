@@ -229,6 +229,8 @@ If the problem has a clear structural driver, state it briefly here — enough t
 
 If the solution designs against a library-provided callback (agent hooks, middleware, lifecycle methods, tool handlers), cite the **Library Callback Contracts** snapshot from `research.md` (Phase 1.25) by file:line. Do not describe the mechanism as "inject via X" or "pass Y" unless X and Y appear verbatim in the accepted return shape. An imagined mechanism that doesn't exist in the library's `.d.ts` is the class of drift `/research`'s Phase 1.25 exists to prevent.
 
+[Diagram suggestion: before leaving the Solution section, consider whether the content above would read more clearly as a diagram — a flowchart, sequence diagram, architecture sketch, state machine, decision tree, or before/after transformation. The lists and prose stay authoritative; a diagram is a reading aid for `/prd-to-issues` decomposition and `/execute` cold-start sessions. If yes, invoke `/mermaid`. Skip when the Solution is short and linear enough that the prose is already the cleanest rendering — the bar is whether a reader unfamiliar with the codebase would orient faster with the diagram than without it. This prompt is placed at Solution-end (not nested in Flow Sketch) so it fires regardless of whether the Solution took a UI-flow, architecture, refactor/swap, or state-machine shape — consolidating the prior Flow Sketch-gated trigger and the refactor/swap trigger proposed in #90 into a single shape-agnostic prompt.]
+
 ## Rabbit Holes
 
 Named risks with one-line pre-decided resolutions. These are the unknowns that could cause a 6-week project to take 18 weeks if left unexamined. By naming them here with a resolution, the builder doesn't have to make these calls under deadline pressure.
@@ -247,8 +249,6 @@ Explicit exclusions. Silence means "in scope," so anything the builder might rea
 
 - **[Place Name]**: [affordance 1], [affordance 2] -> connects to [Other Place]
 - **[Other Place]**: [affordance 3] -> connects to ...
-
-[Diagram suggestion: if this Flow Sketch describes ≥3 steps or any branching UI, consider invoking `/mermaid` to render the flow as a flowchart and embed it alongside the bullet list. The list stays authoritative; the diagram is a reading aid for downstream `/prd-to-issues` decomposition and `/execute` sessions resuming cold. Skip when the flow is short and linear enough that the bullets are already the cleanest rendering.]
 
 ## User Stories
 
