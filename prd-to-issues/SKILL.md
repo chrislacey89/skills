@@ -124,6 +124,12 @@ If a gap is found, don't just document it in this slice's `Consumes`. File a pos
 
 Do not force detailed schedule estimates into each issue. The goal is to surface slices that are still too ambiguous for credible commitment.
 
+**Shape-sufficiency check.** For each new contract this slice introduces in `Produces` (Zod schema, exported type or interface, function signature, storage method parameter shape, server-function return type), confirm the *shape* is rendered as code in the issue body, not just the *name* listed. If only the name appears, render the shape inline before finalizing the boundary map.
+
+The audit is binary: shape present or absent. Shape correctness is evaluated at the §6 Quiz step; shape presence is the prerequisite that lets the Quiz step do its job.
+
+This check exists because PRDs frequently sketch contract shapes in prose without locking them in code form (e.g., "exports a Zod schema with category_scores keyed by …"). The Contract-shape rendering subsection above covers two cases — PRD locked in code (reference by location) and slice introduces a contract the PRD did not lock (re-render). The third case — PRD sketched in prose without locking in code — is where this check fires when the rule's "did not lock" wording is read narrowly. The slice issue is the durable contract `/execute` and `/pre-merge` inherit; the shape lives in code form in the slice's `Produces` regardless of the PRD's surface form for it.
+
 **Dependency-graph diagram (optional).** Before finalizing the boundary map, if it has ≥2 Produces/Consumes entries across the decomposition, consider invoking `/mermaid` to render the cross-slice dependency graph as a flowchart and embed it alongside the existing lists. The lists stay authoritative — the diagram is a reading aid for reviewers and resumed-session agents who otherwise have to mentally compile the bullet structure back into a graph. Skip the diagram when the boundary map is thin enough that the lists are already the cleanest rendering.
 
 ### 5. Derive the Coverage Matrix
