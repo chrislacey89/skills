@@ -78,6 +78,7 @@ Generated Mermaid code must:
 3. Use semantic, human-readable node IDs and labels.
 4. Be indented and line-broken for readability.
 5. Use styling only when it materially improves clarity.
+6. For sequence, state, and entity-relationship diagrams destined for a theme-aware viewer (GitHub, Notion, etc.), prepend the contrast-safe `%%{init: ...}%%` directive from [`references/contrast-for-github.md`](references/contrast-for-github.md). Flowcharts and other diagram types do not need this — their default rendering reads correctly in both light and dark mode.
 
 ## Example
 
@@ -134,6 +135,10 @@ echo 'graph TD
 | Markdown links / wikilinks inside a node label | Not interpreted; renders as raw `[[...]]` | Move the link out of the diagram, or use plain text |
 
 **Quoting rule of thumb:** if a node label contains *any* of `()`, `[]`, `<`, `>`, `:`, `=`, `,`, `;`, `&`, or unbalanced quotes, wrap the whole label in double quotes (`["..."]` for rectangles, `{"..."}` for diamonds).
+
+### Contrast fast-check (theme-aware viewers only)
+
+If the diagram type is **sequence**, **state**, or **entity-relationship** and the destination is a theme-aware viewer (GitHub, Notion, etc.), scan the fenced block for the contrast-safe `%%{init: ...}%%` directive described in [`references/contrast-for-github.md`](references/contrast-for-github.md). 5-second visual check — no re-render required. `mmdc`'s default theme matches the agent's local environment, not the reader's, so a clean parse does not imply readable text on a dark-mode page. See the reference for the per-diagram templates and an optional dark-render SVG inspection if you want belt-and-braces.
 
 ## Handoff
 
