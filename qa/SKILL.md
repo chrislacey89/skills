@@ -35,6 +35,17 @@ Let the user describe the problem in their own words. Ask up to 2–3 short clar
 
 Do NOT over-interview. If the description is clear enough to file, move on.
 
+**Destination check (always ask last).** After symptom / reproducer / expected-vs-actual, ask one more question — the destination check from `references/destination-check.md`:
+
+> How will we know the fix worked end-to-end? Name the specific destination — a file/function, a log query, a dashboard view, a user-observable behavior, an assertion in a test — where the fix's effect must land.
+
+Record the answer as a `Verification destination:` line in the filed issue body (Step 4b template). Then consult `references/destination-check.md`'s signal table against the user's framing of the bug and the proposed fix. Count signals:
+
+- **Zero or one signal firing** → accept any non-empty answer and proceed.
+- **Two or more signals firing** AND the destination answer is vacuous (paraphrases the source-of-change, names "the code change exists", names emission without consumption, or is empty) → firmly recommend `/research` Phase 0 before filing. Phase 0 will grep the repo for the corresponding consumer/setup code; if it returns null, reshape the issue from "set the flag" to "wire the missing consumer" before any code is written. The user retains agency to file lightweight anyway, but the nudge surfaces the reachability constraint instead of leaving it in the developer's head.
+
+This catches source-vs-destination mismatch at intake — a fix that flips a producer-side value without verifying that any consumer reads it, a cache invalidation with no subscriber, a permission grant with no enforcer, a telemetry flag with no emission boundary registered in the target runtime. See `references/destination-check.md` for substantive vs vacuous examples and the full signal table.
+
 ### 2. Explore the codebase in the background
 
 While talking to the user, kick off an Agent (subagent_type=Explore) in the background to understand the relevant area. The goal is NOT to find a fix — it's to:
@@ -137,6 +148,10 @@ Use this template:
 2. [Use domain terms from the codebase, not internal module names]
 3. [Include relevant inputs, flags, or configuration]
 
+## Verification destination
+
+[The destination the fix's effect must reach, named in domain terms — a user-observable behavior, a log/trace observation, a dashboard view, an assertion in a test. Must be distinct from the proposed source-of-change. See `references/destination-check.md` for the substantive vs vacuous bar.]
+
 ## Additional context
 
 [A short plain-language walkthrough that frames the bug for a reader unfamiliar with the codebase: one paragraph of domain setup (what part of the system this touches, in the user's own words), the bug stated in plain English, and why it matters to a user or future maintainer. Skip the walkthrough for trivially-reproducible bugs with no domain nuance — a single line is fine there. Use domain language but don't cite files or line numbers. See `references/writing-for-humans.md` for the shape and revision bar.]
@@ -164,6 +179,10 @@ Use this template for each sub-issue:
 ## Steps to reproduce
 
 1. [Steps specific to THIS issue]
+
+## Verification destination
+
+[The destination this slice's fix must reach — domain-language, distinct from the source-of-change. See `references/destination-check.md`.]
 
 ## Blocked by
 

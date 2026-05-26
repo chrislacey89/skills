@@ -37,6 +37,12 @@ Get a brief description of the issue from the user. If they haven't provided one
 
 Do NOT ask follow-up questions yet. Start investigating immediately.
 
+**Destination check (carry through from `/qa` or ask now).** If this triage was delegated from `/qa`, the user has already answered the destination question and a `Verification destination:` line is attached to the report — carry it through into the issue (Step 5 template). If the triage was invoked directly without going through `/qa`, ask the destination question now from `references/destination-check.md`:
+
+> How will we know the fix worked end-to-end? Name the specific destination — a file/function, a log query, a dashboard view, a user-observable behavior, an assertion in a test — where the fix's effect must land.
+
+At triage rigor, the answer must be substantive — by the time deep diagnosis is running, the destination should be answerable concretely. A vacuous answer (paraphrases the source-of-change, names "the code change exists", names emission without consumption) is a stronger signal here than at `/qa` intake: it suggests the structural condition `references/destination-check.md` describes (source-level finding without destination-side framing) is in play, and Step 2 should explicitly grep for the consumer/setup code before generating hypotheses. Two-or-more signals firing on the signal table AND a vacuous answer → pause triage and recommend `/research` Phase 0 before continuing.
+
 ### 2. Explore and diagnose
 
 **Construct a deterministic feedback loop first.** Before any code analysis or hypothesis work, build a fast, agent-runnable, pass/fail signal that reproduces the failure the user described. This is the highest-leverage activity in this skill — every later step is guessing without it. The loop can be a failing test, a `curl` returning the wrong status, a script that prints a known-wrong value, or whatever the stack supports. It must:
@@ -143,6 +149,10 @@ Open with a short plain-language walkthrough (usually a single paragraph) that f
 - How to reproduce (if applicable)
 
 Skip the walkthrough only for narrow, self-evident failures whose domain meaning is obvious from the stack trace. See `references/writing-for-humans.md` for the shape and revision bar.
+
+## Verification destination
+
+[The destination the fix's effect must reach, named in domain terms — a user-observable behavior, a log/trace observation, a dashboard view, an assertion in a test. Distinct from the source-of-change. See `references/destination-check.md` for substantive vs vacuous examples. The TDD Fix Plan below should land its final passing assertion at this destination, not at a paraphrase of the source.]
 
 ## Root Cause Analysis
 
