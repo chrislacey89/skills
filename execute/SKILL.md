@@ -332,6 +332,19 @@ Example — if the AC says "user can reset their password via email":
 After the generated steps, always include:
 - [ ] Scope matches what was asked — no unasked-for additions, no missing pieces (this is the in-flight self-check; `/pre-merge`'s Surgical Scope dimension is the diff-time check that runs against the merged hunks)
 
+**Write verified status back to the issue (forcing function).** The slice issue's `## Acceptance Criteria` checklist — authored by `/prd-to-issues` — is the durable contract for "what must be true before this slice merges." Each time a criterion is confirmed verified (by your Step 4 verification or the user's confirmation here), persist that tick to the issue so the tracker reflects reality without anyone reading the chat log. This is not a separate "remember to do it" step: it rides on the verification you already performed, so there is no new judgment to make.
+
+Edit safely — toggle only the checkbox lines you actually verified, and never regenerate the body. `gh issue edit --body*` replaces the *entire* body, so read the current body, flip just the confirmed `- [ ]` lines to `- [x]`, and write it back via `--body-file`:
+
+```bash
+gh issue view <slice-issue-number> --json body -q .body > /tmp/issue-body.md
+# In /tmp/issue-body.md, change ONLY the verified criterion lines under
+# "## Acceptance Criteria" from "- [ ]" to "- [x]". Leave every other line untouched.
+gh issue edit <slice-issue-number> --body-file /tmp/issue-body.md
+```
+
+Do not flip a box you did not actually verify, and do not touch lines outside the criteria you confirmed — a careless edit can corrupt issue content. `/execute` is the single writer for these boxes; `/pre-merge` reads them but never writes, so there is no second editor to contradict this one.
+
 #### Ready for PR Review
 
 - [ ] Ready to create the PR and run architectural review now (flows directly into `/pre-merge`)?
@@ -349,6 +362,8 @@ Remove the classification markers:
 ```bash
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped"
 ```
+
+**AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 (read body, flip only confirmed `- [ ]` lines, write back). AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
 
 **Auto-invoke `/pre-merge`.** If Step 5 ran and the user confirmed the "Ready for PR Review" item, invoke `/pre-merge` now. If the task originated from a PRD issue, pass the issue number so `/pre-merge` can gather slice lineage and verify boundary map contracts without asking the user for it again. If the user answered "no" to the PR review item, or Step 5 was skipped entirely (AFK Ralph iterations, trivial-task flows that never reached a user checklist), `/execute` exits here and the user invokes `/pre-merge` manually when ready.
 
