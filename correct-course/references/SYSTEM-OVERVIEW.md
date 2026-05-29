@@ -134,7 +134,7 @@ Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot
 
 ### Step 5: /execute (HITL or AFK via Ralph)
 
-**What it does:** Executes the next concrete slice. In HITL mode, you run `/execute` directly on a specific issue. In AFK mode, Ralph acts as the runner/persona that repeatedly picks the next unblocked issue, invokes `/execute` + `/tdd`, commits, and iterates. Each AFK iteration is a fresh context window that reads the last commits and open issues.
+**What it does:** Executes the next concrete slice. In HITL mode, you run `/execute` directly on a specific issue. In AFK mode, Ralph acts as the runner/persona that repeatedly picks the next unblocked issue, invokes `/execute` + `/tdd`, commits, and iterates. Each AFK iteration is a fresh context window that reads the last commits and open issues — including their comment threads, where the previous iteration forwarded exact errors and partial-progress notes (the read side of the error-forwarding loop documented below).
 
 **Default progression:** Start with HITL Ralph, not AFK Ralph. Use HITL to refine the execution prompt, confirm the repo's quality bar is actually encoded in the workflow, and prove that slice boundaries and feedback loops are working. Go AFK only once the runner is reliably choosing the right next slice and producing reviewable commits without needing frequent rescue.
 

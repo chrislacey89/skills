@@ -133,6 +133,12 @@ This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror c
 
 Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understand the relevant files, patterns, and conventions. If the task is ambiguous, ask the user to clarify scope before proceeding.
 
+**Read the issue comment thread (issue-based work only).** When the task is a GitHub issue, read its comment thread before implementing — do not stop at the body. Step 0's issue-shape detection gate already ran `gh issue view <n> --comments`, so the thread is in context; reuse it rather than re-fetching. The comments are where the pipeline's continuation state lives: prior-iteration handoff notes (what was done, what remains, the exact error output a previous context window hit), plateau-stop notes naming what did *not* advance, post-hoc correction comments filed against this issue when an upstream boundary map drifted, and explicit human scope changes added after the issue was authored. In AFK Ralph loops this is load-bearing — iteration N+1 is designed to continue from what iteration N wrote into the thread, so skipping it re-derives or repeats work the previous iteration already explained.
+
+**Precedence rule.** The issue body remains the durable contract. Comments augment it; they do not silently override it. A comment is an authoritative addition only when it is (a) a pipeline-authored continuation or correction comment, or (b) an explicit human scope change. Freeform discussion is context, never an override. If a comment appears to contradict the body on scope, and it is not a clear pipeline-authored correction or human scope change, flag the conflict to the user rather than acting on the comment.
+
+Skip this read for one-off tasks not tied to a GitHub issue (the same scope guard Step 0 uses).
+
 **Read the research artifact for this feature.** The PRD's "Research Reference" section names where it lives — one of two locations depending on the project's `research.storage` mode:
 
 1. **Spike-issue mode** — the PRD references a closed `research`-labeled GitHub issue (`Refs #<spike-issue-number>`). Read it with:
