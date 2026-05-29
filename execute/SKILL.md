@@ -359,6 +359,8 @@ Do not flip a box you did not actually verify, and do not touch lines outside th
 
 Wait for the user to review and confirm. If they flag items that need fixing, address them, commit the fixes, and re-present the checklist. Only proceed to Step 6 after user confirmation.
 
+**Optional comprehension pass before review.** If the person who will merge this branch did not author it, or wants to internalize it commit-by-commit before approving, `/walk-commits` is an option *before* `/pre-merge` — an interactive per-commit walkthrough (intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off). It is optional and never auto-invoked; name it as a choice, do not run it automatically.
+
 **How the "Ready for PR Review" item drives the handoff:** If the user confirms this final item, Step 6 runs cleanup and then automatically invokes `/pre-merge` with the PRD issue number (if the task originated from one). If the user confirms the behavior, code quality, and acceptance criteria items but answers "no" to the PR review item — because they want to batch with more work, are waiting on external input, or plan to sit on the branch — Step 6 runs cleanup and `/execute` exits cleanly. The user invokes `/pre-merge` manually when ready.
 
 ### 6. Cleanup and Handoff
