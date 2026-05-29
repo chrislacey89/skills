@@ -337,10 +337,12 @@ After the generated steps, always include:
 Edit safely — toggle only the checkbox lines you actually verified, and never regenerate the body. `gh issue edit --body*` replaces the *entire* body, so read the current body, flip just the confirmed `- [ ]` lines to `- [x]`, and write it back via `--body-file`:
 
 ```bash
-gh issue view <slice-issue-number> --json body -q .body > /tmp/issue-body.md
-# In /tmp/issue-body.md, change ONLY the verified criterion lines under
+BODY_FILE=$(mktemp)  # unique per run — two parallel worktrees / Ralph iterations must not share a temp path
+gh issue view <slice-issue-number> --json body -q .body > "$BODY_FILE"
+# In "$BODY_FILE", change ONLY the verified criterion lines under
 # "## Acceptance Criteria" from "- [ ]" to "- [x]". Leave every other line untouched.
-gh issue edit <slice-issue-number> --body-file /tmp/issue-body.md
+gh issue edit <slice-issue-number> --body-file "$BODY_FILE"
+rm -f "$BODY_FILE"
 ```
 
 Do not flip a box you did not actually verify, and do not touch lines outside the criteria you confirmed — a careless edit can corrupt issue content. `/execute` is the single writer for these boxes; `/pre-merge` reads them but never writes, so there is no second editor to contradict this one.
