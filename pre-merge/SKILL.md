@@ -197,6 +197,8 @@ If a concern warrants deeper work, note: "Consider running `/request-refactor-pl
 
 If a finding looks like a behavioral bug, note: "Consider running `/qa` to verify." Do not file an issue.
 
+If the person about to merge did not author the diff — or hasn't internalized it commit-by-commit — note: "Consider running `/walk-commits` for an interactive per-commit comprehension walkthrough before merge." Do not invoke it. This is a comprehension/sign-off pass, distinct from the defect review above; it does not replace these findings.
+
 Omit any tier that has zero findings.
 
 **At the very end of Phase 4 output, print the runtime handoff line if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from:**
