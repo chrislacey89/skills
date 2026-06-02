@@ -159,7 +159,7 @@ For npm or yarn, skip this step — `only-allow` is only needed when enforcing p
 
 Ask the user: "Do you want a quality gate hook that runs feedback loops during editing? This catches issues while Claude works, not just at commit time."
 
-If yes, create `.claude/hooks/quality-gate.sh` and make it executable. This runs as a **PostToolUse** hook on `Write|Edit`, providing immediate feedback after each file change.
+If yes, create `.claude/hooks/quality-gate.sh` and make it executable. This runs as a **PostToolUse** hook on `Write|Edit`, providing immediate feedback after each file change. The first thing it does is anchor to `$CLAUDE_PROJECT_DIR` and no-op if that directory is gone — a hook firing from a worktree that was just torn down (e.g. during `/closeout`) must not emit false `MODULE_NOT_FOUND` errors from a vanished `node_modules`.
 
 **Detect available feedback loops first.** Check `package.json` scripts for `check`/`lint`, `tsc`/`typecheck`, and `test`/`vitest`. Only include loops that actually exist.
 
@@ -167,6 +167,16 @@ If yes, create `.claude/hooks/quality-gate.sh` and make it executable. This runs
 #!/bin/bash
 # Quality gate — runs after each Write/Edit to catch issues early.
 # Only runs on TypeScript/JavaScript files. Skips test/config files.
+
+# Anchor to the project root before running any feedback loop. If the
+# directory is gone — e.g. a worktree was removed out from under the
+# shell during /closeout teardown — no-op instead of emitting false
+# MODULE_NOT_FOUND errors from a vanished node_modules. A stranded cwd
+# must never masquerade as a lint/type failure.
+if [ -z "$CLAUDE_PROJECT_DIR" ] || [ ! -d "$CLAUDE_PROJECT_DIR" ]; then
+  exit 0
+fi
+cd "$CLAUDE_PROJECT_DIR" || exit 0
 
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
