@@ -42,6 +42,15 @@ The **appropriate base** is the repo's own base branch by default — whatever t
 
 Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
 
+**Enter the worktree as a session (when you created a worktree).** Creating the worktree is not the same as the session *running inside* it — `wt switch --create` resets the shell cwd back to the project root after each command, so without a further step the session stays anchored at the original checkout and the reported cwd lies about where work is happening. After creating the worktree, enter it with the harness `EnterWorktree` tool so the session's working directory genuinely *is* the worktree:
+
+- Call `EnterWorktree { path: <absolute-worktree-path> }`. The path must already appear in `git worktree list` for this repo (it will, because you just created it). This persistently switches the session into the worktree.
+- Keep the creation step exactly as above — `wt switch --create` / `git worktree add` runs the worktrunk `pre-start` hooks that seed `.env.local` and dependencies. `EnterWorktree` only switches the cwd; it does not run those hooks. Create first (to seed env/deps), then enter.
+- This puts the knowledge in the world, not the head: the cwd tells the truth about where edits and commits land (a watching operator can see it), and there is no per-command `cd` prefix to forget — eliminating the slip class where one un-prefixed command writes to the wrong tree.
+- The **Plain git** option (`git checkout -b`, no worktree) creates the branch in the current checkout — there is no worktree to enter, so skip `EnterWorktree` and work in place.
+
+**AFK / headless fallback.** If `EnterWorktree` is unavailable (headless runs, AFK Ralph, cron), fall back to cwd-prefix discipline: the shell cwd resets to the project root after every Bash command, so prefix every Bash call in this session with `cd <absolute-worktree-path> &&`. Use this only when the harness tool is genuinely unavailable — it is the old workaround, retained for environments without the native mechanism.
+
 This worktree's teardown is owned by `/closeout` at the pipeline tail — after the PR merges, `/closeout` re-anchors the shell to the base checkout, removes the worktree, and prunes the merged branch. `/execute` is the inflow side of the worktree lifecycle; `/closeout` is the outflow. Step 6 cleanup below removes only the `.tdd-*` markers — it deliberately does not remove the worktree.
 
 **After creating the worktree, set it up.** A new worktree inherits tracked files but not git-ignored ones (`.env.local`, per-worktree deps, build caches). Two paths:
@@ -65,7 +74,7 @@ install = "pnpm install"
 
 - [ ] Git-ignored config copied — `.env.local` (and any other `.env.*`, `*.local`, or project-specific ignored config) exists in the worktree
 - [ ] Dependencies installed — install command (`pnpm install`, `npm ci`, etc.) ran without error in the worktree
-- [ ] cwd discipline set — shell cwd resets to the session's project root after every Bash command; every Bash call in this session will prefix `cd <absolute-worktree-path> &&`
+- [ ] Session is inside the worktree — `pwd` reports the worktree path because you entered it via `EnterWorktree { path }` (not the project root). In the AFK/headless fallback only, this item instead means the `cd <absolute-worktree-path> &&` prefix is being applied to every Bash call
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] TDD marker absent — `.claude/.tdd-active` and `.claude/.tdd-skipped` do not exist in the worktree (fresh slate; Step 3 creates them)
 
