@@ -42,6 +42,8 @@ The **appropriate base** is the repo's own base branch by default — whatever t
 
 Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
 
+This worktree's teardown is owned by `/closeout` at the pipeline tail — after the PR merges, `/closeout` re-anchors the shell to the base checkout, removes the worktree, and prunes the merged branch. `/execute` is the inflow side of the worktree lifecycle; `/closeout` is the outflow. Step 6 cleanup below removes only the `.tdd-*` markers — it deliberately does not remove the worktree.
+
 **After creating the worktree, set it up.** A new worktree inherits tracked files but not git-ignored ones (`.env.local`, per-worktree deps, build caches). Two paths:
 
 **Preferred — configure once via worktrunk hooks** (`.config/wt.toml` in the project):
@@ -363,7 +365,7 @@ Wait for the user to review and confirm. If they flag items that need fixing, ad
 
 ### 6. Cleanup and Handoff
 
-All commits should already be done by this point. This step handles post-implementation cleanup and the transition to `/pre-merge`.
+All commits should already be done by this point. This step handles post-implementation cleanup and the transition to `/pre-merge`. It removes only the classification markers — it deliberately does **not** tear down the worktree or branch. That is `/closeout`'s job at the pipeline tail, after the PR merges; removing the worktree here would destroy the branch before it is reviewed and merged.
 
 Remove the classification markers:
 
