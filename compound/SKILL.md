@@ -1,6 +1,6 @@
 ---
 name: compound
-description: "Primary pipeline closeout step after merge or a high-value fix. Use to capture durable lessons in docs/solutions/ so future /research and /write-a-prd runs improve. Not for trivial edits with no reusable project-level learning."
+description: "Primary pipeline knowledge-capture step after merge or a high-value fix. Use to capture durable lessons in docs/solutions/ so future /research and /write-a-prd runs improve. Not for trivial edits with no reusable project-level learning, and not for the merge/teardown itself (that's /closeout)."
 sources:
   primary:
     - "Living Documentation — Cyrille Martraire"
