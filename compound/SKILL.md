@@ -1,6 +1,6 @@
 ---
 name: compound
-description: "Primary pipeline closeout step after merge or a high-value fix. Use to capture durable lessons in docs/solutions/ so future /research and /write-a-prd runs improve. Not for trivial edits with no reusable project-level learning."
+description: "Primary pipeline knowledge-capture step after merge or a high-value fix. Use to capture durable lessons in docs/solutions/ so future /research and /write-a-prd runs improve. Not for trivial edits with no reusable project-level learning, and not for the merge/teardown itself (that's /closeout)."
 sources:
   primary:
     - "Living Documentation — Cyrille Martraire"
@@ -22,6 +22,8 @@ When the work surfaced planning or estimation surprises, capture those too. McCo
 This is a primary pipeline skill at the end of the default delivery loop.
 
 Use `/compound` after a feature ships, after a high-value bug fix lands, or after a meaningful QA or review cycle exposes a lesson that future work should reuse.
+
+The merge and worktree teardown are owned by `/closeout`, not `/compound` — "shipped" means `/closeout` has merged the reviewed PR. `/compound` runs after that and never performs the merge itself.
 
 Do not use it for trivial edits or for lessons that belong entirely in a higher-fidelity artifact like a test, linter rule, or code comment without any durable project-level learning.
 
@@ -306,7 +308,8 @@ During review, check each document's **Shelf Life** section. If the expiration c
 
 ## Handoff
 
-- **Expected input:** shipped work, solved bugs, or meaningful lessons from implementation, QA, or review
+- **Expected input:** shipped work (the PR merged by `/closeout`), solved bugs, or meaningful lessons from implementation, QA, or review
 - **Produces:** durable `docs/solutions/` knowledge that feeds future `/research` and `/write-a-prd` sessions
-- **Closes the loop on:** `/pre-merge` and shipped implementation work
+- **Comes after:** `/closeout` — which performs the merge and worktree teardown; `/compound` captures the lesson, it does not merge
+- **Closes the loop on:** `/pre-merge`, `/closeout`, and shipped implementation work
 - **What comes next:** future features should consult the compounded knowledge during discovery, research, and shaping

@@ -88,7 +88,7 @@ Use when:
 ## Default pipeline
 
 ```text
-/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → cleanup
+/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /closeout (merge + teardown) → /compound → cleanup
 ```
 
 Treat this as the default route, not a prison. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the default route at `/research`. The workflow supports branch points and deliberate backtracking.
@@ -130,6 +130,7 @@ These are the direct-entry stages in the main delivery path:
 - `/prd-to-issues`
 - `/execute`
 - `/pre-merge`
+- `/closeout`
 - `/compound`
 
 `/execute` is the execution stage in this list, but it may run either HITL or AFK depending on how complete the upstream artifacts are.
@@ -241,6 +242,10 @@ For milestone-planned work, `/research` should consume the selected feature issu
 ### `/pre-merge`
 
 - a PR with lineage and an architectural review readout
+
+### `/closeout`
+
+- a merged PR and a clean base: worktree torn down, branch pruned, base pulled, end state verified
 
 ### `/compound`
 

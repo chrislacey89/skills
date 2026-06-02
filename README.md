@@ -1,10 +1,10 @@
 # Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-27-blue)
+![Skills](https://img.shields.io/badge/skills-28-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 27 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 28 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -35,7 +35,7 @@ npx skills@latest update   # pull latest versions
 ## Canonical pipeline
 
 ```
-/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → cleanup
+/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /closeout (merge + teardown) → /compound → cleanup
 ```
 
 The pipeline is the default path, not a prison. Skills can backtrack when assumptions fail or branch to helper and side-route skills when the work demands it. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the normal pipeline at `/research`. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step — it stops on repeated failure *or* repeated non-progress, whichever trips first.
@@ -82,6 +82,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [qa](qa/) | Single entry point for bug conversations; files lightweight issues and delegates per-issue to `/triage-issue` for deep diagnosis |
 | [pre-merge](pre-merge/) | Author-mode: create the PR and run an architectural review before merge. Reviewer-mode (`--pr <n>`): review someone else's PR and draft comment text |
 | [walk-commits](walk-commits/) | Interactive commit-by-commit comprehension walkthrough before merge — intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off (optional, recommended by `/pre-merge`) |
+| [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
 
