@@ -21,7 +21,7 @@ What we explicitly reject:
 ## The Pipeline
 
 ```
-/shape → /research (always, depth-calibrated) → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → cleanup
+/shape → /research (always, depth-calibrated) → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /closeout (merge + teardown) → /compound → cleanup
 ```
 
 The pipeline order is the default path, not a prison. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step. For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features each needing their own research-PRD cycle — `/shape` can branch to `/create-milestone`, which creates a planning milestone plus feature issues that move from `roadmap bet` to `research-ready` to `prd` before re-entering the default path at `/research`. For big-batch work (6 weeks) that fits a single PRD, `/write-a-prd` creates a lightweight container milestone to organize the PRD and its downstream slice issues. If `/research` invalidates assumptions from `/shape`, return to `/shape`. If `/research` invalidates assumptions from a milestone feature, backtrack to `/create-milestone` or `/shape` depending on the blast radius. If `/write-a-prd` reveals the problem was misunderstood, return to `/research`. If `/prd-to-issues` reveals materially more work than the appetite supports, return to `/write-a-prd` and reshape. Backtrack deliberately rather than patching forward with stale assumptions.
@@ -178,6 +178,18 @@ Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot
 
 **Skill:** Custom `/pre-merge` skill.
 
+### Step 7.5: /closeout (new — owns merge + worktree teardown)
+
+**What it does:** Takes the reviewed PR and returns the workspace to a clean base. Confirms intent (never auto-merges), verifies the PR is pushed, mergeable, and approved, then merges it. Re-anchors the shell to the base checkout *before* removing the worktree — the load-bearing ordering that prevents a removed worktree from stranding the running shell and making a `node_modules`-dependent Stop hook emit false `MODULE_NOT_FOUND` failures. Prunes the merged branch, pulls the base branch, and verifies the *outcome* (on base, clean tree, PR merged, worktree gone, branch pruned) rather than merely that cleanup ran.
+
+**Why it exists:** `/execute` creates a worktree per slice but nothing removed one, so the worktree stock rose without bound — Meadows' remedy for an inflow-without-outflow stock is to add the missing feedback loop, not to exhort harder. The merge→teardown→pull sequence lived only in the user's memory, which Norman names the wrong place for critical procedure ("prospective memory fails silently"); the skill moves it into the world. It orchestrates existing tools (`gh pr merge`, `wt remove` / `git worktree remove`, `commit-commands:clean_gone`) and introduces no filesystem state.
+
+**Boundary:** `/closeout` owns the git-hygiene half of the tail. It does *not* capture lessons (that is `/compound`) and does *not* close issues or supersede the research artifact (that is Step 9). HITL-confirmed and non-blocking — it operationalizes an already-optional tail.
+
+**Output:** Merged PR, torn-down worktree, pruned branch, pulled base, verified clean end state.
+
+**Skill:** Custom `/closeout` skill (new).
+
 ### Step 8: /compound (new)
 
 **What it does:** After the feature ships, captures what was learned into `docs/solutions/`. Reviews the git log, issue thread, and diff to identify the most important lessons — root causes, prevention strategies, patterns, key decisions. Applies a 4-question pre-filter before capturing: is this novel, will it last, could it live closer to the source, and (for bug fixes) was the process fixed? Reviews the PRD's Rabbit Holes against actual outcomes — ones that bit are high-value compound targets. For bug fixes, classifies the defect origin phase (specification/design/coding error) and splits prevention into code-level (tests, assertions) vs. process-level (pipeline step changes). Flags systemic defect patterns when 3+ solutions share the same root cause. Also checks for scope accuracy lessons and captures patterns so future planning improves. When a milestone's feature issues are all complete, close the GitHub milestone and optionally capture tranche-level lessons if they add reusable knowledge.
@@ -189,6 +201,8 @@ Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot
 **Skill:** Custom `/compound` skill (enhanced with Living Documentation principles).
 
 ### Step 9: Cleanup
+
+The git-hygiene half of cleanup — merging the PR, tearing down the worktree, pruning the merged branch, and pulling the base — is owned by `/closeout` (Step 7.5). This step covers the remaining, GitHub-native half; `/closeout` defers to it rather than duplicating it.
 
 **What it does:** Close the PRD issue and any remaining slice issues as shipped, and confirm the research artifact's frontmatter still reflects the versions/decisions that landed. If a version bumped during implementation, supersede the existing artifact with a new dated one (new archive file, or new spike issue) rather than editing the existing one — snapshot semantics depend on each artifact being immutable. The original artifact persists (outside the repo for archive mode, in GitHub for spike-issue mode) and is never deleted at this step — stale-trust protection lives in the frontmatter and supersession discipline, not in deletion.
 
@@ -265,7 +279,7 @@ Everything lives in `.claude/skills/`. No external dependencies. You own all cop
 
 Use this taxonomy consistently:
 
-- **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
+- **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/closeout`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
 - **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`, `/handoff`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
@@ -282,7 +296,8 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
 | `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
 | `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit | `/pre-merge` (auto-invoked after Step 5 PR-review confirmation) |
-| `/pre-merge` | Verified implementation ready to review (author-mode), or an existing PR number to review (reviewer-mode via `--pr <n>`) | PR with lineage plus architectural review readout (author-mode), or draft PR comment text shaped by `references/comment-craft.md` (reviewer-mode) | Merge, then `/compound` only when a durable lesson emerged |
+| `/pre-merge` | Verified implementation ready to review (author-mode), or an existing PR number to review (reviewer-mode via `--pr <n>`) | PR with lineage plus architectural review readout (author-mode), or draft PR comment text shaped by `references/comment-craft.md` (reviewer-mode) | `/closeout` to merge and tear down |
+| `/closeout` | Reviewed, mergeable PR from `/pre-merge` on a feature branch (worktree or plain checkout) | Merged PR, torn-down worktree, pruned branch, pulled base, verified clean end state | `/compound` when an uncaptured lesson is worth recording, then Step 9 issue-closing |
 | `/compound` | Shipped work or meaningful lesson from review or QA | `docs/solutions/` entry with volatility and Shelf Life | Future `/research` and `/write-a-prd` consult it |
 | `/api-design-review` | API-shaped uncertainty from `/research` or `/write-a-prd` | Contract verdict, compatibility class, must-lock decisions | Returns to the calling skill |
 | `/design-an-interface` | Module problem with multiple plausible shapes | Contrasted interface options with a recommendation | Returns to caller (usually `/write-a-prd`) |
@@ -314,7 +329,8 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 - `/setup-ralph-loop` is auto-invoked by `/execute` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist — prepares `ralph-once.sh` and bounded `ralph.sh` for HITL-to-AFK execution
 - `/prd-to-issues` → `/execute`, with Ralph optionally running the AFK execution loop for unblocked slices, then QA and `/pre-merge`
 - `/execute` → `/pre-merge` after verification — auto-invoked at the end of Step 6 when Step 5's manual verification checklist ran and the user confirmed the "Ready for PR Review" item; AFK Ralph iterations and trivial-task flows that skipped Step 5 exit cleanly for manual `/pre-merge` invocation. `/execute` delegates to `/tdd` when backend work benefits from strict red-green-refactor.
-- `/pre-merge` → merge → `/compound`
+- `/pre-merge` → `/closeout` (merge + worktree teardown) → `/compound`
+- `/closeout` merges the reviewed PR, re-anchors the shell to the base checkout *before* removing the worktree, prunes the merged branch, pulls base, and verifies a clean end state; it owns the git-hygiene half of the `merge`/`cleanup` tail and hands the issue-closing + research-artifact half to Step 9. HITL-confirmed; never auto-merges
 - `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about Skill Kit itself rather than the downstream project; `/improve-pipeline` is advisory and files against `chrislacey89/skills`
 - `/qa` is the single entry point for bug conversations and feeds bug work back into `/execute`; it delegates per-issue to `/triage-issue` when a specific bug needs root-cause diagnosis, then returns to its own loop
 - `/request-refactor-plan` and `/improve-codebase-architecture` produce refactor work that can re-enter at `/execute`
@@ -336,6 +352,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 ├── prd-to-issues/SKILL.md          # Issue decomposition (enhanced — boundary maps in each issue)
 ├── execute/SKILL.md                # Execution (enhanced — verification ladder, solutions lookup, React/Next.js references, delegates to /tdd)
 ├── pre-merge/SKILL.md              # PR creation + architectural review before merge (new)
+├── closeout/SKILL.md               # Merge the reviewed PR + tear down the worktree + return to a clean base (new)
 ├── compound/SKILL.md               # Knowledge capture after ship (new — CE-inspired)
 │
 │  ── INFRASTRUCTURE ────────────────────────────────────────────────────
@@ -437,6 +454,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Write tests first | `/tdd` for strict red-green-refactor, usually delegated from `/execute` |
 | Run a QA session or report bugs | `/qa` — single entry point for bug conversations; files lightweight GitHub issues in domain language and delegates per-issue to `/triage-issue` when a specific bug needs root-cause diagnosis |
 | Review and create PR before merge | `/pre-merge` — creates PR with PRD lineage, runs architectural review |
+| Merge a reviewed PR and return to a clean base | `/closeout` — confirm, merge, switch off the worktree before removing it, prune the merged branch, pull base, verify a clean end state |
 | Improve Skill Kit itself | `/improve-pipeline` — capture a pipeline-level lesson as a GitHub issue in `chrislacey89/skills` after loading canonical Skill Kit context |
 | Investigate a specific bug deeply | Start with `/qa` — its Step 3.5 depth check delegates to `/triage-issue` for root-cause analysis, structural diagnosis, and a TDD fix plan that flows into `/execute` |
 | Plan a refactor | `/request-refactor-plan` — tiny commits RFC as GitHub issue, then implement via `/execute` |

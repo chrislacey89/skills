@@ -15,7 +15,7 @@ This repo is not an application — there is no build system, test runner, or de
 Skills compose into an ordered pipeline for taking a feature from idea to shipped:
 
 ```
-/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → merge → /compound → cleanup
+/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /closeout (merge + teardown) → /compound → cleanup
 ```
 
 This summary is here so skill authors can keep handoffs consistent. For work that requires multiple independent PRDs, `/shape` may branch to `/create-milestone`, which creates a planning milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the default path at `/research`. For big-batch work (6 weeks) that fits a single PRD, `/write-a-prd` creates a lightweight container milestone and attaches the PRD issue to it; `/prd-to-issues` then propagates the milestone to all slice issues. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step. The canonical rationale, state model, and recovery rules live in `SYSTEM-OVERVIEW.md`.
@@ -44,6 +44,7 @@ Key interactions between skills:
 - `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (deterministic, not LLM-dependent); `/execute` Step 6 removes it after commit — a PreToolUse hook blocks `.ts` file writes unless the classification gate was passed
 - `/prd-to-issues` produces boundary maps (Produces/Consumes) that `/execute` reads to understand interfaces
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
+- `/closeout` owns the `merge`/`cleanup` git-hygiene tail after `/pre-merge`: confirm → merge the reviewed PR → re-anchor the shell to the base checkout *before* removing the worktree → prune the merged branch → pull base → verify a clean end state. It is HITL-confirmed (never auto-merges), orchestrates existing tools (`gh pr merge`, `wt remove`/`git worktree remove`, `commit-commands:clean_gone`), introduces no filesystem state, and defers lesson capture to `/compound` and issue-closing + research-artifact hygiene to SYSTEM-OVERVIEW Step 9
 - `/compound` runs after ship to capture lessons into `docs/solutions/` — this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes
 - `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about Skill Kit itself rather than the downstream project; `/improve-pipeline` files a GitHub issue in `chrislacey89/skills` and is advisory until the user approves follow-on implementation
 - When backtracking to an earlier skill, stale artifacts (research archive entries, PRD issues, slice issues) must be explicitly updated or superseded before proceeding forward — `/correct-course` is the invocable front door for this, and the canonical rules live in SYSTEM-OVERVIEW.md "Pipeline Recovery". Archive entries are superseded by a new dated file, not deleted.
@@ -53,7 +54,7 @@ Key interactions between skills:
 
 Use these categories consistently across the repo:
 
-- **Primary pipeline skills** — direct-entry steps in the default delivery path, plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/compound`
+- **Primary pipeline skills** — direct-entry steps in the default delivery path, plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/closeout`, `/compound`
 - **Invoked helper skills** — usually not top-level entry points for a feature, but delegated when a narrower decision is unresolved: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
 - **Side-route skills** — valid alternate or supporting paths beside the main pipeline: `/qa`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/help`, `/correct-course`, `/handoff`
 - **Infrastructure skills** — project setup or safety tooling, not normal delivery steps: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
