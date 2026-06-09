@@ -51,12 +51,13 @@ Run this as a do-confirm checklist (Gawande): perform each step, then verify its
 
 Before the merge/teardown sequence, determine whether this repo's isolation is **host-owned** (Conductor, Codespaces, devcontainers). When it is, `/closeout` still performs the GitHub-native merge but **does not** tear down the worktree or prune the local branch — the host owns that half of the lifecycle, and fighting it is Meadows' policy-resistance (two actors pushing the same stock). Cede the worktree stock to the host.
 
-Outflow detection is **stricter than `/execute`'s inflow check** and must *not* use the generic "toplevel ≠ primary working tree" heuristic alone: a *pipeline-made* worktree also satisfies that test, so the generic signal cannot distinguish "host owns teardown" from "the pipeline made this and must tear it down." Key off an explicit signal only:
+Outflow detection is **stricter than `/execute`'s inflow check** and must *not* use the generic "toplevel ≠ primary working tree" heuristic alone: a *pipeline-made* worktree also satisfies that test, so the generic signal cannot distinguish "host owns teardown" from "the pipeline made this and must tear it down." Resolve from `.claude/settings.json` `worktree.provisioning` (default `"auto"` when absent), and honor an explicit override at this end exactly as `/execute` does at the inflow:
 
-- `.claude/settings.json` `worktree.provisioning: "host"`, **or**
-- a host environment variable is present — `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`.
+- **`host`** — cede teardown unconditionally.
+- **`pipeline`** — the pipeline owns teardown. Run the full Steps 4–6 below *even if a host env var is present* — an explicit `pipeline` setting means `/execute` provisioned the worktree itself, so `/closeout` must tear it down (the pre-host behavior). A host env var does not override an explicit `pipeline` choice.
+- **`auto`** (default) — cede teardown only if a host environment variable is present: `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`. Never cede on the generic "toplevel ≠ primary" signal alone.
 
-If neither holds (including `worktree.provisioning: "auto"` with no host env var), the pipeline owns teardown — run the full Steps 4–6 below as written.
+If teardown is not ceded (including `worktree.provisioning: "auto"` with no host env var), the pipeline owns it — run the full Steps 4–6 below as written.
 
 When isolation is host-owned, `/closeout` runs a reduced sequence:
 
