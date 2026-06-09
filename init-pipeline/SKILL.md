@@ -262,6 +262,32 @@ Append these lines if not already present:
 
 `.claude/.ralph-checked` is reserved here but created by `/setup-ralph-loop`, which is auto-invoked by `/execute` when a multi-slice task needs AFK bounds or may be run manually. `/init-pipeline` does not create the marker itself.
 
+### 7. Worktree provisioning mode (optional)
+
+`/execute` Step 0 and `/closeout` consult an optional `.claude/settings.json` key, `worktree.provisioning`, to decide whether the *pipeline* owns worktree provisioning and teardown or whether the *host* environment does. It mirrors the existing `research.storage` precedent — a single, in-repo, authoritative representation of an environment fact (Hunt/Thomas, DRY) rather than env-sniffing scattered across skills.
+
+- `"auto"` (default when the key is absent) — `/execute` stands down if a host env var is present (`CONDUCTOR_WORKSPACE_PATH`, `CODESPACES`, `REMOTE_CONTAINERS`) or the current tree is not the repo's primary working tree; otherwise it provisions via worktrunk or plain git.
+- `"host"` — isolation is always host-owned. `/execute` works in place; `/closeout` merges but cedes worktree teardown and branch pruning to the host.
+- `"pipeline"` — the pipeline always provisions and tears down (the pre-host behavior).
+
+```json
+{
+  "worktree": {
+    "provisioning": "host"
+  }
+}
+```
+
+**Scaffold `host` when running inside a host environment.** If `/init-pipeline` runs while a host env var is set, write `worktree.provisioning: "host"` explicitly — the env var that disambiguates is available at scaffold time, and an explicit setting is more robust than re-deriving it on every `/execute`:
+
+```bash
+if [ -n "$CONDUCTOR_WORKSPACE_PATH" ] || [ -n "$CODESPACES" ] || [ -n "$REMOTE_CONTAINERS" ]; then
+  : # merge {"worktree":{"provisioning":"host"}} into .claude/settings.json
+fi
+```
+
+Merge into existing settings — do not overwrite. When no host env var is present, leave the key unset (`auto` is the safe default for un-hosted repos, where the pipeline should provision).
+
 ## Verification
 
 Before considering setup complete, check:
@@ -274,6 +300,7 @@ Before considering setup complete, check:
 - [ ] Hook manager config exists (e.g. `lefthook.yml`)
 - [ ] Pre-commit hooks run successfully
 - [ ] `.gitignore` has marker entries
+- [ ] If running inside a host environment (Conductor/Codespaces/devcontainer), `.claude/settings.json` has `worktree.provisioning: "host"`; otherwise the key is left unset (`auto`)
 - [ ] No existing project settings were overwritten
 
 ## Handoff
