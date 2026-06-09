@@ -47,6 +47,24 @@ It is HITL-confirmed and non-blocking: it operationalizes an already-optional ta
 
 Run this as a do-confirm checklist (Gawande): perform each step, then verify its outcome before the next. The destructive steps (4–6) are self-guarded — confirm the safety preconditions in Step 2 hold before running them.
 
+### 0. Host-provisioned isolation? Cede teardown first
+
+Before the merge/teardown sequence, determine whether this repo's isolation is **host-owned** (Conductor, Codespaces, devcontainers). When it is, `/closeout` still performs the GitHub-native merge but **does not** tear down the worktree or prune the local branch — the host owns that half of the lifecycle, and fighting it is Meadows' policy-resistance (two actors pushing the same stock). Cede the worktree stock to the host.
+
+Outflow detection is **stricter than `/execute`'s inflow check** and must *not* use the generic "toplevel ≠ primary working tree" heuristic alone: a *pipeline-made* worktree also satisfies that test, so the generic signal cannot distinguish "host owns teardown" from "the pipeline made this and must tear it down." Resolve from `.claude/settings.json` `worktree.provisioning` (default `"auto"` when absent), and honor an explicit override at this end exactly as `/execute` does at the inflow:
+
+- **`host`** — cede teardown unconditionally.
+- **`pipeline`** — the pipeline owns teardown. Run the full Steps 4–6 below *even if a host env var is present* — an explicit `pipeline` setting means `/execute` provisioned the worktree itself, so `/closeout` must tear it down (the pre-host behavior). A host env var does not override an explicit `pipeline` choice.
+- **`auto`** (default) — cede teardown only if a host environment variable is present: `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`. Never cede on the generic "toplevel ≠ primary" signal alone.
+
+If teardown is not ceded (including `worktree.provisioning: "auto"` with no host env var), the pipeline owns it — run the full Steps 4–6 below as written.
+
+When isolation is host-owned, `/closeout` runs a reduced sequence:
+
+- **Step 3 (merge) still runs in full** — `gh pr merge --delete-branch`. Conductor and similar hosts create the PR but leave the *merge* to a human action; the pipeline performing the GitHub-native merge is the value it adds, and the host reflects the result. The deferral is scoped to filesystem teardown, **never** the merge.
+- **Skip Step 4's re-anchor, Step 5's `wt remove` / `git worktree remove` / `ExitWorktree { remove }`, and Step 6's local-branch prune** — the host owns the worktree and branch lifecycle (Conductor reclaims them when the workspace is archived). Never `--force` against a host-managed tree.
+- **Step 8's checklist:** "Worktree gone" and "Branch pruned" become **"N/A — host-managed."** The merge, clean-tree, and PR-merged checks still apply.
+
 ### 1. Confirm intent and gather state
 
 Never auto-merge. State what you are about to do and get an explicit go-ahead.
@@ -115,7 +133,7 @@ git switch <base-branch>
 
 Either way, confirm the shell is no longer inside the feature worktree before proceeding.
 
-### 5. Remove the worktree (only if one was created)
+### 5. Remove the worktree (only if one was created — skip when isolation is host-owned, Step 0)
 
 Now that the shell is anchored to the base checkout, removing the worktree is safe:
 
@@ -127,7 +145,7 @@ git worktree remove <worktree-path>     # plain git
 
 If the worktree has uncommitted or untracked changes you have not accounted for, `git worktree remove` will refuse — investigate rather than forcing `--force`. (Everything reviewed in the PR is already merged; anything left behind is unexpected.)
 
-### 6. Prune the merged branch
+### 6. Prune the merged branch (skip when isolation is host-owned, Step 0)
 
 The local feature branch (and its now-`[gone]` remote-tracking ref) is dead weight after merge. Prune it:
 
@@ -153,8 +171,8 @@ Confirm the *outcome*, not that the steps ran. All must be true:
 - [ ] On the base branch — `git branch --show-current` reports the base.
 - [ ] Working tree clean — `git status --short` is empty.
 - [ ] PR merged — `gh pr view <number> --json state -q .state` reports `MERGED`.
-- [ ] Worktree gone — the feature worktree no longer appears in `git worktree list`.
-- [ ] Branch pruned — the feature branch no longer appears in `git branch`.
+- [ ] Worktree gone — the feature worktree no longer appears in `git worktree list`. (N/A — host-managed — when isolation is host-owned, Step 0.)
+- [ ] Branch pruned — the feature branch no longer appears in `git branch`. (N/A — host-managed — when isolation is host-owned, Step 0.)
 
 Report the end state in one short block. If any check fails, say which and stop — a half-clean state is exactly the failure mode this skill exists to prevent.
 
@@ -190,7 +208,7 @@ A run of `/closeout` is not complete until:
 - the user explicitly confirmed the merge before it ran
 - the PR reports `MERGED`
 - the shell was re-anchored to the base checkout *before* the worktree was removed
-- the feature worktree (if one existed) is gone from `git worktree list` and the merged branch is pruned
+- the feature worktree (if one existed) is gone from `git worktree list` and the merged branch is pruned — or, when isolation is host-owned (Step 0), teardown and pruning were correctly ceded to the host while the merge still ran
 - the base branch was pulled and the working tree is clean on the base branch
 - the end state was reported, and remaining tail work (`/compound` if a lesson is uncaptured, Step 9 issue-closing) was named in the handoff
 
