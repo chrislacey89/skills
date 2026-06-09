@@ -29,9 +29,23 @@ Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the probl
 
 **Branch isolation gate.** Before any implementation work, ensure you are working on a clean branch created for this specific task — not a leftover feature branch from previous work.
 
+**Isolation already provided — stand down (check this first, before the numbered rules).** Some environments hand the session a dedicated, isolated worktree+branch *before* `/execute` runs — Conductor workspaces, GitHub Codespaces, devcontainers, and similar hosts each provision "one workspace = one branch, auto-forked from the base," with setup scripts already run. When that is the case the pipeline does not own provisioning: creating a worktree here would nest one *inside* the host's, and the host's branch (named for the *workspace*, not the task) is not "stale." Read the environment's signal and cede the worktree to whoever already owns it (Norman — read the world's signifier instead of carrying an in-head assumption that the pipeline always provisions; Meadows — one actor per stock, so the pipeline *defers* rather than adding a competing manager).
+
+Resolve the provisioning mode from `.claude/settings.json` `worktree.provisioning` — `"host" | "pipeline" | "auto"`, default `"auto"` when the key is absent (mirroring the existing `research.storage` precedent):
+
+- **`host`** — isolation is host-owned. Stand down unconditionally.
+- **`pipeline`** — the pipeline provisions. Skip this stand-down and run the numbered gate below.
+- **`auto`** (default) — stand down if *either* signal fires:
+  - a host environment variable is present — `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`. This is the cheapest, primary discriminator: the pipeline's only detection mechanism is Bash, and these vars are visible in the agent's shell. (Do **not** detect via a `.conductor` directory in the cwd — Conductor keeps it under `$CONDUCTOR_ROOT_PATH`, not the workspace.)
+  - the current working tree is not the repo's primary working tree — `git rev-parse --show-toplevel` differs from the first path in `git worktree list --porcelain`.
+
+When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. Continue to the issue-shape gate.
+
+This stand-down is deliberately *asymmetric* with `/closeout`'s teardown check. Inflow only needs to answer *"am I already isolated?"* — generic detection (toplevel ≠ primary) and the env-var hint each settle that. The outflow question — *"who owns teardown?"* — is stricter and cannot rely on the generic heuristic alone, because a pipeline-made worktree also satisfies toplevel ≠ primary; `/closeout` keys off the explicit setting or host env var only.
+
 1. Check the current branch: `git branch --show-current`
 2. If the current branch is the base branch (e.g., `main`, `prod`, `master`), create a new feature branch for this task.
-3. If the current branch is a **different feature branch** (not the base branch and not a branch named for this task), you are on a stale branch from previous work. Do not commit new work here. **Exception:** if the current branch is a sibling slice branch named in this task's `Consumes from #N` declaration, you are intentionally about to fork from it for a stacked-PR slice — proceed.
+3. If the current branch is a **different feature branch** (not the base branch and not a branch named for this task), you are on a stale branch from previous work. Do not commit new work here. **Exception:** if the current branch is a sibling slice branch named in this task's `Consumes from #N` declaration, you are intentionally about to fork from it for a stacked-PR slice — proceed. **Exception (host-provisioned):** if the stand-down check above fired, this branch is the host's isolated workspace branch — it is not stale; work in place.
 
 **To create an isolated branch**, use one of these approaches (in order of preference):
 
