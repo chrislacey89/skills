@@ -76,6 +76,8 @@ Each pipeline skill should end with a clear transition statement:
 
 If a skill can branch, the branch condition should be explicit. Example: `/shape` normally hands off to `/research`, but branches to `/create-milestone` when the work requires multiple independent PRDs. Example: `/write-a-prd` creates a container milestone for big-batch appetite before creating the PRD issue. If a skill advances an issue through maturity states, name them explicitly (`roadmap bet` → `research-ready` → `prd`) so downstream skills do not guess what artifact they are consuming.
 
+At branch-point handoffs (and high-frequency control-yield seams like `/execute` → `/pre-merge`), offer the next step as an `AskUserQuestion` menu rather than leaving the user to retype a command — see `docs/next-step-menu.md` for when this applies and how to shape the options. The menu *renders* the `What comes next` line and *composes with* existing auto-invokes; it does not replace them, and it never appears on linear single-successor handoffs or AFK runs.
+
 ## Conversational Principles
 
 **One question per turn.** When a skill needs to ask the user multiple questions, ask one question at a time and wait for the answer before asking the next. Never present a numbered list of questions, a bulleted set of questions, or multiple questions in a single message. This applies to every phase of every skill — discovery, constraint confirmation, review, and closing. The goal is a genuine back-and-forth conversation, not a form to fill out.

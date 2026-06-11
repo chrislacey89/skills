@@ -218,3 +218,5 @@ A run of `/closeout` is not complete until:
 - **Produces:** the PR merged, the worktree torn down, the merged branch pruned, the base branch pulled, and a verified clean end state — no filesystem state introduced
 - **May invoke:** `/compound` when a durable lesson emerged and was not already captured on the PR
 - **Comes next by default:** `/compound` (only when an uncaptured lesson is worth recording) and the `SYSTEM-OVERVIEW.md` Step 9 cleanup prose (close the PRD and slice issues, confirm research-artifact frontmatter). After that, the loop is closed — `/help` when you return to the repo.
+
+**Next-step menu.** With the merge done and a clean base reached, offer the tail as a menu rather than leaving it to recall (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first: **→ `/compound` (capture a lesson)** when an uncaptured lesson is worth recording, **Done — clean base reached**, **`/help`**. The platform's free-text "Other" option is the escape hatch — don't add one.
