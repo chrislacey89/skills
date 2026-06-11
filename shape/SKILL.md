@@ -136,6 +136,8 @@ Hand off to `/research` by default. For work that requires multiple independent 
 - **Carries forward:** choices, assumptions with their confidence tags, impositions, and structural signals
 - **Comes next by default:** `/research`, or `/create-milestone` when the shaped work requires multiple independent PRDs
 
+**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first: **→ `/research` (recommended)**, **→ `/create-milestone` (multiple independent PRDs)**, **Keep shaping**. The platform's free-text "Other" option is the escape hatch — don't add one.
+
 ## What to Avoid
 
 **Premature solutioning.** Don't jump to "how to implement" before "what to build" is clear. If the user starts discussing database schemas before the problem is established, gently redirect: "Let's nail down what this needs to do for the user before we decide how to build it."

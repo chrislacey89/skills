@@ -402,6 +402,8 @@ rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.td
 
 **Auto-invoke `/pre-merge`.** If Step 5 ran and the user confirmed the "Ready for PR Review" item, invoke `/pre-merge` now. If the task originated from a PRD issue, pass the issue number so `/pre-merge` can gather slice lineage and verify boundary map contracts without asking the user for it again. If the user answered "no" to the PR review item, or Step 5 was skipped entirely (AFK Ralph iterations, trivial-task flows that never reached a user checklist), `/execute` exits here and the user invokes `/pre-merge` manually when ready.
 
+**Next-step menu at the manual exits.** When `/execute` stops *without* auto-invoking `/pre-merge` — the user answered "no" to the PR-review item, or is batching more work — do not drop to a bare text box. Offer the next step as a single `AskUserQuestion` (see `references/next-step-menu.md`) with the recommended step first: **→ `/pre-merge` now (recommended)**, **Batch more work / exit**, **`/walk-commits` first**. Beyond the pipeline successor, include 1–3 follow-ups drawn from *this* run — e.g. "verify acceptance criterion N in the running app," "show the diff for the riskiest change" — mirroring `/walk-commits`'s commit-specific deep-dives. The platform's free-text "Other" option is the escape hatch — don't add one. This menu **does not** apply when Step 5 already confirmed PR review (auto-invoke handles that) or on AFK Ralph iterations (no user to ask).
+
 **Print the runtime handoff line.** Whether `/pre-merge` is auto-invoked or the user is exiting to invoke it manually later, print the line so a fresh session can open by copy-paste:
 
 ```
