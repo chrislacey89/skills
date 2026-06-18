@@ -37,10 +37,19 @@ If the question is genuinely ambiguous and the user isn't reachable, default to 
 3. **No persistence by default.** State lives in memory. Persistence is the thing the prototype is *checking*, not something it should depend on. If the question explicitly involves a database, hit a scratch DB or a local file with a clear "PROTOTYPE — wipe me" name.
 4. **Skip the polish.** No tests beyond the spike's own assertion (FEASIBILITY only), no error handling beyond what makes the prototype *runnable*, no abstractions. The point is to learn something fast and then delete it.
 5. **Surface the state or the verdict.** LOGIC re-renders state after every action; UI shows the variant on every switch; FEASIBILITY emits a pass/fail verdict from the test runner or a single observable outcome from the scratch route.
-6. **Delete or absorb when done.** When the prototype has answered its question, either delete it or fold the validated decision into the real code — don't leave it rotting in the repo. For FEASIBILITY specifically, the spike is deleted in the same change that captures the verdict; the verdict is what persists, not the spike.
+6. **Delete or absorb when done.** When the prototype has answered its question, either delete it or fold the validated decision into the real code — don't leave it rotting in the repo. For FEASIBILITY specifically, the spike is deleted in the same change that captures the verdict; the verdict is what persists, not the spike. *Carve-out:* when the spike's captured **output** (not its verdict) is a foreseeable downstream asset — a later slice will consume it as a test fixture — preserve that artifact deliberately; see "Preserve reusable captured output" under **When done**.
 
 ## When done
 
 The *answer* is the only thing worth keeping from a prototype. Capture it somewhere durable (commit message, ADR, issue, the research artifact's assumption tag, or a `NOTES.md` next to the prototype) along with the question it was answering. If the user is around, that capture is a quick conversation; if not, leave the placeholder so they (or you, on the next pass) can fill in the verdict before deleting the prototype.
 
 For FEASIBILITY spikes specifically, the verdict folds back into the calling skill's artifact: `/research` downgrades the assumption tag (e.g. `Uncertain` → `Verified` or `Refuted`), and `/execute` proceeds, pivots, or files a `/correct-course` depending on the answer.
+
+### Preserve reusable captured output
+
+The verdict is always what persists; the spike itself is disposable scaffolding by default, and most spike output genuinely is — delete it. But a FEASIBILITY spike sometimes captures **output** that is itself the cheapest source of a downstream asset: recorded HTTP responses, sample payloads, challenge-page HTML, golden files. When such output is a *foreseeable* downstream consumer's input — a later slice will commit it as a test fixture — preserve that artifact deliberately, distinct from and in addition to the verdict. Either:
+
+- **Commit it as a fixture now** in its real home (e.g. `fixtures/`), with a one-line note on where it came from and when, so the consuming slice's "captures available" assumption is *true* rather than caught-false at execution time; or
+- **Record the exact re-capture recipe** alongside the verdict (the command, the source, any auth/IP conditions) when the artifact can't or shouldn't be committed, so the slice can regenerate it deterministically instead of re-deriving how.
+
+This is a narrow exception, not a license to hoard. Preserve only when a *named* downstream consumer makes the output an asset; verdict-only discipline stays the default for ordinary spikes (Rule 6), where preserving output speculatively just bloats the repo with stale captures. The signal you preserve here is what `/prd-to-issues` and `/execute` rely on when a slice's assumption depends on a spike artifact rather than its verdict.
