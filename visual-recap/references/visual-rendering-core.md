@@ -112,7 +112,10 @@ A minimal serializer (hand-roll per artifact; this is the shape, not a shipped l
       const verdict = el.dataset.verdict || ''; // e.g. needs-change, 🟡
       const note = (el.querySelector('[data-feedback-note]')?.value || '').trim();
       if (!verdict && !note) return;            // skip untouched units
-      lines.push(`- ${kind}#${id}: ${verdict}${note ? ' — "' + note + '"' : ''}`);
+      const parts = [];                         // em-dash separates verdict from note,
+      if (verdict) parts.push(verdict);         // and only appears when both are present —
+      if (note) parts.push('"' + note + '"');   // so a verdict-less question serializes as
+      lines.push(`- ${kind}#${id}: ${parts.join(' — ')}`); // `question#q-1: "…"`, per §4
     });
     return lines.join('\n');
   }
