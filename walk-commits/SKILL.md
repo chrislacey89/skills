@@ -115,6 +115,19 @@ Mark each commit 🟢 / 🟡 / 🔴:
 
 Omit a line when it genuinely has nothing (e.g. "Looks odd on purpose:" on a boring commit) — empty scaffolding is padding.
 
+#### Optional: render the commit as a line-anchored callout
+
+The card above is chat text by default, and for most commits that is the right altitude. But when a commit's riskiest line or deliberate oddity is hard to grasp *out of context* — a subtle change inside a long hunk, a multi-file commit whose pieces only make sense together — render that single commit as a focused, line-anchored callout using the shared **`references/visual-rendering-core.md`** rendering core (the same core `/visual-recap` authors against). The card's fields map straight onto the core's blocks: the **riskiest line** and **looks-odd-on-purpose** entries become `callout`s anchored to the real after-side lines of `git show <hash>`, and the **sign-off** becomes a `signoff-<short-hash>` unit.
+
+This is an enhancement, not a new default — keep it optional and keep the stepper:
+
+- **Reach for it** only when the line genuinely reads better shown in its hunk than described in prose. A boring commit does not earn an HTML file (Norman, *featuritis*).
+- **Grounding holds.** The callout's line numbers and hunk text are copied from `git show`, never retyped; you write only the note. Visual emphasis must not exceed the real change (the core's Lie Factor ≤ 1 rule).
+- **Route answers through the copy-text button.** When a commit is rendered this way, the merger's sign-off and any per-callout response are captured by the core's **Copy feedback** button into the `recap-feedback v1` block (keyed by the stable `signoff-<short-hash>` / `c-<file-slug>-L<line>` ids) and pasted back — instead of, or alongside, the `AskUserQuestion` answer. Promote anything durable to a GitHub PR review comment.
+- **Transient artifact.** The HTML is written to a gitignored `.context/` or `mktemp` path and deleted when the walkthrough ends — per the core's transient-artifact rule. What persists is the 🟢/🟡/🔴 sign-off, not the file.
+
+The `AskUserQuestion` stepper below remains the spine of the walkthrough; the callout is a per-commit zoom you opt into, not a replacement for it.
+
 ### 3. Step the loop with AskUserQuestion
 
 After each commit's card, advance the walkthrough with a single `AskUserQuestion` (one question per turn — never a menu of separate questions). Offer:
