@@ -285,7 +285,7 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/closeout`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/help`, `/correct-course`, `/handoff`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Handoff Table
@@ -315,6 +315,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/ubiquitous-language` | Terminology ambiguity or competing domain terms | `UBIQUITOUS_LANGUAGE.md` with decisions register | Returns to the caller workflow |
 | `/ts-audit` | TypeScript or React files to audit | Structured findings report grouped by category | `/execute` or `/pre-merge` |
 | `/walk-commits` | Finished branch ready to merge, plus the base branch to diff against | Reviewer comprehension and per-commit sign-off (🟢/🟡/🔴) with open items to resolve — a decision, not a durable file | `/closeout` to merge and tear down, then `/compound` only when a durable lesson emerged |
+| `/visual-recap` | Finished diff, PR, or branch to comprehend, plus the base branch to diff against | Transient self-contained interactive HTML recap (file-tree + change flags, annotated split diffs with line-anchored callouts, before/after, reused Mermaid) and the reviewer's copied-back feedback, with durable items promoted to GitHub PR review comments | `/closeout` to merge and tear down, then `/compound` only when a durable lesson emerged |
 | `/help` | Uncertainty about current pipeline position | Next-step recommendation with a one-line reason | The recommended next skill |
 | `/correct-course` | Invalidated artifact or changed assumption | Blast-radius diagnosis and artifact cleanup plan | The earliest skill that needs to re-run |
 | `/handoff` | Long session with no natural compression artifact — mid-skill, exploratory, side-route, or non-pipeline work | Transient handoff doc at a `mktemp` path; references existing artifacts by path, URL, or issue number | Fresh session opened by the user with the doc as input |
@@ -341,7 +342,8 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 - `/request-refactor-plan` and `/improve-codebase-architecture` produce refactor work that can re-enter at `/execute`
 - `/improve-pipeline` captures Skill Kit improvement proposals as GitHub issues in `chrislacey89/skills`, then optionally flows into reviewed implementation of the named repo changes
 - `/ts-audit` produces type-safety findings that can feed into `/execute` for fixes or inform `/pre-merge` architectural review
-- `/walk-commits` is an optional commit-by-commit comprehension walkthrough at the `/pre-merge` → merge boundary; `/pre-merge` Phase 4 recommends it (without invoking) when the person merging didn't author the diff, and `/execute` Step 5/6 names it as an option before `/pre-merge`. It produces reviewer comprehension and sign-off, not defect findings, and never auto-runs
+- `/walk-commits` is an optional commit-by-commit comprehension walkthrough at the `/pre-merge` → merge boundary; `/pre-merge` Phase 4 recommends it (without invoking) when the person merging didn't author the diff, and `/execute` Step 5/6 names it as an option before `/pre-merge`. It produces reviewer comprehension and sign-off, not defect findings, and never auto-runs. It may optionally render a per-commit card as a line-anchored callout via the shared `docs/visual-rendering-core.md`
+- `/visual-recap` is an optional side-route at the same `/pre-merge` → merge boundary: it renders a finished diff/PR/branch as a transient self-contained interactive HTML recap (line-anchored callouts, before/after, reused `/mermaid`) so a reviewer who didn't author the change can grasp its shape before reading lines. `/pre-merge` Phase 4 may recommend it like `/walk-commits`; it is never auto-invoked, skips small/obvious diffs, finds no defects (that stays `/pre-merge`), and the HTML is transient (gitignored `.context/` or `mktemp`, never committed). It shares the `docs/visual-rendering-core.md` rendering core (vocabulary, copy-text feedback serializer, Grounding Rule, secret-redaction, Tufte quality bar) with `/walk-commits`
 - `/help` reads repo state and recommends the next pipeline skill with a one-line reason — advisory only, never runs the next skill itself
 - `/correct-course` diagnoses stale artifacts when an upstream assumption fails, walks the cleanup, and hands off to the earliest skill that needs to re-run
 - `/handoff` is invoked ad-hoc when no inter-skill compression artifact covers the situation (mid-skill, exploratory, non-pipeline work, or cross-machine/cross-agent handoff); it is not part of any default path and is not a substitute for the `**Next session:**` runtime line primary skills already emit
@@ -405,6 +407,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 │   ├── SKILL.md
 │   └── evals/
 ├── walk-commits/SKILL.md           # Interactive commit-by-commit comprehension walkthrough before merge (optional, recommended by /pre-merge)
+├── visual-recap/SKILL.md           # Render a finished diff/PR/branch as a transient interactive HTML recap with line-anchored callouts (optional, never auto-invoked)
 ├── help/SKILL.md                   # Read repo state and recommend the next pipeline skill (advisory only)
 └── correct-course/SKILL.md         # Diagnose stale artifacts and walk the cleanup when an upstream assumption fails
 ```
@@ -462,6 +465,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Run a QA session or report bugs | `/qa` — single entry point for bug conversations; files lightweight GitHub issues in domain language and delegates per-issue to `/triage-issue` when a specific bug needs root-cause diagnosis |
 | Review and create PR before merge | `/pre-merge` — creates PR with PRD lineage, runs architectural review |
 | Understand a branch commit-by-commit before merging it | `/walk-commits` — interactive per-commit walkthrough (intent, riskiest line, deliberate oddities, what's absent by design) with 🟢/🟡/🔴 sign-off; optional, recommended by `/pre-merge`, distinct from its defect review |
+| See the shape of a multi-file change before reading lines | `/visual-recap` — render a finished diff/PR/branch as a transient self-contained interactive HTML recap with line-anchored callouts, before/after, and a copy-text feedback loop; optional, never auto-invoked, skips small/obvious diffs, comprehension not defect-finding |
 | Merge a reviewed PR and return to a clean base | `/closeout` — confirm, merge, switch off the worktree before removing it, prune the merged branch, pull base, verify a clean end state |
 | Improve Skill Kit itself | `/improve-pipeline` — capture a pipeline-level lesson as a GitHub issue in `chrislacey89/skills` after loading canonical Skill Kit context |
 | Investigate a specific bug deeply | Start with `/qa` — its Step 3.5 depth check delegates to `/triage-issue` for root-cause analysis, structural diagnosis, and a TDD fix plan that flows into `/execute` |
