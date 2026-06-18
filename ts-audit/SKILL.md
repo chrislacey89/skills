@@ -171,6 +171,15 @@ The goal of this second pass is to surface at least 1-2 findings per loaded libr
 
 ## Step 4: Generate the report
 
+### Redact secrets before writing the report
+
+The report quotes source code verbatim, and it is a portable artifact — users paste it into a PR, drop it in chat, or hand it to another agent. Source files routinely carry secrets, so masking is not optional and not best-effort: run this pass on every snippet *before* it goes into the report.
+
+- Mask the *value* of any line matching a high-signal secret shape — `*_KEY`, `*_SECRET`, `*_TOKEN`, `*_PASSWORD`, `AKIA…`, `sk-…`, `ghp_…`, `xox[baprs]-…`, bearer tokens, `postgres://user:pass@…` and other credentialed URIs, PEM blocks.
+- Keep the *key*, mask the value — `STRIPE_SECRET_KEY=sk_live_••••••••` keeps the finding legible without leaking the credential. The type pattern is what the finding is about; the secret is not.
+- When in doubt, redact. A masked line the reader can ask about is recoverable; a leaked one in a copied report is not.
+- If you masked anything, say so once near the top of the report ("N value(s) masked") so the reader knows the artifact is sanitized, not incomplete.
+
 Structure the report as markdown:
 
 ```markdown
@@ -207,7 +216,7 @@ _Source: <library book name(s)>_
 **Grouping:** by category (Type Safety, Generics, etc.), not by file. Within each category, order findings by file path then line number.
 
 **What to include in each finding:**
-- The actual code snippet (keep it focused — just the relevant lines)
+- The actual code snippet (keep it focused — just the relevant lines), with secret values masked per the redaction step above
 - A concrete suggested replacement, not just "consider using X"
 - A brief explanation referencing the specific concept from the library
 
