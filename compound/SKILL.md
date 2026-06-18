@@ -1,6 +1,6 @@
 ---
 name: compound
-description: "Primary pipeline knowledge-capture step after merge or a high-value fix. Use to capture durable lessons in docs/solutions/ so future /research and /write-a-prd runs improve. Not for trivial edits with no reusable project-level learning, and not for the merge/teardown itself (that's /closeout)."
+description: "Primary pipeline knowledge-capture step that closes the compounding loop. Capture a durable lesson in docs/solutions/ onto the open PR before /closeout merges (the default), or post-merge when the lesson only surfaces during/after merge. Use so future /research and /write-a-prd runs improve. Not for trivial edits with no reusable project-level learning, and not for the merge/teardown itself (that's /closeout)."
 sources:
   primary:
     - "Living Documentation — Cyrille Martraire"
@@ -19,13 +19,19 @@ When the work surfaced planning or estimation surprises, capture those too. McCo
 
 ## Invocation Position
 
-This is a primary pipeline skill at the end of the default delivery loop.
+This is a primary pipeline skill that closes the compounding loop. It runs near the tail of the default delivery path, after `/pre-merge` has created the PR.
 
-Use `/compound` after a feature ships, after a high-value bug fix lands, or after a meaningful QA or review cycle exposes a lesson that future work should reuse.
+**Default — capture the lesson in the PR, before merge.** When a durable lesson is already known at PR time, run `/compound` on the open PR branch so the `docs/solutions/` entry rides the same PR as the code that taught it — reviewed in the same pass and merged atomically with it. This places `/compound` between `/pre-merge` and `/closeout`:
 
-The merge and worktree teardown are owned by `/closeout`, not `/compound` — "shipped" means `/closeout` has merged the reviewed PR. `/compound` runs after that and never performs the merge itself.
+```
+… → /pre-merge → /compound (in-PR, when a lesson exists) → /closeout (merge + teardown) → cleanup
+```
 
-Do not use it for trivial edits or for lessons that belong entirely in a higher-fidelity artifact like a test, linter rule, or code comment without any durable project-level learning.
+**Fallback — capture post-merge.** Some lessons only surface during or after the merge: integration surprises, QA findings, behavior seen once it ships. For those, run `/compound` after `/closeout` has merged. This is the fallback path, not the default.
+
+Either way, `/compound` never performs the merge or worktree teardown itself — that is `/closeout`. Capturing in-PR means committing onto the open PR branch so the lesson is reviewed like any other change; it does not mean merging.
+
+Do not use it for trivial edits or for lessons that belong entirely in a higher-fidelity artifact like a test, linter rule, or code comment without any durable project-level learning. Whether in-PR or post-merge, the "When NOT to Use" guard below still applies — most PRs carry no durable lesson, and there is no standing per-PR `docs/solutions/` slot to fill.
 
 ## Why This Exists
 
@@ -33,7 +39,8 @@ Without this step, you've done traditional engineering with AI assistance. The f
 
 ## When to Use
 
-- After shipping a feature (the happy path)
+- When a feature's PR is ready and it taught a durable lesson — capture it onto the PR before merge (the happy path)
+- After shipping, when a lesson only became clear during or after the merge (the post-merge fallback)
 - After fixing a tricky bug where the root cause was non-obvious
 - After a QA cycle revealed issues that could have been caught earlier
 - After making an architectural decision with significant tradeoffs
@@ -51,7 +58,7 @@ Without this step, you've done traditional engineering with AI assistance. The f
 
 ### Phase 1: Identify What to Capture
 
-Review the recent work. Look at:
+On the in-PR default path the work under review is the open PR branch, so the commands below read it directly (`git log` and `git diff main...HEAD` against the still-unmerged branch). On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, `git diff main...HEAD` is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work. Look at:
 
 1. **Git log** — What commits were made? What changed?
    ```bash
@@ -264,16 +271,34 @@ If a related solution already exists:
 
 ### Phase 5: Commit
 
-Commit the solution document:
+**In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR and is reviewed and merged with the code that taught it:
 
 ```bash
 git add docs/solutions/<category>/<filename>.md
 git commit -m "docs: compound — <brief description of what was learned>"
+git push        # in-PR path: push so the entry joins the open PR for review
 ```
+
+**Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
 
 ### Phase 6: Report
 
-Tell the user what was captured, then print the loop-closed line:
+Tell the user what was captured, then print the closing block that matches the path you took.
+
+**In-PR path (default)** — the lesson now rides the open PR; the loop closes when `/closeout` merges it. Hand off to the merge step:
+
+```
+Compounded onto PR #<n>: docs/solutions/<category>/<filename>.md
+
+Key lesson: [One sentence summary of the most important takeaway]
+
+This rides the PR — reviewed and merged with the code that taught it — and will be consulted automatically during future /research and /write-a-prd sessions.
+
+**Next session:** /closeout
+**Input:** PR #<n>
+```
+
+**Post-merge path (fallback)** — the work already shipped; this is the end of the loop:
 
 ```
 Compounded: docs/solutions/<category>/<filename>.md
@@ -285,7 +310,7 @@ This will be consulted automatically during future /research and /write-a-prd se
 **Loop closed.** Next: /help when you return to this repo.
 ```
 
-`/compound` is the end of the loop, so it does not print a `**Next session:**` line — the loop-closed line is the runtime-handoff equivalent. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
+On the in-PR path `/closeout` still follows — it performs the merge — so `/compound` hands to it with a `**Next session:**` line. On the post-merge path `/compound` is the end of the loop, so it prints the loop-closed line instead. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
 
 ## Maintenance
 
@@ -308,8 +333,8 @@ During review, check each document's **Shelf Life** section. If the expiration c
 
 ## Handoff
 
-- **Expected input:** shipped work (the PR merged by `/closeout`), solved bugs, or meaningful lessons from implementation, QA, or review
-- **Produces:** durable `docs/solutions/` knowledge that feeds future `/research` and `/write-a-prd` sessions
-- **Comes after:** `/closeout` — which performs the merge and worktree teardown; `/compound` captures the lesson, it does not merge
+- **Expected input:** a durable lesson worth reusing — known at PR time (the in-PR default) or surfacing during/after merge (the post-merge fallback), plus solved bugs or meaningful lessons from implementation, QA, or review
+- **Produces:** durable `docs/solutions/` knowledge that feeds future `/research` and `/write-a-prd` sessions — riding the PR on the in-PR path, committed to base (or a small doc PR) on the post-merge path
+- **Comes after:** `/pre-merge` on the in-PR default path (capture onto the PR branch, then `/closeout` merges code + lesson together); `/closeout` on the post-merge fallback path. `/compound` captures the lesson — it never merges
 - **Closes the loop on:** `/pre-merge`, `/closeout`, and shipped implementation work
-- **What comes next:** future features should consult the compounded knowledge during discovery, research, and shaping
+- **What comes next:** in-PR, `/closeout` merges the PR carrying the lesson; post-merge, the loop is closed. Either way, future features consult the compounded knowledge during discovery, research, and shaping

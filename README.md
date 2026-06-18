@@ -35,7 +35,7 @@ npx skills@latest update   # pull latest versions
 ## Canonical pipeline
 
 ```
-/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /closeout (merge + teardown) → /compound → cleanup
+/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /compound (in-PR) → /closeout (merge + teardown) → cleanup
 ```
 
 The pipeline is the default path, not a prison. Skills can backtrack when assumptions fail or branch to helper and side-route skills when the work demands it. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the normal pipeline at `/research`. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step — it stops on repeated failure *or* repeated non-progress, whichever trips first.
@@ -83,7 +83,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [pre-merge](pre-merge/) | Author-mode: create the PR and run an architectural review before merge. Reviewer-mode (`--pr <n>`): review someone else's PR and draft comment text |
 | [walk-commits](walk-commits/) | Interactive commit-by-commit comprehension walkthrough before merge — intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off (optional, recommended by `/pre-merge`) |
 | [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
-| [compound](compound/) | Capture lessons learned into docs/solutions/ |
+| [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR before `/closeout` merges (default), or post-merge as the fallback |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
 
 ### Orientation & Recovery

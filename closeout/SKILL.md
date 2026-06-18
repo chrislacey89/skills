@@ -25,7 +25,7 @@ This skill *orchestrates existing tools* (`gh pr merge`, `wt remove` / `git work
 This is a primary pipeline skill that owns the `merge → cleanup` tail of the default delivery path:
 
 ```
-… → /pre-merge → [merge + worktree teardown — THIS SKILL] → /compound → [issue-closing — Step 9 prose]
+… → /pre-merge → /compound (in-PR, when a lesson exists) → [merge + worktree teardown — THIS SKILL] → [issue-closing — Step 9 prose]
 ```
 
 Use `/closeout` when:
@@ -37,7 +37,7 @@ Use `/closeout` when:
 Do not use `/closeout` when:
 
 - the PR is not yet created or still under review — run `/pre-merge` first
-- you want to capture a durable lesson — that is `/compound` (which, per the PR-attachable model, may already have ridden the PR before merge); `/closeout` does not capture lessons
+- you want to capture a durable lesson — that is `/compound`, which by default has already ridden the PR before `/closeout` merges (post-merge `/compound` is the fallback); `/closeout` does not capture lessons
 - you want to close the PRD and slice issues or reconcile the research artifact's frontmatter — that is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9; `/closeout` performs the *git-hygiene* half and defers the *issue-closing and research-artifact-supersession* half to Step 9 rather than duplicating it
 - the change is not on a feature branch at all (you are on the base branch with nothing to merge) — there is nothing to close out
 
