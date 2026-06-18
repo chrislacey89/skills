@@ -232,6 +232,8 @@ Mark quality-attribute criteria with `[QA-<attribute>]` where `<attribute>` is o
 
 List the 3-5 key assumptions from the parent PRD that this slice depends on. Before starting execution, spend 60 seconds confirming each is still true. If any assumption has changed, this slice gets a targeted `/research` → mini-PRD cycle before proceeding. If all hold, execute directly.
 
+**Caution — spike artifacts vs. spike verdicts.** If an assumption depends on a spike's captured *artifact* (recorded responses, sample payloads, challenge-page HTML, golden files the slice will commit as a fixture) rather than the spike's *verdict*, do not assert it is "still available" — `/prototype` deletes spikes by default, so the artifact is gone unless it was deliberately preserved (committed as a fixture or recorded as a re-capture recipe; see `/prototype` "Preserve reusable captured output"). Confirm the artifact was actually persisted before writing the assumption. If it was not, scope the slice to re-capture the artifact rather than asserting it persists — otherwise the assumption is false the moment it is written and only `/execute`'s Assumptions-validation gate catches it, late and mid-flight.
+
 - [ ] [Assumption 1 — e.g., "Turso free tier still provides 5GB storage"]
 - [ ] [Assumption 2 — e.g., "better-sqlite3 is still the Drizzle driver in use"]
 - [ ] [Assumption 3 — e.g., "Vercel auto-detects TanStack Start"]
