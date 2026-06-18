@@ -86,8 +86,9 @@ Pick the **single riskiest line** with Spinellis's *surface-signal scan* — a c
 - `FALLTHROUGH` omission in a switch
 - an unclassifiable pointer or `any`
 - a high-churn file (many recent touches → fragile)
+- a symbol **removed in one hunk and re-added — same name or renamed — elsewhere with a changed signature, return type, or lifecycle**: a function replaced by a structurally-evolved successor. The unified diff splits one evolving thing into a delete hunk and an add hunk and hides that callers now depend on a new contract; read the new shape against the old, not as two unrelated edits.
 
-Anchor it as `file:line` so the user can click straight to it.
+Anchor it as `file:line` so the user can click straight to it. **Detecting the replaced-symbol case:** when a commit shows a large deletion of a symbol and a large addition elsewhere, check whether they are the same logical unit (rename detection, `git log --follow`, or matching call sites) before treating them as independent edits — then carry the finding through the existing Riskiest-line / Looks-odd-on-purpose / Absent-by-design card lines (no new card line needed).
 
 Surface **intentional-looking-odd choices** with Spinellis's *deviation = signal*: any departure from a canonical form demands an explicit "why." Either the author intended it (and the walkthrough states the reason) or it is a bug. The deleted `enabled=true` filter that turns out to be the *point* of the change lives here — it looks like an omission but is the intent.
 
