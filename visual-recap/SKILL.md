@@ -100,6 +100,13 @@ Write the file to a **transient** path — gitignored `.context/` or `mktemp` �
 
 ### 5. Open, review, and round-trip the feedback
 
+If the recap embeds a Mermaid diagram, **confirm it renders without a parse error before
+presenting it** (a quick load, or a re-check against the `references/visual-recap-design.md`
+§5 label-safety rules). The `<pre class="mermaid">` source fallback shows source text — the
+exact thing that fails to parse — so it does not stand in for a rendering check. Authoring
+non-trivial diagrams via `/mermaid` (which verifies its own render) discharges this up front.
+Keep it lightweight — no headless-browser harness is required (core §7).
+
 Emit both open paths so the reviewer can choose:
 
 ```

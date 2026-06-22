@@ -143,6 +143,7 @@ The diff and its callouts are the data; everything else recedes.
 - **Small multiples + constancy of design** for before/after and per-file panels: identical scale, identical frame on both sides, so the eye reads the *difference*, not a layout change. Never restyle the after-side relative to the before-side.
 - **Subtraction of weight (1 + 1 = 3).** Adjacent heavy borders create phantom third shapes that read as content. Prefer whitespace and a single light rule to separate panels; delete every border that is not doing work.
 - **Value-scale semantic color, checked for simultaneous contrast in both themes.** Add/remove and risk colors must hold their meaning and contrast on light *and* GitHub-dark backgrounds — flip the palette on `[data-theme]`, and verify red/green stay legible against each other and the background (the principled answer to the #94 dark-mode contrast concern: a value scale, not a one-off patch).
+- **A diagram fills its frame.** Never render an embedded Mermaid SVG at its intrinsic size; size it to the column width (CSS-first, offline-safe — `.mermaid svg{width:100%;height:auto}`, per the `visual-recap-design.md` §1/§5 skeleton). A tiny centered diagram starves the data-ink the section exists to show.
 - **Respect the reading budget** (Cohen / Rigby: ~100–300 LOC, 30–60 min, <400–500 LOC/hr). The recap is *author preparation*, so it must itself stay inside the budget: **3–8 key-change callouts, focused excerpts, not every hunk.** A recap that reproduces the whole diff has rebuilt the thing the reviewer was already going to scroll. If the change is too big for one budget, say so and recommend chunking — do not render a wall.
 
 ---
@@ -158,6 +159,15 @@ The artifact must read *identically* with no network. Proven by spike: a real re
 ---
 
 ## 7. Open / serve guidance the skill should emit
+
+**Confirm an embedded diagram renders before presenting (DO-CONFIRM).** If the recap embeds a
+Mermaid diagram, verify it renders without a parse error before handing the artifact to the
+reviewer — a quick load, or a re-check against the `visual-recap-design.md` §5 label-safety
+rules. The `<pre class="mermaid">` source fallback is *not* a substitute: it shows the source
+text, which is exactly what fails to parse. This is a lightweight verification, not a build
+dependency — it must not mandate a headless browser or erode the offline-first ethos (§6).
+For any non-trivial diagram, authoring it via `/mermaid` (which verifies its own render, #94)
+discharges this check up front.
 
 `file://` is a secure context in real browsers, so the simplest path is:
 
