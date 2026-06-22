@@ -42,7 +42,7 @@ The line that keeps this distinct from `/pre-merge`: **comprehension surface, no
 
 ## The shared rendering core
 
-All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. Read it before rendering. The points below are the skill-level discipline; the core is the rendering contract.
+All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so recaps come out consistent run-to-run. Read both before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
 
 Two rules from the core are load-bearing and worth restating here:
 
@@ -89,9 +89,9 @@ When the change needs an architecture, data-flow, or sequence picture, **reuse `
 
 ### 4. Render the self-contained HTML
 
-Author one `.html` file against the core's vocabulary:
+Author one `.html` file by copying the canonical skeleton in `references/visual-recap-design.md` — the fixed token core (§1) and the per-block markup (§3–§7) — then filling only the grounded data and the prose. Deviate from the skeleton only where the change genuinely needs it; do not re-derive a fresh design system per run.
 
-- Inline, themeable CSS is load-bearing (CSS variables flipped on `[data-theme]` for light + GitHub-dark); CDN libraries are enhancement-only and always have a no-CDN fallback. The file must read identically with the network off.
+- Inline, themeable CSS is load-bearing — copy the skeleton's `:root`/`[data-theme="dark"]` token block verbatim (light default, dark flipped on `[data-theme]`) and keep the variable names. CDN libraries are enhancement-only and always have a no-CDN fallback. The file must read identically with the network off.
 - Line-anchored callouts are **direct labels** rendered at the line, not a separate legend (Tufte; Norman, *natural mapping*). Clicking a marker highlights the exact line — scope the highlight to the code cell, not the whole row.
 - Maximize data-ink: no chartjunk, no decorative shadows; small multiples + constancy of design for before/after panels (identical scale and frame on both sides).
 - Include the **Copy feedback** button and its layered-clipboard serializer with stable `data-feedback-id`s, exactly per the core's `recap-feedback v1` format.
@@ -118,7 +118,7 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 - **Not a defect review.** It does not sweep the diff for bugs — `/pre-merge` does that and emits advisory findings. Recap renders comprehension.
 - **Not free-form diagramming.** It stays clean and structured; exploratory "diagrams that argue" are `/excalidraw-diagram`.
 - **Not a diagram engine.** Architecture/data-flow pictures come from `/mermaid`; the core owns callouts and diffs, not graph layout.
-- **Not a renderer we ship.** The core is a vocabulary the agent hand-authors against — no package, no build, no server, no committed app. If "self-contained HTML with CDN imports" starts growing state, routing, or a component library, pull it back.
+- **Not a renderer we ship.** The core is a vocabulary the agent hand-authors against — no package, no build, no server, no committed app. The canonical skeleton (`references/visual-recap-design.md`) is a *copyable reference the agent inlines*, the same status as the §4 serializer — **not** the runtime component library this bullet forbids: no package, no build step, no CDN runtime, nothing the artifact imports. If "self-contained HTML with CDN imports" starts growing state, routing, or an imported component library, pull it back.
 - **Not a mandatory stage, and not auto-invoked.** It is optional, gated by the skip-for-small-diffs rule. If a later PR sample shows it is rarely invoked or only fires on diffs `/pre-merge` already covers, fold it into `/pre-merge` as an optional phase (mirrors `/walk-commits`'s own self-deprecation clause).
 - **Not a committed artifact.** The HTML is transient — gitignored or `mktemp`, deleted after the round. Per SYSTEM-OVERVIEW §Philosophy.
 
