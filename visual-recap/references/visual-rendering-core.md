@@ -3,6 +3,8 @@
 The shared rendering vocabulary and quality bar for Skill Kit's visual review surfaces — `/visual-recap` and the `/walk-commits` callout enhancement. It is the kit-native analog of Builder.io's shared `wireframe.md` / `canvas.md` cores, with one deliberate difference: **this is a vocabulary the agent authors HTML against, not a renderer we ship and version.** There is no npm package, no build step, no committed app, no MCP connector, and no hosted database. The agent is the renderer; this file is the spec it writes to.
 
 > **Why a shared core at all.** Two skills render line-anchored callouts over a diff. Without one quality bar they drift — two callout shapes, two copy formats, two dark-mode palettes, and "renderer" quietly grows into an app. This file is the single bar both author against. If you are tempted to ship reusable JavaScript instead of describing what the agent should hand-author, stop: that is the lock-in this whole surface exists to avoid (Norman, *featuritis*; the artifact must stay knowledge-in-the-world, not a maintained component library).
+>
+> **A copyable skeleton is not a runtime library.** The canonical token-and-markup skeleton in `visual-recap-design.md` (§3, §6) is a *reference the agent inlines* into a still-self-contained, still-hand-authored file — the same status as the §4 `recap-feedback v1` serializer. That is allowed and is the cure for run-to-run drift. What stays forbidden is a *runtime dependency*: a package, a build step, a server, a CDN call, or versioned JavaScript the artifact imports. The test is unchanged — open the file with the network off; if it still reads, you copied a skeleton, not shipped a library.
 
 ---
 
@@ -41,7 +43,7 @@ If redaction removed anything, say so once in the overview ("N value(s) masked")
 
 ## 3. Component vocabulary
 
-Six blocks cover the review surface. Each is a *semantic role*, not a shipped widget — hand-roll the HTML each time, keep it minimal, and only render the blocks the change actually needs.
+Six blocks cover the review surface. Each is a *semantic role* with a canonical shape: **copy the per-block markup from the canonical skeleton (`visual-recap-design.md`), fill the grounded data and prose, and deviate only where the change genuinely needs it.** Keep it minimal, and only render the blocks the change actually needs. The skeleton is a copyable reference you inline (exactly like the §4 serializer), not a shipped widget — copying it instead of re-deriving the markup each run is what keeps two recaps of similar changes recognizably the same surface, so the reviewer reads the diff instead of re-learning the layout.
 
 | Block | Role | Grounded inputs (tooling) | Authored (prose) |
 |---|---|---|---|
@@ -149,7 +151,7 @@ The diff and its callouts are the data; everything else recedes.
 
 The artifact must read *identically* with no network. Proven by spike: a real recap used **zero** Tailwind utility classes — it was 100% inline CSS and degraded to an identical file offline.
 
-- **Hand-roll a small themeable CSS core** with CSS variables flipped on `[data-theme]` (`--bg`, `--fg`, `--add`, `--del`, `--risk`, `--muted`, …). This is the load-bearing layer; it must not depend on any CDN.
+- **Copy the canonical token core** from `visual-recap-design.md` §1 — a fixed `:root`/`[data-theme="dark"]` block of named CSS variables (`--bg`, `--fg`, `--add`, `--del`, `--risk`, the `--flag-*` and `--sx-*` ramps, a base-16 spacing scale, …), with light as the default and dark flipped on `[data-theme]`. Keep the variable names; do not re-derive a fresh palette per run. This is the load-bearing layer; it must not depend on any CDN.
 - **Reach for a CDN library only where it earns its place** — e.g. highlight.js for syntax coloring — and **always with a no-CDN fallback** so the artifact still reads when the CDN is blocked. Tailwind-via-CDN works but is not needed; do not make the artifact depend on it.
 - The test: open the file with the network off. If it still reads, you built it right.
 
