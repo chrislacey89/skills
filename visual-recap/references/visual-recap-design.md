@@ -120,6 +120,11 @@ works fully offline). These variable names are the canonical set; do not rename 
   .vr-marker{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
     border:none;background:var(--accent);color:#fff;font-weight:700;font-family:var(--sans);cursor:pointer}
   .vr-marker.is-active{box-shadow:0 0 0 3px var(--accent-dim)}
+
+  /* Embedded Mermaid sizes to its frame, never its intrinsic size. CSS-first and
+     offline-safe — this rule alone fixes the too-small diagram even with the network off
+     (the §5 Mermaid-init script is enhancement-only). */
+  .mermaid svg{width:100%;max-width:100%;height:auto;display:block}
 </style>
 ```
 
@@ -242,17 +247,62 @@ links to its hunk in §6. The five flag hues are fixed: `new` `moved` `load-bear
 
 When topology needs a picture, **reuse `/mermaid`** and embed the result in this frame — do
 not hand-roll graph layout (Skill Kit chose embedded Mermaid as its diagram answer, #83).
+`/visual-recap` (and `/walk-commits`) can invoke `/mermaid` directly to produce the source;
+prefer that for any non-trivial diagram (see the label-safety note below).
+
+The container is a **full-width block** (not flex-centered) and the `.mermaid svg` rule from
+§1 stretches the diagram to fill it. The `<pre class="mermaid">` carries the diagram source —
+which is also the offline fallback: with the network off (no Mermaid CDN) it renders as
+readable source text rather than a blank frame.
 
 ```html
 <section id="sec-diagram" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">03</span> &nbsp;Diagram</div>
   <figure style="margin:0">
-    <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s8) var(--s6);display:flex;align-items:center;justify-content:center">
-      <!-- embed the generated Mermaid SVG/markup here -->
+    <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s8) var(--s6);overflow:auto">
+      <!-- Diagram source AND offline fallback. Mermaid (if loaded) replaces this with an
+           SVG that the §1 `.mermaid svg` rule sizes to the frame. Quote every label. -->
+      <pre class="mermaid" style="margin:0;font-family:var(--mono);font-size:12px;color:var(--fg-muted)">
+flowchart LR
+  A["session.ts"] -->|"reads token"| B["tokenStore.get()"]
+  B --> C["middleware/authGuard"]
+      </pre>
     </div>
     <figcaption style="margin-top:var(--s3);font-size:12px;color:var(--fg-muted)">Fig 1 · one-line caption.</figcaption>
   </figure>
 </section>
+```
+
+**Label-safety (hand-authored Mermaid).** Mermaid's label grammar is unforgiving; a faithful
+copy that ignores it ships a parse-error box instead of a diagram. When you write source by
+hand:
+
+- **Quote every node and edge label** — `A["text"]`, `A -->|"text"| B`. Quoting neutralizes
+  the characters below.
+- **Never leave raw `[ ] # ( ) { }` inside an *unquoted* label.** `[`/`]` are read as
+  node-shape syntax; a bare `#` begins an HTML entity code (so `#23` breaks — write
+  `"slice 23"`); `(` opens a round-node. Quote the label or rephrase.
+- **No literal `<br/>` inside an unquoted label** — wrap the label in quotes first.
+- **For any non-trivial diagram, author it via `/mermaid`** instead of hand-writing source.
+  `/mermaid` has its own render-verification step (#94), so it catches these before the
+  source reaches the artifact — the safer path the render-confirm gate (core §7) points at.
+
+**Frame-filling render (enhancement-only; CDN per §6).** The `.mermaid svg` CSS rule already
+sizes the diagram offline-first. When the Mermaid CDN is available, initialize it with
+`flowchart.useMaxWidth:false` and run a post-render pass so the SVG fills the frame rather
+than rendering at its intrinsic (tiny) size. This is enhancement-only — it must never replace
+the `<pre class="mermaid">` source-text fallback above:
+
+```html
+<!-- enhancement-only: omit and the diagram still reads as source text offline (§6) -->
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, flowchart: { useMaxWidth: false } });
+  addEventListener('load', () => document.querySelectorAll('.mermaid svg').forEach(svg => {
+    svg.removeAttribute('width'); svg.removeAttribute('height');   // drop intrinsic sizing;
+    svg.style.width = '100%'; svg.style.height = 'auto';           // let §1's rule fill the frame
+  }));
+</script>
 ```
 
 ---
