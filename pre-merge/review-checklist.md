@@ -116,8 +116,9 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 - Asserting call counts or call order for managed dependencies (non-boundary collaborators)
 - Opaque test data — magic numbers or unclear fixtures where evident data would make the test self-documenting
 - Implementation-coupled test names — names that describe HOW ("calls database twice") instead of WHAT ("user can checkout with valid cart")
+- Fact-emitting heuristic with an untested failure direction — the diff adds or changes a module that reduces input to a boolean/category and whose output is consumed downstream as *trusted ground truth* (most sharply, a mechanical layer feeding an LLM judge in a hybrid mechanical-then-LLM dimension), and its tests cover only the happy direction. Confirm both directions are tested: an input that must **not** trigger the fact (over-claim guard) and one that **should** in a non-obvious form (under-claim guard). **Severity asymmetry** (Nygard fault→error→failure — a wrong fact becomes an error the moment the consumer trusts it): an untested **over-claim** path is a **Concern**; an untested **under-claim** path is a **Suggestion**. Cite the specific untested input class (e.g. "a `User-agent`-scoped block read as block-all"), not "needs more tests." **Review-cadence note.** Added from one triggering incident (mimir SEO mechanical layer — three failure-direction defects shipped green, 2026-06-23) plus principle grounds (Cohen phase-injection economics, Nygard fault→error→failure). If after a reasonable sample of PRs this bullet fires <10% of the time on diffs that had no other reported issue, remove it rather than leave it as ceremony.
 
-**Out of scope:** Test coverage percentage, whether enough tests exist, whether tests pass (pre-commit hooks verify this).
+**Out of scope:** Test coverage percentage and whether enough tests exist *in general*, whether tests pass (pre-commit hooks and `/qa` own these) — **except** the fact-emitting-heuristic failure-direction case above, whose missing test points at a latent contract defect rather than a coverage gap.
 
 ---
 
