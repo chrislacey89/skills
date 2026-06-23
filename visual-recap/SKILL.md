@@ -85,7 +85,7 @@ Now write the parts the model owns — and only these:
 - A one-line **intent summary** above each annotated hunk.
 - **3–8 callouts** total, each anchored to a real line range, each a single note — respecting the reading budget (Cohen/Rigby: ~100–300 LOC, 30–60 min). A recap that callouts every hunk has rebuilt the diff the reviewer was going to scroll anyway.
 
-When the change needs an architecture, data-flow, or sequence picture, **reuse `/mermaid`** and embed the result — do not hand-roll graph layout (issue #83 already chose embedded Mermaid as the pipeline's diagram answer).
+When the change needs an architecture, data-flow, or sequence picture, default to the **CSS diagram primitive** (`references/visual-recap-design.md` §1/§5 `.fc-*`) — a node-and-connector spine that renders identically offline with no CDN and no parse grammar. Reach for embedded Mermaid (via `/mermaid`) **only** for a genuinely complex graph that needs real auto-layout; do not hand-roll *that* layout by hand. (Issue #83 chose Mermaid for GitHub-bound markdown, rendered natively — a different context from this self-contained offline HTML.)
 
 ### 4. Render the self-contained HTML
 
@@ -100,12 +100,13 @@ Write the file to a **transient** path — gitignored `.context/` or `mktemp` �
 
 ### 5. Open, review, and round-trip the feedback
 
-If the recap embeds a Mermaid diagram, **confirm it renders without a parse error before
-presenting it** (a quick load, or a re-check against the `references/visual-recap-design.md`
-§5 label-safety rules). The `<pre class="mermaid">` source fallback shows source text — the
-exact thing that fails to parse — so it does not stand in for a rendering check. Authoring
-non-trivial diagrams via `/mermaid` (which verifies its own render) discharges this up front.
-Keep it lightweight — no headless-browser harness is required (core §7).
+The default CSS diagram primitive needs no render check — it has no parse grammar and no CDN.
+**Only if you took the Mermaid opt-in** for a complex graph, **confirm it renders without a
+parse error before presenting it** (a quick load, or a re-check against the
+`references/visual-recap-design.md` §5 label-safety rules). The `<pre class="mermaid">` source
+fallback shows source text — the exact thing that fails to parse — so it does not stand in for
+a rendering check. Authoring such diagrams via `/mermaid` (which verifies its own render)
+discharges this up front. Keep it lightweight — no headless-browser harness is required (core §7).
 
 Emit both open paths so the reviewer can choose:
 
@@ -124,7 +125,7 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 
 - **Not a defect review.** It does not sweep the diff for bugs — `/pre-merge` does that and emits advisory findings. Recap renders comprehension.
 - **Not free-form diagramming.** It stays clean and structured; exploratory "diagrams that argue" are `/excalidraw-diagram`.
-- **Not a diagram engine.** Architecture/data-flow pictures come from `/mermaid`; the core owns callouts and diffs, not graph layout.
+- **Not a graph-layout engine.** Simple flow/sequence pictures use the CSS diagram primitive; complex graphs that need auto-layout come from `/mermaid`. The core owns callouts and diffs, not hand-positioned graph layout.
 - **Not a renderer we ship.** The core is a vocabulary the agent hand-authors against — no package, no build, no server, no committed app. The canonical skeleton (`references/visual-recap-design.md`) is a *copyable reference the agent inlines*, the same status as the §4 serializer — **not** the runtime component library this bullet forbids: no package, no build step, no CDN runtime, nothing the artifact imports. If "self-contained HTML with CDN imports" starts growing state, routing, or an imported component library, pull it back.
 - **Not a mandatory stage, and not auto-invoked.** It is optional, gated by the skip-for-small-diffs rule. If a later PR sample shows it is rarely invoked or only fires on diffs `/pre-merge` already covers, fold it into `/pre-merge` as an optional phase (mirrors `/walk-commits`'s own self-deprecation clause).
 - **Not a committed artifact.** The HTML is transient — gitignored or `mktemp`, deleted after the round. Per SYSTEM-OVERVIEW §Philosophy.

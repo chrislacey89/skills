@@ -52,9 +52,9 @@ Six blocks cover the review surface. Each is a *semantic role* with a canonical 
 | **annotated-diff** | Split before/after for one hunk, callouts anchored to after-side lines, with a one-line intent summary above it | the hunk text, line numbers | the hunk `summary` (intent) and each callout `note` |
 | **callout** | A note anchored to a line range, rendered *at* that line | `lines: "42-47"` from the real hunk | the `note` |
 | **before/after toggle** | Small-multiple comparison of two states of the same unit | both states' text | which difference matters |
-| **diagram** | Architecture / data-flow / sequence when topology needs a picture | — | reuse `/mermaid`; do not hand-roll graph layout |
+| **diagram** | Architecture / data-flow / sequence when topology needs a picture | — | CSS primitive for simple flow/sequence (default); Mermaid opt-in for complex graphs |
 
-**Do not reinvent diagrams.** When the change needs an architecture, data-flow, or sequence picture, emit a Mermaid block via `/mermaid` and embed it — Skill Kit already chose embedded Mermaid as its diagram answer (issue #83). The rendering core owns callouts and diffs, not graph layout.
+**CSS-first diagrams; Mermaid for complex graphs.** A recap's diagrams are almost always a simple flow or short sequence — these have no layout problem to solve, so the default is the pure-CSS diagram primitive (`.fc-*`, `visual-recap-design.md` §1/§5): it renders identically offline, needs no CDN, and has no parse grammar. Reach for embedded Mermaid (via `/mermaid`) **only** for genuinely complex graphs — a dense DAG, ER, or class diagram — that need real auto-layout; that is the case the "do not hand-roll graph layout" rule still guards. This is a different context from issue #83, which chose Mermaid for **GitHub-bound markdown** (rendered natively, no CDN) — that decision stands. The boundary: GitHub-rendered markdown → Mermaid; self-contained offline HTML → CSS-first. The rendering core owns callouts and diffs, not graph layout.
 
 **Callouts are direct labels, not legends** (Tufte, *direct labeling over legends*; Norman, *natural mapping*). The note lives spatially where the thing it explains is — clicking the inline marker highlights the exact line and rings its card. Never collect notes into a separate keyed legend the reviewer has to cross-reference; that puts the topology back in their head, which is the whole problem this surface exists to remove.
 
@@ -143,7 +143,7 @@ The diff and its callouts are the data; everything else recedes.
 - **Small multiples + constancy of design** for before/after and per-file panels: identical scale, identical frame on both sides, so the eye reads the *difference*, not a layout change. Never restyle the after-side relative to the before-side.
 - **Subtraction of weight (1 + 1 = 3).** Adjacent heavy borders create phantom third shapes that read as content. Prefer whitespace and a single light rule to separate panels; delete every border that is not doing work.
 - **Value-scale semantic color, checked for simultaneous contrast in both themes.** Add/remove and risk colors must hold their meaning and contrast on light *and* GitHub-dark backgrounds — flip the palette on `[data-theme]`, and verify red/green stay legible against each other and the background (the principled answer to the #94 dark-mode contrast concern: a value scale, not a one-off patch).
-- **A diagram fills its frame.** Never render an embedded Mermaid SVG at its intrinsic size; size it to the column width (CSS-first, offline-safe — `.mermaid svg{width:100%;height:auto}`, per the `visual-recap-design.md` §1/§5 skeleton). A tiny centered diagram starves the data-ink the section exists to show.
+- **A diagram fills its frame.** The default CSS primitive (`.fc-*`, §1/§5) is full-width by construction. If you take the Mermaid opt-in for a complex graph, never render its SVG at intrinsic size — size it to the column width (`.mermaid svg{width:100%;height:auto}`, per the `visual-recap-design.md` §1/§5 skeleton). A tiny centered diagram starves the data-ink the section exists to show.
 - **Respect the reading budget** (Cohen / Rigby: ~100–300 LOC, 30–60 min, <400–500 LOC/hr). The recap is *author preparation*, so it must itself stay inside the budget: **3–8 key-change callouts, focused excerpts, not every hunk.** A recap that reproduces the whole diff has rebuilt the thing the reviewer was already going to scroll. If the change is too big for one budget, say so and recommend chunking — do not render a wall.
 
 ---
@@ -160,14 +160,15 @@ The artifact must read *identically* with no network. Proven by spike: a real re
 
 ## 7. Open / serve guidance the skill should emit
 
-**Confirm an embedded diagram renders before presenting (DO-CONFIRM).** If the recap embeds a
-Mermaid diagram, verify it renders without a parse error before handing the artifact to the
-reviewer — a quick load, or a re-check against the `visual-recap-design.md` §5 label-safety
-rules. The `<pre class="mermaid">` source fallback is *not* a substitute: it shows the source
-text, which is exactly what fails to parse. This is a lightweight verification, not a build
-dependency — it must not mandate a headless browser or erode the offline-first ethos (§6).
-For any non-trivial diagram, authoring it via `/mermaid` (which verifies its own render, #94)
-discharges this check up front.
+**Confirm a Mermaid diagram renders before presenting (DO-CONFIRM).** The default CSS diagram
+primitive (§5) needs no such check — it has no parse grammar and no CDN, so it is correct the
+moment it is written. This gate applies **only when you took the Mermaid opt-in** for a complex
+graph: verify it renders without a parse error before handing the artifact to the reviewer — a
+quick load, or a re-check against the `visual-recap-design.md` §5 label-safety rules. The
+`<pre class="mermaid">` source fallback is *not* a substitute: it shows the source text, which
+is exactly what fails to parse. This is a lightweight verification, not a build dependency — it
+must not mandate a headless browser or erode the offline-first ethos (§6). Authoring the
+diagram via `/mermaid` (which verifies its own render, #94) discharges this check up front.
 
 `file://` is a secure context in real browsers, so the simplest path is:
 

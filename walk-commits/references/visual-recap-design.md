@@ -121,9 +121,32 @@ works fully offline). These variable names are the canonical set; do not rename 
     border:none;background:var(--accent);color:#fff;font-weight:700;font-family:var(--sans);cursor:pointer}
   .vr-marker.is-active{box-shadow:0 0 0 3px var(--accent-dim)}
 
-  /* Embedded Mermaid sizes to its frame, never its intrinsic size. CSS-first and
-     offline-safe — this rule alone fixes the too-small diagram even with the network off
-     (the §5 Mermaid-init script is enhancement-only). */
+  /* CSS diagram primitive — the DEFAULT diagram (see §5). Pure CSS, no CDN, no parse
+     grammar: renders identically offline and fills its frame by construction. A vertical
+     spine of node cards joined by connectors; .fc-fan lays out a parallel row of children.
+     Reach for embedded Mermaid (below) only for complex graphs this can't express. */
+  .fc{display:flex;flex-direction:column;align-items:center;gap:0;width:100%}
+  .fc-node{width:100%;max-width:600px;border:1px solid var(--border-strong);border-radius:var(--r2);
+    background:var(--bg-subtle);padding:var(--s3) var(--s4);text-align:center}
+  .fc-node.is-accent{border-color:var(--accent);background:var(--accent-dim)}
+  .fc-node.is-artifact{border-style:dashed;border-color:var(--accent);background:var(--bg-elev)}
+  .fc-node.is-muted{background:var(--bg-elev)}
+  .fc-step{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:3px}
+  .fc-title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)}
+  .fc-sub{font-size:12px;color:var(--fg-muted);margin-top:3px;text-wrap:pretty}
+  .fc-conn{display:flex;flex-direction:column;align-items:center;padding:2px 0}
+  .fc-conn .fc-line{width:2px;height:16px;background:var(--border-strong)}
+  .fc-conn .fc-lbl{font-size:11px;color:var(--fg-muted);margin:4px 0 2px;font-style:italic}
+  .fc-conn .fc-tip{font-size:13px;line-height:1;color:var(--accent)}
+  .fc-conn.is-dashed .fc-line{background:repeating-linear-gradient(var(--accent) 0 3px,transparent 3px 7px)}
+  .fc-fan{display:flex;gap:var(--s3);margin-top:var(--s3);flex-wrap:wrap}
+  .fc-fan .fc-node{flex:1 1 150px;max-width:none;padding:var(--s2) var(--s3);text-align:left}
+  .fc-fan .fc-title{font-size:12px}
+
+  /* Embedded Mermaid (the §5 OPT-IN, complex graphs only) sizes to its frame, never its
+     intrinsic size. The init script in §5 is enhancement-only; this rule keeps an
+     already-rendered SVG full-width. */
   .mermaid svg{width:100%;max-width:100%;height:auto;display:block}
 </style>
 ```
@@ -243,34 +266,86 @@ links to its hunk in §6. The five flag hues are fixed: `new` `moved` `load-bear
 
 ---
 
-## 5. Block: diagram (embed only)
+## 5. Block: diagram
 
-When topology needs a picture, **reuse `/mermaid`** and embed the result in this frame — do
-not hand-roll graph layout (Skill Kit chose embedded Mermaid as its diagram answer, #83).
-`/visual-recap` (and `/walk-commits`) can invoke `/mermaid` directly to produce the source;
-prefer that for any non-trivial diagram (see the label-safety note below).
+A recap's diagrams are almost always a **simple flow or short sequence** — "where the code
+moved," "data flows A → B → C," "step 1 then step 2." These have no graph-layout problem to
+solve, so the default is a **pure-CSS diagram primitive** (the `.fc-*` classes in §1): a
+vertical spine of node cards joined by connectors, with `.fc-fan` for a parallel row of
+children. It renders identically online and offline, needs no CDN, has no label grammar to
+escape, and fills its frame by construction — so none of the Mermaid guards in the opt-in
+below apply to it.
 
-The container is a **full-width block** (not flex-centered) and the `.mermaid svg` rule from
-§1 stretches the diagram to fill it. The `<pre class="mermaid">` carries the diagram source —
-which is also the offline fallback: with the network off (no Mermaid CDN) it renders as
-readable source text rather than a blank frame.
+**Decision rule (one line):** simple flow / sequence / step-spine → the **CSS primitive**
+(default, below). Genuinely complex graph — a dense DAG, an ER or class diagram, anything
+that needs real auto-layout → the **Mermaid opt-in** further down. When unsure, start with
+CSS; reach for Mermaid only when CSS would force you to hand-position a graph (which is the
+layout problem the "don't hand-roll graph layout" rule exists to prevent — it still holds for
+that case).
+
+**Why CSS is the default here, and why this does not contradict #83.** The surface's
+load-bearing invariant is "reads identically with the network off" (core §6). A self-contained
+recap opened from `file://` has no native Mermaid renderer, so Mermaid needs a CDN — and its
+offline fallback is unparsed source text, which is not a diagram (the exact failure that
+recurred across #128, #129, and #131). The CSS primitive has no such failure mode. This is a
+**different context** from #83, which chose Mermaid for **GitHub-bound markdown** (issues, PR
+bodies) where GitHub renders `mermaid` fences natively with no CDN — that decision stands. The
+boundary: **GitHub-rendered markdown → Mermaid; self-contained offline HTML → CSS-first.**
+
+### Default — the CSS diagram primitive
+
+A spine of `.fc-node`s separated by `.fc-conn` connectors (add `.fc-lbl` for an edge label,
+`.is-dashed` for a derived/handoff edge). Nest a `.fc-fan` inside a node for a parallel row of
+children. Node variants: `.is-accent` (the focal step), `.is-artifact` (a file/handoff,
+dashed), `.is-muted` (context).
 
 ```html
 <section id="sec-diagram" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">03</span> &nbsp;Diagram</div>
   <figure style="margin:0">
-    <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s8) var(--s6);overflow:auto">
-      <!-- Diagram source AND offline fallback. Mermaid (if loaded) replaces this with an
-           SVG that the §1 `.mermaid svg` rule sizes to the frame. Quote every label. -->
-      <pre class="mermaid" style="margin:0;font-family:var(--mono);font-size:12px;color:var(--fg-muted)">
-flowchart LR
-  A["session.ts"] -->|"reads token"| B["tokenStore.get()"]
-  B --> C["middleware/authGuard"]
-      </pre>
+    <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s7) var(--s6);overflow:auto">
+      <div class="fc">
+        <div class="fc-node is-muted"><div class="fc-title">session.ts</div></div>
+        <div class="fc-conn"><div class="fc-line"></div><div class="fc-lbl">reads token</div><div class="fc-tip">▼</div></div>
+        <div class="fc-node is-accent">
+          <span class="fc-step">step</span>
+          <div class="fc-title">tokenStore.get()</div>
+          <div class="fc-sub">Resolves the session token; fans out to its sources.</div>
+          <div class="fc-fan">
+            <div class="fc-node is-muted"><div class="fc-title">cookie</div></div>
+            <div class="fc-node is-muted"><div class="fc-title">header</div></div>
+          </div>
+        </div>
+        <div class="fc-conn is-dashed"><div class="fc-line"></div><div class="fc-lbl">validated</div><div class="fc-tip">▼</div></div>
+        <div class="fc-node"><div class="fc-title">middleware/authGuard</div></div>
+      </div>
     </div>
     <figcaption style="margin-top:var(--s3);font-size:12px;color:var(--fg-muted)">Fig 1 · one-line caption.</figcaption>
   </figure>
 </section>
+```
+
+The container is a **full-width block** (not flex-centered); the spine centers itself and each
+node stretches to `max-width`. No script, no CDN, no render-confirm step — it is correct the
+moment it is written.
+
+### Opt-in — embedded Mermaid (complex graphs only)
+
+Use this **only** when the decision rule above sends you here. When topology genuinely needs
+auto-layout, author the source via `/mermaid` (which verifies its own render, #94) and embed
+it in the same full-width frame; the `.mermaid svg` rule from §1 sizes it. The
+`<pre class="mermaid">` carries the source, which Mermaid replaces with an SVG when the CDN
+loads. **Be honest about the offline state:** with no network the `<pre>` shows source text,
+not a diagram — a degraded fallback, *not* an offline-equivalent render (that is precisely why
+the CSS primitive is the default). If you embed Mermaid, **confirm it renders before
+presenting** (core §7).
+
+```html
+<pre class="mermaid" style="margin:0;font-family:var(--mono);font-size:12px;color:var(--fg-muted)">
+flowchart LR
+  A["session.ts"] -->|"reads token"| B["tokenStore.get()"]
+  B --> C["middleware/authGuard"]
+</pre>
 ```
 
 **Label-safety (hand-authored Mermaid).** Mermaid's label grammar is unforgiving; a faithful
@@ -283,18 +358,15 @@ hand:
   node-shape syntax; a bare `#` begins an HTML entity code (so `#23` breaks — write
   `"slice 23"`); `(` opens a round-node. Quote the label or rephrase.
 - **No literal `<br/>` inside an unquoted label** — wrap the label in quotes first.
-- **For any non-trivial diagram, author it via `/mermaid`** instead of hand-writing source.
-  `/mermaid` has its own render-verification step (#94), so it catches these before the
-  source reaches the artifact — the safer path the render-confirm gate (core §7) points at.
+- **Author it via `/mermaid`** rather than hand-writing source; its render-verification step
+  (#94) catches these before the source reaches the artifact.
 
-**Frame-filling render (enhancement-only; CDN per §6).** The `.mermaid svg` CSS rule already
-sizes the diagram offline-first. When the Mermaid CDN is available, initialize it with
-`flowchart.useMaxWidth:false` and run a post-render pass so the SVG fills the frame rather
-than rendering at its intrinsic (tiny) size. This is enhancement-only — it must never replace
-the `<pre class="mermaid">` source-text fallback above:
+**Frame-filling render (enhancement-only; CDN per §6).** When the Mermaid CDN is available,
+initialize with `flowchart.useMaxWidth:false` and run a post-render pass so the SVG fills the
+frame rather than rendering at its intrinsic (tiny) size:
 
 ```html
-<!-- enhancement-only: omit and the diagram still reads as source text offline (§6) -->
+<!-- enhancement-only: omit and the diagram degrades to source text offline (§6) -->
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
   mermaid.initialize({ startOnLoad: true, flowchart: { useMaxWidth: false } });
