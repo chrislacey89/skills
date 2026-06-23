@@ -303,7 +303,7 @@ dashed), `.is-muted` (context).
 <section id="sec-diagram" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">03</span> &nbsp;Diagram</div>
   <figure style="margin:0">
-    <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s7) var(--s6);overflow:auto">
+    <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s8) var(--s6);overflow:auto">
       <div class="fc">
         <div class="fc-node is-muted"><div class="fc-title">session.ts</div></div>
         <div class="fc-conn"><div class="fc-line"></div><div class="fc-lbl">reads token</div><div class="fc-tip">▼</div></div>
@@ -341,6 +341,7 @@ the CSS primitive is the default). If you embed Mermaid, **confirm it renders be
 presenting** (core §7).
 
 ```html
+<!-- embed inside the same <section>/<figure>/full-width <div> frame the default example shows -->
 <pre class="mermaid" style="margin:0;font-family:var(--mono);font-size:12px;color:var(--fg-muted)">
 flowchart LR
   A["session.ts"] -->|"reads token"| B["tokenStore.get()"]
