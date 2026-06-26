@@ -9,6 +9,7 @@ sources:
     - "A Philosophy of Software Design — John Ousterhout"
     - "Refactoring — Martin Fowler"
     - "Extreme Programming Explained — Kent Beck"
+    - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
 ---
 
 # Test-Driven Development
@@ -145,6 +146,10 @@ Two rules:
 2. **If a test jumps from sub-second to multi-second runtime after adding a retry or sleep, the fix is never "bump `testTimeout`."** The fix is "inject the primitive so tests can disable it." `testTimeout` bumps mask the coupling; injection removes it. Only bump if you have an affirmative reason — e.g. the test is genuinely exercising real-time behavior and cannot use a virtual clock.
 
 **Audit signal:** before you decide a slow test is legitimate, grep the touched code for `Effect\.sleep|Effect\.delay|Schedule\.|setTimeout|setInterval` (or the equivalent in your stack). If any match is in a code path the test can reach and the primitive isn't injected, the coupling is the bug — not the timeout.
+
+## Mocked external seams hide production-runtime behavior
+
+Mocking a type you don't own — a platform API (workerd crypto, edge-runtime globals), the filesystem, a deploy/copy step — makes the test pass in a runtime more permissive than production, or against an artifact layout production won't have. The test is green and blind at the same time. Per GOOS's "only mock types you own," wrap the external type in a thin adapter you *do* own and integration-test that adapter against the real dependency; don't mock the boundary itself. The parity gap a mocked owned-seam leaves is caught downstream at `/execute` Step 4 **Tier 2.7 (Production-Runtime Parity)** — but the root fix is the owned adapter here, not the gate there.
 
 ## Checklist Per Cycle
 
