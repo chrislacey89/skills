@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.15.0 — Production-runtime parity gate in `/execute` + `/pre-merge` (#136)
+
+Closes the structural gap where the pipeline's strongest automated "done" bars certify a slice using evidence gathered in an environment that isn't faithful to where the code runs. The triggering incident (mimir audit-publish slices #8/#9): a PBKDF2 iteration count miniflare accepted but workerd hard-caps and throws on, and a publish step whose absolute-path assets 404'd from the deployed worker root — both green under tests, both broke only in the real Cloudflare runtime, both caught by a human running the deployed artifact rather than any pipeline step. Implements issue #136's Mediator-approved minimal change set under its three binding constraints: conditional trigger (never universal), self-removal clause (falsifiable, can't rot into ceremony), and feedback-loop framing (make the manual live-verification step structural, not a new inspection layer).
+
+### Changes
+
+- **New `/execute` Step 4 Tier 2.7 — Production-Runtime Parity (#136)** — a conditional verification rung that fires *only* when the deploy runtime differs from the test runtime, the slice ships deploy-time-resolved static assets, or a platform limit isn't enforced by the test runtime (Node-to-Node / Node-to-Vercel work never sees it). Runs the *released* artifact against the runtime it actually deploys to, points at `/tdd`'s owned-adapter root fix, and carries the `<10%`-fires self-removal clause.
+- **`/pre-merge` Dimension 8 review-time mirror (#136)** — `pre-merge/review-checklist.md` Dimension 8, renamed *Runtime Initialization & Production-Runtime Parity*, gains three patterns (test-runtime permissiveness, deploy-layout / absolute-asset divergence, mocked owned-seam blindness) each with a verification procedure and a shared self-removal clause; its trigger is widened to deploy-runtime / static-asset / platform-limit diffs in both the checklist and `pre-merge/SKILL.md`. Also fixes pre-existing off-by-one dimension labels in `pre-merge/SKILL.md` (docs/solutions 6→7, Runtime Init 7→8) to match the checklist numbering and the rest of the repo (`docs/destination-check.md`, CHANGELOG #79).
+- **`/tdd` mocked-external-seam pointer (#136)** — a one-line boundary clarification naming over-mocking (GOOS "only mock types you own") as the upstream root fix and deferring the parity-gap safety net to Tier 2.7. Adds GOOS to secondary sources.
+- **Source + canonical-doc sync (#136)** — `execute` and `pre-merge` secondary `sources` now list Continuous Delivery, The Twelve-Factor App, Release It!, and GOOS (the books the new prose operationalizes); `SYSTEM-OVERVIEW.md` reflects the rung in its verification-ladder summary; the four bundled `SYSTEM-OVERVIEW.md` copies are re-synced.
+
 ## v1.14.0 — Render branch-point handoffs as next-step menus (#115)
 
 Closes a friction loop at the seams between skills. Every primary skill already computes its successor — the `Comes next by default:` line — but leaves it in prose, so the user rereads it (or remembers it) and retypes the command. The most common case is typing `/pre-merge` the instant `/execute` finishes. The fix moves that already-known next step out of the user's head and onto the screen: at genuine branch points, the handoff is offered as an `AskUserQuestion` menu with the recommended step pre-surfaced.

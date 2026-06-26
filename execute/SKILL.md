@@ -5,6 +5,10 @@ sources:
   secondary:
     - "The Checklist Manifesto — Atul Gawande"
     - "Extreme Programming Explained — Kent Beck"
+    - "Continuous Delivery — Jez Humble & David Farley"
+    - "The Twelve-Factor App — Adam Wiggins"
+    - "Release It! — Michael Nygard"
+    - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
 ---
 
 # Execute

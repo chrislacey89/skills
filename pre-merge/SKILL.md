@@ -5,6 +5,10 @@ sources:
   secondary:
     - "Software Requirements — Karl Wiegers & Joy Beatty"
     - "The Checklist Manifesto — Atul Gawande"
+    - "Continuous Delivery — Jez Humble & David Farley"
+    - "The Twelve-Factor App — Adam Wiggins"
+    - "Release It! — Michael Nygard"
+    - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
 ---
 
 # Pre-Merge
