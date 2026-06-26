@@ -313,6 +313,26 @@ If any placeholder is wired as the default for a non-dry path without a fail-fas
 
 This is a silent-degradation check: if an operator ran this without `--dry-run`, would the output be real, or would placeholder data flow through the production path?
 
+#### Tier 2.7: Production-Runtime Parity (deploy-runtime ≠ test-runtime slices only)
+
+**Conditional — never universal. This rung fires only when at least one of the following holds, and is skipped entirely otherwise. A slice whose tests run in the same runtime it deploys to (most Node-to-Node and Node-to-Vercel work) never sees it.**
+
+- The slice's deploy runtime differs from its test runtime — e.g. workerd vs miniflare/Node, a real browser vs jsdom, an edge/Lambda runtime vs the local dev server.
+- The slice ships published or static assets whose paths resolve at **deploy** time — absolute-path `<link>`/`<script>`/`<img>` references, a publish/copy step, a CDN or worker public root.
+- The platform imposes a limit the test runtime does not enforce — crypto iteration caps, request/response size, CPU/time budgets, bundle size, or APIs present in the test runtime but absent in production.
+
+**Why this rung exists — and why it is a feedback loop, not an inspection layer.** Green tests certify behavior in the environment the *tests* model, not the one the code *deploys* to. When the test runtime is more permissive than the deploy runtime, or a seam is mocked away from the real artifact, "tests pass" is not evidence of "works in production." This is the dev/prod parity gap (Twelve-Factor Factor X: keep the dev↔prod gap small along the *tools* dimension) and the missing automated feedback loop that Continuous Delivery closes with a smoke test against a production-like environment. The job here is not to add ceremony — it is to make the manual "someone ran the deployed thing and it worked" step *structural*, so the safety net is the pipeline rather than a person's diligence.
+
+**Run it against the real artifact, not the test build:**
+
+- Build and run the **released** artifact in (or against) the runtime it deploys to — `wrangler dev` / the platform's emulator that uses the production runtime, a preview deploy, or the production build served the way it will actually be served — not just `pnpm run dev`.
+- Exercise end-to-end the path the failing seam lives on: submit the login, load the published page in a browser and confirm its linked sub-resources (`/_astro/*`, `/assets/*`, fonts, favicon) each return 200, invoke the platform API the test mocked. A 200 on the HTML is not enough if its sub-resources 404.
+- If a test passed only because the test runtime is more permissive than production (a limit not enforced, an API present that production lacks), treat that as a **blind** test, not a green one — pin the production limit in the assertion and re-verify against the real runtime.
+
+The deeper fix usually lives upstream in `/tdd`: a seam that had to be mocked to stay green (a platform crypto API, the filesystem, the deploy copy) is exactly the seam GOOS says you should *not* mock — wrap external types you don't own in a thin adapter and integration-test the adapter. This rung catches the parity gap; owned adapters plus a faithful test runtime keep it from recurring.
+
+**Review-cadence note.** Added on convergent grounds (Continuous Delivery's smoke-against-production-like-environment, Twelve-Factor Factor X, Release It! "Design for Deployment", the GOOS walking skeleton) plus one triggering incident (mimir audit-publish slices #8/#9, 2026-06-25 — both green under the test suite, both broke only in the workerd/deployed runtime). If after a reasonable sample of slices this rung fires <10% of the time on diffs that had no other issue, demote it to advisory or remove it rather than leave it as ceremony.
+
 #### Tier 3: Behavioral Verification
 - API endpoints return the expected responses (use curl or httpie to verify)
 - Browser flows work end-to-end (if applicable and you can verify)
