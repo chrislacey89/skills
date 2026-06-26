@@ -5,6 +5,10 @@ sources:
   secondary:
     - "Software Requirements — Karl Wiegers & Joy Beatty"
     - "The Checklist Manifesto — Atul Gawande"
+    - "Continuous Delivery — Jez Humble & David Farley"
+    - "The Twelve-Factor App — Adam Wiggins"
+    - "Release It! — Michael Nygard"
+    - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
 ---
 
 # Pre-Merge
@@ -134,13 +138,13 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 **Dimension 4 (Boundary Map Contracts) only runs if a PRD with slice issues was provided.** Without boundary maps, there are no contracts to verify.
 
-**Dimension 7 (Runtime Initialization) only runs if the diff includes schema files, migration files, environment config, or server startup code.** Without infrastructure changes, there is nothing to verify.
+**Dimension 8 (Runtime Initialization & Production-Runtime Parity) only runs if the diff includes schema files, migration files, environment config, server startup code, a CLI/orchestration entrypoint with a dry-run mode, OR code whose deploy runtime differs from its test runtime / static assets resolved at deploy time / behavior bounded by a platform limit the test runtime does not enforce.** Without infrastructure or deploy-runtime changes, there is nothing to verify.
 
 **Surgical Scope runs on every diff.** Where Dimensions 4 and 5 check plan-vs-actual between slices (PRD-gated), Surgical Scope checks scope drift inside a single diff — drive-by reformatting, speculative additions, adjacent fixes — and applies whether or not the work went through `/prd-to-issues`. Findings under this dimension must cite the file path and hunk start line; "looks scope-creepy" is not a finding.
 
 **Dimension 11 (Review-friendly Size) runs on every diff.** It checks whether the diff stays within the convergent engagement bands documented in `review-checklist.md` (>300 LOC Observation, >500 LOC or >20 files Suggestion, >800 LOC + multi-domain Concern). Tracer-bullet slices are exempt — note the suppression in the findings rather than silently skipping. The signal is about *reviewer load*, not scope drift, so it is distinct from Dimension 10 even when both fire on the same diff.
 
-**Dimension 6 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
+**Dimension 7 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
 
 **TypeScript projects:** For branches with significant `.ts` or `.tsx` changes, mention that `/ts-audit` can be run on the changed files for type-safety analysis that complements the architectural review. Do not invoke it automatically — note it as an option. Example: "For deeper TypeScript analysis, consider running `/ts-audit` on the changed files."
 
