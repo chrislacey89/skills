@@ -1,6 +1,6 @@
 ---
 name: visual-recap
-description: "Side-route skill that renders a finished diff, PR, or branch as a single self-contained interactive HTML recap — file-tree + change flags, annotated split diffs with line-anchored callouts, before/after panels, reused Mermaid diagrams, and a copy-text feedback loop. Use when a reviewer who didn't author the change needs to grasp its shape before reading lines. Optional and never auto-invoked; skip for small or obvious diffs. Not a defect finder (that's /pre-merge), not free-form diagramming (that's /excalidraw-diagram), not a committed artifact (the HTML is transient)."
+description: "Side-route skill that renders a finished diff, PR, or branch as a single self-contained interactive HTML recap — file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, CSS-first flow diagrams (Mermaid opt-in for complex graphs), and a copy-text feedback loop. Use when a reviewer who didn't author the change needs to grasp its shape before reading lines. Optional and never auto-invoked; skip for small or obvious diffs. Not a defect finder (that's /pre-merge), not free-form diagramming (that's /excalidraw-diagram), not a committed artifact (the HTML is transient)."
 sources:
   primary:
     - "Best Kept Secrets of Peer Code Review — Jason Cohen"
@@ -31,6 +31,8 @@ Use `/visual-recap` when:
 - The change's topology (what moved where, which hunks are load-bearing) is hard to hold in your head from flat terminal output.
 - You want a portable, line-anchored artifact you can open in a browser and feed answers back from.
 
+Choosing between the two comprehension side-routes: `/walk-commits` steps the branch commit-by-commit with per-commit sign-off — reach for it when the history is the story and each commit deserves its own verdict. `/visual-recap` renders the whole change as one connected surface — reach for it when the final shape matters more than the path that produced it.
+
 **Do not** use `/visual-recap`:
 
 - **For small or obvious diffs.** This is the load-bearing gate. A one-file, few-line change reads faster as plain text; generating ceremony HTML for it is filler bait (Norman, *featuritis*; Meadows, *policy resistance*). If `/pre-merge` or `/walk-commits` terminal output already makes the change legible, do not render a recap. When unsure, skip.
@@ -39,6 +41,13 @@ Use `/visual-recap` when:
 - **To produce a committed artifact** — the HTML is transient (see the transient-artifact rule). Never commit it.
 
 The line that keeps this distinct from `/pre-merge`: **comprehension surface, not defect-finding.** If you catch yourself enumerating bugs, you are running the wrong skill.
+
+## The floor: lean is not thin
+
+The skip gate cuts filler — but a change that *passes* the gate owes the reviewer a substantial surface. The failure mode on the other side of filler is the **thin recap**: a sparse three-block render of a 40-file change — one diagram, one sentence, one file list — that forces the reviewer back into the raw diff anyway, under-serving them exactly as much as boilerplate over-serves them. Restraint applies to *decoration and repetition*, never to *coverage*: every meaningful changed surface either gets a block or is intentionally omitted (see the coverage inventory in Step 3).
+
+- **GOOD** — a 25-file auth change: a two-paragraph overview (objective, the session-storage decision, the token-expiry risk), a data-model card for the `sessions` table, an api-endpoint card for the new refresh route, the file-tree with flags, a CSS flow diagram of the new token path, and five key files each with an intent summary and 2–3 line-anchored callouts.
+- **BAD** — the same change as one diagram, one sentence, and a file list; or the opposite wall: every hunk reproduced with a callout on each.
 
 ## The shared rendering core
 
@@ -64,6 +73,8 @@ git log --oneline --no-merges "$BASE_BRANCH..HEAD"
 
 Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a PR, resolve its head/base with `gh pr view <n>`.
 
+**Scope the whole work unit.** When invoked mid-session after work has already happened, the default scope is everything the session produced — the original implementation plus follow-up fixes, tests, and doc updates — not just the most recent edit. Exclude unrelated dirty work that predates the session. When regenerating a recap after feedback, keep the broad scope; never narrow it to just the latest fix unless asked.
+
 **Apply the skip gate now.** Look at the `--stat`. If the change is small or obvious — a single file, a handful of lines, a mechanical rename — say so and **recommend skipping the recap**; the terminal output from `/pre-merge` or `/walk-commits` is faster. Only proceed when the topology genuinely warrants a shape-first surface. This gate is the skill's main defense against becoming filler.
 
 ### 2. Derive the grounded skeleton (tooling, not prose)
@@ -76,24 +87,31 @@ Build the structural inputs mechanically, before writing a single sentence:
 
 Run secret-redaction over every hunk at this step (per the core), before any of it reaches the HTML.
 
-### 3. Author the prose layer (judgment only)
+### 3. Inventory coverage, then author the prose layer
 
-Now write the parts the model owns — and only these:
+**Inventory first.** Before writing a sentence, list from the diff every meaningful changed surface: routes/components, schema entities, API endpoints/actions, dialogs/popovers, role/permission states, empty/error states, and shared abstractions. The finished recap must represent each item with a block **or intentionally omit it** (tiny, redundant, not reviewer-visible). This list is the mechanical counter-pressure against the thin recap — and it stays grounded, because it comes from the diff, not from memory.
 
-- The **overview**: 1–3 sentences of "what this change is," the scale, and the reading mode (evolution vs. maintenance), so the reviewer reads *intent first*.
+Then write the parts the model owns — and only these:
+
+- The **overview**: 1–3 sentences of "what this change is," the scale, and the reading mode (evolution vs. maintenance) for a small change; up to 3 short paragraphs for a large one — the objective, the key decisions visible in the diff, and the risks a reviewer should weigh. Intent first, either way.
 - A **change flag** per file (`new` / `moved` / `load-bearing` / `mechanical` / `risky`).
 - A one-line **intent summary** above each annotated hunk.
-- **3–8 callouts** total, each anchored to a real line range, each a single note — respecting the reading budget (Cohen/Rigby: ~100–300 LOC, 30–60 min). A recap that callouts every hunk has rebuilt the diff the reviewer was going to scroll anyway.
+- Callouts on **3–8 key files/hunks** — each key file gets its intent summary and a few high-signal callouts anchored to real line ranges, with excerpts focused (~150 lines max each) and the whole recap inside the reading budget (Cohen/Rigby: ~100–300 LOC of excerpts, 30–60 min). A recap that callouts every hunk has rebuilt the diff the reviewer was going to scroll anyway; a recap with one callout for a 40-file change is the thin recap the floor forbids.
+- A one-sentence **compatibility note** beside each contract card that needs one (breaking / risky / non-breaking, and for whom).
+
+When the diff changes a **schema or API surface**, the resulting contract is the headline, not the source: render a **data-model card** per changed entity and an **api-endpoint card** per changed route (`references/visual-recap-design.md` §8) — per-field change flags, struck-through `was:` prior types, grounded in the real migration/route diff. Keep the literal SQL/handler hunk for when the exact statement still matters.
+
+When the diff changes **rendered UI** — layout, controls, navigation, dialogs, visible states, design tokens — include **wireframe block(s)** (`references/visual-recap-design.md` §9); code diffs are not a substitute for showing what the user will see. Cover the **entry surface**, the **interaction surface** that opens or changes, and the **resulting state**, plus role variants when permissions changed. After-only is fine for purely additive UI; skip wireframes when the UI delta is trivial. Wireframes are the one model-authored block: labels and controls come from diff-visible strings and component names, and inferred layout says "layout inferred" in the caption.
 
 When the change needs an architecture, data-flow, or sequence picture, default to the **CSS diagram primitive** (`references/visual-recap-design.md` §1/§5 `.fc-*`) — a node-and-connector spine that renders identically offline with no CDN and no parse grammar. Reach for embedded Mermaid (via `/mermaid`) **only** for a genuinely complex graph that needs real auto-layout; do not hand-roll *that* layout by hand. (Issue #83 chose Mermaid for GitHub-bound markdown, rendered natively — a different context from this self-contained offline HTML.)
 
 ### 4. Render the self-contained HTML
 
-Author one `.html` file by copying the canonical skeleton in `references/visual-recap-design.md` — the fixed token core (§1) and the per-block markup (§3–§7) — then filling only the grounded data and the prose. Deviate from the skeleton only where the change genuinely needs it; do not re-derive a fresh design system per run.
+Author one `.html` file by copying the canonical skeleton in `references/visual-recap-design.md` — the fixed token core (§1) and the per-block markup (§3–§9) — then filling only the grounded data and the prose. Deviate from the skeleton only where the change genuinely needs it; do not re-derive a fresh design system per run.
 
 - Inline, themeable CSS is load-bearing — copy the skeleton's `:root`/`[data-theme="dark"]` token block verbatim (light default, dark flipped on `[data-theme]`) and keep the variable names. CDN libraries are enhancement-only and always have a no-CDN fallback. The file must read identically with the network off.
 - Line-anchored callouts are **direct labels** rendered at the line, not a separate legend (Tufte; Norman, *natural mapping*). Clicking a marker highlights the exact line — scope the highlight to the code cell, not the whole row.
-- Maximize data-ink: no chartjunk, no decorative shadows; small multiples + constancy of design for before/after panels (identical scale and frame on both sides).
+- Maximize data-ink: no chartjunk, no decorative shadows; small multiples + constancy of design for before/after comparisons — labeled side-by-side columns by default, identical scale and frame on both sides, the state named in the column header (never inside the frame); take the toggle variant only when the content is too wide to halve.
 - Include the **Copy feedback** button and its layered-clipboard serializer with stable `data-feedback-id`s, exactly per the core's `recap-feedback v1` format.
 
 Write the file to a **transient** path — gitignored `.context/` or `mktemp` — never the tracked tree.
@@ -133,6 +151,6 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 ## Handoff
 
 - **Expected input:** a finished change to comprehend — a branch range, a PR number, or a working diff — plus the base branch to diff against. No upstream artifact is required, though a linked PRD or slice issue helps frame intent.
-- **Produces:** a transient, self-contained interactive HTML recap (file-tree + change flags, annotated split diffs with line-anchored callouts, before/after panels, reused Mermaid diagrams) and the reviewer's copied-back feedback, with durable items promoted to GitHub PR review comments. A comprehension surface and a decision, not a committed file.
+- **Produces:** a transient, self-contained interactive HTML recap (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, CSS-first flow diagrams with Mermaid opt-in for complex graphs) and the reviewer's copied-back feedback, with durable items promoted to GitHub PR review comments. A comprehension surface and a decision, not a committed file.
 - **Reconnects at:** the `/pre-merge` → merge boundary. Run it before approving; proceed to merge once the change is understood, then `/compound` if a durable lesson emerged.
 - **What comes next:** the user merges (or pauses on unresolved items). `/visual-recap` does not invoke anything.
