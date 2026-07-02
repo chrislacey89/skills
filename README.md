@@ -82,7 +82,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [qa](qa/) | Single entry point for bug conversations; files lightweight issues and delegates per-issue to `/triage-issue` for deep diagnosis |
 | [pre-merge](pre-merge/) | Author-mode: create the PR and run an architectural review before merge. Reviewer-mode (`--pr <n>`): review someone else's PR and draft comment text |
 | [walk-commits](walk-commits/) | Interactive commit-by-commit comprehension walkthrough before merge — intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off (optional, recommended by `/pre-merge`; can render per-commit callouts via the shared visual-rendering core) |
-| [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML recap — file-tree + change flags, annotated split diffs with line-anchored callouts, before/after panels, reused Mermaid, copy-text feedback loop (optional, never auto-invoked, transient artifact) |
+| [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML recap — file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes, before/after columns, CSS-first diagrams (Mermaid opt-in), copy-text feedback loop (optional, never auto-invoked, transient artifact) |
 | [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR before `/closeout` merges (default), or post-merge as the fallback |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |

@@ -19,7 +19,8 @@ shared by `/visual-recap`, the `/walk-commits` per-commit callouts, and the futu
 
 The values below are the proven reference (the "Visual Recap v2" surface): dark-first deep
 blue-ink canvas, a single electric-violet accent, monospace-forward dense layout, a fixed
-272px rail beside a centered ≤1000px scrolling column running overview → files → diagram →
+272px rail beside a centered ≤1000px scrolling column running overview → files → contracts
+(when schema/API surfaces changed) → diagram → wireframes (when rendered UI changed) →
 annotated changes → before/after → review. Every semantic color is tuned for WCAG AA
 contrast against its surface in **both** themes — light is the `:root` default, dark flips
 on `[data-theme="dark"]`.
@@ -113,7 +114,7 @@ works fully offline). These variable names are the canonical set; do not rename 
   ::selection{background:var(--accent-dim)}
 
   /* A few stateful classes — the one place classes beat inline styles, because the
-     active state is toggled by the small script in §8. Everything else stays inline. */
+     active state is toggled by the small script in §10. Everything else stays inline. */
   .vr-callout{border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev)}
   .vr-callout.is-active{box-shadow:0 0 0 1px var(--accent),0 18px 40px -16px var(--accent-glow)}
   .vr-line.is-active{background:var(--mark-bg)}
@@ -184,7 +185,7 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
       <nav style="display:flex;flex-direction:column;margin-top:auto">
         <div style="font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s2)">Contents</div>
         <a href="#sec-overview" style="display:flex;align-items:center;gap:11px;padding:7px 0;text-decoration:none;font-size:13px;font-weight:500;color:var(--fg-muted)"><span style="width:2px;height:15px;background:var(--accent);border-radius:2px"></span><span style="font-family:var(--mono);font-size:11px;width:14px">01</span>Overview</a>
-        <!-- …files 02, diagram 03, changes 04, compare 05, review 06 — same shape -->
+        <!-- …then one entry per rendered section (files, contracts, diagram, wireframes, changes, compare, review), numbered in render order — same shape -->
       </nav>
       <div style="display:flex;align-items:center;justify-content:flex-end;padding-top:var(--s4);border-top:1px solid var(--border)">
         <button onclick="toggleTheme()" style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--border-strong);border-radius:999px;background:var(--bg-elev);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:550;cursor:pointer">◐ Theme</button>
@@ -193,7 +194,7 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
 
     <!-- MAIN: one scrolling column, ≤1000px, centered -->
     <main style="max-width:1000px;width:100%;margin:0 auto;padding:var(--s8) var(--s7)">
-      <!-- the six blocks of §3–§7 drop in here, each separated by margin-top:var(--s8) -->
+      <!-- the blocks of §3–§9 drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
     </main>
   </div>
 </div>
@@ -386,7 +387,7 @@ A card per hunk: header (flag · path · one-line intent), a split BEFORE/AFTER 
 **identical scale and frame on both sides** (small-multiples constancy), and callout cards
 below. Diff lines carry a 2px colored left spine and a 12%-opacity wash; the line-number
 gutter is 36px. Added/removed line backgrounds use `--add-bg` / `--del-bg`. Each annotated
-line gets a numbered `.vr-marker`; clicking it activates its callout (see §8). Callouts are
+line gets a numbered `.vr-marker`; clicking it activates its callout (see §10). Callouts are
 **direct labels** anchored at the line, never a separate legend.
 
 Stable ids per `visual-rendering-core.md` §4: callout cards and their markers share a
@@ -446,12 +447,53 @@ A secret-masked value renders as an inert chip, never the value (per
 
 ---
 
-## 7. Block: before/after toggle + review
+## 7. Block: before/after comparison + review
 
-**Before/after** — a segmented pill with a sliding accent thumb; both states render in an
-identical frame and scale so only the code differs.
+**Before/after — labeled columns are the default.** Two identical frames side by side, with
+`Before` / `After` as column *headers* above each frame — never a label baked inside the
+frame, where it reads as part of the product UI and lands in a random corner. Both frames
+share the same scale, padding, and density (small-multiples constancy), so the eye reads the
+*difference*, not a layout change — a comparison the toggle defeats by hiding one state.
+Columns are the structured-comparison primitive: two states of a config, a schema shape, a
+rendered surface (§9), or a short code unit — read in one glance, no interaction required.
+
+**Decision rule (one line):** can both states be read side by side without crushing the
+content into unreadably narrow columns? → **columns** (default, below). Content too wide —
+long code lines, a dense full-width table → the **toggle variant** further down.
 
 ```html
+<section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0">
+        <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">let</span> currentToken = <span style="color:var(--sx-n)">null</span></code></div>
+        <!-- …rest of the BEFORE state, one row per line… -->
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0">
+        <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)</code></div>
+        <!-- …rest of the AFTER state, identical frame and scale… -->
+      </div>
+    </div>
+  </div>
+  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same frame, same scale on both sides — only the content differs.</p>
+</section>
+```
+
+### Variant — the toggle (wide states only)
+
+When each state is too wide to halve — long code lines, a dense table — fall back to a
+segmented pill with a sliding accent thumb; both states render in an identical frame and
+scale so only the code differs. The comparison cost is real (the reviewer holds one state in
+memory while viewing the other), so take this variant only when columns would crush the
+content.
+
+```html
+<!-- replaces the columns grid inside the same <section> -->
 <section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s4);flex-wrap:wrap">
     <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
@@ -461,7 +503,7 @@ identical frame and scale so only the code differs.
       <span id="ba-thumb" style="position:absolute;top:3px;bottom:3px;width:calc(50% - 3px);border-radius:999px;background:var(--accent);left:3px;transition:left .28s cubic-bezier(.4,0,.2,1)"></span>
     </div>
   </div>
-  <!-- Both panels live here. setSide() (§8) toggles their `hidden` attribute; they MUST
+  <!-- Both panels live here. setSide() (§10) toggles their `hidden` attribute; they MUST
        carry exactly these ids. Render both in the same frame and scale — only the code differs. -->
   <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);min-height:200px;padding:var(--s4) 0">
     <div id="ba-before">
@@ -503,7 +545,171 @@ do not reinvent the format here.
 
 ---
 
-## 8. The minimal vanilla interactions
+## 8. Block: contract cards (data-model + api-endpoint)
+
+When the diff changes a schema or an API surface, the **resulting contract is the headline**,
+not the SQL or the handler code. A reviewer of a migration wants "the `sessions` table gained
+`refresh_token_id` and `expires_at` changed type" before (often instead of) the literal
+`ALTER TABLE`. Render the contract as a card, grounded field-by-field in the real
+migration/route diff; reach for the literal SQL/handler hunk in §6 only when the exact
+statement still matters.
+
+**Field-level flags reuse the diff semantics** so meaning never blurs: `--add` for an added
+field/param, `--del` for a removed one, `--risk` for a modified type/shape (a contract
+change *is* the compatibility risk the reviewer must weigh), `--flag-moved` for a rename. A
+modified field shows its prior type inline as struck-through `was:` text — the diff-aware
+detail that turns a schema listing into a schema *change*.
+
+Both card types carry a stable `data-feedback-id` (`dm-<entity-slug>`,
+`ep-<method>-<path-slug>` — `visual-rendering-core.md` §4) so reviewer notes serialize with
+the rest of the feedback.
+
+**data-model card** — one per changed entity (table, model, collection). Show every field of
+a small entity; for a large one show the changed fields plus their nearest unchanged
+neighbors as context rows:
+
+```html
+<section id="sec-contracts" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">03</span> &nbsp;Contracts</div>
+
+  <div data-feedback-id="dm-sessions" data-feedback-kind="model" style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:var(--s3);padding:var(--s4);border-bottom:1px solid var(--border)">
+      <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">sessions</span>
+      <span style="border:1px solid var(--risk);color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600">modified</span>
+      <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--fg-muted)">db/migrations/0142_sessions.sql</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:12.5px;padding:var(--s2) 0">
+      <!-- unchanged context row: transparent spine, no wash -->
+      <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 90px;gap:var(--s3);align-items:center;padding:6px var(--s4);border-left:2px solid transparent"><span style="color:var(--fg)">id</span><span style="color:var(--fg-muted)">uuid · pk</span><span></span></div>
+      <!-- added field: --add spine + wash -->
+      <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 90px;gap:var(--s3);align-items:center;padding:6px var(--s4);border-left:2px solid var(--add);background:var(--add-bg)"><span style="color:var(--fg)">refresh_token_id</span><span style="color:var(--fg-muted)">uuid · nullable</span><span style="justify-self:end;color:var(--add);font-size:10px;font-weight:600;font-family:var(--sans)">added</span></div>
+      <!-- modified field: --risk spine, struck-through prior type -->
+      <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 90px;gap:var(--s3);align-items:center;padding:6px var(--s4);border-left:2px solid var(--risk)"><span style="color:var(--fg)">expires_at</span><span style="color:var(--fg-muted)">timestamptz <span style="color:var(--fg-faint);text-decoration:line-through">was: integer</span></span><span style="justify-self:end;color:var(--risk);font-size:10px;font-weight:600;font-family:var(--sans)">modified</span></div>
+      <!-- removed field: --del spine + wash, struck-through name -->
+      <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 90px;gap:var(--s3);align-items:center;padding:6px var(--s4);border-left:2px solid var(--del);background:var(--del-bg)"><span style="color:var(--fg-muted);text-decoration:line-through">legacy_ttl</span><span style="color:var(--fg-faint)">integer</span><span style="justify-self:end;color:var(--del);font-size:10px;font-weight:600;font-family:var(--sans)">removed</span></div>
+    </div>
+  </div>
+</section>
+```
+
+**api-endpoint card** — method badge, path, endpoint-level change chip, then one row per
+changed param / request field / response field with the same flag treatment. A wholly
+removed endpoint renders its path struck-through with a `removed` chip and needs no rows:
+
+```html
+<div data-feedback-id="ep-post-api-auth-refresh" data-feedback-kind="endpoint" style="margin-top:var(--s4);border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);overflow:hidden">
+  <div style="display:flex;align-items:center;gap:var(--s3);padding:var(--s4);border-bottom:1px solid var(--border)">
+    <span style="font-family:var(--mono);font-size:11px;font-weight:700;padding:3px 8px;border-radius:var(--r1);background:var(--accent-dim);color:var(--accent)">POST</span>
+    <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">/api/auth/refresh</span>
+    <span style="border:1px solid var(--add);color:var(--add);background:color-mix(in srgb,var(--add) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600">added</span>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--fg-muted)">src/routes/auth.ts</span>
+  </div>
+  <div style="font-family:var(--mono);font-size:12.5px;padding:var(--s2) 0">
+    <div style="display:grid;grid-template-columns:110px minmax(0,1.2fr) minmax(0,1fr) 90px;gap:var(--s3);align-items:center;padding:6px var(--s4);border-left:2px solid var(--add);background:var(--add-bg)"><span style="color:var(--fg-faint);font-size:11px">body</span><span style="color:var(--fg)">refreshToken</span><span style="color:var(--fg-muted)">string · required</span><span style="justify-self:end;color:var(--add);font-size:10px;font-weight:600;font-family:var(--sans)">added</span></div>
+    <div style="display:grid;grid-template-columns:110px minmax(0,1.2fr) minmax(0,1fr) 90px;gap:var(--s3);align-items:center;padding:6px var(--s4);border-left:2px solid var(--risk)"><span style="color:var(--fg-faint);font-size:11px">200 body</span><span style="color:var(--fg)">expiresAt</span><span style="color:var(--fg-muted)">string (ISO) <span style="color:var(--fg-faint);text-decoration:line-through">was: number</span></span><span style="justify-self:end;color:var(--risk);font-size:10px;font-weight:600;font-family:var(--sans)">modified</span></div>
+  </div>
+</div>
+```
+
+A compatibility-sensitive change gets one short authored sentence directly beside its card
+(is it breaking, risky, or non-breaking, and for whom) — that judgment is the prose the
+model owns; the fields themselves stay mechanically derived.
+
+---
+
+## 9. Block: UI wireframe
+
+When the diff changes rendered UI — layout, controls, navigation, dialogs, visible states,
+design tokens — show the visual delta; code diffs are not a substitute for what the user
+will see. Wireframes are the one **model-authored** structured block (the Grounding Rule
+exception, `visual-rendering-core.md` §1): every label, control, and state must come from
+diff-visible strings and component names, and when the layout is inferred rather than read
+from the diff, the caption says so ("layout inferred").
+
+**Coverage:** show the **entry surface** where the change appears, the **interaction
+surface** that opens or changes (popover, dialog, tab, inline editor), and the **resulting
+state** — plus role variants when permissions changed. After-only is fine for purely
+additive UI; skip wireframes entirely when the UI delta is trivial. Zoom in on the changed
+sub-surface with the matching frame variant — never redraw a whole page for a popover
+change.
+
+Paste this style block alongside the §1 core only when the recap renders UI changes:
+
+```html
+<style>
+  /* UI wireframe primitives (§9) — same tokens, no new palette */
+  .wf-frame{border:1.5px solid var(--border-strong);border-radius:var(--r3);background:var(--bg);overflow:hidden}
+  .wf-frame.is-popover{max-width:320px;border-radius:var(--r2)}
+  .wf-frame.is-panel{max-width:360px}
+  .wf-frame.is-mobile{max-width:260px;border-radius:18px}
+  .wf-chrome{display:flex;align-items:center;gap:var(--s2);padding:8px var(--s3);border-bottom:1px solid var(--border);background:var(--bg-subtle)}
+  .wf-dot{width:8px;height:8px;border-radius:99px;background:var(--border-strong)}
+  .wf-url{flex:1;font-family:var(--mono);font-size:11px;color:var(--fg-muted);background:var(--bg-inset);border-radius:999px;padding:3px 10px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .wf-body{display:flex;flex-direction:column;gap:var(--s3);padding:var(--s4)}
+  .wf-card{border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev);padding:var(--s3) var(--s4)}
+  .wf-pill{display:inline-block;border:1px solid var(--border-strong);border-radius:999px;padding:2px 10px;font-size:11px;font-weight:600;color:var(--fg-muted)}
+  .wf-pill.is-accent{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+  .wf-btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--border-strong);border-radius:var(--r1);padding:6px 14px;font-size:12px;font-weight:600;background:var(--bg-elev);color:var(--fg)}
+  .wf-btn.is-primary{border-color:var(--accent);background:var(--accent);color:#fff}
+  .wf-muted{color:var(--fg-muted);font-size:12px}
+  .wf-spacer{flex:1}
+</style>
+```
+
+**Quality rules** (each exists because its violation has shipped a bad mockup):
+
+- **Tokens, never hex; no decorative shadows.** The theme toggle must flip the wireframe
+  too; fake depth reads as content (Tufte).
+- **Real product content, never lorem or gray bars.** Labels, counts, and button text come
+  from the diff and the code it touches — a wireframe with invented copy violates grounding.
+- **Full-width chrome bars.** Headers/toolbars are one flex row spanning the frame with a
+  `.wf-spacer` pushing trailing actions to the edge — never a centered clump. In a
+  Before/After pair the bar stays full-width in both states; the spacer absorbs the
+  difference so surviving controls hold their edge alignment.
+- **Pin bottom bars.** Frame = flex column; body gets `flex:1`; the bottom bar sits last —
+  never floating mid-frame above an empty band.
+- **Comparable before/after.** Preserve the unchanged controls in both states so the
+  reviewer sees exactly what moved or appeared, in the position the implementation puts it;
+  same frame size, scale, and density on both sides. Label the states with the §7 column
+  headers, never inside the frame.
+- **Single-line rows stay single-line.** Toolbars, tab rails, breadcrumbs, path chips:
+  `white-space:nowrap` on the row, `overflow:hidden;text-overflow:ellipsis` on growable
+  labels.
+- **Fill the frame.** No large empty bands; shorten copy rather than letting it wrap.
+
+Worked example — a share popover gaining a "Copy link" action, as a §7 column pair
+(`data-feedback-id="wf-share-popover"` on the wrapping unit so notes serialize):
+
+```html
+<div data-feedback-id="wf-share-popover" data-feedback-kind="wireframe" style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start;justify-items:center">
+  <div style="width:100%;max-width:320px">
+    <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
+    <div class="wf-frame is-popover">
+      <div class="wf-chrome"><strong style="font-size:12.5px">Share document</strong><span class="wf-spacer"></span><span class="wf-muted">✕</span></div>
+      <div class="wf-body">
+        <input placeholder="Invite by email…" style="border:1px solid var(--border-strong);border-radius:var(--r1);padding:7px 10px;font-size:12px;background:var(--bg-elev);color:var(--fg)">
+        <button class="wf-btn is-primary">Send invite</button>
+      </div>
+    </div>
+  </div>
+  <div style="width:100%;max-width:320px">
+    <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
+    <div class="wf-frame is-popover">
+      <div class="wf-chrome"><strong style="font-size:12.5px">Share document</strong><span class="wf-spacer"></span><span class="wf-muted">✕</span></div>
+      <div class="wf-body">
+        <input placeholder="Invite by email…" style="border:1px solid var(--border-strong);border-radius:var(--r1);padding:7px 10px;font-size:12px;background:var(--bg-elev);color:var(--fg)">
+        <button class="wf-btn is-primary">Send invite</button>
+        <div class="wf-card" style="display:flex;align-items:center;gap:var(--s2)"><span style="font-size:12.5px">Copy link</span><span class="wf-spacer"></span><span class="wf-pill is-accent">new</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Labels from ShareDialog.tsx; layout inferred.</p>
+```
+
+---
+
+## 10. The minimal vanilla interactions
 
 Three tiny handlers — theme toggle, callout active-state, before/after side. No framework,
 no state library; if this grows routing or a store it has become the app the surface exists
@@ -552,8 +758,9 @@ unchanged.
   used sparingly.
 - **Don't** color syntax tokens with `--add` / `--del`; reserve those hues for diff
   semantics so meaning never blurs.
-- **Do** annotate only the few changes that matter (3–8 callouts per recap; the core's
-  reading budget).
+- **Do** annotate only the changes that matter — 3–8 *key files/hunks*, each with a one-line
+  intent summary and a few high-signal callouts, focused excerpts of ~150 lines max (the
+  core's reading budget: a ceiling *and* a floor).
 - **Don't** add decorative drop shadows or gradients beyond `--shadow`; separate with
   whitespace, a hairline, or a tonal step (Tufte: subtract weight).
 - **Do** keep both themes equal — every semantic color is already WCAG-AA-tuned in §1;
