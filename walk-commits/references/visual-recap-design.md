@@ -31,7 +31,12 @@ on `[data-theme="dark"]`.
 
 Paste this `<style>` block into `<head>`. It is the load-bearing layer — named CSS variables
 flipped on `[data-theme]`, no CDN, no web fonts (two native system stacks so the surface
-works fully offline). These variable names are the canonical set; do not rename them per run.
+works fully offline). These variable names are the canonical set; do not rename them per run —
+and specifically **do not adopt the visual language of the app under review** (its palette,
+fonts, or chrome). A review instrument stays visually independent of its subject: the pull to
+theme the recap in a well-designed app's own aesthetic is strongest exactly where it does most
+harm, because it both destroys run-to-run constancy and sprays the subject's accent onto recap
+chrome that carries no diff meaning (Tufte: decoration exceeding the data).
 
 ```html
 <style>
