@@ -124,6 +124,7 @@ This is an enhancement, not a new default — keep it optional and keep the step
 
 - **Reach for it** only when the line genuinely reads better shown in its hunk than described in prose. A boring commit does not earn an HTML file (Norman, *featuritis*).
 - **Grounding holds.** The callout's line numbers and hunk text are copied from `git show`, never retyped; you write only the note. Visual emphasis must not exceed the real change (the core's Lie Factor ≤ 1 rule).
+- **Canonical token core, not the reviewed app's aesthetic (forcing function).** Confirm the rendered callout's `:root`/`[data-theme]` block is the canonical `references/visual-recap-design.md` §1 set — canonical variable names and values — not a palette, font stack, or chrome re-derived from the app under review. A review instrument stays visually independent of its subject (core §6).
 - **Route answers through the copy-text button.** When a commit is rendered this way, the merger's sign-off and any per-callout response are captured by the core's **Copy feedback** button into the `recap-feedback v1` block (keyed by the stable `signoff-<short-hash>` / `c-<file-slug>-L<line>` ids) and pasted back — instead of, or alongside, the `AskUserQuestion` answer. Promote anything durable to a GitHub PR review comment.
 - **Transient artifact.** The HTML is written to a gitignored `.context/` or `mktemp` path and deleted when the walkthrough ends — per the core's transient-artifact rule. What persists is the 🟢/🟡/🔴 sign-off, not the file.
 

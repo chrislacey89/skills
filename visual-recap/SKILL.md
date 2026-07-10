@@ -118,6 +118,8 @@ Write the file to a **transient** path — gitignored `.context/` or `mktemp` �
 
 ### 5. Open, review, and round-trip the feedback
 
+**Confirm the token core is canonical, not the reviewed app's aesthetic (forcing function).** Before presenting, verify the artifact's `:root`/`[data-theme]` block is the canonical `references/visual-recap-design.md` §1 set — canonical variable names and values — and **not** a palette, font stack, or chrome re-derived from the app under review. This is the deviation most likely to occur on a well-designed downstream app and the most harmful when it does: the neutral instrument adopts its subject's brand and loses run-to-run constancy. It is a checked step, not stated hope (core §6).
+
 The default CSS diagram primitive needs no render check — it has no parse grammar and no CDN.
 **Only if you took the Mermaid opt-in** for a complex graph, **confirm it renders without a
 parse error before presenting it** (a quick load, or a re-check against the
