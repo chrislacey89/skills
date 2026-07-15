@@ -67,6 +67,17 @@ Each skill should make its role obvious.
 - **Side-route skills** should say how they reconnect to the main workflow.
 - **Infrastructure skills** should say they are setup tasks, not feature-delivery stages.
 
+### Invocation mechanics — a cost axis orthogonal to role
+
+The roles above say *where a skill sits in the workflow*. They say nothing about *how it is invoked*, which is a separate axis with its own cost:
+
+- **Model-invoked** skills can self-trigger, so their `description` sits in the context window on every turn of every session — in every downstream repo the pack is installed into. The cost is *context load*, paid whether or not the skill ever fires there.
+- **User-invoked** skills fire only when a human types `/name` (`disable-model-invocation: true` in Claude Code). The cost is *cognitive load*: zero context, but the human must remember the skill exists.
+
+The two axes are independent — a side-route or an infrastructure skill can be either. Naming the axis gives the vocabulary to ask, per skill, "can this ever usefully self-trigger in a downstream session?" For a side-route that is always typed in practice the answer is plausibly no, and its always-on description is an unpriced cost that grows monotonically as the set grows.
+
+**Standing audit (not yet actioned):** produce a per-skill list of which skills can never usefully self-trigger. **Flag flips are out of scope** until (a) the `npx skills` CLI is verified to preserve the frontmatter field and (b) every cross-skill auto-invoke chain the skill participates in — `/execute` → `/pre-merge`, `/execute` → `/tdd`, `/write-a-prd` → `/design-an-interface`, and the rest — is checked. A wrong flag silently breaks a chain the pipeline relies on.
+
 ## Handoff Contract
 
 Each pipeline skill should end with a clear transition statement:
@@ -129,6 +140,15 @@ When modifying a skill:
 - If a skill advances an issue through lifecycle states, define those states and the minimum content required to move between them
 - If a skill can run HITL or AFK, say which mode is expected by default and what durable artifacts must exist before AFK execution is safe
 - Use American English spelling throughout: *behavior* not *behaviour*, *color* not *colour*, *initialize* not *initialise*, *center* not *centre*, *optimize* not *optimise*, *neighbor* not *neighbour*, etc. When forking an upstream skill that uses British spelling, convert it in the same change. Exceptions: proper nouns, book titles, and quoted material keep their original spelling.
+
+**Inventory-sync rule (a router that lies is worse than no router).** Adding, renaming, removing, or re-roling a skill must update every inventory surface *in the same change*, never in a follow-up. The surfaces are:
+
+- the skill tables in `README.md`
+- the Handoff Table and the role lists in `SYSTEM-OVERVIEW.md`
+- the role lists in this file (`CLAUDE.md` § Invocation Roles)
+- the classification ladder in `help/SKILL.md` Step 2
+
+A stale surface routes agents and users to a skill that no longer exists, or under a role it no longer holds — the drift #143 reconciled once by hand. Keeping the surfaces in lockstep with the change that causes the drift makes that reconciliation standing rather than after-the-fact, and puts the inventory knowledge in the world instead of the maintainer's head.
 
 ## Shared reference files
 
