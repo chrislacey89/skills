@@ -39,6 +39,7 @@ sources:
   - whether it is a direct-entry, delegated, side-route, or infrastructure skill
 - Do not put process steps in `description`.
 - `sources` should be used selectively. Only claim a source the body clearly operationalizes.
+- Invocation mechanics are a **cost axis orthogonal to pipeline role**: a *model-invoked* skill's `description` rides in the context window every turn of every session (context load), while a *user-invoked* skill (`disable-model-invocation: true` in Claude Code) costs nothing until a human types `/name` (cognitive load). Which load a skill should spend informs whether it self-triggers and whether to split or merge it. The canonical treatment and the standing per-skill audit live in `CLAUDE.md` § Invocation Roles; flag flips are out of scope there until CLI field-preservation and every auto-invoke chain are verified.
 
 ## Required sections
 
@@ -155,6 +156,21 @@ Move material into shared docs or references only when multiple skills actively 
 - Keep utility skills lighter than core pipeline skills.
 - Keep provenance asymmetric — core methodology-bearing skills can justify richer source metadata than narrow utility skills.
 
+## Prose economy and steering
+
+Structure keeps skills consistent; steering keeps them *effective*. Every sentence in a skill either changes what the model does or is dead weight it reads on every relevant turn. This section is the editing-time discipline for keeping skill prose load-bearing. It is a **per-sentence diagnostic, not a length target** — a long skill whose every line changes behavior is a deep module (Ousterhout), and cutting it to hit a line count deletes behavior. Apply these to prose you *changed*, not as a mandate to shorten skills that already work.
+
+- **No-op test.** For each sentence you added or changed, ask whether the model already does this by default. If deleting the sentence would not change the model's behavior, delete it — do not trim it. Instructions the model already obeys spend context and dilute the ones that actually steer.
+- **Prompt the positive, not the negative.** Naming a forbidden behavior makes it *more* available to the model, not less — the words are now in the window. Replace "do not do X" with a concrete statement of the behavior you want. Reserve explicit prohibitions for genuine, high-cost failure modes where positive framing alone is not enough.
+- **Leading words.** Anchor behavior with pretrained concepts the model already carries — *seam*, *frontier*, *tracer bullet*, *deep module*, *sediment*. One right word invokes a whole schema in a few tokens; a paragraph explaining the same idea from scratch spends more and lands softer.
+- **Checkable, exhaustive completion criteria.** Every step that produces or verifies something must end on a criterion the model can *check* — a file exists, a command exits 0, a grep returns zero matches, an issue is created — not a vague "done when it looks right." Where the check must cover a set (all consumer surfaces, all deleted exports), say the set is exhaustive so the model does not stop at the first hit.
+- **Single source of truth per meaning.** Each concept lives in exactly one canonical place; other skills link to it rather than restating it. Two copies of a rule drift, and the drift stays silent until they contradict each other.
+
+**Named failure modes to edit against:**
+
+- **Sediment** — stale layers that settle because adding a sentence feels safe and removing one feels risky. Left unchecked, every enhancement thickens the skill by one no-op line. The no-op test is the pruning discipline that fights it.
+- **Sprawl** — one meaning restated across many surfaces, so a change must land in several places or the copies diverge. The single-source-of-truth rule is the fix.
+
 ## Quality bar by skill role
 
 ### Primary pipeline skills
@@ -199,3 +215,5 @@ Before considering a skill revision done, check:
 - [ ] any claimed sources are truly visible in the body
 - [ ] optional sections like `Common Rationalizations`, `Red Flags`, or `Verification` are included when they would prevent likely agent failure
 - [ ] the skill does not duplicate large amounts of repo-level philosophy that belongs in `SYSTEM-OVERVIEW.md`
+- [ ] each step that produces or verifies something ends on a checkable completion criterion (see `Prose economy and steering`)
+- [ ] the no-op hunt was run on changed prose — every added or edited sentence changes model behavior, or it was deleted
