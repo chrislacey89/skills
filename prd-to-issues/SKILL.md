@@ -50,6 +50,16 @@ Slices may be 'HITL' or 'AFK'. HITL slices require human interaction, such as an
 - Order the first slice to validate architecture, then remaining slices by risk
 </vertical-slice-rules>
 
+<wide-refactor-branch>
+**When no vertical slice can land green — expand–contract.** The tracer-bullet rules above assume a thin slice can cut every layer and still pass CI. One class defeats that: a mechanical change whose blast radius breaks call sites repo-wide — renaming a widely-imported symbol, changing a shared signature, swapping a serialization format — where any partial change leaves the tree red. Do not force a tracer bullet here; decompose the refactor along the expand–contract sequence instead:
+
+1. **Expand** — introduce the new form *beside* the old one. Nothing is removed yet, so CI stays green. One slice.
+2. **Migrate** — move call sites to the new form in blast-radius-sized batches, each batch its own slice, each leaving CI green. Size batches for reviewability (§6's >500 LOC / >20 files signal), not for speed.
+3. **Contract** — remove the old form once a grep confirms no call site still references it. One slice, ordered last in the dependency graph.
+
+Each step is still a complete, verifiable slice — the seam it cuts is the migration boundary, not an end-user feature, so "demoable on its own" reads as "CI is green after this slice and the old and new forms coexist without conflict." This branch *adds to* the tracer-bullet path rather than replacing it: reach for it only when the default thin-slice decomposition would force a red tree, and state in the §9 decomposition summary why a tracer bullet could not land end-to-end here.
+</wide-refactor-branch>
+
 Always create a final QA issue with a detailed manual QA plan for all items that require human verification. This QA issue should be the last item in the dependency graph, blocked by all other slices. It should be HITL.
 
 ### 4. Draft the Boundary Map
