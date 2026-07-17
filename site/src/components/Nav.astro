@@ -1,0 +1,63 @@
+---
+import { repoUrl } from "../lib/data";
+---
+
+<nav class="nav wrap">
+	<span class="brand">Skill&thinsp;Kit</span>
+	<div class="links">
+		<a href="#canon">The canon</a>
+		<a href="#practice">Into practice</a>
+		<a href="#collection">Collection</a>
+		<a class="ghbtn" href={repoUrl}>GitHub</a>
+	</div>
+</nav>
+
+<style>
+	.nav {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding-block: 26px;
+		border-bottom: 1px solid var(--rule);
+	}
+	.brand {
+		font-family: var(--display);
+		font-size: 23px;
+		letter-spacing: 0.02em;
+	}
+	.links {
+		display: flex;
+		align-items: center;
+		gap: 30px;
+		font-size: 14.5px;
+	}
+	.links a {
+		color: var(--sage);
+	}
+	.links a:hover {
+		color: var(--gold-bright);
+	}
+	.ghbtn {
+		color: var(--ink-bg) !important;
+		background: var(--gold);
+		padding: 9px 20px;
+		border-radius: 2px;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.ghbtn:hover {
+		background: var(--gold-bright);
+		text-decoration: none;
+	}
+	@media (max-width: 640px) {
+		.nav {
+			flex-direction: column;
+			gap: 16px;
+		}
+		.links {
+			gap: 20px;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+	}
+</style>

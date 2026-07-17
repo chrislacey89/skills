@@ -1,0 +1,158 @@
+---
+import { repoUrl, installCommand, fullInstallCommand } from "../lib/data";
+---
+
+<header class="hero wrap">
+	<div class="eyebrow">Twenty-nine skills · Eight books · One pipeline</div>
+	<h1>Fifty years of software wisdom, <em>finally executable.</em></h1>
+	<p class="sub">
+		Skill Kit distills Beck, Fowler, Ousterhout, Evans, Singer, Humble and
+		Farley into a delivery pipeline your coding agent actually follows. Every
+		skill cites its sources. Nothing rests on vibes.
+	</p>
+	<div class="cta-row">
+		<a class="btn-primary" href={`${repoUrl}#installation`}>Install the pack</a>
+		<a class="btn-ghost" href="#canon">Browse the shelf</a>
+	</div>
+
+	<button
+		type="button"
+		class="copybox"
+		data-copy={fullInstallCommand}
+		aria-label="Copy install command to clipboard"
+	>
+		<span class="prompt" aria-hidden="true">$</span>
+		<span class="cmd">{installCommand}</span>
+		<span class="copylabel" data-copylabel>copy</span>
+	</button>
+</header>
+
+<style>
+	.hero {
+		padding-block: 100px 84px;
+		text-align: center;
+	}
+	.eyebrow {
+		margin-bottom: 30px;
+	}
+	h1 {
+		font-family: var(--display);
+		font-weight: 500;
+		font-size: clamp(52px, 7vw, 100px);
+		line-height: 1.04;
+		letter-spacing: -0.01em;
+		margin: 0 auto 30px;
+		max-width: 940px;
+	}
+	h1 em {
+		color: var(--gold);
+		font-style: italic;
+	}
+	.sub {
+		font-size: 19px;
+		color: var(--sage);
+		max-width: 640px;
+		margin: 0 auto 44px;
+		text-wrap: pretty;
+	}
+	.cta-row {
+		display: flex;
+		justify-content: center;
+		gap: 16px;
+		flex-wrap: wrap;
+		margin-bottom: 34px;
+	}
+	.btn-primary,
+	.btn-ghost {
+		padding: 15px 32px;
+		border-radius: 2px;
+		font-size: 15px;
+	}
+	.btn-primary {
+		background: var(--gold);
+		color: var(--ink-bg);
+		font-weight: 600;
+	}
+	.btn-primary:hover {
+		background: var(--gold-bright);
+		text-decoration: none;
+	}
+	.btn-ghost {
+		border: 1px solid var(--rule-soft);
+		color: var(--paper);
+		font-weight: 500;
+	}
+	.btn-ghost:hover {
+		border-color: var(--gold);
+		text-decoration: none;
+	}
+	.copybox {
+		display: inline-flex;
+		align-items: center;
+		gap: 14px;
+		border: 1px solid var(--rule);
+		background: var(--ink-bg-deep);
+		border-radius: 2px;
+		padding: 13px 20px;
+		font-family: var(--mono);
+		font-size: 13.5px;
+		color: var(--sage);
+		cursor: pointer;
+	}
+	.copybox:hover {
+		border-color: var(--gold);
+	}
+	.prompt {
+		color: var(--rule-soft);
+		user-select: none;
+	}
+	.cmd {
+		white-space: nowrap;
+	}
+	.copylabel {
+		color: var(--gold);
+		font-size: 12px;
+		min-width: 56px;
+		text-align: right;
+	}
+	@media (max-width: 560px) {
+		.copybox {
+			max-width: 100%;
+		}
+		.cmd {
+			white-space: normal;
+			word-break: break-all;
+			text-align: left;
+		}
+	}
+</style>
+
+<script>
+	const box = document.querySelector<HTMLButtonElement>(".copybox");
+	const label = box?.querySelector<HTMLElement>("[data-copylabel]");
+	let resetTimer: number | undefined;
+
+	box?.addEventListener("click", async () => {
+		const text = box.dataset.copy ?? "";
+		try {
+			await navigator.clipboard.writeText(text);
+		} catch {
+			// Fallback for browsers without the async clipboard API.
+			const ta = document.createElement("textarea");
+			ta.value = text;
+			ta.style.position = "fixed";
+			ta.style.opacity = "0";
+			document.body.appendChild(ta);
+			ta.select();
+			document.execCommand("copy");
+			ta.remove();
+		}
+		if (label) {
+			label.textContent = "copied ✓";
+			window.clearTimeout(resetTimer);
+			resetTimer = window.setTimeout(() => {
+				label.textContent = "copy";
+			}, 1600);
+		}
+	});
+</script>

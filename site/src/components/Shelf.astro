@@ -1,0 +1,345 @@
+---
+import { shelf } from "../lib/data";
+
+const authorOf = (full: string) => full.split(" — ")[1] ?? "";
+---
+
+<section id="canon" class="canon">
+	<div class="wrap">
+		<div class="head">
+			<div class="eyebrow">The canon</div>
+			<h2>The shelf behind the skills</h2>
+		</div>
+
+		<div class="shelf" data-shelf>
+			{
+				shelf.map((b, i) => (
+					<button
+						type="button"
+						class="spine"
+						style={`--i:${i}; height:${b.h}; background:${b.color}; color:${b.ink};`}
+						title={b.full}
+						aria-pressed="false"
+						data-key={`${b.author}-${b.title}`}
+						data-title={b.title}
+						data-author={authorOf(b.full)}
+					>
+						<span class="label">
+							{b.title} — {b.author}
+						</span>
+					</button>
+				))
+			}
+		</div>
+		<div class="board"></div>
+
+		<div class="detail-slot" data-detail></div>
+
+		<p class="hint" data-hint>
+			Pull a book off the shelf — each SKILL.md names its sources in
+			frontmatter.
+		</p>
+	</div>
+</section>
+
+<style>
+	.canon {
+		border-top: 1px solid var(--rule);
+		background: var(--ink-bg-deep);
+	}
+	.canon .wrap {
+		padding-block: 92px;
+	}
+	.head {
+		text-align: center;
+		margin-bottom: 56px;
+	}
+	.head .eyebrow {
+		margin-bottom: 14px;
+	}
+	.head h2 {
+		font-family: var(--display);
+		font-weight: 500;
+		font-size: 44px;
+		margin: 0;
+	}
+
+	.shelf {
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		gap: 10px;
+		flex-wrap: wrap;
+	}
+
+	.spine {
+		width: 74px;
+		border: none;
+		border-radius: 3px 3px 0 0;
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		padding: 16px 0;
+		cursor: pointer;
+		box-shadow:
+			inset -6px 0 10px rgba(0, 0, 0, 0.28),
+			inset 2px 0 0 rgba(255, 255, 255, 0.12);
+		transition:
+			transform 0.25s ease,
+			box-shadow 0.25s ease;
+		font: inherit;
+	}
+	.spine:hover {
+		transform: translateY(-10px);
+	}
+	.spine .label {
+		writing-mode: vertical-rl;
+		transform: rotate(180deg);
+		font-family: var(--display);
+		font-size: 14.5px;
+		letter-spacing: 0.04em;
+		white-space: nowrap;
+	}
+
+	/* Scroll-reveal: hide only when JS can bring them back. */
+	:global(.has-js) .shelf .spine {
+		opacity: 0;
+	}
+	:global(.has-js) .shelf[data-revealed] .spine {
+		animation: spineRise 0.6s cubic-bezier(0.22, 1, 0.36, 1)
+			calc(var(--i) * 0.09s) both;
+	}
+
+	.spine[aria-pressed="true"] {
+		transform: translateY(-10px);
+		box-shadow:
+			inset -6px 0 10px rgba(0, 0, 0, 0.28),
+			inset 2px 0 0 rgba(255, 255, 255, 0.12),
+			0 0 0 2px var(--gold);
+	}
+
+	.board {
+		height: 14px;
+		max-width: 780px;
+		margin: 0 auto;
+		background: linear-gradient(180deg, #5c4a2e, #3e3120);
+		border-radius: 2px;
+		box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+	}
+
+	.hint {
+		text-align: center;
+		color: var(--muted);
+		font-size: 14.5px;
+		font-style: italic;
+		margin: 36px auto 0;
+		max-width: 560px;
+	}
+
+	/* ── Open book ─────────────────────────────────────────────── */
+	.detail-slot :global(.book) {
+		max-width: 920px;
+		margin: 44px auto 0;
+		perspective: 1600px;
+		animation: bookArrive 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+	.detail-slot :global(.spread) {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		border-radius: 4px 10px 10px 4px;
+		box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5);
+		position: relative;
+		transform-style: preserve-3d;
+	}
+	.detail-slot :global(.page) {
+		color: #2a2a22;
+		padding: 42px 38px 46px;
+	}
+	.detail-slot :global(.page-left) {
+		background: linear-gradient(100deg, #ede4ce 88%, #ddd2b6 100%);
+		border-radius: 4px 0 0 4px;
+		border-right: 1px solid #c9bc9e;
+		box-shadow: inset -18px 0 24px -14px rgba(0, 0, 0, 0.28);
+	}
+	.detail-slot :global(.page-right) {
+		background: linear-gradient(260deg, #f2ebda 88%, #e2d8be 100%);
+		border-radius: 0 10px 10px 0;
+		box-shadow: inset 18px 0 24px -14px rgba(0, 0, 0, 0.22);
+		transform-origin: left center;
+		animation: pageOpen 0.85s cubic-bezier(0.25, 0.9, 0.3, 1) 0.2s both;
+		backface-visibility: hidden;
+	}
+	.detail-slot :global(.page-right-inner) {
+		animation: inkFade 0.5s ease 0.75s both;
+	}
+	.detail-slot :global(.plabel) {
+		font-size: 11px;
+		letter-spacing: 0.26em;
+		text-transform: uppercase;
+		color: #8a7b54;
+		margin-bottom: 22px;
+	}
+	.detail-slot :global(.ptitle) {
+		font-family: var(--display);
+		font-size: 30px;
+		line-height: 1.12;
+		margin-bottom: 6px;
+	}
+	.detail-slot :global(.pauthor) {
+		font-family: var(--display);
+		font-style: italic;
+		font-size: 16px;
+		color: #6e6448;
+		margin-bottom: 26px;
+	}
+	.detail-slot :global(.plesson) {
+		font-family: var(--display);
+		font-style: italic;
+		font-size: 20px;
+		line-height: 1.45;
+		color: #3e3a2c;
+		border-top: 1px solid #c9bc9e;
+		padding-top: 22px;
+	}
+	.detail-slot :global(.pfm) {
+		font-family: var(--mono);
+		font-size: 12.5px;
+		line-height: 1.6;
+		background: #e7dcbf;
+		border: 1px solid #d3c6a2;
+		border-radius: 4px;
+		padding: 14px 16px;
+		margin: 0 0 20px;
+		white-space: pre-wrap;
+		color: #4a432e;
+	}
+	.detail-slot :global(.pexcerpt) {
+		font-size: 14.5px;
+		line-height: 1.65;
+		color: #3e3a2c;
+		text-wrap: pretty;
+		margin-bottom: 22px;
+	}
+	.detail-slot :global(.plink) {
+		font-size: 13.5px;
+		font-weight: 600;
+		color: #7a5c1e;
+		border-bottom: 1px solid #c9bc9e;
+		padding-bottom: 2px;
+	}
+	.detail-slot :global(.plink:hover) {
+		color: #a4552f;
+		text-decoration: none;
+	}
+
+	@media (max-width: 720px) {
+		.detail-slot :global(.spread) {
+			grid-template-columns: 1fr;
+		}
+		.detail-slot :global(.page-right) {
+			animation: inkFade 0.5s ease both;
+		}
+	}
+</style>
+
+<script>
+	import { bookDetails, repoUrl } from "../lib/data";
+
+	const shelf = document.querySelector<HTMLElement>("[data-shelf]");
+	const slot = document.querySelector<HTMLElement>("[data-detail]");
+	const hint = document.querySelector<HTMLElement>("[data-hint]");
+	const spines = Array.from(
+		shelf?.querySelectorAll<HTMLButtonElement>(".spine") ?? [],
+	);
+
+	let selectedKey: string | null = null;
+
+	function el(tag: string, cls: string, text?: string) {
+		const node = document.createElement(tag);
+		node.className = cls;
+		if (text !== undefined) node.textContent = text;
+		return node;
+	}
+
+	function renderDetail(spine: HTMLButtonElement) {
+		const key = spine.dataset.key ?? "";
+		const detail = bookDetails[key];
+		if (!slot || !detail) return;
+
+		const title = spine.dataset.title ?? "";
+		const author = spine.dataset.author ?? "";
+
+		const book = el("div", "book");
+		const spread = el("div", "spread");
+
+		const left = el("div", "page page-left");
+		left.append(
+			el("div", "plabel", "From the book"),
+			el("div", "ptitle", title),
+			el("div", "pauthor", author),
+			el("div", "plesson", detail.lesson),
+		);
+
+		const right = el("div", "page page-right");
+		const inner = el("div", "page-right-inner");
+		inner.append(el("div", "plabel", `Into the skill — ${detail.file}`));
+		inner.append(el("pre", "pfm", detail.fm));
+		inner.append(el("div", "pexcerpt", detail.excerpt));
+		const link = document.createElement("a");
+		link.className = "plink";
+		link.href = `${repoUrl}/blob/prod/${detail.file}`;
+		link.target = "_blank";
+		link.rel = "noopener";
+		link.textContent = "Read the full SKILL.md →";
+		inner.append(link);
+		right.append(inner);
+
+		spread.append(left, right);
+		book.append(spread);
+
+		slot.replaceChildren(book);
+	}
+
+	function select(spine: HTMLButtonElement) {
+		const key = spine.dataset.key ?? "";
+		if (key === selectedKey) {
+			close();
+			return;
+		}
+		selectedKey = key;
+		for (const s of spines)
+			s.setAttribute("aria-pressed", String(s === spine));
+		renderDetail(spine);
+		if (hint) hint.textContent = "Click the spine again to close the book.";
+	}
+
+	function close() {
+		selectedKey = null;
+		for (const s of spines) s.setAttribute("aria-pressed", "false");
+		slot?.replaceChildren();
+		if (hint)
+			hint.textContent =
+				"Pull a book off the shelf — each SKILL.md names its sources in frontmatter.";
+	}
+
+	for (const spine of spines) {
+		spine.addEventListener("click", () => select(spine));
+	}
+
+	// Reveal spines on first scroll into view, then auto-open the flagship.
+	if (shelf) {
+		const io = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((e) => e.isIntersecting)) {
+					io.disconnect();
+					shelf.setAttribute("data-revealed", "");
+					window.setTimeout(() => {
+						if (!selectedKey && spines[0]) select(spines[0]);
+					}, 1400);
+				}
+			},
+			{ threshold: 0.35 },
+		);
+		io.observe(shelf);
+	}
+</script>

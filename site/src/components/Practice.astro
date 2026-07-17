@@ -1,0 +1,110 @@
+---
+import { mappings } from "../lib/data";
+---
+
+<section id="practice" class="practice wrap">
+	<div class="grid">
+		<div class="lede">
+			<div class="eyebrow">Into practice</div>
+			<h2>From principle to pipeline stage</h2>
+			<p>
+				The pipeline isn't invented — it's assembled. Each stage
+				operationalizes a named discipline from the literature, with explicit
+				handoffs between them.
+			</p>
+		</div>
+		<div class="rows">
+			{
+				mappings.map((m) => (
+					<div class="row">
+						<div class="from">
+							<div class="principle">{m.principle}</div>
+							<div class="source">{m.source}</div>
+						</div>
+						<div class="arrow" aria-hidden="true">
+							→
+						</div>
+						<div class="to">
+							<div class="skill">{m.skill}</div>
+							<div class="what">{m.what}</div>
+						</div>
+					</div>
+				))
+			}
+		</div>
+	</div>
+</section>
+
+<style>
+	.practice.wrap {
+		padding-block: 92px;
+	}
+	.grid {
+		display: grid;
+		grid-template-columns: 1fr 1.5fr;
+		gap: 72px;
+		align-items: start;
+	}
+	.lede {
+		position: sticky;
+		top: 32px;
+	}
+	.lede .eyebrow {
+		margin-bottom: 14px;
+	}
+	.lede h2 {
+		font-family: var(--display);
+		font-weight: 500;
+		font-size: 42px;
+		line-height: 1.08;
+		margin: 0 0 18px;
+	}
+	.lede p {
+		color: var(--sage);
+		font-size: 16px;
+		margin: 0;
+		text-wrap: pretty;
+	}
+	.row {
+		display: grid;
+		grid-template-columns: 1fr 24px 1fr;
+		gap: 16px;
+		align-items: center;
+		padding: 22px 0;
+		border-bottom: 1px solid var(--rule);
+	}
+	.principle {
+		font-family: var(--display);
+		font-style: italic;
+		font-size: 19px;
+		color: var(--paper);
+	}
+	.source {
+		font-size: 13.5px;
+		color: var(--muted);
+	}
+	.arrow {
+		color: var(--gold);
+		font-size: 18px;
+		text-align: center;
+	}
+	.skill {
+		font-weight: 600;
+		font-size: 15.5px;
+		color: var(--gold);
+	}
+	.what {
+		font-size: 13.5px;
+		color: var(--sage);
+		text-wrap: pretty;
+	}
+	@media (max-width: 860px) {
+		.grid {
+			grid-template-columns: 1fr;
+			gap: 40px;
+		}
+		.lede {
+			position: static;
+		}
+	}
+</style>
