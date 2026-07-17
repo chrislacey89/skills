@@ -7,3 +7,6 @@ node_modules/
 # environment
 .env
 .env.production
+
+# Real image assets under public/ are tracked (root .gitignore ignores *.png globally)
+!public/og-image.png
