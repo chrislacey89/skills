@@ -1,0 +1,50 @@
+---
+import "../styles/global.css";
+
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const {
+	title = "Skill Kit — Fifty years of software wisdom, finally executable",
+	description = "Skill Kit distills Beck, Fowler, Ousterhout, Evans, Singer, Humble and Farley into a delivery pipeline your coding agent actually follows. Every skill cites its sources.",
+} = Astro.props;
+
+const base = import.meta.env.BASE_URL;
+const favicon = `${base.replace(/\/$/, "")}/favicon.svg`;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script is:inline>
+			// Set synchronously so scroll-reveal animations only hide content
+			// when JS is present to reveal it again.
+			document.documentElement.classList.add("has-js");
+		</script>
+		<link rel="icon" type="image/svg+xml" href={favicon} />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		<link rel="canonical" href={canonical} />
+
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:url" content={canonical} />
+		<meta name="twitter:card" content="summary" />
+
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400..700;1,400..600&family=Spectral:ital,wght@0,300;0,400;0,600;1,400&display=swap"
+			rel="stylesheet"
+		/>
+	</head>
+	<body>
+		<slot />
+	</body>
+</html>

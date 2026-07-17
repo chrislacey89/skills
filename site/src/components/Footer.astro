@@ -1,0 +1,79 @@
+---
+import { repoUrl } from "../lib/data";
+---
+
+<footer class="footer">
+	<div class="wrap">
+		<h2>Read once. <em>Ship forever.</em></h2>
+		<p>The canon, installed as a working pipeline in one command.</p>
+		<a class="install" href={`${repoUrl}#installation`}>Install Skill Kit</a>
+		<div class="meta">
+			<span>Skill Kit — MIT License</span>
+			<div class="metalinks">
+				<a href={repoUrl}>GitHub</a>
+				<a href={`${repoUrl}/blob/prod/SYSTEM-OVERVIEW.md`}>System overview</a>
+			</div>
+		</div>
+	</div>
+</footer>
+
+<style>
+	.footer {
+		border-top: 1px solid var(--rule);
+		background: var(--ink-bg-deep);
+	}
+	.footer .wrap {
+		padding: 88px 40px 40px;
+		text-align: center;
+	}
+	.footer h2 {
+		font-family: var(--display);
+		font-weight: 500;
+		font-size: clamp(38px, 5vw, 62px);
+		line-height: 1.06;
+		margin: 0 0 14px;
+	}
+	.footer h2 em {
+		color: var(--gold);
+		font-style: italic;
+	}
+	.footer p {
+		color: var(--sage);
+		font-size: 16px;
+		margin: 0 0 36px;
+	}
+	.install {
+		display: inline-block;
+		background: var(--gold);
+		color: var(--ink-bg);
+		padding: 16px 36px;
+		border-radius: 2px;
+		font-weight: 600;
+		font-size: 15.5px;
+		margin-bottom: 68px;
+	}
+	.install:hover {
+		background: var(--gold-bright);
+		text-decoration: none;
+	}
+	.meta {
+		display: flex;
+		justify-content: space-between;
+		border-top: 1px solid var(--rule);
+		padding-top: 22px;
+		font-size: 13.5px;
+		color: var(--muted);
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+	.metalinks {
+		display: flex;
+		gap: 26px;
+	}
+	.metalinks a {
+		color: var(--sage);
+	}
+	.metalinks a:hover {
+		color: var(--gold-bright);
+	}
+</style>

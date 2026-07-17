@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+/* ── Palette (from "The Canon" design) ─────────────────────────── */
+:root {
+	--ink-bg: #1c2822;
+	--ink-bg-deep: #17211c;
+	--paper: #f0e9d8;
+	--sage: #c7bfa9;
+	--muted: #8e9a8c;
+	--gold: #c9a24b;
+	--gold-bright: #e3c275;
+	--rule: #35443b;
+	--rule-soft: #5a6a5e;
+
+	--serif: "Spectral", Georgia, serif;
+	--display: "EB Garamond", Georgia, serif;
+	--mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--ink-bg);
+}
+
+body {
+	-webkit-font-smoothing: antialiased;
+	font-family: var(--serif);
+	color: var(--paper);
+	font-size: 16.5px;
+	line-height: 1.6;
+	min-height: 100vh;
+}
+
+a {
+	color: var(--gold);
+	text-decoration: none;
+}
+a:hover {
+	color: var(--gold-bright);
+	text-decoration: underline;
+}
+
+::selection {
+	background: var(--gold);
+	color: var(--ink-bg);
+}
+
+/* Shared layout helper: the centered page column. */
+.wrap {
+	max-width: 1140px;
+	margin: 0 auto;
+	padding-inline: 40px;
+}
+
+.eyebrow {
+	font-size: 13px;
+	letter-spacing: 0.28em;
+	text-transform: uppercase;
+	color: var(--gold);
+}
+
+/* ── Animations ────────────────────────────────────────────────── */
+@keyframes bookArrive {
+	from {
+		opacity: 0;
+		transform: translateY(30px) scale(0.94);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes pageOpen {
+	from {
+		transform: rotateY(-92deg);
+	}
+	60% {
+		transform: rotateY(6deg);
+	}
+	to {
+		transform: rotateY(0deg);
+	}
+}
+@keyframes inkFade {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes spineRise {
+	from {
+		opacity: 0;
+		transform: translateY(46px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.001ms !important;
+		animation-delay: 0ms !important;
+		transition-duration: 0.001ms !important;
+	}
+}

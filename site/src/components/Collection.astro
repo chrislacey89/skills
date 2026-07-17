@@ -1,0 +1,76 @@
+---
+import { catalog } from "../lib/data";
+---
+
+<section id="collection" class="collection wrap">
+	<div class="head">
+		<div class="eyebrow">The collection</div>
+		<h2>Twenty-nine skills, catalogued</h2>
+	</div>
+	<div class="cols">
+		{
+			catalog.map((c) => (
+				<div class="col">
+					<div class="colname">{c.name}</div>
+					<div class="items">
+						{c.skills.map((sk) => (
+							<span class="item">{sk}</span>
+						))}
+					</div>
+				</div>
+			))
+		}
+	</div>
+</section>
+
+<style>
+	.collection.wrap {
+		padding-block: 92px;
+	}
+	.head {
+		text-align: center;
+		margin-bottom: 52px;
+	}
+	.head .eyebrow {
+		margin-bottom: 14px;
+	}
+	.head h2 {
+		font-family: var(--display);
+		font-weight: 500;
+		font-size: 44px;
+		margin: 0;
+	}
+	.cols {
+		display: grid;
+		grid-template-columns: repeat(5, 1fr);
+		gap: 36px;
+	}
+	.colname {
+		font-family: var(--display);
+		font-size: 19px;
+		color: var(--gold);
+		border-bottom: 1px solid var(--gold);
+		padding-bottom: 10px;
+		margin-bottom: 14px;
+	}
+	.items {
+		display: flex;
+		flex-direction: column;
+		gap: 9px;
+	}
+	.item {
+		font-size: 14px;
+		color: var(--sage);
+	}
+	@media (max-width: 900px) {
+		.cols {
+			grid-template-columns: repeat(2, 1fr);
+			gap: 28px;
+		}
+	}
+	@media (max-width: 480px) {
+		.cols {
+			grid-template-columns: 1fr;
+		}
+	}
+</style>
