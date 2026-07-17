@@ -40,7 +40,7 @@ export interface CatalogGroup {
 }
 
 export const shelf: Book[] = [
-	{ title: "A Philosophy of Software Design", author: "Ousterhout", full: "A Philosophy of Software Design — John Ousterhout", h: "300px", color: "#7A3B2E", ink: "#F0E9D8" },
+	{ title: "A Philosophy of Software Design", author: "Ousterhout", full: "A Philosophy of Software Design — John Ousterhout", h: "352px", color: "#7A3B2E", ink: "#F0E9D8" },
 	{ title: "Shape Up", author: "Singer", full: "Shape Up — Ryan Singer", h: "260px", color: "#31536B", ink: "#F0E9D8" },
 	{ title: "TDD By Example", author: "Beck", full: "TDD By Example — Kent Beck", h: "282px", color: "#6B5B2E", ink: "#F0E9D8" },
 	{ title: "Refactoring", author: "Fowler", full: "Refactoring — Martin Fowler", h: "310px", color: "#3E5C46", ink: "#F0E9D8" },
