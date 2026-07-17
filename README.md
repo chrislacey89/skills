@@ -1,10 +1,10 @@
 # Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-29-blue)
+![Skills](https://img.shields.io/badge/skills-30-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 29 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 30 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 

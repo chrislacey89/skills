@@ -126,9 +126,9 @@ export const pipeline: string[] = [
 export const catalog: CatalogGroup[] = [
 	{ name: "Planning", skills: ["shape", "create-milestone", "research", "write-a-prd", "prd-to-issues", "design-an-interface", "api-design-review", "prototype", "mermaid"] },
 	{ name: "Development", skills: ["execute", "tdd", "triage-issue", "improve-codebase-architecture", "request-refactor-plan", "ts-audit"] },
-	{ name: "Knowledge & QA", skills: ["qa", "pre-merge", "walk-commits", "visual-recap", "compound", "closeout", "ubiquitous-language"] },
+	{ name: "Knowledge & QA", skills: ["qa", "pre-merge", "walk-commits", "visual-recap", "compound", "closeout", "ubiquitous-language", "improve-pipeline"] },
 	{ name: "Orientation", skills: ["help", "correct-course", "handoff"] },
-	{ name: "Tooling", skills: ["init-pipeline", "setup-pre-commit", "git-guardrails-claude-code"] },
+	{ name: "Tooling", skills: ["init-pipeline", "setup-pre-commit", "setup-ralph-loop", "git-guardrails-claude-code"] },
 ];
 
 export const repoUrl = "https://github.com/chrislacey89/skills";
