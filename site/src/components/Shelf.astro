@@ -236,8 +236,39 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		.detail-slot :global(.spread) {
 			grid-template-columns: 1fr;
 		}
+		.detail-slot :global(.page-left) {
+			border-radius: 4px 4px 0 0;
+			border-right: none;
+			border-bottom: 1px solid #c9bc9e;
+			box-shadow: none;
+		}
 		.detail-slot :global(.page-right) {
+			border-radius: 0 0 10px 10px;
+			box-shadow: none;
 			animation: inkFade 0.5s ease both;
+		}
+	}
+
+	/* Keep the shelf a single scrollable row on narrow screens instead of
+	   wrapping eight spines into a broken pile above the board. */
+	@media (max-width: 680px) {
+		.shelf {
+			flex-wrap: nowrap;
+			justify-content: flex-start;
+			overflow-x: auto;
+			padding: 4px 4px 8px;
+			-webkit-overflow-scrolling: touch;
+			scrollbar-width: thin;
+		}
+		.spine {
+			flex: 0 0 auto;
+			width: 62px;
+		}
+		.spine .label {
+			font-size: 13px;
+		}
+		.board {
+			max-width: none;
 		}
 	}
 </style>

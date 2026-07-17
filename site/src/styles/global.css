@@ -54,6 +54,12 @@ a:hover {
 	padding-inline: 40px;
 }
 
+@media (max-width: 560px) {
+	.wrap {
+		padding-inline: 22px;
+	}
+}
+
 .eyebrow {
 	font-size: 13px;
 	letter-spacing: 0.28em;

@@ -3,7 +3,7 @@ import { repoUrl, installCommand, fullInstallCommand } from "../lib/data";
 ---
 
 <header class="hero wrap">
-	<div class="eyebrow">Twenty-nine skills · Eight books · One pipeline</div>
+	<div class="eyebrow">Twenty-eight skills · Eight books · One pipeline</div>
 	<h1>Fifty years of software wisdom, <em>finally executable.</em></h1>
 	<p class="sub">
 		Skill Kit distills Beck, Fowler, Ousterhout, Evans, Singer, Humble and
@@ -116,12 +116,18 @@ import { repoUrl, installCommand, fullInstallCommand } from "../lib/data";
 		text-align: right;
 	}
 	@media (max-width: 560px) {
+		.hero {
+			padding-block: 64px 60px;
+		}
+		h1 {
+			font-size: clamp(40px, 12vw, 62px);
+		}
 		.copybox {
 			max-width: 100%;
 		}
 		.cmd {
 			white-space: normal;
-			word-break: break-all;
+			word-break: break-word;
 			text-align: left;
 		}
 	}
