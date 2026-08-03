@@ -93,7 +93,7 @@ The script should:
 
 - run exactly one Ralph iteration
 - point Ralph at the task source
-- tell Ralph to pick the highest-risk unblocked slice, not just the first issue
+- compute the unblocked set in the script, and tell Ralph to pick the highest-risk slice from it
 - tell Ralph to use `/execute`
 - tell Ralph to run the repo's real feedback loops
 - tell Ralph to stop after one reviewable slice
@@ -104,10 +104,33 @@ Suggested shape:
 #!/bin/bash
 set -e
 
-claude --message "Look at the open GitHub issues. Pick the highest-risk unblocked issue that still needs implementation, respecting blocking relationships. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
+# Compute the frontier in bash rather than asking the model to reconstruct it
+# by reading `Blocked by` prose out of N issue bodies. Native GitHub issue
+# dependencies (wired by /prd-to-issues §7) make this a lookup; `blocked_by`
+# counts OPEN blockers only, so it is current with no bookkeeping.
+#
+# Dependency data is REST-only: `gh issue list --json isBlocked` errors with
+# "Unknown JSON field". The has("pull_request") filter is required because the
+# REST issues list returns pull requests alongside issues.
+FRONTIER=$(gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+  --jq '[.[]
+        | select(has("pull_request") | not)
+        | select(.issue_dependencies_summary.blocked_by == 0)
+        | .number] | join(", ")')
+
+if [ -z "$FRONTIER" ]; then
+  echo "No unblocked issues — either all work is done, or the graph has a cycle."
+  exit 0
+fi
+
+claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
 ```
 
 Adapt the prompt to the actual task source and available commands.
+
+Handing the model a computed candidate set — rather than the instruction "respecting blocking relationships" — is the point of this shape. An instruction to honor a graph the model must first reconstruct from prose has no mechanism behind it, and its failure mode is a plausible-looking wrong slice rather than an error. AFK is the stage with nobody watching, so it is the stage least able to absorb that. Deterministic selection stays in bash; the judgment call the model is actually good at (which of these candidates is riskiest) stays in the prompt.
+
+If the repo's slice issues predate native dependency wiring, `$FRONTIER` will list everything. Wire the edges first — see `/prd-to-issues` §7 — or the loop is back to guessing.
 
 ### 5. Generate `ralph.sh`
 
@@ -133,11 +156,26 @@ if [ -z "$1" ]; then
 fi
 
 for ((iteration=1; iteration<=$1; iteration++)); do
-  claude --message "Look at the open GitHub issues. Pick the highest-risk unblocked issue that still needs implementation, respecting blocking relationships. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
+  # Recompute each iteration — closing a blocker un-gates its dependents,
+  # so the frontier grows as the loop makes progress.
+  FRONTIER=$(gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+    --jq '[.[]
+          | select(has("pull_request") | not)
+          | select(.issue_dependencies_summary.blocked_by == 0)
+          | .number] | join(", ")')
+
+  if [ -z "$FRONTIER" ]; then
+    echo "No unblocked issues — stopping after $((iteration - 1)) iteration(s)."
+    break
+  fi
+
+  claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
 
   echo "Ralph iteration $iteration complete."
 done
 ```
+
+Recomputing the frontier inside the loop is what makes the graph load-bearing across iterations: a slice that was blocked at iteration 1 becomes takeable the moment its blocker closes, with no edit to any issue body.
 
 If the user wants, also add convenience scripts to `package.json`, for example:
 
