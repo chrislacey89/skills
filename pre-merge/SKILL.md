@@ -195,6 +195,14 @@ These are factual notes, not review findings. They don't produce Observations, S
 
 **Acceptance-criteria checkbox reconciliation (reporting only).** While the slice issues are loaded, compare each slice's `## Acceptance Criteria` checkbox state against what the merged diff and verification actually establish. Flag any mismatch as a factual note — a criterion that reads as met but whose box is still unchecked, or a checked box the diff doesn't support. Report it; do not edit the issue. `/execute` is the single writer for these boxes (see its Step 5/6 writeback); `/pre-merge` stays advisory and never writes, so this is a merge-gate backstop that surfaces drift without creating a second editor.
 
+**Closing-issue comment-thread reconciliation (reporting only).** Phase 1 loads slice issues without their comment threads, so a requirement living only in a comment is invisible to every check above. For each issue named in the PR body's `Closes #N` lines — those issues only, not every slice loaded in Phase 1 — fetch the thread and compare it against the body:
+
+```bash
+gh issue view <closing-issue-number> --comments
+```
+
+Report as a factual note any comment naming a concrete capability the body's acceptance criteria do not cover **and whose consumer you can name** (an issue, slice, PRD, or shipped code that would use it). Apply the same discriminator `/execute` Step 1 uses: an exploratory comment with no identified consumer does not qualify. Merging is what closes the issue, so this is the last moment the thread is still attached to open work. Report it; do not edit the issue and do not file the follow-up yourself — `/execute` remains the single writer, and this backstops the case where `/execute` never ran on the issue at all (hand-authored PRs, external contributions).
+
 If the review reveals that the main lesson is about Skill Kit itself — for example unclear stage boundaries, missing handoff guidance, or a review checklist gap in `chrislacey89/skills` rather than a problem in the downstream codebase — note: "Consider running `/improve-pipeline` if that skill is present." Do not invoke it.
 
 If a concern warrants deeper work, note: "Consider running `/request-refactor-plan` for this area." Do not invoke it.

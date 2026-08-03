@@ -166,7 +166,18 @@ Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understa
 
 **Precedence rule.** The issue body remains the durable contract. Comments augment it; they do not silently override it. A comment is an authoritative addition only when it is (a) a pipeline-authored continuation or correction comment, or (b) an explicit human scope change. Freeform discussion is context, never an override. If a comment appears to contradict the body on scope, and it is not a clear pipeline-authored correction or human scope change, flag the conflict to the user rather than acting on the comment.
 
-Skip this read for one-off tasks not tied to a GitHub issue (the same scope guard Step 0 uses).
+**Disposal rule.** Classifying a comment is not the whole job — decide what happens to the part of the thread the body does *not* cover. This applies when this slice's PR will close the issue (`Closes #N`). The body is this pipeline's baseline: acceptance criteria live there, `/prd-to-issues` decomposes bodies, `Closes #N` closes on a body's terms. A capability that stays in a comment is outside every one of those mechanisms, so the close silently discards it — and the loss emits no signal, because the issue closes green and the PR merges clean.
+
+The discriminator is a single test, and it is **not** "is the idea good": **can you name the consumer?** If you can point at the issue, slice, PRD, or shipped code that would use the capability, it qualifies. If you cannot — a design musing, a "we might want," an approach the author was thinking aloud about with no identified caller — it does **not** qualify and must not be promoted; promoting it manufactures scope and invents dependencies. When in doubt, it does not qualify.
+
+For a comment that does qualify, surface it to the user before finishing the slice and offer the two disposals:
+
+1. **Promote it into the body** — add it to this issue's acceptance criteria and build it in this slice, when it is genuinely the same seam and the appetite absorbs it.
+2. **File its own issue** with a `Blocks #N` link naming the consumer you identified — when it is real work that belongs elsewhere.
+
+Either one gives the capability an owner that survives the close. Do not silently absorb it, do not widen scope unilaterally, and do not implement it just because you noticed it — the choice is the user's. On AFK runs there is no user to ask, so default to filing the follow-up issue with the `Blocks #N` link; promotion into the body widens the slice without approval.
+
+Skip this read — and the disposal rule with it — for one-off tasks not tied to a GitHub issue (the same scope guard Step 0 uses).
 
 **Read the research artifact for this feature.** The PRD's "Research Reference" section names where it lives — one of two locations depending on the project's `research.storage` mode:
 
