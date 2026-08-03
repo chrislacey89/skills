@@ -8,6 +8,7 @@ sources:
     - "Designing Web APIs — Jin, Sahni, Shevat"
     - "Software Estimation — Steve McConnell"
     - "Software Requirements — Karl Wiegers & Joy Beatty"
+    - "Living Documentation — Cyrille Martraire"
 ---
 
 # PRD to Issues
@@ -229,6 +230,12 @@ Repeat once per edge. Wire the §3 QA issue last and count its edges against the
 gh api repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
   --jq '[.[] | {number, state}]'
 ```
+
+**Reconcile the two representations before moving on.** Naming the edge authoritative settles *who wins* a disagreement; it does not stop one from happening. Because the prose line and the edge set encode the same fact — which issues gate this one — that fact is redundant, and redundant knowledge needs a divergence check rather than a declaration of authority (Martraire, *Living Documentation* Ch. 3: for unavoidably redundant knowledge, establish a reconciliation mechanism; Hunt & Thomas on DRY: "it isn't a question of whether you'll remember, it's a question of when you'll forget").
+
+The check is cheap and belongs here, at the one moment both representations are being written together: for each slice, compare the issue numbers in its prose `## Blocked by` line against the numbers returned by the dependency list above. They must be the same set. A prose entry with no edge is a gate the pipeline will not enforce; an edge with no prose entry is a gate no human can explain. Fix whichever is wrong before finalizing.
+
+This is the only place the two can be reconciled cheaply. Downstream, `/help` and Ralph read the edges and never see the prose, so a divergence introduced later stays invisible until someone hand-reads an issue body.
 
 Three properties of this API are worth stating plainly, because each is a sharp edge that otherwise gets rediscovered by a failing agent:
 
