@@ -104,6 +104,19 @@ install = "pnpm install"
 
 Skip this gate for one-off tasks not tied to a GitHub issue.
 
+**Blocked-slice gate.** Still on the issue, confirm the slice is actually takeable before implementing it. Read the dependency list endpoint directly rather than the `issue_dependencies_summary` field, which can be served stale right after a mutation:
+
+```bash
+gh api repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by \
+  --jq '[.[] | select(.state == "open") | {number, title}]'
+```
+
+An empty array means takeable — proceed. Any open blocker means **stop**: name the blocking issues to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
+
+Note that `gh issue list --json` cannot answer this — dependency data is REST-only, and `--json isBlocked` errors with `Unknown JSON field`. The edges are wired by `/prd-to-issues` §7; a repo whose slices predate that wiring returns an empty array for every issue, which is indistinguishable from "unblocked." When the array is empty *and* the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand.
+
+Skip this gate for one-off tasks not tied to a GitHub issue.
+
 **Ralph auto-detection gate.** Evaluate all three conditions:
 
 - [ ] The task comes from a GitHub issue (not a one-off verbal request)
