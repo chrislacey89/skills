@@ -350,6 +350,15 @@ gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
 
 Substitute the real slice numbers for `101,102,103,104`. When several slices qualify, `min` takes the lowest-numbered one — the same tiebreak as before. Note that `gh issue list --json` cannot answer this question at all (see §7).
 
+**Confirm the pick against the list endpoint before printing it.** This query reads `issue_dependencies_summary`, and §7 wired the edges moments ago — that is precisely the window in which the summary can still be stale, so a slice that *is* blocked can surface here as takeable. One extra call on the single chosen slice closes it:
+
+```bash
+gh api repos/{owner}/{repo}/issues/<chosen-slice>/dependencies/blocked_by \
+  --jq '[.[] | select(.state == "open") | .number]'
+```
+
+An empty array confirms the pick. Anything else means the summary was stale — re-run the query above and confirm again. This is the only place in the pipeline where a frontier read follows its own writes closely enough to matter; `/help`, `/execute`, and Ralph read a graph written in an earlier session, so they can use the summary directly.
+
 ```
 **Next session:** /execute #<first-unblocked-slice-number>
 **Input:** the slice issue body
