@@ -431,11 +431,23 @@ if [ -z "$1" ]; then
 fi
 
 for ((i=1; i<=$1; i++)); do
-  claude --message "Look at the open GitHub issues. Pick the highest-risk unblocked issue that still needs implementation, respecting blocking relationships. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
+  # Compute the frontier from native GitHub issue dependencies rather than
+  # asking the model to parse `Blocked by` prose. Recomputed each iteration,
+  # because closing a blocker un-gates its dependents automatically.
+  FRONTIER=$(gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+    --jq '[.[]
+          | select(has("pull_request") | not)
+          | select(.issue_dependencies_summary.blocked_by == 0)
+          | .number] | join(", ")')
+  [ -z "$FRONTIER" ] && { echo "No unblocked issues."; break; }
+
+  claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
   # ... (rest of the script remains the same)
 ```
 
 Run in a sandboxed environment (Docker or separate terminal). Each iteration is a fresh context window.
+
+The frontier query is REST-only — `gh issue list --json isBlocked` errors with `Unknown JSON field` — and the `has("pull_request")` filter is required because the REST issues list returns pull requests alongside issues. `/prd-to-issues` §7 wires the edges this reads; `/help` and `/execute` select by the same `blocked_by == 0` rule, so every selection site in the pipeline agrees by construction.
 
 Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durable progress substrate here is GitHub-native state plus commits: PRD issues, slice issues with dependencies, QA issues, issue comments with exact errors, and the commit history itself. That keeps the repo aligned with its "state lives in GitHub, not the filesystem" rule.
 

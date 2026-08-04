@@ -8,6 +8,7 @@ sources:
     - "Designing Web APIs — Jin, Sahni, Shevat"
     - "Software Estimation — Steve McConnell"
     - "Software Requirements — Karl Wiegers & Joy Beatty"
+    - "Living Documentation — Cyrille Martraire"
 ---
 
 # PRD to Issues
@@ -61,6 +62,8 @@ Each step is still a complete, verifiable slice — the seam it cuts is the migr
 </wide-refactor-branch>
 
 Always create a final QA issue with a detailed manual QA plan for all items that require human verification. This QA issue should be the last item in the dependency graph, blocked by all other slices. It should be HITL.
+
+Because it is blocked by *every* other slice, the QA issue carries the largest fan-in edge set in any decomposition — and it is the one most likely to be under-wired by hand. §7's dependency-wiring step covers it explicitly: one edge per blocking slice, counted against the slice list. A QA issue with missing edges reports itself as takeable while implementation slices are still open.
 
 ### 4. Draft the Boundary Map
 
@@ -142,6 +145,8 @@ This check exists because PRDs frequently sketch contract shapes in prose withou
 
 **Dependency-graph diagram (optional).** Before finalizing the boundary map, if it has ≥2 Produces/Consumes entries across the decomposition, consider invoking `/mermaid` to render the cross-slice dependency graph as a flowchart and embed it alongside the existing lists. The lists stay authoritative — the diagram is a reading aid for reviewers and resumed-session agents who otherwise have to mentally compile the bullet structure back into a graph. Skip the diagram when the boundary map is thin enough that the lists are already the cleanest rendering.
 
+Once the issues exist and §7 has wired native dependency edges, a regenerated version of this diagram can be derived from the API rather than hand-transcribed from the boundary map — read each slice's `.../dependencies/blocked_by` list and render the edges directly. Deriving it removes the transcription step, which is the step that lets the diagram drift from the real graph.
+
 ### 5. Derive the Coverage Matrix
 
 **Skip this step when the PRD decomposes into a single slice.** For single-slice PRDs the boundary map + user-stories-covered field already serve as coverage; a matrix would be pure ceremony.
@@ -200,6 +205,44 @@ For each approved slice, create a GitHub issue using `gh issue create`. Use the 
 
 Create issues in dependency order (blockers first) so you can reference real issue numbers in the "Blocked by" field.
 
+**Then wire each blocking relationship as a native GitHub issue dependency.** The create-then-reference structure above already gives you a second pass over the graph once real issue numbers exist; that pass now also POSTs one edge per `Blocked by` entry.
+
+Both representations are written, and they have distinct jobs. The prose `## Blocked by` line documents *why* a slice is gated, is readable without API access, and survives a tracker migration. The native edge is the **gate**: it is what `/help`, `/execute`, and Ralph query to decide what is takeable, and it is authoritative for any automated selection. Writing only the prose leaves every downstream consumer parsing English to reconstruct a graph that GitHub can serve directly.
+
+For each `Blocked by` relationship, resolve the blocker's numeric **database id**, then POST the edge:
+
+```bash
+# The endpoint takes the blocker's database id (e.g. 4888210647) — NOT its
+# #number and NOT its GraphQL node_id. Passing the issue number wires a wrong
+# edge or silently no edge, so always resolve the id first.
+BLOCKER_ID=$(gh api repos/{owner}/{repo}/issues/<blocker-number> --jq .id)
+
+gh api --method POST \
+  repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
+  -F issue_id="$BLOCKER_ID"
+```
+
+Repeat once per edge. Wire the §3 QA issue last and count its edges against the slice list — it is blocked by every other slice, so it is where a missed POST is least visible.
+
+**Verify against the list endpoint, not the summary.** The `issue_dependencies_summary` field on an issue object can be served stale immediately after a mutation — a removed edge may still report `blocked_by: 1` for a short window. Confirm what you wrote by reading the dependency list itself:
+
+```bash
+gh api repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
+  --jq '[.[] | {number, state}]'
+```
+
+**Reconcile the two representations before moving on.** Naming the edge authoritative settles *who wins* a disagreement; it does not stop one from happening. Because the prose line and the edge set encode the same fact — which issues gate this one — that fact is redundant, and redundant knowledge needs a divergence check rather than a declaration of authority (Martraire, *Living Documentation* Ch. 3: for unavoidably redundant knowledge, establish a reconciliation mechanism; Hunt & Thomas on DRY: "it isn't a question of whether you'll remember, it's a question of when you'll forget").
+
+The check is cheap and belongs here, at the one moment both representations are being written together: for each slice, compare the issue numbers in its prose `## Blocked by` line against the numbers returned by the dependency list above. They must be the same set. A prose entry with no edge is a gate the pipeline will not enforce; an edge with no prose entry is a gate no human can explain. Fix whichever is wrong before finalizing.
+
+This is the only place the two can be reconciled cheaply. Downstream, `/help` and Ralph read the edges and never see the prose, so a divergence introduced later stays invisible until someone hand-reads an issue body.
+
+Three properties of this API are worth stating plainly, because each is a sharp edge that otherwise gets rediscovered by a failing agent:
+
+- **`gh issue list --json` cannot see dependency data.** Every other GitHub read in this pack uses `gh issue list --json`; dependency reads must use `gh api`, because `--json isBlocked` — and every other dependency field — errors with `Unknown JSON field`. If you are reaching for `gh issue list` to answer "what is blocked," you are on the wrong endpoint.
+- **The REST issues list includes pull requests.** `GET /repos/{owner}/{repo}/issues` returns PRs alongside issues. PRs carry a null `issue_dependencies_summary`, so an `== 0` predicate happens to exclude them today, but that is incidental — filter explicitly with `select(has("pull_request") | not)` so a PR is never surfaced as a takeable slice.
+- **`blocked_by` counts open blockers only.** A closed blocker stays visible on the dependency list but drops the dependent's `blocked_by` count to zero. Closing a blocker un-gates its dependents with no bookkeeping — which is exactly what the prose line, once written, never does for itself.
+
 <issue-template>
 ## Parent PRD
 
@@ -254,6 +297,8 @@ List the 3-5 key assumptions from the parent PRD that this slice depends on. Bef
 
 Or "None — can start immediately" if no blockers.
 
+This block is written for humans: it records which slices gate this one, and why where that is not obvious. It is not what automated selection reads — the native GitHub dependency edge wired alongside it is authoritative for any "is this takeable" decision. If the two disagree, the edge wins and the prose is the thing to correct.
+
 ## User Stories Addressed
 
 Reference by number from the parent PRD:
@@ -290,14 +335,36 @@ After all issues are created, present a summary showing:
 
 This summary helps the user (and Ralph) understand the full picture before execution begins. The Coverage Matrix remains a derived view — future readers regenerate it from the PRD issue body and the slice issues' `User Stories Addressed` sections rather than reading a stored matrix file.
 
-**At the end of the summary, print the runtime handoff line** naming the first unblocked slice (the slice with no `Blocked by` entry, or the lowest-numbered such slice when several qualify):
+**At the end of the summary, print the runtime handoff line** naming the first unblocked slice. Compute it with a query rather than re-reading the issue bodies you just wrote — the edges wired in §7 are what make this a lookup:
+
+```bash
+# Scope to THIS decomposition's slice numbers. An unscoped repo-wide min will
+# happily return some unrelated ancient open issue.
+gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+  --jq '[.[]
+        | select(has("pull_request") | not)
+        | select(IN(.number; 101,102,103,104))
+        | select(.issue_dependencies_summary.blocked_by == 0)
+        | .number] | min'
+```
+
+Substitute the real slice numbers for `101,102,103,104`. When several slices qualify, `min` takes the lowest-numbered one — the same tiebreak as before. Note that `gh issue list --json` cannot answer this question at all (see §7).
+
+**Confirm the pick against the list endpoint before printing it.** This query reads `issue_dependencies_summary`, and §7 wired the edges moments ago — that is precisely the window in which the summary can still be stale, so a slice that *is* blocked can surface here as takeable. One extra call on the single chosen slice closes it:
+
+```bash
+gh api repos/{owner}/{repo}/issues/<chosen-slice>/dependencies/blocked_by \
+  --jq '[.[] | select(.state == "open") | .number]'
+```
+
+An empty array confirms the pick. Anything else means the summary was stale — re-run the query above and confirm again. This is the only place in the pipeline where a frontier read follows its own writes closely enough to matter; `/help`, `/execute`, and Ralph read a graph written in an earlier session, so they can use the summary directly.
 
 ```
 **Next session:** /execute #<first-unblocked-slice-number>
 **Input:** the slice issue body
 ```
 
-If every slice declares `Blocked by`, surface the dependency cycle to the user before printing — do not pick arbitrarily.
+If the query returns `null` — every slice reports a nonzero `blocked_by` — surface the dependency cycle to the user before printing. Do not pick arbitrarily.
 
 ## Handoff
 

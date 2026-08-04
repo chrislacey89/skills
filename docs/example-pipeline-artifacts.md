@@ -14,10 +14,12 @@ Instructor analytics dashboard
 
 ### Example slices
 
+Each slice below shows a prose `Blocked by:` line *and* a native GitHub dependency edge. Both are written, and they have different jobs: the prose records why a slice is gated and is readable without API access; the native edge is what `/help`, `/execute`, and Ralph query to decide what is takeable. See `/prd-to-issues` §7 for the wiring commands.
+
 #### Slice 1 — Tracer bullet: analytics service end-to-end
 
 - **Type:** AFK
-- **Blocked by:** None
+- **Blocked by:** None (no native edges wired — this is the frontier at t=0)
 - **Why first:** proves the core architecture from data source to callable service before UI work begins
 - **Produces:** analytics service module, core types, first integration test
 - **Consumes:** existing database access layer only
@@ -25,7 +27,7 @@ Instructor analytics dashboard
 #### Slice 2 — Shared dashboard visualization shell
 
 - **Type:** AFK
-- **Blocked by:** Slice 1
+- **Blocked by:** Slice 1 (native edge wired: Slice 1 → Slice 2)
 - **Why now:** builds UI around a proven service contract instead of inventing data shapes in the component layer
 - **Produces:** dashboard shell component, loading state, empty state
 - **Consumes:** analytics service output and shared analytics types from Slice 1
@@ -33,7 +35,7 @@ Instructor analytics dashboard
 #### Slice 3 — Instructor route integration
 
 - **Type:** HITL
-- **Blocked by:** Slice 2
+- **Blocked by:** Slice 2 (native edge wired: Slice 2 → Slice 3)
 - **Why HITL:** route-level UX and access rules may still need user judgment
 - **Produces:** instructor-facing route, permissions wiring, browser-verifiable flow
 - **Consumes:** dashboard shell and analytics service contract
@@ -41,7 +43,7 @@ Instructor analytics dashboard
 #### Slice 4 — Manual QA and acceptance pass
 
 - **Type:** HITL
-- **Blocked by:** Slices 1-3
+- **Blocked by:** Slices 1-3 (three native edges wired — the fan-in is the easiest set to under-wire by hand, so count the edges against the slice list)
 - **Why last:** verifies the end-to-end flow with human judgment where needed
 - **Produces:** QA issue comments, bug follow-ups if needed, acceptance signal
 - **Consumes:** all prior slices as shipped behavior
@@ -52,6 +54,7 @@ Instructor analytics dashboard
 - Later slices consume stable outputs instead of inventing contracts mid-flight.
 - HITL work is reserved for slices that actually need user judgment.
 - QA is a real downstream slice, not an implicit afterthought.
+- The dependency order is queryable, not just documented — closing Slice 1 un-gates Slice 2 with no edit to any issue body.
 
 ## Example 2: A Good Boundary Map
 
