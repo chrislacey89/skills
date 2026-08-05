@@ -44,23 +44,45 @@ Red flags:
 - Test name describes HOW not WHAT
 - Verifying through external means instead of interface
 
-## Evident Data
-
-Test values should make the relationship between input and expected output **obvious in the test body**. The reader should see the arithmetic, not reverse-engineer it from magic numbers.
+**Tautological tests**: The expected value is worked out the same way the code works it out, so the test passes by construction and can never disagree with the code.
 
 ```typescript
-// BAD: Where does 42 come from?
-test("calculates order total", () => {
-  expect(calculateTotal(order)).toBe(42);
-});
-
-// GOOD: Arithmetic is visible
+// BAD: The assertion recomputes the implementation's formula
 test("calculates order total with tax", () => {
   const price = 100;
   const taxRate = 0.1;
   expect(calculateTotal({ price, taxRate })).toBe(price + price * taxRate);
 });
+
+// GOOD: The expected value comes from outside the code under test
+test("calculates order total with tax", () => {
+  // 100 + 10% tax = 110
+  expect(calculateTotal({ price: 100, taxRate: 0.1 })).toBe(110);
+});
 ```
+
+The bad version is green forever — it *is* the implementation, written twice. If the domain rule is actually "tax applies after the discount," or the rate is a percentage rather than a fraction, the test is wrong in exactly the same way the code is and the bar stays green. It also survives every refactor and runs fast, so no other check in this skill will catch it. Expected values must come from an independent source: a known-good literal, a worked example from the spec, a domain expert, or a reference implementation. Never from running the same algorithm the code runs.
+
+## Evident Data
+
+Test values should make the relationship between input and expected output **obvious in the test body**. The reader should see the arithmetic, not reverse-engineer it from magic numbers.
+
+```typescript
+// BAD: Where does 42 come from? The inputs are hidden inside `order`.
+test("calculates order total", () => {
+  expect(calculateTotal(order)).toBe(42);
+});
+
+// GOOD: Inputs are visible, expected value is an independent literal
+test("calculates order total with tax", () => {
+  // 100 + 10% tax = 110
+  expect(calculateTotal({ price: 100, taxRate: 0.1 })).toBe(110);
+});
+```
+
+Evident data means the **inputs and the relationship** are visible — not that the expected value is computed from them. Deriving the expectation from the inputs (`toBe(price + price * taxRate)`) fixes the magic number by writing a tautological test, which is the worse of the two failures: a magic number is merely unreadable, while a recomputed expectation is unfalsifiable.
+
+When no obvious literal exists — the arithmetic is too involved to state by inspection — do not fall back to recomputing the formula. Use Beck's **Triangulation**: add a second case with different values that a single constant cannot satisfy, forcing the implementation to generalize.
 
 If there is no conceptual difference between two values, use the simpler one. A test checking email lowercasing needs `"ALICE@TEST.COM"`, not a realistic 40-character address.
 
