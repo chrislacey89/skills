@@ -28,7 +28,7 @@ Do not use it to replace shaping or decomposition. If the task is still unclear 
 
 **Core principle**: Tests should verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn't. Test difficulty is a design signal, not an obstacle to work around — when a test requires complex mock setup to reach domain logic, the production code has fused decisions with infrastructure. Refactor the production code, not the test scaffolding.
 
-False positives (tests that fail on safe refactors) trigger a destructive sequence: developers investigate, find no real bug, stop trusting the suite, start ignoring failures, and a real regression slips through unnoticed. Coupling tests to implementation details is not a minor style issue — it is the primary mechanism by which test suites lose their value.
+False positives (tests that fail on safe refactors) trigger a destructive sequence: developers investigate, find no real bug, stop trusting the suite, start ignoring failures, and a real regression slips through unnoticed. Coupling tests to implementation details is not a minor style issue — it is a primary mechanism by which test suites lose their value.
 
 **Good tests** are integration-style: they exercise real code paths through public APIs. They describe _what_ the system does, not _how_ it does it. A good test reads like a specification - "user can checkout with valid cart" tells you exactly what capability exists. These tests survive refactors because they don't care about internal structure.
 
@@ -157,6 +157,7 @@ Mocking a type you don't own — a platform API (workerd crypto, edge-runtime gl
 [ ] Test describes behavior, not implementation
 [ ] Test uses public interface only
 [ ] Test would survive internal refactor
+[ ] Expected values come from an independent source, not the code's own formula
 [ ] Code is minimal for this test
 [ ] No speculative features added
 ```
