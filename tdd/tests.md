@@ -61,7 +61,7 @@ test("calculates order total with tax", () => {
 });
 ```
 
-The bad version is green forever — it *is* the implementation, written twice. If the domain rule is actually "tax applies after the discount," or the rate is a percentage rather than a fraction, the test is wrong in exactly the same way the code is and the bar stays green. It also survives every refactor and runs fast, so no other check in this skill will catch it. Expected values must come from an independent source: a known-good literal, a worked example from the spec, a domain expert, or a reference implementation. Never from running the same algorithm the code runs.
+The bad version is green forever — it *is* the implementation, written twice. If the domain rule is actually "tax applies after the discount," or the rate is a percentage rather than a fraction, the test is wrong in exactly the same way the code is and the bar stays green. It also survives every refactor and runs fast, so every coupling-based check passes it — which is why `SKILL.md` § Checklist Per Cycle carries a dedicated row for where the expected value came from. Expected values must come from an independent source: a known-good literal, a worked example from the spec, a domain expert, or a reference implementation. Never from running the same algorithm the code runs.
 
 ## Evident Data
 
