@@ -209,7 +209,7 @@ One fix to `/help`'s Phase 1 state gather. The prior version hardcoded `git log 
 
 ### Motivation
 
-Caught while running `/help` in the Civic Mirror repo (default branch `prod`). The initial state gather exited 128 on `git log main..HEAD`, which cancelled the other six commands in the same parallel batch, and the recovery round had to retry everything with the correct ref. Two compounding problems: (1) the hardcoded branch name was wrong for the repo, and (2) the parallel dispatch amplified one failure into seven. Fix (1) addresses the immediate bug; fix (2) is a durable note so future skill authors know not to trust `&&`-chains inside parallel batches.
+Caught while running `/help` in the Civic Mirror repo (default branch `prod`). The initial state gather exited 128 on `git log main..HEAD`, which canceled the other six commands in the same parallel batch, and the recovery round had to retry everything with the correct ref. Two compounding problems: (1) the hardcoded branch name was wrong for the repo, and (2) the parallel dispatch amplified one failure into seven. Fix (1) addresses the immediate bug; fix (2) is a durable note so future skill authors know not to trust `&&`-chains inside parallel batches.
 
 ## v1.6.0 — BMAD Audit Adopts + /execute Auto-Flow + QA/Triage Restructure
 
