@@ -96,6 +96,42 @@ The teardown is destructive; verify it is safe first (self-guard). All of these 
 
 If any precondition fails, stop and report which one — do not merge or remove anything. A failed precondition is a signal to return to review, not to force through.
 
+**Review currency — does the approval still cover *this* diff? (non-blocking)**
+
+The three checkboxes above ask whether a review happened. None of them asks whether it covered the diff about to merge. In the intended linear flow those are the same question, which is exactly why the gap is invisible; in a real HITL session scope accretes on a branch *after* its review pass, and nothing connects the diff `/pre-merge` read to the diff `/closeout` merges. That is an inflow with no feedback loop (Meadows — the structural fix is to add the loop, not to exhort), and it quietly degrades "the PR was reviewed" into "an early version of the PR was reviewed" at the one moment the degradation matters most. Continuous Delivery states the rule plainly: the artifact you reviewed must be the artifact you ship.
+
+Read the stamp `/pre-merge` Phase 4 left in the PR body and compare it to the current head:
+
+```bash
+git fetch --quiet
+REVIEWED_SHA=$(gh pr view <number> --json body -q .body \
+  | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{7,40\}\) -->.*/\1/p' | tail -1)
+HEAD_SHA=$(gh pr view <number> --json headRefOid -q .headRefOid)
+```
+
+Three outcomes, and only one of them interrupts:
+
+- **The SHAs match** — the reviewed diff *is* the merge candidate. Pass silently. Do not narrate it: this is the common case, and announcing a non-event every run is what turns a gate into wallpaper.
+- **No stamp found** (`$REVIEWED_SHA` empty) — a hand-authored PR, an external contribution, or a PR that predates the stamp. Note it in one line ("no `/pre-merge` stamp on this PR — review currency unknown") and continue. Absence of a stamp is not evidence of an unreviewed diff, and stopping on every un-stamped PR is precisely the alarm fatigue that gets a gate reflexively defeated (Meadows, *policy resistance*).
+- **The SHAs differ** — commits landed after the review. Do not stop, and do not merge yet. Show the *magnitude* of what was added, so the decision is proportional to the size of the delta rather than to the bare fact of one:
+
+  ```bash
+  git diff --stat "$REVIEWED_SHA".."$HEAD_SHA"
+  git log --oneline "$REVIEWED_SHA".."$HEAD_SHA"
+  ```
+
+  If `$REVIEWED_SHA` is not present locally — the branch was force-pushed and the reviewed commit was rewritten away — say so. The reviewed diff is unrecoverable, which is a *stronger* divergence signal than a measurable delta, not a weaker one.
+
+  Then ask once, with a single `AskUserQuestion`, recommended option first:
+
+  - **→ Re-review the delta with `/pre-merge` (recommended)** — put the added commits through the review dimensions, then re-stamp and return here.
+  - **Merge anyway — I've seen these commits** — an explicit acknowledgement. Repeat it in the Step 3 merge confirmation so the choice is on the record rather than implicit.
+  - **Stop — I want to look at this first** — leaves the PR unmerged and the workspace untouched.
+
+  The platform's free-text "Other" option is the escape hatch — don't add one.
+
+This precondition **never hard-blocks**. `/closeout` is HITL and non-blocking by design, and the fix here is making the divergence *visible* — not seizing the merge decision from the user.
+
 ### 3. Merge the PR
 
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it:
@@ -188,6 +224,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 | "The PR looks fine, I'll just merge it without asking." | Merge is outward-facing and hard to reverse. `/closeout` always confirms intent first (Step 1). Auto-merge is an explicit non-goal. |
 | "I'll `wt remove` first, then `cd` out of the trashed directory." | That is the exact slip this skill exists to prevent — it strands the shell inside a removed worktree and makes a `node_modules`-dependent Stop hook emit false `MODULE_NOT_FOUND` errors. Re-anchor to base *before* removing (Step 4). |
 | "Verifying the steps ran is the same as verifying it worked." | Meadows' "seeking the wrong goal" — measuring activity, not outcome. Step 8 checks the actual end state: on base, clean tree, PR merged, worktree gone, branch pruned. |
+| "There's a review on this PR, so the diff has been reviewed." | Only if nothing landed after it. `/pre-merge` stamps the SHA it reviewed; Step 2 compares that to the current head and shows `git diff --stat` of anything added since. A review of an earlier state is not a review of the release candidate (Continuous Delivery). |
 | "I'll force the worktree removal — there's just some leftover state." | Everything reviewed is already merged; leftover state is unexpected. Investigate it rather than `--force`-ing it away. |
 | "I'll close the PRD issue and refresh the research artifact while I'm here." | That is Step 9's job, not closeout's. Performing research-artifact supersession from here duplicates and risks contradicting the canonical cleanup prose. Name it as remaining work and hand off. |
 | "I'll capture the lesson in `docs/solutions/` as part of closing out." | That is `/compound`. Under the PR-attachable model the lesson may already be on the PR; if it isn't, hand to `/compound` — don't fold knowledge capture into closeout. |
@@ -196,6 +233,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 
 - About to run `wt remove` / `git worktree remove` while the shell's cwd is still inside that worktree.
 - Merging before confirming the PR is pushed, mergeable, and approved (skipping Step 2).
+- Merging a PR whose head has moved past its `<!-- reviewed-at: … -->` stamp without ever showing the user the post-review delta.
 - A Stop hook or feedback loop suddenly reporting `MODULE_NOT_FOUND` / "cannot find module" for `biome`, `tsc`, or `vitest` right after a teardown — almost always a stranded cwd, not a real failure.
 - Reporting "cleanup done" without the Step 8 outcome checks actually passing.
 - `git worktree list` showing several stale feature worktrees — evidence the outflow loop is being skipped; this is the symptom closeout removes.
@@ -206,6 +244,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 A run of `/closeout` is not complete until:
 
 - the user explicitly confirmed the merge before it ran
+- review currency was checked — the stamped SHA matched the merge candidate, the PR carried no stamp (noted and continued), or the post-review delta was shown and the user chose to re-review, acknowledge, or stop
 - the PR reports `MERGED`
 - the shell was re-anchored to the base checkout *before* the worktree was removed
 - the feature worktree (if one existed) is gone from `git worktree list` and the merged branch is pruned — or, when isolation is host-owned (Step 0), teardown and pruning were correctly ceded to the host while the merge still ran
