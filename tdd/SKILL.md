@@ -76,12 +76,16 @@ Before writing any code:
 - [ ] Classify code under test using the [code classification quadrant](code-classification.md): domain model → unit test, controller → integration test, trivial → skip, overcomplicated → refactor first
 - [ ] Design interfaces for [testability](interface-design.md)
 - [ ] List the behaviors to test (not implementation steps)
-- [ ] Partition the input domain: name the input's **characteristics**, split each into **blocks** that are complete (every value lands in one) and disjoint (no value lands in two), and plan one test per block. Prefer many characteristics with few blocks over few with many; when categories overlap, decompose them into independent booleans plus an explicit constraint rather than patching the categories. **This produces the list, not the order** — step 3 still writes one test at a time, one block per cycle. Enumerating blocks up front is not the horizontal slicing forbidden above; writing them all as tests up front is. [tests.md § Cover Both Failure Directions](tests.md) is this applied to a classifier.
+- [ ] Partition the input domain into characteristics and blocks (see below)
 - [ ] Get user approval on the plan
 
 Ask: "What should the public interface look like? Which behaviors are most important to test?"
 
 **You can't test everything.** Confirm with the user exactly which behaviors matter most. Focus testing effort on critical paths and complex logic, not every possible edge case.
+
+**Partitioning the input domain.** Name the input's **characteristics** — its independent properties — and split each into **blocks** that are complete (every value lands in one) and disjoint (no value lands in two). Plan one test per block. Prefer many characteristics with few blocks over few with many, and when categories overlap, decompose them into independent booleans plus an explicit constraint rather than patching the categories.
+
+This produces the list, not the order. Step 3 still writes one test at a time, one block per cycle — enumerating blocks up front is not the horizontal slicing forbidden above; writing them all as tests up front is. [tests.md § Cover Both Failure Directions](tests.md) is this applied to a classifier.
 
 ### 2. Tracer Bullet
 
