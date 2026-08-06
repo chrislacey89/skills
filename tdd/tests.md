@@ -61,7 +61,18 @@ test("calculates order total with tax", () => {
 });
 ```
 
-The bad version is green forever — it *is* the implementation, written twice. If the domain rule is actually "tax applies after the discount," or the rate is a percentage rather than a fraction, the test is wrong in exactly the same way the code is and the bar stays green. It also survives every refactor and runs fast, so every coupling-based check passes it — which is why `SKILL.md` § Checklist Per Cycle carries a dedicated row for where the expected value came from. Expected values must come from an independent source: a known-good literal, a worked example from the spec, a domain expert, or a reference implementation. Never from running the same algorithm the code runs.
+The bad version is green forever — it *is* the implementation, written twice. If the domain rule is actually "tax applies after the discount," or the rate is a percentage rather than a fraction, the test is wrong in exactly the same way the code is and the bar stays green. It also survives every refactor and runs fast, so every coupling-based check passes it — which is why `SKILL.md` § Checklist Per Cycle carries a dedicated row for where the expected value came from. Expected values must come from an independent source — never from running the same algorithm the code runs. Which independent source is the next section.
+
+## The Oracle
+
+The thing that decides whether a run was correct has a name: the **oracle**. Every test has one, chosen deliberately or not, and each kind fails in its own way. Pick one on purpose.
+
+- **Direct verification** — a known-good literal, a worked example lifted from the spec, or a value a domain expert confirmed. The default and the strongest; it fails only when the spec itself is wrong.
+- **Redundant computation** — a reference implementation, a prior release, a second algorithm. Fails silently when the reference shares the fault: if the code is wrong in exactly the way the reference is wrong, the test stays green. A tautological test is this strategy at its worst, with the code under test standing in as its own reference.
+- **Consistency check** — assert a property the output must satisfy rather than the output itself. A sort returns a permutation of its input in non-descending order; a parser's output re-serializes to the input it was given. Incomplete by construction — it rules out impossible outputs without proving the right one — but cheap and independent.
+- **Data redundancy** — assert an identity relating several outputs. Prefer identities across *different* inputs over identities within one: `sin(a + b) === sin(a) * cos(b) + cos(a) * sin(b)` catches an implementation that `sin(x) ** 2 + cos(x) ** 2 === 1` misses, because the single-input form is satisfied by compensating errors in the two functions.
+
+**When no independent literal exists** — the output is opaque, or the arithmetic is too involved to state by inspection — do not fall back to recomputing the formula. Reach for triangulation (§ Evident Data) when the output is numeric and the generalization is what you're pinning down; reach for a consistency check or a multi-input identity when it isn't. Recomputation is not the last resort. It is the one option that is never available.
 
 ## Evident Data
 
