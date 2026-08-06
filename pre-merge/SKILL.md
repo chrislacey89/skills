@@ -124,6 +124,8 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 3. Print the PR URL.
 
+4. **Note that the body gains one more section later.** Phase 4 appends a `## Review Currency` block recording the head SHA the review actually covered. It is written *after* Phase 3 runs, not here — a stamp written at PR-creation time would certify a review that had not happened yet.
+
 ### Phase 3: Architectural Review
 
 Consult `review-checklist.md` for the review dimensions and their violation patterns. The 11 dimensions run identically in both modes — the `diff` they read is the local `git diff "$BASE_BRANCH...HEAD"` in author-mode and the `gh pr diff <pr-number>` output in reviewer-mode.
@@ -213,6 +215,32 @@ If the person about to merge did not author the diff — or hasn't internalized 
 
 Omit any tier that has zero findings.
 
+**Stamp the reviewed head SHA into the PR (author-mode only).** The review above covers one specific commit. Record which one in the PR body, so a later — possibly fresh-session — `/closeout` can tell whether the diff it is about to merge is still the diff that was reviewed. Prospective memory fails silently (Norman), so the marker goes into durable GitHub state rather than into the operator's head; `/closeout` Step 2's review-currency precondition is its only reader.
+
+Write it only after the findings above have been presented — the stamp asserts "a review completed at this SHA," so writing it earlier would certify a review that had not run.
+
+```bash
+REVIEWED_SHA=$(git rev-parse HEAD)
+BODY_FILE=$(mktemp)   # unique per run — parallel worktrees must not share a temp path
+gh pr view <pr-number> --json body -q .body > "$BODY_FILE"
+# In "$BODY_FILE": replace the existing "## Review Currency" section if one is
+# present; otherwise append this block, substituting the real SHAs:
+#
+#   ## Review Currency
+#
+#   <!-- reviewed-at: <full-sha> -->
+#   Reviewed by `/pre-merge` at `<short-sha>`. Commits pushed after this SHA have
+#   not been through the review dimensions — `/closeout` surfaces the delta before merge.
+#
+gh pr edit <pr-number> --body-file "$BODY_FILE"
+rm -f "$BODY_FILE"
+```
+
+- **Exactly one stamp per PR.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer.
+- **Keep both halves.** The HTML comment carries the full SHA and is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
+- **Reviewer-mode does not stamp.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify.
+- **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed. Re-running `/pre-merge` after the fixes re-stamps and clears the divergence.
+
 **At the very end of Phase 4 output, if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from, recommend capturing it in this PR before merge.** `/compound`'s default is to commit the `docs/solutions/` entry onto this still-open PR branch, so the lesson is reviewed in the same pass as the code and merged atomically with it — capture it now, before `/closeout`, rather than as a separate post-merge session. Print the runtime handoff line:
 
 ```
@@ -288,7 +316,7 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 ## Handoff
 
 - **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), or an existing PR number you want reviewed (reviewer-mode)
-- **Produces:** a PR with lineage plus an architectural review readout (author-mode), or draft PR comment text following `references/comment-craft.md` (reviewer-mode)
+- **Produces:** a PR with lineage, stamped with the head SHA the review covered, plus an architectural review readout (author-mode), or draft PR comment text following `references/comment-craft.md` (reviewer-mode)
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
 - **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR so it is reviewed and merged with the code it explains (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`
 
