@@ -298,7 +298,7 @@ Do not triage and fix in one motion. Produce the *complete* disposition plan for
 
 1. Does every finding matching the escalate list above actually carry an ESCALATE disposition?
 2. Is any single bucket at 100%? All-FIX means the escalate list was not consulted; all-ESCALATE means the loop is a rubber stamp that saves nothing.
-3. Does any FIX name a file outside the diff? That is an escalate or a file, not a fix.
+3. Does any FIX name a file outside the diff? A fix is local to the diff by definition, so this is an ESCALATE — or, if it surfaced as a structural sibling of another fix, it belongs in that fix's filed issue rather than as a disposition of its own.
 4. Does any FIX lack a named feedback loop that would confirm it?
 
 **Errors must fall toward ESCALATE.** Three passes over a normal finding set is on the order of 40 disposition decisions; even at 95% accuracy each, the probability that all are correct is around 13% (Huyen's compound-error arithmetic — `0.95^10 ≈ 0.60` for a ten-step agent). The design response is not "be more accurate," it is that the two branches have **asymmetric cost**: a wrong ESCALATE wastes the operator's time, while a wrong FIX ships unsupervised bad code. When a disposition is genuinely borderline, escalate.
@@ -315,7 +315,7 @@ Do not triage and fix in one motion. Produce the *complete* disposition plan for
 
 1. **Re-stamp.** Run Phase 4's stamp block against the new head — same single-block, replace-not-append mechanics.
 2. **Write the ledger** (below) into the PR body.
-3. **Decide.** If every finding from this pass has a disposition and no ESCALATE fired, run one more pass over the delta. If nothing new surfaces and everything is dispositioned, exit clean.
+3. **Decide.** If every finding has a disposition and no ESCALATE fired, run one more pass over the delta; if that pass surfaces nothing new, exit clean. **If the pass produced no fix commits at all** — every finding was dropped at verification, or the pass genuinely found nothing to change — there is no delta to review, so exit clean without spending a pass on an empty diff.
 
 **Re-review the delta, not the whole diff again.** Pass N > 1 reviews `git diff <previously-stamped-sha>...HEAD` — the commits this loop just authored — with the full `$BASE_BRANCH...HEAD` diff available as context so a fix's interaction with unchanged code is still visible. Re-running all 11 dimensions over an unchanged diff produces the same findings and burns a pass.
 
@@ -372,9 +372,18 @@ All three re-stamp. All three write the ledger. All three print what the operato
 
 If *findings surfaced per pass* trends down across runs over time, the loop is suppressing reports rather than improving code — re-anchor the bar or return review to HITL.
 
-#### Circuit breakers
+#### Loop-safety coverage, and circuit breakers
 
-Loop-mode introduces none of its own. It trips on `/execute`'s existing repeated-failure and plateau rules, which already have the right shape: two consecutive passes on the same finding set with nothing transitioning from unresolved to resolved is a plateau, and it escalates.
+The rules above are placed where they apply rather than collected in a list, so they are read at the moment they bind. That makes the set harder to audit, so here is the derivation. STPA Step 1 classifies inadequate control actions four ways, and **three of the four require nothing to fail** — which is why enumerating them catches hazards that listing plausible mistakes does not:
+
+| Inadequate control action | The rule that covers it |
+|---|---|
+| Not provided | A finding silently receives no disposition → the exit condition: every finding, including dropped ones, carries one |
+| Provided unsafely | The loop fixes what it should have escalated → the escalate list, plus verify-before-fix and errors-fall-toward-escalate |
+| Wrong timing or sequence | A pass reads a half-applied fix set and reports on a state that never existed → Step 2's ordering rule: the next pass may not start until this pass's fix commits have landed |
+| Stopped too soon / applied too long | The loop exits at its bound looking clean → bound exhaustion is an escalation, and the health signal is findings *dispositioned*, never findings *remaining* |
+
+**Circuit breakers: loop-mode introduces none of its own.** It trips on `/execute`'s existing repeated-failure and plateau rules, which already have the right shape: two consecutive passes on the same finding set with nothing transitioning from unresolved to resolved is a plateau, and it escalates.
 
 ### Reviewer-mode comment drafts
 
