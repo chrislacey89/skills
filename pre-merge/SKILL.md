@@ -134,11 +134,15 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 ### Phase 3: Architectural Review
 
-Consult `review-checklist.md` for the review dimensions and their violation patterns. The 11 dimensions run identically in both modes — the `diff` they read is the local `git diff "$BASE_BRANCH...HEAD"` in author-mode and the `gh pr diff <pr-number>` output in reviewer-mode.
+Consult `review-checklist.md` for the review dimensions and their violation patterns. The 11 dimensions run identically in all three modes; only the `diff` they read differs:
+
+- **Author-mode** — the local `git diff "$BASE_BRANCH...HEAD"`.
+- **Reviewer-mode** — the `gh pr diff <pr-number>` output.
+- **Loop-mode** — the full `git diff "$BASE_BRANCH...HEAD"` on pass 1, and on pass N > 1 the delta since the last stamp, with the full diff available as context (Phase 5 Step 3).
 
 **Delegation exists for reviewer independence; parallelism on large diffs is a sub-case of it.** When `/pre-merge` is auto-invoked by `/execute` Step 6 it runs in the session that just wrote the code, holding every rationalization the implementing agent made while writing it. The dimensions are sound; the reviewer is not independent. Cohen's finding is that the author's job is to *annotate for* a reviewer, not to be one — so the sub-agent split below is first a way to put a clean context in front of the diff, and only second a way to halve wall-clock on a big one.
 
-- **Loop-mode: delegation is unconditional, regardless of diff size.** Each dimension pass runs in a fresh sub-agent whose entire context is the diff, `review-checklist.md`, and the PR body's `## Review Notes` block — *not* the implementing session's context. See Phase 5 for what the sub-agent may and may not be told between passes.
+- **Loop-mode: delegation is unconditional, regardless of diff size.** Each dimension pass runs in a fresh sub-agent whose context is the diff, `review-checklist.md`, the PR body's `## Review Notes` block, and — from pass 2 on — the *dispositions* recorded in the ledger, so the pass does not re-report findings an earlier pass already resolved. Nothing else: not the implementing session's context, and not the previous pass's un-actioned findings or severity judgments. Phase 5's ledger section gives the full forward/withheld split and the reason for it.
 - **Author-mode and reviewer-mode: delegate by size.** **Small diff** (< 200 changed lines, < 10 files): run all dimensions sequentially in the main agent. **Larger diff**: spawn the two sub-agents below in parallel.
 
 The split, when sub-agents are used:
@@ -258,7 +262,7 @@ rm -f "$BODY_FILE"
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
 - **Reviewer-mode does not stamp.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify.
 - **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed. Re-running `/pre-merge` after the fixes re-stamps and clears the divergence.
-- **Loop-mode re-stamps on every exit path**, including the escalation and bound-exhaustion paths. See Phase 5 — the loop authors fix commits inside the interval this stamp guards, so an exit that skips the re-stamp makes `/closeout` report divergence on work the loop itself reviewed.
+- **Loop-mode re-stamps only on its clean exit**, where a delta pass actually reviewed the fix commits. On its escalation and bound-exhaustion exits it deliberately leaves the stamp behind the head, because those fixes were applied and never reviewed — `/closeout` surfacing that delta is the gate doing its job. See Phase 5 § Exit paths.
 
 **At the very end of Phase 4 output, if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from, recommend capturing it in this PR before merge.** `/compound`'s default is to commit the `docs/solutions/` entry onto this still-open PR branch, so the lesson is reviewed in the same pass as the code and merged atomically with it — capture it now, before `/closeout`, rather than as a separate post-merge session. Print the runtime handoff line:
 
@@ -275,7 +279,7 @@ Substitute `<pr-number>` with the PR created in Phase 2. Skip the line when the 
 
 Phases 1–4 are a sensor. Without something that acknowledges, investigates, and resolves what the sensor reports, the reporting channel is functionally equivalent to having no sensor at all (Leveson, Ch. 12) — and Phase 4's own closing line is "No action is required. These are advisory." Phase 5 is the closing arc: it turns each finding into a disposition, applies what it may safely apply, and hands back what it may not.
 
-**Bounds.** At most **three** passes. A pass is: Phases 1–4 (Phase 2 skipped after the first — the PR exists) → plan → execute → re-stamp → ledger write.
+**Bounds.** At most **three** passes. A pass is: Phases 1–4 (Phase 2 skipped after the first — the PR exists) → plan → execute → ledger write, with the re-stamp riding the *next* pass's review of the fixes rather than this pass's application of them (Step 3).
 
 #### Step 1 — Triage every finding into a plan, before fixing anything
 
@@ -315,7 +319,7 @@ Do not triage and fix in one motion. Produce the *complete* disposition plan for
 
 #### Step 3 — Close the pass, then decide whether another is warranted
 
-1. **Re-stamp.** Run Phase 4's stamp block against the new head — same single-block, replace-not-append mechanics.
+1. **Re-stamp — but only once a pass has actually reviewed the head you are stamping.** The stamp asserts "a review completed at this SHA" (Phase 4), and that contract does not bend for loop-mode. Fixes applied in Step 2 move the head to a SHA no dimension has read yet, so the re-stamp belongs *after* the next pass reviews that delta, not immediately after the fixes land. Run Phase 4's stamp block then — same single-block, replace-not-append mechanics.
 2. **Write the ledger** (below) into the PR body.
 3. **Decide.** If every finding has a disposition and no ESCALATE fired, run one more pass over the delta; if that pass surfaces nothing new, exit clean. **If the pass produced no fix commits at all** — every finding was dropped at verification, or the pass genuinely found nothing to change — there is no delta to review, so exit clean without spending a pass on an empty diff.
 
@@ -327,25 +331,29 @@ Do not triage and fix in one motion. Produce the *complete* disposition plan for
 
 Each pass runs in a fresh sub-agent, so without a durable artifact it re-derives the previous pass's findings (Cohen: N passes by a self-similar reviewer are not N independent reviews). The ledger is that artifact, and it is simultaneously the acknowledged / investigated / resolved record Leveson's closed-loop rule requires — one artifact, both jobs, GitHub-native.
 
-It follows the `## Review Currency` conventions exactly: a marked block in the PR body, **exactly one per PR**, replaced rather than appended, with a machine-readable marker and a visible human line.
+It follows the `## Review Currency` conventions with **one deliberate divergence**: a marked block in the PR body, exactly one per PR, with a machine-readable marker and a visible human line — but where the stamp holds a single current value that each write supersedes, the ledger is a *cumulative* record.
+
+**Rewriting the block must carry every prior pass's rows forward.** "Replace, don't append" governs the block, not its contents: pass 2 emits one block containing pass 1's rows plus its own. A literal replacement that drops pass 1's rows destroys exactly the acknowledged / investigated / resolved record this section cites Leveson to justify — and it fails silently, because the surviving block looks complete. Tag each row with the pass that dispositioned it so the history stays readable.
 
 ```markdown
 ## Review Disposition Ledger
 
 <!-- loop-pass: 2 of 3 -->
-<!-- loop-judge: model=<model-id> checklist=<sha of review-checklist.md> prompt=loop-mode-v1 -->
+<!-- loop-judge: model=claude-opus-5 checklist=a1b2c3d prompt=loop-mode-v1 -->
 
 Dispositioned by `/pre-merge` loop-mode. Every finding below has an owner: a commit, an issue, or an escalation waiting on you.
 
-| Finding | Dimension | Disposition | Where it landed |
-|---|---|---|---|
-| Duplicate date formatter in pipeline | 1 — Deep Modules | fixed | `abc1234` |
-| Same pattern in `lib/export/` | 1 — Deep Modules (sibling) | filed | #199 |
-| Presence helper claimed as Effect Layer | 4 — Boundary Map | escalated | pass 2 — changes an exported type |
-| Stamp block "no-ops" | 6 — docs/solutions | dropped | repo convention; `/execute` Step 5 uses the same shape |
+| Pass | Finding | Dimension | Disposition | Where it landed |
+|---|---|---|---|---|
+| 1 | Duplicate date formatter in pipeline | 1 — Deep Modules | fixed | `abc1234` |
+| 1 | Same pattern in `lib/export/` | 1 — Deep Modules (sibling) | filed | #199 |
+| 1 | Stamp block "no-ops" | 6 — docs/solutions | dropped | repo convention; `/execute` Step 5 uses the same shape |
+| 2 | Presence helper claimed as Effect Layer | 4 — Boundary Map | escalated | changes an exported type |
 
 **Checks not run this pass:** `/ts-audit` — delta is 12 changed `.ts` lines across 1 file, below the 50-line / 2-file trigger.
 ```
+
+**No angle brackets inside the marker values.** The fields above carry literal values (a model ID, a short SHA, a prompt name), never `<placeholder>` syntax — a `>` inside an HTML comment terminates the naive `<!-- … -->` extraction that reads it, truncating the marker at the first placeholder and silently dropping every field after it. That is not hypothetical: `scripts/test-loop-ledger-markers.sh` was written against a template that had this bug and caught it on the first run. Substitute real values; if a value could ever contain `>`, quote or encode it.
 
 The **Checks not run this pass** line is where a suppressed check is recorded. A check that was skipped is not a finding and has no disposition, so it does not belong in the table — but leaving it out entirely would let the ledger read as "everything ran," which is the silent-truncation failure the ledger exists to prevent. Omit the line when every check ran.
 
@@ -364,15 +372,23 @@ The delegated reviewer is an AI judge, and **a judge is a system — model + pro
 
 #### Exit paths
 
-All three re-stamp. All three write the ledger. All three print what the operator is inheriting.
+All three write the ledger. All three print what the operator is inheriting. They differ on the stamp, and the difference is the whole point.
 
-| Exit | When | What it means |
-|---|---|---|
-| **Clean** | every finding dispositioned, no escalate fired, a delta pass surfaced nothing new | The branch is reviewed and every finding has an owner. Hand off to `/compound` or `/closeout` as Phase 4 describes. |
-| **Escalation** | any escalate-list condition fired | Stop immediately. Name the finding, the condition it tripped, and what you did *not* do. The remaining findings still get dispositions in the plan — escalating one finding does not leave the others unowned. |
-| **Bound exhausted** | three passes with findings still undispositioned | **This is an escalation, not a clean exit.** Say so plainly. A bound that quietly reports success when it runs out of passes is the "stopped too soon" hazard wearing a green badge. |
+| Exit | When | Stamp | What it means |
+|---|---|---|---|
+| **Clean** | every finding dispositioned, no escalate fired, a delta pass surfaced nothing new | **Re-stamp.** The delta pass read the fix commits, so the head genuinely is reviewed | The branch is reviewed and every finding has an owner. Hand off to `/compound` or `/closeout` as Phase 4 describes. |
+| **Escalation** | any escalate-list condition fired | **Do not re-stamp.** Fixes already applied this pass have not been reviewed | Stop immediately. Name the finding, the condition it tripped, and what you did *not* do. The remaining findings still get dispositions in the plan — escalating one finding does not leave the others unowned. |
+| **Bound exhausted** | three passes with findings still undispositioned | **Do not re-stamp**, for the same reason | **This is an escalation, not a clean exit.** Say so plainly. A bound that quietly reports success when it runs out of passes is the "stopped too soon" hazard wearing a green badge. |
 
-**Re-stamp on every one of them — including escalation and bound exhaustion.** Loop-mode's fix commits are invalidating writers in the interval between Phase 4's stamp and `/closeout`'s check. A loop that fixes code and then escalates without re-stamping leaves its own commits sitting past the stamp, and `/closeout` reports divergence on work the loop authored and reviewed itself — training the reflexive click-through the review-currency gate exists to avoid, on code rather than on a single markdown file.
+**Why the stamp is conditional — the divergence is real on two of the three paths.** Loop-mode's fix commits are invalidating writers in the interval between Phase 4's stamp and `/closeout`'s check, and they are *self-remediating on the clean path only*: there, the delta pass reads them and the re-stamp is earned. On the escalation and bound-exhaustion paths the loop applies fixes and stops without reviewing them, so `/closeout` surfacing that delta is a **true positive** — the operator is being shown unreviewed code, which is exactly what the gate is for. Re-stamping there would suppress a real signal by asserting a review that never ran, reintroducing the failure the stamp was built to prevent, one seam over and on code rather than on a single markdown file.
+
+**Say it in the ledger, so the divergence is legible rather than mysterious.** On a no-stamp exit, record which commits are unreviewed:
+
+```markdown
+**Unreviewed at exit:** `abc1234`, `def5678` — fixes applied in pass 2 before the loop escalated. The stamp still points at `9a8b7c6`; `/closeout` will surface this delta, correctly.
+```
+
+Without that line the operator meets a bare divergence prompt at `/closeout` and has to reconstruct where the commits came from — and a gate whose alarms are unexplained is one that gets clicked through, which is the same end state as a gate that stays silent.
 
 #### Health signals
 
@@ -460,7 +476,7 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 ## Handoff
 
 - **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), an existing PR number you want reviewed (reviewer-mode), or an AFK handoff from `/execute` — branch plus the `## Review Notes` it wrote into the PR body (loop-mode)
-- **Produces:** a PR with lineage, stamped with the head SHA the review covered, plus an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or a branch where every finding carries a disposition — fix commits, filed issues, and a `## Review Disposition Ledger` in the PR body, re-stamped on whichever exit path was taken (loop-mode)
+- **Produces:** a PR with lineage, stamped with the head SHA the review covered, plus an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or a branch where every finding carries a disposition — fix commits, filed issues, and a `## Review Disposition Ledger` in the PR body, re-stamped on a clean exit and deliberately left un-restamped on an escalation exit so `/closeout` still surfaces the unreviewed fixes (loop-mode)
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
 - **May invoke:** `/ts-audit` on changed `.ts`/`.tsx` — in loop-mode only; author-mode and reviewer-mode mention it without invoking
 - **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR so it is reviewed and merged with the code it explains (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`. In loop-mode, a clean exit joins the author-mode path above; an escalation or bound-exhaustion exit hands back to the operator with the ledger naming what is unowned, and nothing proceeds until they decide

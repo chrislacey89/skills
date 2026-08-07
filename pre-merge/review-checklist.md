@@ -1,6 +1,8 @@
 # Review Checklist
 
-Used by `/pre-merge` during Phase 3 in both author-mode and reviewer-mode. Eleven dimensions, each independent. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
+Used by `/pre-merge` during Phase 3 in all three modes — author-mode, reviewer-mode, and loop-mode. Eleven dimensions, each independent. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
+
+In **loop-mode**, these findings are not advisory: each one is dispositioned FIX or ESCALATE through `/pre-merge` Phase 5. The dimensions and severity rules below are unchanged — but a finding destined for a FIX must first be verified against the tree, because a false positive acted on is worse than one merely reported.
 
 In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comment drafts via `references/comment-craft.md` — the severity tier maps onto a Comment Signal prefix (`Concern` → `needs change:` / `needs rework:` / `align:`, `Suggestion` → `levelup:`, `Observation` → drop or `nitpick:`) and each blocking comment is shaped through Triple-R. The dimensions and severity rules below are unchanged across modes; comment-craft only governs how the findings are presented to the author.
 
