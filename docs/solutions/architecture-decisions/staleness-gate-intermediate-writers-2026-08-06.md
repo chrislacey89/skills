@@ -59,7 +59,7 @@ Then classify each intermediate writer explicitly as **benign** (auto-acknowledg
 - The stamp and the check are synchronous (same session, no yield to other steps) — there is no interval for another writer to occupy.
 - Every write during the interval is genuinely unreviewed scope. Then interrupting on all of them is the correct behavior and classifying would only weaken the gate. The discriminator is not "is this write small" but "does this write come from an actor whose output was already subject to the guarantee the gate protects." A `/compound` entry rides the PR precisely so it *will* be reviewed; a hand-added feature commit does not.
 
-**Sibling docs:** none yet. Adjacent shape worth watching: gates that compare against a *research* artifact rather than a PR, where `/correct-course` is the interstitial writer.
+**Sibling docs:** `advisory-to-executed-rule-promotion-2026-08-07.md` — the adjacent shape. This entry is about a gate whose correctness depends on actors nobody enumerated; that one is about a rule whose correctness depends on evidence nobody scoped. Both are cases where thorough design work aimed one question to the left of the one that mattered, which suggests the shared defect is *not* insufficient rigor but an unasked question. Adjacent shape still worth watching: gates that compare against a *research* artifact rather than a PR, where `/correct-course` is the interstitial writer.
 
 ## Solution
 
