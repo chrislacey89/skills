@@ -41,23 +41,21 @@ assert_eq() {
     fi
 }
 
-assert_ne() {
-    local unexpected="$1" actual="$2" label="$3"
-    if [[ "$unexpected" != "$actual" ]]; then
-        printf '  ok   %s\n' "$label"
-        pass=$((pass + 1))
-    else
-        printf '  FAIL %s\n       expected anything but: %q\n' "$label" "$unexpected"
-        fail=$((fail + 1))
-    fi
-}
-
 # --- Pull both halves of the contract out of the skills themselves -----------
 
+# The full reader line from /closeout Step 2, which this suite splits into the
+# sed script and the filter applied after it.
+reader_line="$(grep "sed -n 's/[^']*reviewed-at" "$closeout_skill" | head -1)"
+
 # The sed script /closeout Step 2 pipes the PR body through.
-reader_expr="$(grep -o "sed -n 's/[^']*reviewed-at[^']*'" "$closeout_skill" \
-    | head -1 \
+reader_expr="$(printf '%s' "$reader_line" \
+    | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
     | sed "s/^sed -n '//; s/'\$//")"
+
+# Whatever /closeout pipes the sed output into — everything past the sed
+# script's closing quote, minus the trailing ")" of the command substitution.
+reader_filter="$(printf '%s' "$reader_line" \
+    | sed "s/.*'[[:space:]]*|[[:space:]]*//; s/)[[:space:]]*\$//")"
 
 # The marker template /pre-merge Phase 4 substitutes the reviewed SHA into.
 writer_template="$(grep -o '<!-- reviewed-at: [^ ]* -->' "$premerge_skill" | head -1)"
@@ -74,11 +72,16 @@ if [[ -z "$writer_template" ]]; then
 fi
 
 printf 'reader (closeout/SKILL.md):   %s\n' "$reader_expr"
+printf 'reader filter:                %s\n' "$reader_filter"
 printf 'writer (pre-merge/SKILL.md):  %s\n' "$writer_template"
 
 # read_marker <<< body — run /closeout's own extraction over a PR body on stdin.
-# The `| tail -1` mirrors the pipeline at closeout/SKILL.md Step 2; it is the one
-# part of the reader not expressible inside the sed script.
+# The `| tail -1` is the one part of the reader not expressible inside the sed
+# script, so it is replicated here rather than extracted. That replication is a
+# restatement, which is exactly what this suite exists to avoid — so the first
+# assertion below pins $reader_filter against it. Without that pin, switching
+# the skill to `head -1` would leave the "newer stamp wins" test green while
+# describing the opposite reader, and a stale SHA is the dangerous answer.
 read_marker() { sed -n "$reader_expr" | tail -1; }
 
 # pr_body <marker-line>... — a realistic PR body with prose either side of the
@@ -97,13 +100,21 @@ full_sha='0123456789abcdef0123456789abcdef01234567'   # 40 hex chars, like headR
 
 # -----------------------------------------------------------------------------
 
+section "the reader is fully accounted for"
+
+assert_eq 'tail -1' "$reader_filter" \
+    "the post-sed filter is still 'tail -1', which read_marker replicates"
+
+# -----------------------------------------------------------------------------
+
 section "writer declares a full-SHA placeholder"
 
+# Also covers the substitution itself: an unsubstituted template still contains
+# the literal "<full-sha>" and cannot equal the expected marker, so a swapped or
+# renamed placeholder fails here rather than surfacing later as a parse miss.
 marker="${writer_template//<full-sha>/$full_sha}"
-assert_ne "$writer_template" "$marker" \
-    "the HTML-comment template carries a <full-sha> placeholder (not the short form)"
 assert_eq "<!-- reviewed-at: $full_sha -->" "$marker" \
-    "substituting the reviewed SHA yields a well-formed marker"
+    "the <full-sha> placeholder substitutes into a well-formed marker"
 
 # -----------------------------------------------------------------------------
 
