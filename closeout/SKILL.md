@@ -105,15 +105,17 @@ Read the stamp `/pre-merge` Phase 4 left in the PR body and compare it to the cu
 ```bash
 git fetch --quiet
 REVIEWED_SHA=$(gh pr view <number> --json body -q .body \
-  | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{7,40\}\) -->.*/\1/p' | tail -1)
+  | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
 HEAD_SHA=$(gh pr view <number> --json headRefOid -q .headRefOid)
 ```
 
+**Exactly 40 hex characters, compared by string equality.** Both halves of that sentence are load-bearing, because this marker is a contract that spans two skills. `/pre-merge` Phase 4 emits the full 40-character OID, and `headRefOid` is always 40 characters, so `\{40\}` is the only width that can ever compare equal — accepting a shorter one would let a malformed marker (a hand-edited body, a template placeholder substituted into the wrong half) parse successfully and then differ from `$HEAD_SHA` forever. `[[ "$REVIEWED_SHA" == "$HEAD_SHA" ]]` is the comparison: exact string equality on two full OIDs, never a prefix test. A marker the regex rejects yields an empty `$REVIEWED_SHA` and takes the "no stamp found" branch below, which degrades gracefully — far better than the "SHAs differ" branch crying wolf on a PR whose head never moved. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this round trip against both skills so the writer's format and this parser cannot drift apart silently.
+
 Three outcomes, and only one of them interrupts:
 
-- **The SHAs match** — the reviewed diff *is* the merge candidate. Pass silently. Do not narrate it: this is the common case, and announcing a non-event every run is what turns a gate into wallpaper.
-- **No stamp found** (`$REVIEWED_SHA` empty) — a hand-authored PR, an external contribution, or a PR that predates the stamp. Note it in one line ("no `/pre-merge` stamp on this PR — review currency unknown") and continue. Absence of a stamp is not evidence of an unreviewed diff, and stopping on every un-stamped PR is precisely the alarm fatigue that gets a gate reflexively defeated (Meadows, *policy resistance*).
-- **The SHAs differ** — commits landed after the review. Do not stop, and do not merge yet. Show the *magnitude* of what was added, so the decision is proportional to the size of the delta rather than to the bare fact of one:
+- **The SHAs match** — string-equal full OIDs, so the reviewed diff *is* the merge candidate. Pass silently. Do not narrate it: this is the common case, and announcing a non-event every run is what turns a gate into wallpaper.
+- **No stamp found** (`$REVIEWED_SHA` empty) — a hand-authored PR, an external contribution, a PR that predates the stamp, or a marker whose shape the regex above rejected. Note it in one line ("no `/pre-merge` stamp on this PR — review currency unknown") and continue. Absence of a stamp is not evidence of an unreviewed diff, and stopping on every un-stamped PR is precisely the alarm fatigue that gets a gate reflexively defeated (Meadows, *policy resistance*).
+- **The SHAs differ** — two well-formed 40-character OIDs that are not string-equal, meaning commits landed after the review. Do not stop, and do not merge yet. Show the *magnitude* of what was added, so the decision is proportional to the size of the delta rather than to the bare fact of one:
 
   ```bash
   git diff --stat "$REVIEWED_SHA".."$HEAD_SHA"
