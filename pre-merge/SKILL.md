@@ -290,7 +290,7 @@ Do not triage and fix in one motion. Produce the *complete* disposition plan for
   - the same finding survives two passes;
   - `/execute`'s repeated-failure or plateau rule trips.
 
-**Filing is not a third branch.** It is the output of the structural-sibling search that a FIX already runs (see Step 2). `/pre-merge` findings are by construction *about the diff*, so a branch defined over out-of-diff work has no input to match: given this rubric with FILE as a peer option, three independent classifiers selected it zero times across 42 judgements. Siblings are a different input type, produced as a side effect of fixing.
+**Filing is not a third branch.** It is the output of the structural-sibling search that a FIX already runs (see Step 2). `/pre-merge` findings are by construction *about the diff*, so a branch defined over out-of-diff work has no input to match: given this rubric with FILE as a peer option, three independent classifiers selected it zero times across 42 judgments. Siblings are a different input type, produced as a side effect of fixing.
 
 **Validate the plan before executing it.** Four cheap checks that pay for themselves:
 
@@ -339,7 +339,7 @@ Dispositioned by `/pre-merge` loop-mode. Every finding below has an owner: a com
 | Stamp block "no-ops" | 6 — docs/solutions | dropped | repo convention; `/execute` Step 5 uses the same shape |
 ```
 
-Write it with the same `mktemp` → read body → edit the block → `gh pr edit --body-file` shape Phase 4's stamp uses. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path (see `docs/solutions/architecture-decisions/staleness-gate-intermediate-writers-2026-08-06.md`).
+Write it with the same `mktemp` → read body → edit the block → `gh pr edit --body-file` shape Phase 4's stamp uses. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path. A staleness gate's correctness is a property of the *interval* it spans, not of the two steps at its ends, so every actor that can write the guarded artifact in that interval needs an explicit benign-or-invalidating call.
 
 **What passes forward to the next pass, and what is withheld.** Independence and efficiency pull opposite ways here, and the split resolves them:
 
