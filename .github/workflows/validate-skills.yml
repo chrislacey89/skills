@@ -88,3 +88,6 @@ jobs:
 
       - name: Run verify-install test suite
         run: bash scripts/test-verify-install.sh
+
+      - name: Run review-currency marker contract suite
+        run: bash scripts/test-review-currency-marker.sh

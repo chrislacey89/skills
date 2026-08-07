@@ -23,5 +23,7 @@ pre-push:
       run: bash scripts/test-sync-references.sh
     verify-install-script-tests:
       run: bash scripts/test-verify-install.sh
+    review-currency-marker-tests:
+      run: bash scripts/test-review-currency-marker.sh
     shellcheck-all:
       run: shellcheck scripts/*.sh
