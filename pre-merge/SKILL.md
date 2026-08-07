@@ -47,7 +47,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 **Author-mode:**
 
-1. **Ask for the PRD issue number.** Accept "none" if this change didn't go through the full pipeline.
+1. **Ask for the PRD issue number.** Accept "none" if this change didn't go through the full pipeline. **In loop-mode entered from an AFK `/execute` handoff, do not ask** — take the issue number from the handoff (`/execute` Step 6 passes it) and treat its absence as "none". There is nobody to answer, so an unconditional question here would hang the run at its first step.
 
 2. **If a PRD was given:**
    ```bash
@@ -126,9 +126,11 @@ Closes #<prd-issue-number>
 For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain setup, what changed and why each piece was the right move, and why it matters. See `references/writing-for-humans.md`.]
 ```
 
-3. Print the PR URL.
+3. **Write the `## Review Notes` block, when `/execute` handed one over.** Both the author-mode and loop-mode handoffs pass a block of re-runnable verification claims — which commands ran and their exit status, which tiers were skipped and why, scope absorbed under the Consumes gate, assumptions that shifted, known-weak spots. Emit it verbatim after `## Summary`; do not summarize or re-word it. Its whole value is that the reviewer can re-run the claims, and every summarization hop is a lossy transformation authored by the agent under review. See `/execute` Step 6 for the block's shape.
 
-4. **Note that the body gains one more section later.** Phase 4 appends a `## Review Currency` block recording the head SHA the review actually covered. It is written *after* Phase 3 runs, not here — a stamp written at PR-creation time would certify a review that had not happened yet.
+4. Print the PR URL.
+
+5. **Note that the body gains one more section later.** Phase 4 appends a `## Review Currency` block recording the head SHA the review actually covered. It is written *after* Phase 3 runs, not here — a stamp written at PR-creation time would certify a review that had not happened yet.
 
 ### Phase 3: Architectural Review
 
@@ -228,7 +230,7 @@ If the person about to merge did not author the diff — or hasn't internalized 
 
 Omit any tier that has zero findings.
 
-**Stamp the reviewed head SHA into the PR (author-mode only).** The review above covers one specific commit. Record which one in the PR body, so a later — possibly fresh-session — `/closeout` can tell whether the diff it is about to merge is still the diff that was reviewed. Prospective memory fails silently (Norman), so the marker goes into durable GitHub state rather than into the operator's head; `/closeout` Step 2's review-currency precondition is its only reader.
+**Stamp the reviewed head SHA into the PR (author-mode and loop-mode).** The review above covers one specific commit. Record which one in the PR body, so a later — possibly fresh-session — `/closeout` can tell whether the diff it is about to merge is still the diff that was reviewed. Prospective memory fails silently (Norman), so the marker goes into durable GitHub state rather than into the operator's head; `/closeout` Step 2's review-currency precondition is its only reader.
 
 Write it only after the findings above have been presented — the stamp asserts "a review completed at this SHA," so writing it earlier would certify a review that had not run.
 
