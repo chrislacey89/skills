@@ -12,13 +12,14 @@
 #   1. "A change to model, review-checklist.md revision, or prompt shape starts a
 #      NEW loop rather than continuing the current one." That comparison is only
 #      possible if all three are actually recorded. Drop one from the template and
-#      the rule cannot fire — a judge swap mid-loop then goes undetected, and the
-#      "same finding survives two passes" escalation compares two passes that were
-#      never measured the same way.
+#      the rule cannot fire — a judge swap between invocations then goes
+#      undetected, and cross-pass comparisons silently compare two passes that
+#      were never measured the same way.
 #
-#   2. The three-pass bound. The template's "N of M" carries M, and the Bounds
-#      prose carries it as a word. Change one without the other and the ledger
-#      advertises a bound the loop does not enforce.
+#   2. "Loop-mode runs no autonomous passes." The marker counts invocations and
+#      must stay a bare integer. An "N of M" shape, or a pass-bound sentence in
+#      the skill, would advertise a limit the loop does not enforce — the loop
+#      makes no commits, so it has no cycle of its own to bound.
 #
 # Tests read both halves out of the skill rather than restating them, so the suite
 # fails when either drifts — which a hand-copied literal could not detect.
@@ -136,41 +137,33 @@ assert_contains "$judge_prose" "prompt" "the rule names the prompt shape"
 
 # -----------------------------------------------------------------------------
 
-section "the ledger's advertised bound matches the bound the loop enforces"
+section "the pass marker carries a bare counter, not a bound"
 
-# The template reads "<!-- loop-pass: N of M -->"; M is the bound.
-marker_bound="$(printf '%s' "$pass_template" | sed -n 's/.*of \([0-9]\{1,\}\) -->/\1/p')"
+# Loop-mode makes no commits and runs no autonomous passes, so there is no pass
+# bound to advertise. The marker counts invocations. A reintroduced "N of M"
+# would advertise a limit the loop does not enforce, which is the drift this
+# assertion catches.
+pass_value="$(printf '%s' "$pass_template" | sed -n 's/<!-- loop-pass:[[:space:]]*\(.*\)[[:space:]]*-->/\1/p' | sed 's/[[:space:]]*$//')"
 
-# The Bounds prose spells it as a word: "At most **three** passes."
-bound_word="$(grep -o 'At most \*\*[a-z]\{1,\}\*\* passes' "$premerge_skill" \
-    | head -1 | sed 's/At most \*\*//; s/\*\* passes//')"
+printf 'loop-pass value:     %q\n' "$pass_value"
 
-if [[ -z "$marker_bound" ]]; then
-    printf 'FATAL: loop-pass template has no "N of M" shape: %s\n' "$pass_template" >&2
-    exit 2
+if [[ "$pass_value" =~ ^[0-9]+$ ]]; then
+    printf '  ok   loop-pass is a bare invocation counter\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL loop-pass is not a bare counter: %q\n' "$pass_value"
+    printf '       Loop-mode has no pass bound; an "N of M" shape advertises one it does not enforce.\n'
+    fail=$((fail + 1))
 fi
-if [[ -z "$bound_word" ]]; then
-    printf 'FATAL: no "At most **<word>** passes" bound found in %s\n' "$premerge_skill" >&2
-    exit 2
+
+# The skill must not carry a pass-bound claim either.
+if grep -q 'At most \*\*[a-z]\{1,\}\*\* passes' "$premerge_skill"; then
+    printf '  FAIL pre-merge/SKILL.md still states a pass bound, but loop-mode runs no autonomous passes\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   the skill states no pass bound\n'
+    pass=$((pass + 1))
 fi
-
-case "$bound_word" in
-    one)   bound_digit=1 ;;
-    two)   bound_digit=2 ;;
-    three) bound_digit=3 ;;
-    four)  bound_digit=4 ;;
-    five)  bound_digit=5 ;;
-    *)
-        printf 'FATAL: unrecognized bound word %q — extend the word->digit map.\n' "$bound_word" >&2
-        exit 2
-        ;;
-esac
-
-printf 'bound (prose):       %s -> %s\n' "$bound_word" "$bound_digit"
-printf 'bound (marker):      %s\n' "$marker_bound"
-
-assert_eq "$bound_digit" "$marker_bound" \
-    "the ledger marker's bound matches the Bounds prose"
 
 # -----------------------------------------------------------------------------
 

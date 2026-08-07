@@ -203,8 +203,8 @@ The prompt should say Ralph must:
 - leave exact error output in issue comments when blocked
 - stop and escalate after repeated failure instead of retrying forever
 - stop and escalate after repeated non-progress (plateau), not just repeated failure — non-progress means two consecutive iterations on the same slice where no unmet acceptance criterion, failing check, or unresolved unknown transitioned to resolved; one recovering iteration resets the counter. See `/execute` "AFK progress and plateau detection" and `references/SYSTEM-OVERVIEW.md` (bundled alongside this skill) for the full rule.
-- after implementation, run review in `/pre-merge` **loop-mode** with a bounded pass count — an AFK iteration is finished when every review finding has a disposition, not when the code is committed
-- in that loop, escalate rather than deciding for itself: public interfaces, exported types, boundary-map `Produces`, API contracts, and dependency changes are the operator's calls, as is any finding whose minimal and thorough fixes would leave different public contracts behind
+- after implementation, run review in `/pre-merge` **loop-mode** — an AFK iteration is finished when every review finding has a row in the PR's disposition ledger, not when the code is committed
+- record findings; do not act on them. Loop-mode makes no commits and settles nothing: fixing, filing, accepting, and dropping are the operator's calls, made against the ledger in the morning
 - never treat "the review came back clean" as the reason to stop — a loop that exits on clean reviews will produce clean reviews rather than better code
 
 **Do not add a review phase to `ralph.sh` yet.** Loop-mode is entered from `/execute` Step 6's AFK exit, which is enough to prove it. Wiring it into the script as an explicit post-implementation phase is deferred until the loop has run HITL-first — the same HITL-before-AFK rule that governs Ralph itself (Step 8 below).
