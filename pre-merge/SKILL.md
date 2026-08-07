@@ -25,10 +25,13 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
 
 ## Modes
 
-`/pre-merge` runs in one of two modes. Both reuse Phase 3's 11 architectural review dimensions (`review-checklist.md`); they differ in what they consume and what they produce.
+`/pre-merge` runs in one of three modes. All three reuse Phase 3's 11 architectural review dimensions (`review-checklist.md`); they differ in what they consume and what they produce.
 
-- **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4). This is the mode auto-invoked by `/execute` Step 6.
+- **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4). This is the mode auto-invoked by `/execute` Step 6 on the HITL path.
 - **Reviewer-mode** — invoked as `/pre-merge --pr <number>` against a PR you did not author. The skill skips PR creation (the PR already exists) and produces *draft comment text* (Phase 4) for you to review and post, structured per `references/comment-craft.md` (5P gate, Triple-R, Comment Signals, MMG Exchange).
+- **Loop-mode** — invoked as `/pre-merge --loop`, or entered automatically when `/execute` hands off on an AFK run. Runs Phases 1–4 as author-mode does, then continues into **Phase 5**: it gives every finding a disposition (fix it here, or escalate and stop), applies the fixes through `/execute`'s normal path, re-stamps, and re-reviews the delta — bounded at three passes. Findings stop being advisories in this mode; they become work with owners.
+
+**Loop-mode's exit condition is that every finding has a disposition — never that the review came back clean.** "Zero findings" is a *forbidden* termination signal, consistent with Phase 4's existing minimum-findings guard, which was written because a near-empty review on a non-trivial diff means the review stopped early rather than that the code is flawless. A loop that terminates on clean reviews will reliably produce clean reviews and nothing else (Meadows, *Seeking the Wrong Goal*; Leveson: never reward low incident counts — reward reporting itself).
 
 If you are running on a branch other than the user's working branch and `--pr` was not provided, ask once whether the user means reviewer-mode against a specific PR number rather than guessing — auto-detection saves a keystroke but misclassifying mode produces draft comments that would have been local advisories or vice versa.
 
@@ -36,6 +39,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 - **Author-mode:** after QA passes and before merging a feature branch to main; after Ralph finishes AFK execution and you've verified behavior; or for any branch you want reviewed before merge, even without a full pipeline run.
 - **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the 10-dimension architectural review to their diff and produce constructive comment text.
+- **Loop-mode:** when a branch should reach *reviewed, with every finding dispositioned* without an operator sitting through each pass — the AFK handoff from `/execute`, or a HITL run where you want the mechanical fix-and-re-review cycle driven for you and only the genuinely hard calls handed back.
 
 ## Execution Flow
 
@@ -130,13 +134,19 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 Consult `review-checklist.md` for the review dimensions and their violation patterns. The 11 dimensions run identically in both modes — the `diff` they read is the local `git diff "$BASE_BRANCH...HEAD"` in author-mode and the `gh pr diff <pr-number>` output in reviewer-mode.
 
-**Small diff** (< 200 changed lines, < 10 files): run all dimensions sequentially in the main agent.
+**Delegation exists for reviewer independence; parallelism on large diffs is a sub-case of it.** When `/pre-merge` is auto-invoked by `/execute` Step 6 it runs in the session that just wrote the code, holding every rationalization the implementing agent made while writing it. The dimensions are sound; the reviewer is not independent. Cohen's finding is that the author's job is to *annotate for* a reviewer, not to be one — so the sub-agent split below is first a way to put a clean context in front of the diff, and only second a way to halve wall-clock on a big one.
 
-**Larger diff**: spawn two sub-agents in parallel:
+- **Loop-mode: delegation is unconditional, regardless of diff size.** Each dimension pass runs in a fresh sub-agent whose entire context is the diff, `review-checklist.md`, and the PR body's `## Review Notes` block — *not* the implementing session's context. See Phase 5 for what the sub-agent may and may not be told between passes.
+- **Author-mode and reviewer-mode: delegate by size.** **Small diff** (< 200 changed lines, < 10 files): run all dimensions sequentially in the main agent. **Larger diff**: spawn the two sub-agents below in parallel.
+
+The split, when sub-agents are used:
+
 - **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope, Review-friendly Size
 - **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
 
 Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format.
+
+**The reviewer always reads the actual diff, never a summary of it.** A summary is a lossy transformation authored by the controller under review; a fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson: no control system performs better than its measuring channel).
 
 **Dimension 4 (Boundary Map Contracts) only runs if a PRD with slice issues was provided.** Without boundary maps, there are no contracts to verify.
 
@@ -148,7 +158,10 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 **Dimension 7 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
 
-**TypeScript projects:** For branches with significant `.ts` or `.tsx` changes, mention that `/ts-audit` can be run on the changed files for type-safety analysis that complements the architectural review. Do not invoke it automatically — note it as an option. Example: "For deeper TypeScript analysis, consider running `/ts-audit` on the changed files."
+**TypeScript projects:** For branches with significant `.ts` or `.tsx` changes, `/ts-audit` complements the architectural review with type-safety analysis. Whether it runs depends on the mode:
+
+- **Author-mode and reviewer-mode: mention it, do not invoke it.** Note it as an option — "For deeper TypeScript analysis, consider running `/ts-audit` on the changed files" — and leave the decision with the user. This is the deliberate HITL boundary; the scoping below does not move it.
+- **Loop-mode: auto-invoke it** on the changed `.ts`/`.tsx` files and feed its findings through Phase 5's disposition rubric alongside the dimension findings. It is already the recommended next action at exactly this point for exactly these files; the only reason it was ever manual is that nothing drove the loop.
 
 **Verify, don't suspect — library callback semantics, subpath swaps, and provider schema constraints.** When a finding turns on how a library treats a value the application hands it (return from a callback, object passed to a hook, systemMessages/tools/middleware collection semantics), the sub-agent must cite the installed type definition — `node_modules/<library>/**/*.d.ts` file path and line — in the finding. If a research archive entry exists for this feature, prefer its `callback_contracts_snapshot` (see `research/SKILL.md` Phase 1.25). For findings that turn on which subpath of a package an import resolves through — runtime-affecting swaps disguised as type-only diffs across sibling subpaths of multi-runtime packages — prefer the `installed_versions_snapshot` (see `research/SKILL.md` Phase 5b); Dimension 4's spec-reality check item 2 is the gate that consumes it. For findings that turn on **provider schema constraints when an SDK wraps a provider** — the SDK's type signature accepts a shape (JSON Schema, Zod, tool definitions) that the underlying provider's actual contract rejects (e.g. Gemini's `response_schema` rejecting numeric enums, Anthropic's `tool.input_schema` honoring only a subset of JSON Schema, OpenAI Structured Outputs' schema-subset divergence from JSON Schema 2020-12) — the citation must include the provider's contract docs at the installed SDK version, not only the SDK's permissive `.d.ts`. Hedged language ("if the library replaces X rather than merges", "if this field is accepted", "the SDK lets you pass any schema") without a source citation is not acceptable for this class of finding — the proof is one grep or one provider-docs page away and the failure mode is runtime-invisible. Either cite the source and classify as Observation/Suggestion/Concern per the severity rules, or downgrade to a named follow-up with an explicit "verify before merge" action.
 
@@ -241,6 +254,7 @@ rm -f "$BODY_FILE"
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
 - **Reviewer-mode does not stamp.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify.
 - **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed. Re-running `/pre-merge` after the fixes re-stamps and clears the divergence.
+- **Loop-mode re-stamps on every exit path**, including the escalation and bound-exhaustion paths. See Phase 5 — the loop authors fix commits inside the interval this stamp guards, so an exit that skips the re-stamp makes `/closeout` report divergence on work the loop itself reviewed.
 
 **At the very end of Phase 4 output, if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from, recommend capturing it in this PR before merge.** `/compound`'s default is to commit the `docs/solutions/` entry onto this still-open PR branch, so the lesson is reviewed in the same pass as the code and merged atomically with it — capture it now, before `/closeout`, rather than as a separate post-merge session. Print the runtime handoff line:
 
@@ -250,6 +264,115 @@ rm -f "$BODY_FILE"
 ```
 
 Substitute `<pr-number>` with the PR created in Phase 2. Skip the line when the work was a clean execution of a pre-shaped plan with no surprises, rework, or non-obvious decisions — the issue body and PR description already carry that record, and a `docs/solutions/` entry with no reusable lesson trains future readers to skim. When in doubt, skip. Signals that a lesson is worth capturing: a tricky bug whose root cause was non-obvious, a Rabbit Hole from the PRD that actually bit, an architectural decision with significant tradeoffs, or a pattern that should be reused. See `/compound`'s "When NOT to Use" for the full skip list.
+
+### Phase 5: Loop-Mode — Dispose of Every Finding
+
+**Loop-mode only.** Author-mode and reviewer-mode end at Phase 4; their findings stay advisory by design.
+
+Phases 1–4 are a sensor. Without something that acknowledges, investigates, and resolves what the sensor reports, the reporting channel is functionally equivalent to having no sensor at all (Leveson, Ch. 12) — and Phase 4's own closing line is "No action is required. These are advisory." Phase 5 is the closing arc: it turns each finding into a disposition, applies what it may safely apply, and hands back what it may not.
+
+**Bounds.** At most **three** passes. A pass is: Phases 1–4 (Phase 2 skipped after the first — the PR exists) → plan → execute → re-stamp → ledger write.
+
+#### Step 1 — Triage every finding into a plan, before fixing anything
+
+Do not triage and fix in one motion. Produce the *complete* disposition plan for the pass first, validate it, and only then execute (Huyen, Ch. 6 — planner / evaluator / executor: "to avoid fruitless execution, planning should be decoupled from execution"). Catching a bad plan costs one check; catching it mid-execution costs commits to unwind.
+
+**Verify each finding against the tree before it may be dispositioned FIX.** A finding is a *claim about* the code, not the code. On the corpus that validated this rubric, one finding of fourteen asserted that a block "no-ops because the mutating step is a bash comment" — and all three independent classifiers dispositioned it FIX with high confidence. It was a false positive: the comment-carries-the-judgment-step shape is an established convention in this repo, used identically in `/execute` Step 5's acceptance-criteria writeback. A loop running that plan would have confidently "fixed" a convention it did not recognize. So: **a FIX disposition requires the finding to be confirmed against the tree first, and a finding that fails verification is dropped, not fixed.** Phase 3's "Verify, don't suspect" rule already says this for library-callback semantics; loop-mode generalizes it to every finding it intends to act on. Record dropped findings in the ledger as `dropped` with the verification that refuted them — a dropped finding is still a dispositioned finding.
+
+**The disposition rubric — two branches, FIX or ESCALATE.**
+
+- **FIX in-loop** — the finding is local to files already in the diff, **and** confirmable by an existing feedback loop you can name: typecheck, test, lint, or a specific verification-ladder tier from `/execute` Step 4. Both halves are required. "I can see how to fix this" is not a feedback loop.
+- **ESCALATE and stop — no judgment call.** Any one of these, and the loop stops:
+  - the fix changes a public interface, an exported type, a boundary-map `Produces`, or an API contract;
+  - it adds, removes, or upgrades a dependency;
+  - **the minimal and the thorough fix would leave different public contracts behind** (nearly every finding admits a minimal and a thorough fix, so "two designs with different long-term costs" is too wide a test to be useful — the discriminator is the contract each one leaves, not the effort each one takes);
+  - it contradicts the PRD, the research artifact, or a `docs/solutions/` entry;
+  - the same finding survives two passes;
+  - `/execute`'s repeated-failure or plateau rule trips.
+
+**Filing is not a third branch.** It is the output of the structural-sibling search that a FIX already runs (see Step 2). `/pre-merge` findings are by construction *about the diff*, so a branch defined over out-of-diff work has no input to match: given this rubric with FILE as a peer option, three independent classifiers selected it zero times across 42 judgements. Siblings are a different input type, produced as a side effect of fixing.
+
+**Validate the plan before executing it.** Four cheap checks that pay for themselves:
+
+1. Does every finding matching the escalate list above actually carry an ESCALATE disposition?
+2. Is any single bucket at 100%? All-FIX means the escalate list was not consulted; all-ESCALATE means the loop is a rubber stamp that saves nothing.
+3. Does any FIX name a file outside the diff? That is an escalate or a file, not a fix.
+4. Does any FIX lack a named feedback loop that would confirm it?
+
+**Errors must fall toward ESCALATE.** Three passes over a normal finding set is on the order of 40 disposition decisions; even at 95% accuracy each, the probability that all are correct is around 13% (Huyen's compound-error arithmetic — `0.95^10 ≈ 0.60` for a ten-step agent). The design response is not "be more accurate," it is that the two branches have **asymmetric cost**: a wrong ESCALATE wastes the operator's time, while a wrong FIX ships unsupervised bad code. When a disposition is genuinely borderline, escalate.
+
+#### Step 2 — Execute the plan
+
+**Fixes route through `/execute`'s normal path.** Classification gate, `/tdd` where it applies, commit per logical unit, the Step 4 verification ladder. There is no bypass lane for fixes just because a reviewer asked for them.
+
+**Every FIX runs `/execute`'s structural-sibling search** (Step 4, Bug-Fix Verification item 2): search the codebase for the same pattern that produced the finding. Siblings inside the diff are fixed in the same pass. **Siblings outside the diff are filed as issues in `/qa`'s shape and linked to the PR** — do not hand-roll issue bodies, and do not widen the diff to reach them. This is Leveson's learning orientation applied at the finding level: a defect fixed in one location and left in three others is 75% unfixed.
+
+**Fixes apply in a defined order, and the next pass may not start until this pass's fix commits have landed.** A pass that reads a half-applied fix set produces findings about a state that never existed (STPA: *wrong timing or sequence*). Order the fixes so the tree typechecks between commits, apply them, and confirm every commit is in before Step 3.
+
+#### Step 3 — Close the pass, then decide whether another is warranted
+
+1. **Re-stamp.** Run Phase 4's stamp block against the new head — same single-block, replace-not-append mechanics.
+2. **Write the ledger** (below) into the PR body.
+3. **Decide.** If every finding from this pass has a disposition and no ESCALATE fired, run one more pass over the delta. If nothing new surfaces and everything is dispositioned, exit clean.
+
+**Re-review the delta, not the whole diff again.** Pass N > 1 reviews `git diff <previously-stamped-sha>...HEAD` — the commits this loop just authored — with the full `$BASE_BRANCH...HEAD` diff available as context so a fix's interaction with unchanged code is still visible. Re-running all 11 dimensions over an unchanged diff produces the same findings and burns a pass.
+
+#### The disposition ledger
+
+Each pass runs in a fresh sub-agent, so without a durable artifact it re-derives the previous pass's findings (Cohen: N passes by a self-similar reviewer are not N independent reviews). The ledger is that artifact, and it is simultaneously the acknowledged / investigated / resolved record Leveson's closed-loop rule requires — one artifact, both jobs, GitHub-native.
+
+It follows the `## Review Currency` conventions exactly: a marked block in the PR body, **exactly one per PR**, replaced rather than appended, with a machine-readable marker and a visible human line.
+
+```markdown
+## Review Disposition Ledger
+
+<!-- loop-pass: 2 of 3 -->
+<!-- loop-judge: model=<model-id> checklist=<sha of review-checklist.md> prompt=loop-mode-v1 -->
+
+Dispositioned by `/pre-merge` loop-mode. Every finding below has an owner: a commit, an issue, or an escalation waiting on you.
+
+| Finding | Dimension | Disposition | Where it landed |
+|---|---|---|---|
+| Duplicate date formatter in pipeline | 1 — Deep Modules | fixed | `abc1234` |
+| Same pattern in `lib/export/` | 1 — Deep Modules (sibling) | filed | #199 |
+| Presence helper claimed as Effect Layer | 4 — Boundary Map | escalated | pass 2 — changes an exported type |
+| Stamp block "no-ops" | 6 — docs/solutions | dropped | repo convention; `/execute` Step 5 uses the same shape |
+```
+
+Write it with the same `mktemp` → read body → edit the block → `gh pr edit --body-file` shape Phase 4's stamp uses. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path (see `docs/solutions/architecture-decisions/staleness-gate-intermediate-writers-2026-08-06.md`).
+
+**What passes forward to the next pass, and what is withheld.** Independence and efficiency pull opposite ways here, and the split resolves them:
+
+- **Forward: the dispositions** — what was fixed and where, what was filed, what was dropped and why. These are facts about the code's *current* state. Without them the next pass re-reports resolved findings.
+- **Withheld: the previous pass's un-actioned findings and its severity judgments.** That is the anchoring surface. A fresh reviewer independently re-raising something an earlier pass dismissed is *signal* — and under the escalate list, a finding surviving two passes is already a stop trigger. Forwarding the earlier judgment would suppress exactly the evidence that trigger depends on.
+
+This is deliberately **not** `/handoff`. That skill summarizes into a transient `mktemp` doc, and both properties are wrong here: the fix Leveson's rule demands is "hand over checkable claims," not "summarize better," and every summarization hop is a lossy transformation authored by the upstream controller. `/handoff`'s own Red Flags already forbid producing a doc at a pipeline-skill boundary; that fence stays where it is.
+
+#### Pin the judge, or cross-pass comparison is meaningless
+
+The delegated reviewer is an AI judge, and **a judge is a system — model + prompt + sampling parameters — not a model** (Huyen, Ch. 3). The escalate rule "the same finding survives two passes" silently assumes pass 1 and pass 3 measured the same way. Nothing enforces that on its own, so loop-mode records the reviewer's model, the `review-checklist.md` revision, and the prompt shape in the ledger's `loop-judge` marker. **A change to any of the three starts a new loop rather than continuing the current one** — pass counts and survive-two-passes comparisons do not carry across a judge change.
+
+#### Exit paths
+
+All three re-stamp. All three write the ledger. All three print what the operator is inheriting.
+
+| Exit | When | What it means |
+|---|---|---|
+| **Clean** | every finding dispositioned, no escalate fired, a delta pass surfaced nothing new | The branch is reviewed and every finding has an owner. Hand off to `/compound` or `/closeout` as Phase 4 describes. |
+| **Escalation** | any escalate-list condition fired | Stop immediately. Name the finding, the condition it tripped, and what you did *not* do. The remaining findings still get dispositions in the plan — escalating one finding does not leave the others unowned. |
+| **Bound exhausted** | three passes with findings still undispositioned | **This is an escalation, not a clean exit.** Say so plainly. A bound that quietly reports success when it runs out of passes is the "stopped too soon" hazard wearing a green badge. |
+
+**Re-stamp on every one of them — including escalation and bound exhaustion.** Loop-mode's fix commits are invalidating writers in the interval between Phase 4's stamp and `/closeout`'s check. A loop that fixes code and then escalates without re-stamping leaves its own commits sitting past the stamp, and `/closeout` reports divergence on work the loop authored and reviewed itself — training the reflexive click-through the review-currency gate exists to avoid, on code rather than on a single markdown file.
+
+#### Health signals
+
+**The loop's health signal is findings surfaced and dispositioned — never findings remaining.** Watch two rates together, not either alone (Huyen, Ch. 4 — violation rate paired with false-refusal rate): the **bad-fix rate** (fixed what it should have escalated) and the **over-escalation rate** (escalated what was plainly local and checkable). Optimizing either alone yields a useless loop — reckless in one direction, a rubber stamp that escalates everything and saves nothing in the other. The ledger is the raw data for both.
+
+If *findings surfaced per pass* trends down across runs over time, the loop is suppressing reports rather than improving code — re-anchor the bar or return review to HITL.
+
+#### Circuit breakers
+
+Loop-mode introduces none of its own. It trips on `/execute`'s existing repeated-failure and plateau rules, which already have the right shape: two consecutive passes on the same finding set with nothing transitioning from unresolved to resolved is a plateau, and it escalates.
 
 ### Reviewer-mode comment drafts
 
@@ -311,14 +434,16 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 - **Not a test runner.** Pre-commit hooks run tests, typecheck, and lint on every commit.
 - **Not a bug finder.** `/qa` files behavioral bugs as GitHub issues.
 - **Not a refactoring planner.** `/request-refactor-plan` produces RFC-style refactor proposals.
-- **Not a CI gate.** Findings are advisory. The user decides what to address before merging.
+- **Not a CI gate.** In author-mode and reviewer-mode, findings are advisory and the user decides what to address before merging. Loop-mode acts on findings but is still not a gate — it ends at "every finding has a disposition," never at "safe to merge," and `/closeout` remains HITL-confirmed.
 - **Not an auto-poster.** Reviewer-mode produces draft comment text for the user to review and post; the skill does not call `gh pr comment` or `gh pr review` itself.
+- **Not a learning organ.** Loop-mode is a *fixing* orientation by design — it disposes of findings. Diagnosing the process defect that let a flaw through is `/compound`'s job, and loop-mode's escalations and filed issues are its input.
 
 ## Handoff
 
-- **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), or an existing PR number you want reviewed (reviewer-mode)
-- **Produces:** a PR with lineage, stamped with the head SHA the review covered, plus an architectural review readout (author-mode), or draft PR comment text following `references/comment-craft.md` (reviewer-mode)
+- **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), an existing PR number you want reviewed (reviewer-mode), or an AFK handoff from `/execute` — branch plus the `## Review Notes` it wrote into the PR body (loop-mode)
+- **Produces:** a PR with lineage, stamped with the head SHA the review covered, plus an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or a branch where every finding carries a disposition — fix commits, filed issues, and a `## Review Disposition Ledger` in the PR body, re-stamped on whichever exit path was taken (loop-mode)
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
-- **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR so it is reviewed and merged with the code it explains (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`
+- **May invoke:** `/ts-audit` on changed `.ts`/`.tsx` — in loop-mode only; author-mode and reviewer-mode mention it without invoking
+- **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR so it is reviewed and merged with the code it explains (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`. In loop-mode, a clean exit joins the author-mode path above; an escalation or bound-exhaustion exit hands back to the operator with the ledger naming what is unowned, and nothing proceeds until they decide
 
-**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended)**, **`/closeout` (no lesson to capture)**, **Address a finding first**. When no lesson emerged, lead with **→ `/closeout` (recommended)**, **Address a finding first**, **File follow-up issues / redirect to `/qa` or `/request-refactor-plan`**. In reviewer-mode the options differ — **Post the draft comments**, **Open the MMG exchange offline first**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
+**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). It does not apply on AFK loop-mode runs — there is no user to ask, so print the exit readout and the handoff line instead. Present a single `AskUserQuestion` with the recommended step first. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended)**, **`/closeout` (no lesson to capture)**, **Address a finding first**. When no lesson emerged, lead with **→ `/closeout` (recommended)**, **Address a finding first**, **File follow-up issues / redirect to `/qa` or `/request-refactor-plan`**. In reviewer-mode the options differ — **Post the draft comments**, **Open the MMG exchange offline first**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
