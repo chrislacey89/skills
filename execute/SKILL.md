@@ -320,7 +320,7 @@ Infer surfaces from the module body as it existed before deletion (git show, or 
 - Required environment variables are present and valid (check `.env.local` or equivalent)
 - No unhandled errors in the server console output during startup
 
-If you cannot start the dev server (e.g., missing external services), note which checks you skipped and why in the Step 5 checklist so the user can verify them.
+If you cannot start the dev server (e.g., missing external services), note which checks you skipped and why in **both** the Step 5 checklist and the Step 6 review notes. The checklist reaches the user; the review notes reach the reviewer. Sending the note only to the checklist means it dies there on any run that never presents one — which is every AFK run — and skipped verification invisible to review is the exact gap this tier exists to close.
 
 #### Tier 2.6: Non-Dry Path Sanity Check (CLI + orchestration slices only)
 
@@ -448,7 +448,44 @@ rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.td
 
 **AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 (read body, flip only confirmed `- [ ]` lines, write back). AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
 
-**Auto-invoke `/pre-merge`.** If Step 5 ran and the user confirmed the "Ready for PR Review" item, invoke `/pre-merge` now. If the task originated from a PRD issue, pass the issue number so `/pre-merge` can gather slice lineage and verify boundary map contracts without asking the user for it again. If the user answered "no" to the PR review item, or Step 5 was skipped entirely (AFK Ralph iterations, trivial-task flows that never reached a user checklist), `/execute` exits here and the user invokes `/pre-merge` manually when ready.
+**Write review notes into the PR body.** `/execute` finishes holding things no artifact records: which verification tiers ran versus were skipped and why, which scope was absorbed under Step 0's Consumes gate, which assumptions shifted, where the implementation is thinnest. Author preparation is the strongest empirical correlate with low defect density (Cohen) and a structured reading plan measurably raises detection (Dunsmore) — but only if the reviewer receives it. Left in the Step 5 checklist alone, that knowledge reaches a user and stops there — and on an AFK run no checklist is ever presented, so it reaches nobody.
+
+Hand it to the reviewer instead, as a `## Review Notes` block in the PR body. GitHub-native, survives a fresh session, no new filesystem state. **`/execute` composes the notes; `/pre-merge` writes them** — on both the author-mode and loop-mode handoffs, pass the block to `/pre-merge`, which emits it into the body at Phase 2 alongside the rest of the PR template. `/pre-merge` owns PR creation, and `/execute` should not start writing PR bodies to deliver a block the very next step is already opening the body to write.
+
+**The notes must be checkable, not trusted.** The reviewer's entire picture of this change comes from the diff plus these notes — and the notes are authored by the agent whose work is under review. A fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson: no control system performs better than its measuring channel). So record **which verification commands ran and their exit status**, in a form the reviewer can re-run. Never assert a conclusion the reviewer has to take on faith: "Tier 2.5 verified" is exactly the claim that cannot be checked.
+
+```markdown
+## Review Notes
+
+<!-- review-notes: execute -->
+
+**Verification commands run**
+
+| Command | Exit | Tier |
+|---|---|---|
+| `pnpm run typecheck` | 0 | 2 |
+| `pnpm run test` | 0 | 2 |
+| `curl -s -o /dev/null -w '%{http_code}' localhost:3000/reports` → `200` | 0 | 2.5 |
+
+**Verification skipped, and why**
+- Tier 2.7 — not applicable: test runtime and deploy runtime are both Node 22.
+- Tier 2.5 dev-server boot — skipped, no Postgres available in this environment.
+
+**Scope absorbed under the Consumes gate**
+- #41 declared `ReportSchema` as a Zod schema; the tree had a plain object. Added the schema here; correction comment filed on #41.
+
+**Assumptions that shifted**
+- None.
+
+**Known-weak spots**
+- The retry path in `lib/fetch.ts` is covered only for the 2-attempt case.
+```
+
+**Auto-invoke `/pre-merge`.** Which mode depends on how Step 5 resolved:
+
+- **Step 5 ran and the user confirmed "Ready for PR Review"** → invoke `/pre-merge` in author-mode now, passing the review notes and — if the task originated from a PRD issue — the issue number, so it can gather slice lineage and verify boundary map contracts without asking the user again.
+- **AFK Ralph iteration** (Step 5 structurally cannot run — there is no user to ask) → enter **`/pre-merge` loop-mode** rather than exiting to a manual invocation. This moves the AFK boundary from "code exists" to "code has been reviewed and every finding has an owner." Loop-mode records findings in a durable ledger on the PR and makes no commits and no decisions, so what the operator inherits in the morning is a reviewed branch plus a triaged list — not a branch that was quietly edited overnight.
+- **The user answered "no" to the PR review item**, or Step 5 was skipped by the trivial-task exception → `/execute` exits here and the user invokes `/pre-merge` manually when ready.
 
 **Next-step menu at the manual exits.** When `/execute` stops *without* auto-invoking `/pre-merge` — the user answered "no" to the PR-review item, or is batching more work — do not drop to a bare text box. Offer the next step as a single `AskUserQuestion` (see `references/next-step-menu.md`) with the recommended step first: **→ `/pre-merge` now (recommended)**, **Batch more work / exit**, **`/walk-commits` first**. Beyond the pipeline successor, include 1–3 follow-ups drawn from *this* run — e.g. "verify acceptance criterion N in the running app," "show the diff for the riskiest change" — mirroring `/walk-commits`'s commit-specific deep-dives. The platform's free-text "Other" option is the escape hatch — don't add one. This menu **does not** apply when Step 5 already confirmed PR review (auto-invoke handles that) or on AFK Ralph iterations (no user to ask).
 
@@ -487,5 +524,5 @@ This applies to AFK Ralph iterations only. HITL `/execute` runs are paced by use
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
 - **Produces:** verified code changes as compartmentalized commits (one per logical unit), and implementation context for the next reviewer or iteration
 - **May invoke:** `/tdd` for backend work and behavior-heavy frontend logic, plus stack-specific reference skills when the project stack warrants them
-- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo, and `/pre-merge` at the end of Step 6 when Step 5 ran and the user confirmed the "Ready for PR Review" checklist item
-- **Comes next by default:** `/pre-merge` — auto-invoked after Step 5 user confirmation in HITL mode; user invokes it manually after AFK Ralph iterations or when they answered "no" to the PR review item
+- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo, and `/pre-merge` at the end of Step 6 — in author-mode when Step 5 ran and the user confirmed the "Ready for PR Review" checklist item, in loop-mode on AFK Ralph iterations
+- **Comes next by default:** `/pre-merge` — author-mode, auto-invoked after Step 5 user confirmation in HITL mode; loop-mode, auto-entered on AFK Ralph iterations; invoked manually by the user when they answered "no" to the PR review item or the trivial-task exception skipped Step 5

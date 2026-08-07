@@ -91,3 +91,6 @@ jobs:
 
       - name: Run review-currency marker contract suite
         run: bash scripts/test-review-currency-marker.sh
+
+      - name: Run loop-ledger marker contract suite
+        run: bash scripts/test-loop-ledger-markers.sh
