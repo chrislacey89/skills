@@ -204,6 +204,10 @@ Skip this read — and the disposal rule with it — for one-off tasks not tied 
 
 Some legacy PRDs may still reference `research.md` in the repo root or `plans/` — read it if present. Whatever the location, the research artifact contains cached technical research that should inform your approach. Do not re-research what has already been decided.
 
+**Read the slice's `### Context` block before the grep below (issue-based work only).** When the slice issue's `## Boundary Map` carries a `### Context` subsection, read its anchors, gotchas, and research pointer *first*. `/prd-to-issues` wrote that block so this session would not have to re-derive it: the anchors name the existing files to read or imitate, and the research pointer goes straight to the artifact instead of walking the parent PRD to find it. Reading it is not optional — a block that is written and never preferentially read is not neutral overhead, it is a section readers learn to skip, which taxes the Boundary Map around it.
+
+Treat it as pointers, not truth. The anchors were written at decomposition time and siblings may have merged since; the code and the research artifact still win on any conflict, per the precedence rule below. A stale anchor is a correction to file on the issue, not a reason to skip the block.
+
 Consult `docs/solutions/` for relevant past solutions before starting implementation:
 
 ```bash
