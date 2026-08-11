@@ -442,10 +442,9 @@ for ((i=1; i<=$1; i++)); do
   # Compute the frontier from native GitHub issue dependencies rather than
   # asking the model to parse `Blocked by` prose. Recomputed each iteration,
   # because closing a blocker un-gates its dependents automatically.
-  FRONTIER=$(gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+  FRONTIER=$(gh issue list --state open --limit 100 --json number,blockedBy \
     --jq '[.[]
-          | select(has("pull_request") | not)
-          | select(.issue_dependencies_summary.blocked_by == 0)
+          | select([.blockedBy.nodes[] | select(.state == "OPEN")] | length == 0)
           | .number] | join(", ")')
   [ -z "$FRONTIER" ] && { echo "No unblocked issues."; break; }
 
@@ -455,7 +454,7 @@ for ((i=1; i<=$1; i++)); do
 
 Run in a sandboxed environment (Docker or separate terminal). Each iteration is a fresh context window.
 
-The frontier query is REST-only — `gh issue list --json isBlocked` errors with `Unknown JSON field` — and the `has("pull_request")` filter is required because the REST issues list returns pull requests alongside issues. `/prd-to-issues` §7 wires the edges this reads; `/help` and `/execute` select by the same `blocked_by == 0` rule, so every selection site in the pipeline agrees by construction.
+The frontier query needs `gh` >= 2.94.0 (see `README.md` § Installation), which exposes `blockedBy` as a `--json` field; `gh issue list` also excludes pull requests by definition, so no filter is needed. Note `state` is the GraphQL enum — uppercase `OPEN`, where the REST endpoint returns lowercase. `/prd-to-issues` §7 wires the edges this reads; `/help` and `/execute` select by the same empty-`open_blockers` rule, so every selection site in the pipeline agrees by construction.
 
 Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durable progress substrate here is GitHub-native state plus commits: PRD issues, slice issues with dependencies, QA issues, issue comments with exact errors, and the commit history itself. That keeps the repo aligned with its "state lives in GitHub, not the filesystem" rule.
 
