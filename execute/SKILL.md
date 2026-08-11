@@ -23,6 +23,8 @@ Use `/execute` when the work is ready to build, verify, and commit.
 
 Use HITL `/execute` when the slice still needs active user judgment, supervision, or acceptance decisions during implementation. Use AFK `/execute` only when the next slice is already durable in GitHub, unblocked, and legible from its issue, boundary map, and any linked research artifact (archive file or spike issue) or `docs/solutions/` context.
 
+Legible to a reader holding none of it — which is what an AFK iteration is. `/prd-to-issues` §4's context completeness check is the gate behind that condition: it requires every AFK slice to carry a `### Context` block, or explicit empty declarations, before the issue is filed. A slice marked AFK with no such block was never checked against this condition, only assumed to meet it. Treat that as a reason to run the slice HITL, or to send it back through `/prd-to-issues`, rather than as a formality to wave through.
+
 See **Step 0: Prerequisites** below for the mandatory Ralph auto-detection and TDD marker gates.
 
 Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the problem or shape is still unresolved. Do not use it as a substitute for `/pre-merge` once implementation is complete and ready for review.
