@@ -39,7 +39,7 @@ Do NOT over-interview. If the description is clear enough to file, move on.
 
 > How will we know the fix worked end-to-end? Name the specific destination — a file/function, a log query, a dashboard view, a user-observable behavior, an assertion in a test — where the fix's effect must land.
 
-Record the answer as a `Verification destination:` line in the filed issue body (Step 4b template). Then consult `references/destination-check.md`'s signal table against the user's framing of the bug and the proposed fix. Count signals:
+Record the answer as a `Verification destination:` line in the filed issue body (Step 4c template). Then consult `references/destination-check.md`'s signal table against the user's framing of the bug and the proposed fix. Count signals:
 
 - **Zero or one signal firing** → accept any non-empty answer and proceed.
 - **Two or more signals firing** AND the destination answer is vacuous (paraphrases the source-of-change, names "the code change exists", names emission without consumption, or is empty) → firmly recommend `/research` Phase 0 before filing. Phase 0 will grep the repo for the corresponding consumer/setup code; if it returns null, reshape the issue from "set the flag" to "wire the missing consumer" before any code is written. The user retains agency to file lightweight anyway, but the nudge surfaces the reachability constraint instead of leaving it in the developer's head.
@@ -123,7 +123,23 @@ If a prior rejection surfaces:
 
 This is a process check, not an enforcement gate — closed-wontfix history is treated as durable state that lives in GitHub. Skill Kit deliberately does not maintain a parallel filesystem archive of rejected enhancements (per `SYSTEM-OVERVIEW.md` "State lives in GitHub, not the filesystem").
 
-#### 4b. Create the issue
+#### 4b. Match the repo's label convention (before filing)
+
+Read the labels the repo already uses, then apply the ones that fit:
+
+```bash
+gh label list
+gh issue list --state all --limit 20 --json number,labels \
+  --jq '.[] | select(.labels | length > 0) | {number, labels: [.labels[].name]}'
+```
+
+Apply the matching labels with `--label` on `gh issue create`. Match what is there — do not impose a taxonomy. Skill Kit runs in repos it does not own, and a convention you invent is one the maintainers have to live with. If nothing fits and a new label would genuinely help, **ask the user before creating one**.
+
+If the repo has no labels at all, file without them and say so once; do not manufacture a scheme.
+
+This step is load-bearing rather than cosmetic. GitHub's `parent-issue:` search qualifier does not work — the sub-issue progress badge links to a query the search backend rejects, and `has:parent-issue` silently matches every issue in the repo. A shared label is currently the only mechanism that makes a batch of related issues retrievable by someone who was not in the session that filed them.
+
+#### 4c. Create the issue
 
 Create issues with `gh issue create`. Do NOT ask the user to review first — just file and share URLs.
 
@@ -202,6 +218,27 @@ When creating a breakdown:
 - **Create issues in dependency order** so you can reference real issue numbers in "Blocked by"
 - **Maximize parallelism** — the goal is that multiple people (or agents) can grab different issues simultaneously
 
+**Then wire each blocking relationship as a native GitHub dependency.** The prose `## Blocked by` section records *why* a bug is gated and survives a tracker migration, but no tool reads it. The native edge is what automated selection queries — including `/execute`'s Blocked-slice gate, which stops before implementing a slice with an open blocker. A `/qa` bug filed with prose only returns no edges from that gate, so a genuinely blocked bug reads as takeable.
+
+Once the issues exist and you have real numbers, wire one edge per `Blocked by` entry:
+
+```bash
+gh issue edit <blocked-number> --add-blocked-by <blocker-number>,<blocker-number>
+```
+
+⚠️ **Do not pass `--blocked-by` to `gh issue create`.** `create` applies relationships as a deferred second mutation; if it fails, `gh` reports an error, **suppresses the issue URL**, and offers a `--recover` prompt — but the issue was already created, so following the prompt files a **duplicate**. Create bare, capture the URL, then wire. (Verified in `gh` 2.97.0; [cli/cli#13899](https://github.com/cli/cli/pull/13899) is open and unmerged.)
+
+Then confirm the prose and the edges agree — they encode the same fact, so a divergence check belongs at the one moment both are being written:
+
+```bash
+gh api repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
+  --jq '[.[] | {number, state}]'
+```
+
+A prose entry with no edge is a gate nothing enforces; an edge with no prose entry is a gate nobody can explain. Fix whichever is wrong.
+
+**Graceful degradation.** Issue dependencies require `gh` ≥ 2.94.0 and are unavailable on GitHub Enterprise Server below 3.19. If the `edit` fails for that reason, keep the prose, tell the user the edges could not be wired, and carry on — the issues themselves are the deliverable. Do not fail a bug report over a relationship.
+
 #### Rules for all issue bodies
 
 - **No file paths or line numbers** — these go stale
@@ -219,6 +256,6 @@ Keep going until the user says they're done. Each issue is independent — don't
 ## Handoff
 
 - **Expected input:** observed user-facing failures, regressions, or QA findings — `/qa` is the single entry point for bug conversations
-- **Produces:** durable GitHub issues written in domain language, plus per-issue triage issues from `/triage-issue` when depth was needed
+- **Produces:** durable GitHub issues written in domain language, carrying the repo's existing label convention and native dependency edges alongside the prose `## Blocked by` section, plus per-issue triage issues from `/triage-issue` when depth was needed
 - **Delegates per-issue to:** `/triage-issue` for bugs that fail the Step 3.5 depth check; control returns to the `/qa` loop after each delegation
 - **Feeds back into:** `/execute` once the filed bug work is ready to implement
