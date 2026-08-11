@@ -94,3 +94,6 @@ jobs:
 
       - name: Run loop-ledger marker contract suite
         run: bash scripts/test-loop-ledger-markers.sh
+
+      - name: Run Context-block contract suite
+        run: bash scripts/test-context-block-contract.sh

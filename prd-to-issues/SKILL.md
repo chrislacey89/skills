@@ -152,9 +152,11 @@ The audit is binary — pointer present or absent — for the same reason the sh
 
 Each AFK slice's `### Context` block must contain, or explicitly declare empty:
 
-- **Anchor pointers** — existing files to read or imitate, as `path — why`, or the line `Greenfield — no existing pattern to follow.` The anchor is a **path**, never a bare pattern name: "follow the repository pattern" helps only a reader who already recognizes it, while a path is readable by anyone. The `why` states the file's **purpose, or the pattern it exemplifies** ("owns the retry/backoff policy every outbound client uses") — never a line-level restatement, which gives the reader nothing to chunk against and is pure load (Fan 2010). Where the repo has an `UBIQUITOUS_LANGUAGE.md` and this slice leans on domain terms defined there, cite it as one more anchor.
+- **Anchors** — existing files to read or imitate, as `path — why`, or the line `Greenfield — no existing pattern to follow.` The anchor is a **path**, never a bare pattern name: "follow the repository pattern" helps only a reader who already recognizes it, while a path is readable by anyone. The `why` states the file's **purpose, or the pattern it exemplifies** ("owns the retry/backoff policy every outbound client uses") — never a line-level restatement, which gives the reader nothing to chunk against and is pure load (Fan 2010). Where the repo has an `UBIQUITOUS_LANGUAGE.md` and this slice leans on domain terms defined there, cite it as one more anchor.
 - **Gotchas** — constraints known now that bear on this slice, drawn from the PRD's Rabbit Holes and the research artifact, or `None known.`
-- **Research pointer** — the research artifact's location (`Refs #<spike-issue-number>` or the archive path), cited in this slice so `/execute` need not walk the parent PRD to find it.
+- **Research** — the research artifact's location (`Refs #<spike-issue-number>` or the archive path), cited in this slice so `/execute` need not walk the parent PRD to find it.
+
+These three labels are rendered verbatim in the `### Context` block of the issue template below. `scripts/test-context-block-contract.sh` pins the two lists against each other — changing a slot here without changing the template (or the reverse) fails the suite rather than shipping a check that asks for a field the template has no room for.
 
 Pointers, not restatements — the code and the research artifact stay the truth; the block only says where to look. Slice size is a separate concern, already covered by the orthogonality and estimate-readiness checks above.
 

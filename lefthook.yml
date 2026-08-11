@@ -27,5 +27,7 @@ pre-push:
       run: bash scripts/test-review-currency-marker.sh
     loop-ledger-marker-tests:
       run: bash scripts/test-loop-ledger-markers.sh
+    context-block-contract-tests:
+      run: bash scripts/test-context-block-contract.sh
     shellcheck-all:
       run: shellcheck scripts/*.sh
