@@ -242,11 +242,11 @@ Wire the §3 QA issue last and count its edges against the slice list — it is 
 **Verify by reading the edges back, not the summary.** The `issue_dependencies_summary` counts can be served stale immediately after a mutation — a removed edge may still report `blocked_by: 1` for a short window. Confirm what you wrote by reading the edges themselves:
 
 ```bash
-gh api repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
-  --jq '[.[] | {number, state}]'
+gh issue view <blocked-number> --json blockedBy \
+  --jq '[.blockedBy.nodes[] | {number, state}]'
 ```
 
-This read stays on `gh api`: it is the one that must show each edge's `state`, and the REST dependency-list endpoint is the verified source for that.
+Each node carries `{id, number, state, title, url}`, and `state` is the GraphQL enum — **uppercase** `OPEN` / `CLOSED`, not the REST endpoint's lowercase. `blockedBy.totalCount` counts blockers in *every* state, so it is the CLI's equivalent of `total_blocked_by`.
 
 **Reconcile the two representations before moving on.** Naming the edge authoritative settles *who wins* a disagreement; it does not stop one from happening. Because the prose line and the edge set encode the same fact — which issues gate this one — that fact is redundant, and redundant knowledge needs a divergence check rather than a declaration of authority (Martraire, *Living Documentation* Ch. 3: for unavoidably redundant knowledge, establish a reconciliation mechanism; Hunt & Thomas on DRY: "it isn't a question of whether you'll remember, it's a question of when you'll forget").
 
@@ -256,11 +256,11 @@ This is the only place the two can be reconciled cheaply. Downstream, `/help` an
 
 Three properties of this API are worth stating plainly, because each is a sharp edge that otherwise gets rediscovered by a failing agent:
 
-- **`blocked_by` counts open blockers only; `total_blocked_by` counts all of them.** A closed blocker stays on the dependency list but drops `blocked_by` to zero. Closing a blocker un-gates its dependents with no bookkeeping — which is exactly what the prose line, once written, never does for itself. The pair is also what distinguishes *"this slice had blockers and they all closed"* (`blocked_by == 0 && total_blocked_by > 0`) from *"this slice was never wired"* (`total_blocked_by == 0`). Downstream readers need that distinction; reading only `blocked_by` collapses the two.
-- **The summary fields are absent from the single-issue REST GET.** `issue_dependencies_summary` and `sub_issues_summary` are returned by `GET /repos/{owner}/{repo}/issues` (the list) and are **not present** on `GET /repos/{owner}/{repo}/issues/{number}`. Reading the single-issue endpoint yields null regardless of the real state — which reads as "no dependencies" rather than as an error. When you need one issue's edges, use the `/dependencies/blocked_by` list endpoint shown above, not the issue object.
-- **The REST issues list includes pull requests.** `GET /repos/{owner}/{repo}/issues` returns PRs alongside issues, so any raw REST read needs `select(has("pull_request") | not)` to avoid surfacing a PR as a takeable slice. `gh issue list` excludes PRs by definition and needs no such filter — one of several reasons to prefer it.
+- **Open blockers and total blockers are different questions, and you usually want both.** A closed blocker stays on the edge list but stops gating. Filtering nodes to `state == "OPEN"` answers *"is this takeable now"*; `totalCount` answers *"was this ever wired"*. Together they separate *"had blockers, all closed"* (`totalCount > 0`, no open nodes) from *"never wired"* (`totalCount == 0`) — a distinction downstream readers need, and one that reading open-blockers alone collapses. Closing a blocker un-gates its dependents with no bookkeeping, which is exactly what the prose line never does for itself.
+- **`state` is uppercase on the CLI and lowercase on REST.** `--json blockedBy` returns the GraphQL enum (`OPEN` / `CLOSED`); `gh api …/dependencies/blocked_by` returns `open` / `closed`. A `jq` filter copied between the two silently matches nothing.
+- **If you do drop to raw REST, two traps apply.** `GET /repos/{owner}/{repo}/issues` returns pull requests alongside issues, so it needs `select(has("pull_request") | not)` or a PR can surface as a takeable slice. And the summary objects (`issue_dependencies_summary`, `sub_issues_summary`) are served only by that *list* endpoint — they are **absent** from the single-issue `GET`, which yields null regardless of the real state and reads as "no dependencies" rather than as an error. `gh issue list` / `gh issue view` avoid both: the former excludes PRs by definition, and neither depends on the summary objects.
 
-**Use the `gh` CLI, not hand-rolled REST, for this graph.** `gh` ≥ 2.94.0 exposes the whole relationship surface as flags and `--json` fields (see `README.md` § Installation for the version floor). Reach for `gh api` only for the two summary counts above, which have no `--json` equivalent. In particular `--json blockedBy,blocking,parent,subIssues` all work — the field that errors with `Unknown JSON field` is `isBlocked`, which does not exist and is easily mistaken for evidence that the whole family is unavailable.
+**Prefer the `gh` CLI over hand-rolled REST for this graph.** `gh` ≥ 2.94.0 exposes the whole relationship surface as flags and `--json` fields (see `README.md` § Installation for the version floor). `--json blockedBy,blocking,parent,subIssues` all work — the field that errors with `Unknown JSON field` is `isBlocked`, which does not exist and is easily mistaken for evidence that the whole family is unavailable.
 
 <issue-template>
 ## Parent PRD
@@ -376,26 +376,16 @@ This summary helps the user (and Ralph) understand the full picture before execu
 ```bash
 # Scope to THIS decomposition's slice numbers. An unscoped repo-wide min will
 # happily return some unrelated ancient open issue.
-gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+gh issue list --state open --limit 100 --json number,blockedBy \
   --jq '[.[]
-        | select(has("pull_request") | not)
         | select(IN(.number; 101,102,103,104))
-        | select(.issue_dependencies_summary.blocked_by == 0)
+        | select([.blockedBy.nodes[] | select(.state == "OPEN")] | length == 0)
         | .number] | min'
 ```
 
-Substitute the real slice numbers for `101,102,103,104`. When several slices qualify, `min` takes the lowest-numbered one — the same tiebreak as before.
+Substitute the real slice numbers for `101,102,103,104`. When several slices qualify, `min` takes the lowest-numbered one — the same tiebreak as before. `gh issue list` excludes pull requests by definition, so no `has("pull_request")` guard is needed here.
 
-This is one of the two reads that still uses `gh api` rather than the CLI, because `issue_dependencies_summary` has no `--json` equivalent — the `blocked_by` / `total_blocked_by` pair is only served by the REST list endpoint. That is a narrow exception to §7's prefer-the-CLI rule, not a general one.
-
-**Confirm the pick before printing it.** This query reads the summary counts, and §7 wired the edges moments ago — that is precisely the window in which they can still be stale, so a slice that *is* blocked can surface here as takeable. One extra call on the single chosen slice closes it:
-
-```bash
-gh api repos/{owner}/{repo}/issues/<chosen-slice>/dependencies/blocked_by \
-  --jq '[.[] | select(.state == "open") | .number]'
-```
-
-An empty array confirms the pick. Anything else means the summary was stale — re-run the query above and confirm again. This read filters on each edge's `state` explicitly, so a closed blocker correctly does not gate the pick. This is the only place in the pipeline where a frontier read follows its own writes closely enough to matter; `/help`, `/execute`, and Ralph read a graph written in an earlier session, so they can use the summary directly.
+Because this reads the edges themselves rather than a summary count, it is not subject to the post-write staleness window — the reason the previous version of this step needed a second confirming call. Filtering on `state == "OPEN"` means a closed blocker correctly does not gate the pick. This step is the only place in the pipeline where a frontier read follows its own writes closely enough for staleness to have been a concern at all; `/help`, `/execute`, and Ralph read a graph written in an earlier session.
 
 ```
 **Next session:** /execute #<first-unblocked-slice-number>

@@ -231,8 +231,8 @@ gh issue edit <blocked-number> --add-blocked-by <blocker-number>,<blocker-number
 Then confirm the prose and the edges agree — they encode the same fact, so a divergence check belongs at the one moment both are being written:
 
 ```bash
-gh api repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
-  --jq '[.[] | {number, state}]'
+gh issue view <blocked-number> --json blockedBy \
+  --jq '[.blockedBy.nodes[] | .number]'
 ```
 
 A prose entry with no edge is a gate nothing enforces; an edge with no prose entry is a gate nobody can explain. Fix whichever is wrong.

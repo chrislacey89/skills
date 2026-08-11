@@ -106,26 +106,19 @@ install = "pnpm install"
 
 Skip this gate for one-off tasks not tied to a GitHub issue.
 
-**Blocked-slice gate.** Still on the issue, confirm the slice is actually takeable before implementing it. Read the dependency list endpoint directly rather than the `issue_dependencies_summary` field, which can be served stale right after a mutation:
+**Blocked-slice gate.** Still on the issue, confirm the slice is actually takeable before implementing it. Read the edges themselves rather than a summary count, which can be served stale right after a mutation:
 
 ```bash
-gh api repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by \
-  --jq '[.[] | select(.state == "open") | {number, title}]'
+gh issue view <n> --json blockedBy \
+  --jq '{open_blockers: [.blockedBy.nodes[] | select(.state == "OPEN") | {number, title}],
+         ever_wired: .blockedBy.totalCount}'
 ```
 
-An empty array means takeable — proceed. Any open blocker means **stop**: name the blocking issues to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
+`open_blockers` empty means takeable — proceed. Any open blocker means **stop**: name the blocking issues to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
 
-This read stays on `gh api` because it needs each edge's `state`, which the dependency-list endpoint serves directly.
+**Read `ever_wired` before trusting an empty list.** Empty has two causes: the slice genuinely has no open blockers, or the repo predates the edge wiring in `/prd-to-issues` §7 and has no edges at all. `totalCount` counts blockers in every state, so it separates them — `ever_wired > 0` means this slice *was* wired and its blockers have since closed, so the empty list is real. `ever_wired == 0` means no edge was ever written and the empty list proves nothing; if the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand.
 
-**Distinguish "unblocked" from "never wired" before trusting an empty array.** An empty array has two causes: the slice genuinely has no open blockers, or the repo predates the edge wiring in `/prd-to-issues` §7 and has no edges at all. The summary counts tell them apart:
-
-```bash
-gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
-  --jq ".[] | select(.number == <n>) | .issue_dependencies_summary
-       | {blocked_by, total_blocked_by}"
-```
-
-`total_blocked_by > 0` means this slice was wired and its blockers have closed — the empty array is real, proceed. `total_blocked_by == 0` means no edge was ever written, so the array proves nothing; if the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand. Note this read must go through the issues *list* endpoint — the summary fields are absent from the single-issue GET (see `/prd-to-issues` §7).
+Note `state` here is the GraphQL enum — uppercase `OPEN`, not the REST endpoint's lowercase `open`.
 
 Skip this gate for one-off tasks not tied to a GitHub issue.
 
