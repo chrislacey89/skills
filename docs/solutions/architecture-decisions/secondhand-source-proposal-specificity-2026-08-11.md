@@ -46,6 +46,12 @@ The graceful-degradation rule is correct for the case it was written for — the
 
 **This is the second entry in five days with the same abstract shape.** `advisory-to-executed-rule-promotion-2026-08-07.md` closes on: *"An acknowledged limitation that gates nothing is not a constraint. It is a footnote."* That was a spike's stated scope failing to narrow the design it licensed. This is a source gap failing to narrow the proposal it grounds. Same missing edge — from *recorded limitation* to *scope of what may be specified* — at two different seams. Two instances is a pattern worth naming, not yet a systemic claim.
 
+> **Update 2026-08-11 (same day) — a third instance, and it recurred on this entry's own subject matter.** Issue #205 was drafted from `/prd-to-issues` §7's description of the GitHub dependency API rather than from `gh --help`, and its Recommended Changes table specified that `/qa` should copy §7's database-id lookup verbatim. `gh` had shipped a first-class flag for it two months earlier. Both halves of this entry's Rule Scope held: the mechanism arrived through a secondhand rendering (a stale handoff doc, plus §7 as an intermediate rendering of the API), and the proposal specified artifact-level detail the primary source determines. The primary source was a **one-command** gap — the same "one command, one day" cost profile recorded above.
+>
+> Two details make this instance worse than the two above. The rendering was **internal** — a skill in this repo, which reads as authoritative in a way an external tool's docs do not, so nothing prompted a check. And the near-miss was narrow: the handoff's *line numbers* were verified against the current checkout, which caught that it was stale about **what had shipped** — that finding was simply not generalized one step further, to whether §7 was stale about **how to do it**.
+>
+> Three instances moves this from "a pattern worth naming" to a systemic claim about `/improve-pipeline` Phase 3.5. The Prevention below is still unimplemented, and the third instance happened while implementing a fix for the second. See `by-construction-claims-need-a-mechanism-2026-08-11.md`, which covers why §7 read as verified in the first place.
+
 ## Learning Level
 
 - **Level:** Structure
@@ -111,6 +117,7 @@ One further correction was recorded rather than acted on: the proposal deliberat
 - Issue #81 — the SMART quality-attribute precedent this extends from nonfunctional to behavioral criteria
 - `advisory-to-executed-rule-promotion-2026-08-07.md` — sibling shape; see Rule Scope
 - `staleness-gate-intermediate-writers-2026-08-06.md` — third entry in the same chain
+- `by-construction-claims-need-a-mechanism-2026-08-11.md` — fourth entry; the third instance of *this* entry's shape (issue #205, PR #206) and the reason the internal rendering read as verified
 
 ## Shelf Life
 
