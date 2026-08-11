@@ -76,6 +76,21 @@ That gap is the reason this entry exists. The instance was cheap; the mechanism 
 
 **Code-level.** The repo already has the pattern, in `scripts/test-review-currency-marker.sh`: it **extracts** the real regex from `closeout/SKILL.md` and the real template from `pre-merge/SKILL.md` and round-trips one through the other, rather than restating either. A hand-copied assertion in a test drifts alongside the thing it tests; a test that reads both halves fails precisely when they stop agreeing. The same shape applies to any idiom asserted to be shared — extract each occurrence, normalize whitespace, assert one distinct value. **Adopt this whenever prose claims cross-file agreement.** The assertion and the test should be added in the same change; an "agree by construction" clause with no accompanying test is the detectable form of this defect.
 
+**Which mechanism — and specifically, why not a Claude Code hook.** This is the first question a reader asks here, because Skill Kit ships hook-based enforcement (`/init-pipeline`'s TDD classification gate) and reaching for the same tool looks natural. It is the wrong tool for this class, and the dividing line is worth stating once:
+
+| What is being checked | Right mechanism |
+|---|---|
+| Session state that does not survive to commit time — *"was this work classified **before** code was written?"* | **Hook.** `.claude/.tdd-active` exists only during the session; nothing in the tree can answer this afterward. |
+| Any property verifiable from the tree — cross-file agreement, a reference resolving, a marker's format | **Test**, wired into CI. |
+
+Cross-file consistency is entirely tree-verifiable, so a hook would *narrow* who the check protects rather than widen it. Three concrete reasons:
+
+1. **Coverage holes, and they are not hypothetical.** A `PostToolUse` hook fires on `Edit`/`Write`. The session that produced this entry edited `SKILL.md` files four ways — `Write`, `Edit`, `python3` heredocs through `Bash` (three separate files), and `gh pr edit`. A hook would have missed every `python3` edit, and those were the multi-site mechanical rewrites *most* likely to introduce the drift being guarded against.
+2. **It only protects one editor.** A hook never fires for a human in an IDE, a contributor who does not use Claude Code, or CI. The tree is read by all three.
+3. **Skill Kit deliberately has no `.claude/` directory.** Its enforcement is lefthook (pre-commit cheap, pre-push full) with CI as the gate — `lefthook.yml` states outright that local hooks are "an early-warning layer, not a gate." The hooks `/init-pipeline` installs are for *downstream projects*, not for this repo.
+
+If edit-time latency ever becomes the actual pain, the right place is **lefthook pre-commit**, not a Claude hook — it catches every edit path rather than one agent's.
+
 **Process-level.** Two changes, neither yet made:
 
 1. **A capability claim about an external tool needs a version and a re-check command**, the same way `/research` requires a docs URL at the verified version. `"gh issue list --json cannot see dependency data"` should never have been writable without a `gh` version beside it. A claim with a version attached is falsifiable by inspection; without one it is folklore on its first read.
