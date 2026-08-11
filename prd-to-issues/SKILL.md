@@ -158,7 +158,7 @@ Each AFK slice's `### Context` block must contain, or explicitly declare empty:
 
 Pointers, not restatements — the code and the research artifact stay the truth; the block only says where to look. Slice size is a separate concern, already covered by the orthogonality and estimate-readiness checks above.
 
-**Sunset clause.** This check was added on audit grounds, without a triggering incident. If across a reasonable sample of AFK decompositions the block is consistently greenfield/none-known filler, or `/execute` iterations are observed skipping it despite its Step 1 instruction, remove it rather than leave it as ceremony — support that is never acted on becomes clutter, and clutter trains readers to skip the region it sits in (Hermans Ch. 11).
+**Sunset clause for the context check.** It was added on audit grounds, without a triggering incident. If across a reasonable sample of AFK decompositions the block is consistently greenfield/none-known filler, or `/execute` iterations are observed skipping it despite its Step 1 instruction, remove it rather than leave it as ceremony — support that is never acted on becomes clutter, and clutter trains readers to skip the region it sits in (Hermans Ch. 11).
 
 **Dependency-graph diagram (optional).** Before finalizing the boundary map, if it has ≥2 Produces/Consumes entries across the decomposition, consider invoking `/mermaid` to render the cross-slice dependency graph as a flowchart and embed it alongside the existing lists. The lists stay authoritative — the diagram is a reading aid for reviewers and resumed-session agents who otherwise have to mentally compile the bullet structure back into a graph. Skip the diagram when the boundary map is thin enough that the lists are already the cleanest rendering.
 
