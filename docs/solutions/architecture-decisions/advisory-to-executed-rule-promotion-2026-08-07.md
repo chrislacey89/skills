@@ -114,6 +114,7 @@ Three complications dissolved rather than needing answers, which is the usual si
 - Issue #182 — the original proposal, including the FEASIBILITY spike and the comment that names the validity gap
 - Issue #190 — the deferred acting half, with entry conditions and an explicit unimplemented-is-acceptable outcome
 - `staleness-gate-intermediate-writers-2026-08-06.md` — sibling shape; see Rule Scope
+- `secondhand-source-proposal-specificity-2026-08-11.md` — the same missing edge ("an acknowledged limitation that gates nothing") at the source-gap → proposal-specificity seam
 
 ## Shelf Life
 

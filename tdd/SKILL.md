@@ -85,7 +85,9 @@ Ask: "What should the public interface look like? Which behaviors are most impor
 
 **Partitioning the input domain.** Name the input's **characteristics** — its independent properties — and split each into **blocks** that are complete (every value lands in one) and disjoint (no value lands in two). Plan one test per block. Prefer many characteristics with few blocks over few with many, and when categories overlap, decompose them into independent booleans plus an explicit constraint rather than patching the categories.
 
-This produces the list, not the order. Step 3 still writes one test at a time, one block per cycle — enumerating blocks up front is not the horizontal slicing forbidden above; writing them all as tests up front is. [tests.md § Cover Both Failure Directions](tests.md) is this applied to a classifier.
+An acceptance criterion already written in EARS form (`When`/`While`/`If … then`, from `/prd-to-issues`) arrives pre-partitioned: each keyword clause names a characteristic — a compound criterion names several, not one — and the `shall` clause is the behavior the oracle checks, a worked example lifted from the spec ([tests.md § The Oracle](tests.md)). Mirror the clause in the test name so the criterion and the test that proves it stay findable from each other.
+
+This produces the list, not the order. Step 3 still writes one test at a time, one block per cycle — enumerating blocks up front is not the horizontal slicing forbidden above; writing them all as tests up front is. [tests.md § Cover Both Failure Directions](tests.md) is this applied to a classifier; an `If … then` criterion is that guard stated at requirement time.
 
 ### 2. Tracer Bullet
 
