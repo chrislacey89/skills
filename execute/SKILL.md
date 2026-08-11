@@ -23,6 +23,8 @@ Use `/execute` when the work is ready to build, verify, and commit.
 
 Use HITL `/execute` when the slice still needs active user judgment, supervision, or acceptance decisions during implementation. Use AFK `/execute` only when the next slice is already durable in GitHub, unblocked, and legible from its issue, boundary map, and any linked research artifact (archive file or spike issue) or `docs/solutions/` context.
 
+Legible to a reader holding none of it — which is what an AFK iteration is. `/prd-to-issues` §4's context completeness check is the gate behind that condition: it requires every AFK slice to carry a `### Context` block, or explicit empty declarations, before the issue is filed. A slice marked AFK with no such block was never checked against this condition, only assumed to meet it. Treat that as a reason to run the slice HITL, or to send it back through `/prd-to-issues`, rather than as a formality to wave through.
+
 See **Step 0: Prerequisites** below for the mandatory Ralph auto-detection and TDD marker gates.
 
 Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the problem or shape is still unresolved. Do not use it as a substitute for `/pre-merge` once implementation is complete and ready for review.
@@ -203,6 +205,10 @@ Skip this read — and the disposal rule with it — for one-off tasks not tied 
 2. **Archive mode** (default) — the PRD references `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`. Read the file directly. If you are running on a machine other than the one that produced the research, the file will not exist; flag this to the user and either re-run `/research` or proceed with explicit acknowledgment of the missing context.
 
 Some legacy PRDs may still reference `research.md` in the repo root or `plans/` — read it if present. Whatever the location, the research artifact contains cached technical research that should inform your approach. Do not re-research what has already been decided.
+
+**Read the slice's `### Context` block before the grep below (issue-based work only).** When the slice issue's `## Boundary Map` carries a `### Context` subsection, read its anchors, gotchas, and research pointer *first*. `/prd-to-issues` wrote that block so this session would not have to re-derive it: the anchors name the existing files to read or imitate, and the research pointer goes straight to the artifact instead of walking the parent PRD to find it. Reading it is not optional — a block that is written and never preferentially read is not neutral overhead, it is a section readers learn to skip, which taxes the Boundary Map around it.
+
+Treat it as pointers, not truth. The anchors were written at decomposition time and siblings may have merged since; the code and the research artifact still win on any conflict, per the precedence rule below. A stale anchor is a correction to file on the issue, not a reason to skip the block.
 
 Consult `docs/solutions/` for relevant past solutions before starting implementation:
 

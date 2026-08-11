@@ -9,6 +9,7 @@ sources:
     - "Software Estimation — Steve McConnell"
     - "Software Requirements — Karl Wiegers & Joy Beatty"
     - "Living Documentation — Cyrille Martraire"
+    - "The Programmer's Brain — Felienne Hermans"
 ---
 
 # PRD to Issues
@@ -143,6 +144,24 @@ The audit is binary: shape present or absent. Shape correctness is evaluated at 
 
 This check exists because PRDs frequently sketch contract shapes in prose without locking them in code form (e.g., "exports a Zod schema with category_scores keyed by …"). The Contract-shape rendering subsection above covers two cases — PRD locked in code (reference by location) and slice introduces a contract the PRD did not lock (re-render). The third case — PRD sketched in prose without locking in code — is where this check fires when the rule's "did not lock" wording is read narrowly. The slice issue is the durable contract `/execute` and `/pre-merge` inherit; the shape lives in code form in the slice's `Produces` regardless of the PRD's surface form for it.
 
+**Context completeness check (AFK slices only).** After the shape-sufficiency check, confirm each slice marked AFK carries the pointers a cold reader needs — or explicitly declares them empty. HITL slices are exempt; they have a human in the loop to ask.
+
+An AFK slice hands a fresh context window a task requiring search, comprehension, and transcription at once — the costliest kind to leave undecomposed (Hermans, *The Programmer's Brain* Ch. 11). This session already did the search, in §2. Write it down so the fresh window pays only comprehension and transcription. That is also the admission test for the block: a line earns its place only if it removes a search the implementer would otherwise run. "Useful background" does not qualify.
+
+The audit is binary — pointer present or absent — for the same reason the shape-sufficiency check is: the author cannot grade their own clarity. Experts' estimates of novice difficulty do not improve even when they are prompted to recall being novices (Hinds 1999), because automatization erases the memory of what each step cost (Hermans Ch. 13). Presence is checkable; "does this feel legible?" is not.
+
+Each AFK slice's `### Context` block must contain, or explicitly declare empty:
+
+- **Anchors** — existing files to read or imitate, as `path — why`, or the line `Greenfield — no existing pattern to follow.` The anchor is a **path**, never a bare pattern name: "follow the repository pattern" helps only a reader who already recognizes it, while a path is readable by anyone. The `why` states the file's **purpose, or the pattern it exemplifies** ("owns the retry/backoff policy every outbound client uses") — never a line-level restatement, which gives the reader nothing to chunk against and is pure load (Fan 2010). Where the repo has an `UBIQUITOUS_LANGUAGE.md` and this slice leans on domain terms defined there, cite it as one more anchor.
+- **Gotchas** — constraints known now that bear on this slice, drawn from the PRD's Rabbit Holes and the research artifact, or `None known.`
+- **Research** — the research artifact's location (`Refs #<spike-issue-number>` or the archive path), cited in this slice so `/execute` need not walk the parent PRD to find it.
+
+These three labels are rendered verbatim in the `### Context` block of the issue template below. `scripts/test-context-block-contract.sh` pins the two lists against each other — changing a slot here without changing the template (or the reverse) fails the suite rather than shipping a check that asks for a field the template has no room for.
+
+Pointers, not restatements — the code and the research artifact stay the truth; the block only says where to look. Slice size is a separate concern, already covered by the orthogonality and estimate-readiness checks above.
+
+**Sunset clause for the context check.** It was added on audit grounds, without a triggering incident. If across a reasonable sample of AFK decompositions the block is consistently greenfield/none-known filler, or `/execute` iterations are observed skipping it despite its Step 1 instruction, remove it rather than leave it as ceremony — support that is never acted on becomes clutter, and clutter trains readers to skip the region it sits in (Hermans Ch. 11).
+
 **Dependency-graph diagram (optional).** Before finalizing the boundary map, if it has ≥2 Produces/Consumes entries across the decomposition, consider invoking `/mermaid` to render the cross-slice dependency graph as a flowchart and embed it alongside the existing lists. The lists stay authoritative — the diagram is a reading aid for reviewers and resumed-session agents who otherwise have to mentally compile the bullet structure back into a graph. Skip the diagram when the boundary map is thin enough that the lists are already the cleanest rendering.
 
 Once the issues exist and §7 has wired native dependency edges, a regenerated version of this diagram can be derived from the API rather than hand-transcribed from the boundary map — read each slice's `.../dependencies/blocked_by` list and render the edges directly. Deriving it removes the transcription step, which is the step that lets the diagram drift from the real graph.
@@ -188,6 +207,7 @@ Ask the user:
 - Are the correct slices marked as HITL and AFK?
 - Do the boundary map interfaces look right? (Are these the right function signatures, types, endpoints?)
 - Does every shared type, endpoint, or data model have exactly one owning slice in the Produces column?
+- For each AFK slice: if a fresh session knew nothing beyond this issue body and its links, would it have everything needed — anchor files, gotchas, research pointer? (This is the condition `/execute` names for AFK safety, and you are the only reader here who is not already holding the context.)
 - For every `Consumes` entry that references an already-closed upstream slice: does the symbol actually exist at the declared path, in the declared shape?
 - Does the total decomposition feel proportionate to the stated appetite? A small-batch appetite (1-2 weeks) with 10+ slices or 4+ dependency levels suggests scope grew beyond what was shaped. A big-batch appetite with only 2-3 trivial slices suggests the shaping was too aggressive. If the decomposition feels disproportionate, which slices should be merged, split, or cut?
 - Does any non-tracer slice project to **>500 LOC or >20 files** at ship time? If so, can it split without breaking the vertical seam? Tracer bullets are exempt — they intentionally cut wide to prove end-to-end architecture. (Soft signal sourced from convergent code-review research: Tacke's engagement-degradation thresholds (≤500 lines / ≤20 files) and Rigby's 11–78 LOC convergent median across 13 projects (Microsoft, AMD, Android, Chrome OS, Apache, Linux). The mirror size signal at review time is `/pre-merge` Dimension 11.)
@@ -269,6 +289,17 @@ What this slice needs from upstream slices:
 - Refs #<spike-issue-number>: research spike pinning the recommended approach or library callback contract this slice's interface depends on (cite only when a spike issue exists for this PRD's research and the slice is bounded by a specific recommendation in it)
 
 Or "Nothing — this is a leaf node (no upstream dependencies)." if no dependencies.
+
+### Context
+
+*AFK slices only — what a fresh context window needs so it does not have to re-derive this. Omit the whole subsection for HITL slices.*
+
+- **Anchors:** `path/to/existing.ts` — owns the retry/backoff policy every outbound client uses; imitate its error shape
+- **Anchors:** `UBIQUITOUS_LANGUAGE.md` — defines the domain terms this slice's `What to Build` leans on
+- **Gotchas:** the upstream API rejects batches larger than 50 (PRD Rabbit Holes)
+- **Research:** `Refs #<spike-issue-number>` — or `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`
+
+Use the explicit empty declarations rather than dropping a bullet: `Greenfield — no existing pattern to follow.` and `None known.`
 
 ## Acceptance Criteria
 
