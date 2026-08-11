@@ -276,8 +276,14 @@ Mark policy-driven criteria with `[POLICY]` — these encode current business ru
 
 Mark quality-attribute criteria with `[QA-<attribute>]` where `<attribute>` is one of `PERF`, `RELI`, `SEC`, `USAB`, `MAINT`. These criteria carry the SMART quality-attribute discipline forward from the parent PRD's §Implementation Decisions — each must be specific, measurable, attainable, relevant, and time-bounded. Name the verification mechanism (load test, fault-injection test, log-capture assertion, etc.) so `/pre-merge` can verify implementation reflects the declared criterion.
 
+Write a criterion in EARS form — `<condition>, the <module> shall <response>` — when the trigger condition is what makes the criterion falsifiable: the behavior is condition-dependent (error path, guard, state-dependent flow), the slice is API-shaped or compliance-sensitive, or the criterion protects a failure direction of a classifier. Three keywords cover what slices carry: `When <trigger>` for a point event, `While <state>` for behavior sustained across a state, and `If <condition>, then` for deviations and failures. Route a deviation through `If … then` even when the prose doesn't frame it as a failure — omitted failure handling is the defect that keyword pair exists to prevent. Put the real module name in the `<module>` slot (it is already in the Boundary Map), and stack at most two keywords; a criterion needing three is two criteria.
+
+Plain prose remains the default. A criterion that fails all three triggers is unconditional, which is already the notation's unconditional form — inventing a condition to satisfy a template produces a worse criterion than the prose it replaced.
+
 - [ ] Criterion 1
 - [ ] Criterion 2
+- [ ] If the feed returns a malformed row, then the parser shall reject the row and log a structured error
+- [ ] While a sync is in flight, the scheduler shall reject new sync requests
 - [ ] `[POLICY]` Criterion that reflects a current business rule rather than a stable requirement
 - [ ] `[QA-PERF]` p95 search latency under 200ms with 100 concurrent users, verified by load test in this slice
 
