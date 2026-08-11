@@ -97,3 +97,6 @@ jobs:
 
       - name: Run Context-block contract suite
         run: bash scripts/test-context-block-contract.sh
+
+      - name: Run selection-idiom consistency suite
+        run: bash scripts/test-selection-idiom-consistency.sh

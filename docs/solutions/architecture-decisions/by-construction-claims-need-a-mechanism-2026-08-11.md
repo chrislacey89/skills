@@ -68,9 +68,18 @@ The two compound. A claim believed to be verified, asserted to be consistent, an
 
 **What this PR fixed (the instance).** Removed the false claim from all five sources and the four bundled copies; swapped the hand-rolled REST mechanism for `gh issue edit --add-blocked-by`; stated a `gh >= 2.94.0` floor in `README.md` — the repo's first declared tool-version floor, which is the closest thing to a snapshot the claim ever had.
 
-**What this PR deliberately did not fix (the mechanism).** The idiom still lives in five hand-maintained files, and the "agree by construction" assertion in `help/SKILL.md` and `SYSTEM-OVERVIEW.md` is still unenforced. Nine occurrences, zero tests relating them. Left as a named finding rather than silently absorbed — the scope of #205 was the claims, and expanding it to build the harness mid-PR is the "while we are here" rewrite the guardrails warn against.
+**What this PR then fixed (the mechanism).** `scripts/test-selection-idiom-consistency.sh` now constructs the agreement the prose asserts, wired into lefthook pre-push and CI. Four checks, each extracting the real text from the real files:
 
-That gap is the reason this entry exists. The instance was cheap; the mechanism is the durable part, and it is still open.
+1. The three FRONTIER copies (`/setup-ralph-loop` ×2, `SYSTEM-OVERVIEW.md`) normalize to one value.
+2. No file compares `.state == "open"` against a `blockedBy` read — the uppercase/lowercase split that matches nothing silently.
+3. `isBlocked` does not resurface as a capability claim in any skill.
+4. Every adjacent `` `/skill` Step N `` reference resolves to a heading that exists.
+
+**What it deliberately does not assert:** that all nine occurrences are byte-identical. They are not, and should not be — §9 tests for an empty set, `/execute` projects `{number, title}`, `/help` projects `.number`. Pinning them to one string would force a false uniformity and the suite would be deleted the first time someone legitimately needed a different projection. Only the parts that *must* agree are pinned.
+
+The suite was mutation-tested before commit: drifting one FRONTIER copy's `--limit`, lowercasing one state predicate, appending an `isBlocked` claim, and adding a dangling `Step 9` reference each produced exactly one failure, and the tree was restored clean. A contract suite that has only ever been observed passing is itself an unverified claim — which is the error this entry is about.
+
+Check 4 earned its place immediately: the `/triage-issue` fix made earlier in this same PR referenced `/qa` **Step 4b**, a number created by renumbering in that same PR. It is now referenced by name instead.
 
 ## Prevention
 
@@ -133,6 +142,6 @@ If edit-time latency ever becomes the actual pain, the right place is **lefthook
 
 ## Shelf Life
 
-Retire the *instance* when a test pins the selection idiom across its five sites — at that point the "agree by construction" claim is true and this entry documents a closed gap.
+The *instance* closed in the PR that opened it — `scripts/test-selection-idiom-consistency.sh` now constructs what the prose asserts. Retire this entry's instance half when that suite is deleted or the "agree by construction" claim is removed; the suite's own check 5 fails if the claim disappears without it, so the two retire together by design.
 
 The *general* rule outlives it and is now the fourth entry in a chain saying one thing four ways: **a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism.** Four instances is past the point where the siblings should be consolidated into one entry; that consolidation is the real successor to all four, and this entry should be folded into it rather than deleted.
