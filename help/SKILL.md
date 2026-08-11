@@ -66,15 +66,19 @@ ls -t "$HOME/.claude/research/$REPO_SLUG/" 2>/dev/null
 gh issue list --state open --json number,title,labels,milestone --limit 50
 
 # The frontier — which open issues are actually takeable right now.
-# `gh issue list --json` CANNOT answer this: `--json isBlocked` (and every
-# other dependency field) errors with "Unknown JSON field". Dependency data
-# is REST-only, so this one call uses `gh api`.
+# This one call uses `gh api` because the dependency summary counts
+# (blocked_by / total_blocked_by) have no `--json` equivalent; they are
+# served only by the REST issues LIST endpoint, not the single-issue GET.
 # The `has("pull_request")` filter is required — the REST issues list returns
-# pull requests alongside issues.
+# pull requests alongside issues. (`gh issue list` excludes PRs by definition,
+# but cannot return these counts.)
 gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
   --jq '.[]
        | select(has("pull_request") | not)
-       | {number, blocked_by: .issue_dependencies_summary.blocked_by, assignee: (.assignee.login // null)}' 2>/dev/null
+       | {number,
+          blocked_by: .issue_dependencies_summary.blocked_by,
+          total_blocked_by: .issue_dependencies_summary.total_blocked_by,
+          assignee: (.assignee.login // null)}' 2>/dev/null
 
 # Open milestones with remaining feature issues
 gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | {title, open_issues, closed_issues}' 2>/dev/null
@@ -82,7 +86,7 @@ gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | {title, open_iss
 
 The frontier call is independent of every other call in this batch and cannot fail on a guessed ref, so it belongs inside the parallel batch. `blocked_by` counts *open* blockers only — a slice whose blockers have all closed reports `0` with no bookkeeping, so this value can be trusted as current without re-reading the blockers.
 
-Repos whose slice issues predate native dependency wiring (see `/prd-to-issues` §7) will report `blocked_by: 0` for everything. That is indistinguishable from a genuinely flat graph, so when every open issue reports `0` and the issue bodies contain prose `Blocked by #N` lines, fall back to the prose and say so in the recommendation rather than asserting the whole backlog is takeable.
+Repos whose slice issues predate native dependency wiring (see `/prd-to-issues` §7) will report `blocked_by: 0` for everything. `total_blocked_by` tells that apart from a genuinely flat graph without guessing: if any issue reports `total_blocked_by > 0`, the repo *is* wired and the zeros are real. If every issue reports `total_blocked_by: 0` and the bodies contain prose `Blocked by #N` lines, no edge was ever written — fall back to the prose and say so in the recommendation rather than asserting the whole backlog is takeable.
 
 **Parallel tool-use gotcha.** In Claude Code, when one bash call in a parallel batch errors, the harness cancels its in-flight siblings — one bad ref takes down the whole snapshot. This is why Phase 1a must run first (and alone): if base-branch detection fails, nothing in Phase 1b will try to reference `$BASE_BRANCH`. Do not chain `&&`/`||` against a guessed branch name inside a parallel batch to "save a round trip" — it will fail noisily on any repo that does not match your guess.
 

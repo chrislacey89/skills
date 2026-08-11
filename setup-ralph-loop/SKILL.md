@@ -109,9 +109,10 @@ set -e
 # dependencies (wired by /prd-to-issues §7) make this a lookup; `blocked_by`
 # counts OPEN blockers only, so it is current with no bookkeeping.
 #
-# Dependency data is REST-only: `gh issue list --json isBlocked` errors with
-# "Unknown JSON field". The has("pull_request") filter is required because the
-# REST issues list returns pull requests alongside issues.
+# This uses `gh api` because the dependency summary counts have no `--json`
+# equivalent — they are served only by the REST issues LIST endpoint. The
+# has("pull_request") filter is required because that list returns pull
+# requests alongside issues.
 FRONTIER=$(gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
   --jq '[.[]
         | select(has("pull_request") | not)
@@ -130,7 +131,7 @@ Adapt the prompt to the actual task source and available commands.
 
 Handing the model a computed candidate set — rather than the instruction "respecting blocking relationships" — is the point of this shape. An instruction to honor a graph the model must first reconstruct from prose has no mechanism behind it, and its failure mode is a plausible-looking wrong slice rather than an error. AFK is the stage with nobody watching, so it is the stage least able to absorb that. Deterministic selection stays in bash; the judgment call the model is actually good at (which of these candidates is riskiest) stays in the prompt.
 
-If the repo's slice issues predate native dependency wiring, `$FRONTIER` will list everything. Wire the edges first — see `/prd-to-issues` §7 — or the loop is back to guessing.
+If the repo's slice issues predate native dependency wiring, `$FRONTIER` will list everything. Check before trusting it: if every open issue reports `total_blocked_by == 0` while bodies carry prose `Blocked by #N` lines, no edge was ever written. Wire the edges first — see `/prd-to-issues` §7 — or the loop is back to guessing. AFK is the stage least able to absorb that, because nobody is watching the wrong slice get picked.
 
 ### 5. Generate `ralph.sh`
 

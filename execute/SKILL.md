@@ -115,7 +115,17 @@ gh api repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by \
 
 An empty array means takeable — proceed. Any open blocker means **stop**: name the blocking issues to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
 
-Note that `gh issue list --json` cannot answer this — dependency data is REST-only, and `--json isBlocked` errors with `Unknown JSON field`. The edges are wired by `/prd-to-issues` §7; a repo whose slices predate that wiring returns an empty array for every issue, which is indistinguishable from "unblocked." When the array is empty *and* the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand.
+This read stays on `gh api` because it needs each edge's `state`, which the dependency-list endpoint serves directly.
+
+**Distinguish "unblocked" from "never wired" before trusting an empty array.** An empty array has two causes: the slice genuinely has no open blockers, or the repo predates the edge wiring in `/prd-to-issues` §7 and has no edges at all. The summary counts tell them apart:
+
+```bash
+gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+  --jq ".[] | select(.number == <n>) | .issue_dependencies_summary
+       | {blocked_by, total_blocked_by}"
+```
+
+`total_blocked_by > 0` means this slice was wired and its blockers have closed — the empty array is real, proceed. `total_blocked_by == 0` means no edge was ever written, so the array proves nothing; if the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand. Note this read must go through the issues *list* endpoint — the summary fields are absent from the single-issue GET (see `/prd-to-issues` §7).
 
 Skip this gate for one-off tasks not tied to a GitHub issue.
 
