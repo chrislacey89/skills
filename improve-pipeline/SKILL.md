@@ -324,7 +324,7 @@ If no gap is identified, remove the Gap subsection rather than leaving a placeho
 
 **Verdict:** Reject / Defer / Proceed narrowly / Proceed broadly
 
-[The synthesis. State the minimal coherent change set and the key repo-wide tradeoffs.]
+[The synthesis. State the minimal coherent change set and the key repo-wide tradeoffs. When the dialectic ran in degraded mode, say so here and say what it cost: the Skeptic read the Advocate's case before writing, so the two positions are not independent and the verdict should be read accordingly.]
 
 ## Recommended Changes
 
