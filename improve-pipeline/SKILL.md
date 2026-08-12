@@ -167,7 +167,9 @@ Each book loaded should contribute something specific the dialectic can cite —
 
 ### Phase 4: Run the Three-Agent Dialectic
 
-Use a structured tension pattern before writing the proposal. If sub-agents are available, use them. If not, simulate the three roles sequentially with clear separation.
+Use a structured tension pattern before writing the proposal. Spawn the Advocate and the Skeptic as sub-agents **in a single message**, so each writes its opening case without the other's in context — two cases formed at the same moment cannot anchor on each other, and weighing them against each other only means something if they were formed apart. The Mediator runs after both return.
+
+When sub-agents are unavailable, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly.
 
 #### Agent 1: Advocate
 
@@ -399,6 +401,7 @@ A run of `/improve-pipeline` is not complete until all of the following are true
 - the canonical context was loaded from `README.md`, `SYSTEM-OVERVIEW.md` (or `references/SYSTEM-OVERVIEW.md`), `CLAUDE.md`, `docs/skill-anatomy.md` (or `references/skill-anatomy.md`), and `docs/writing-for-humans.md` (or `references/writing-for-humans.md`)
 - the `## Field Incident` and `## Why This Is a Pipeline Problem` sections meet the walkthrough shape and revision bar in `references/writing-for-humans.md`
 - the nearest affected skill and adjacent overlapping skills were reviewed
+- the Advocate and Skeptic were spawned in one message and neither received the other's case, or the filed issue names the run as degraded mode
 - `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating
 - an issue was filed or updated in `chrislacey89/skills`, or filing was intentionally deferred with a stated reason
