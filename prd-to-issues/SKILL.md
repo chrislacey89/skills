@@ -229,27 +229,24 @@ Create issues in dependency order (blockers first) so you can reference real iss
 
 Both representations are written, and they have distinct jobs. The prose `## Blocked by` line documents *why* a slice is gated, is readable without API access, and survives a tracker migration. The native edge is the **gate**: it is what `/help`, `/execute`, and Ralph query to decide what is takeable, and it is authoritative for any automated selection. Writing only the prose leaves every downstream consumer parsing English to reconstruct a graph that GitHub can serve directly.
 
-For each `Blocked by` relationship, resolve the blocker's numeric **database id**, then POST the edge:
+Wire each edge with `gh issue edit`, which takes issue **numbers** and accepts several blockers per call:
 
 ```bash
-# The endpoint takes the blocker's database id (e.g. 4888210647) — NOT its
-# #number and NOT its GraphQL node_id. Passing the issue number wires a wrong
-# edge or silently no edge, so always resolve the id first.
-BLOCKER_ID=$(gh api repos/{owner}/{repo}/issues/<blocker-number> --jq .id)
-
-gh api --method POST \
-  repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
-  -F issue_id="$BLOCKER_ID"
+gh issue edit <blocked-number> --add-blocked-by <blocker-number>,<blocker-number>
 ```
 
-Repeat once per edge. Wire the §3 QA issue last and count its edges against the slice list — it is blocked by every other slice, so it is where a missed POST is least visible.
+Wire the §3 QA issue last and count its edges against the slice list — it is blocked by every other slice, so it is where a missed edge is least visible.
 
-**Verify against the list endpoint, not the summary.** The `issue_dependencies_summary` field on an issue object can be served stale immediately after a mutation — a removed edge may still report `blocked_by: 1` for a short window. Confirm what you wrote by reading the dependency list itself:
+⚠️ **Never pass `--blocked-by` (or `--parent`, or `--type`) to `gh issue create`.** `create` applies relationships as a *deferred second mutation* after the issue exists. When that mutation fails — permissions, a feature unavailable on the host, GHES below the floor — `gh` reports the error, **suppresses the issue URL**, and offers a `--recover` prompt. The issue was still created, so an agent that follows the prompt files a **duplicate**. Creating bare and wiring in a second pass keeps a relationship failure isolated and retryable, which is why the create-then-reference structure above is load-bearing rather than incidental. (Verified live in `gh` 2.97.0; the fix, [cli/cli#13899](https://github.com/cli/cli/pull/13899), is open and unmerged.)
+
+**Verify by reading the edges back, not the summary.** The `issue_dependencies_summary` counts can be served stale immediately after a mutation — a removed edge may still report `blocked_by: 1` for a short window. Confirm what you wrote by reading the edges themselves:
 
 ```bash
-gh api repos/{owner}/{repo}/issues/<blocked-number>/dependencies/blocked_by \
-  --jq '[.[] | {number, state}]'
+gh issue view <blocked-number> --json blockedBy \
+  --jq '[.blockedBy.nodes[] | {number, state}]'
 ```
+
+Each node carries `{id, number, state, title, url}`, and `state` is the GraphQL enum — **uppercase** `OPEN` / `CLOSED`, not the REST endpoint's lowercase. `blockedBy.totalCount` counts blockers in *every* state, so it is the CLI's equivalent of `total_blocked_by`.
 
 **Reconcile the two representations before moving on.** Naming the edge authoritative settles *who wins* a disagreement; it does not stop one from happening. Because the prose line and the edge set encode the same fact — which issues gate this one — that fact is redundant, and redundant knowledge needs a divergence check rather than a declaration of authority (Martraire, *Living Documentation* Ch. 3: for unavoidably redundant knowledge, establish a reconciliation mechanism; Hunt & Thomas on DRY: "it isn't a question of whether you'll remember, it's a question of when you'll forget").
 
@@ -259,9 +256,11 @@ This is the only place the two can be reconciled cheaply. Downstream, `/help` an
 
 Three properties of this API are worth stating plainly, because each is a sharp edge that otherwise gets rediscovered by a failing agent:
 
-- **`gh issue list --json` cannot see dependency data.** Every other GitHub read in this pack uses `gh issue list --json`; dependency reads must use `gh api`, because `--json isBlocked` — and every other dependency field — errors with `Unknown JSON field`. If you are reaching for `gh issue list` to answer "what is blocked," you are on the wrong endpoint.
-- **The REST issues list includes pull requests.** `GET /repos/{owner}/{repo}/issues` returns PRs alongside issues. PRs carry a null `issue_dependencies_summary`, so an `== 0` predicate happens to exclude them today, but that is incidental — filter explicitly with `select(has("pull_request") | not)` so a PR is never surfaced as a takeable slice.
-- **`blocked_by` counts open blockers only.** A closed blocker stays visible on the dependency list but drops the dependent's `blocked_by` count to zero. Closing a blocker un-gates its dependents with no bookkeeping — which is exactly what the prose line, once written, never does for itself.
+- **Open blockers and total blockers are different questions, and you usually want both.** A closed blocker stays on the edge list but stops gating. Filtering nodes to `state == "OPEN"` answers *"is this takeable now"*; `totalCount` answers *"was this ever wired"*. Together they separate *"had blockers, all closed"* (`totalCount > 0`, no open nodes) from *"never wired"* (`totalCount == 0`) — a distinction downstream readers need, and one that reading open-blockers alone collapses. Closing a blocker un-gates its dependents with no bookkeeping, which is exactly what the prose line never does for itself.
+- **`state` is uppercase on the CLI and lowercase on REST.** `--json blockedBy` returns the GraphQL enum (`OPEN` / `CLOSED`); `gh api …/dependencies/blocked_by` returns `open` / `closed`. A `jq` filter copied between the two silently matches nothing.
+- **If you do drop to raw REST, two traps apply.** `GET /repos/{owner}/{repo}/issues` returns pull requests alongside issues, so it needs `select(has("pull_request") | not)` or a PR can surface as a takeable slice. And the summary objects (`issue_dependencies_summary`, `sub_issues_summary`) are served only by that *list* endpoint — they are **absent** from the single-issue `GET`, which yields null regardless of the real state and reads as "no dependencies" rather than as an error. `gh issue list` / `gh issue view` avoid both: the former excludes PRs by definition, and neither depends on the summary objects.
+
+**Prefer the `gh` CLI over hand-rolled REST for this graph.** `gh` ≥ 2.94.0 exposes the whole relationship surface as flags and `--json` fields (see `README.md` § Installation for the version floor). `--json blockedBy,blocking,parent,subIssues` all work — the field that errors with `Unknown JSON field` is `isBlocked`, which does not exist and is easily mistaken for evidence that the whole family is unavailable.
 
 <issue-template>
 ## Parent PRD
@@ -377,24 +376,16 @@ This summary helps the user (and Ralph) understand the full picture before execu
 ```bash
 # Scope to THIS decomposition's slice numbers. An unscoped repo-wide min will
 # happily return some unrelated ancient open issue.
-gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+gh issue list --state open --limit 100 --json number,blockedBy \
   --jq '[.[]
-        | select(has("pull_request") | not)
         | select(IN(.number; 101,102,103,104))
-        | select(.issue_dependencies_summary.blocked_by == 0)
+        | select([.blockedBy.nodes[] | select(.state == "OPEN")] | length == 0)
         | .number] | min'
 ```
 
-Substitute the real slice numbers for `101,102,103,104`. When several slices qualify, `min` takes the lowest-numbered one — the same tiebreak as before. Note that `gh issue list --json` cannot answer this question at all (see §7).
+Substitute the real slice numbers for `101,102,103,104`. When several slices qualify, `min` takes the lowest-numbered one — the same tiebreak as before. `gh issue list` excludes pull requests by definition, so no `has("pull_request")` guard is needed here.
 
-**Confirm the pick against the list endpoint before printing it.** This query reads `issue_dependencies_summary`, and §7 wired the edges moments ago — that is precisely the window in which the summary can still be stale, so a slice that *is* blocked can surface here as takeable. One extra call on the single chosen slice closes it:
-
-```bash
-gh api repos/{owner}/{repo}/issues/<chosen-slice>/dependencies/blocked_by \
-  --jq '[.[] | select(.state == "open") | .number]'
-```
-
-An empty array confirms the pick. Anything else means the summary was stale — re-run the query above and confirm again. This is the only place in the pipeline where a frontier read follows its own writes closely enough to matter; `/help`, `/execute`, and Ralph read a graph written in an earlier session, so they can use the summary directly.
+Because this reads the edges themselves rather than a summary count, it is not subject to the post-write staleness window — the reason the previous version of this step needed a second confirming call. Filtering on `state == "OPEN"` means a closed blocker correctly does not gate the pick. This step is the only place in the pipeline where a frontier read follows its own writes closely enough for staleness to have been a concern at all; `/help`, `/execute`, and Ralph read a graph written in an earlier session.
 
 ```
 **Next session:** /execute #<first-unblocked-slice-number>

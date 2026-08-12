@@ -66,23 +66,23 @@ ls -t "$HOME/.claude/research/$REPO_SLUG/" 2>/dev/null
 gh issue list --state open --json number,title,labels,milestone --limit 50
 
 # The frontier — which open issues are actually takeable right now.
-# `gh issue list --json` CANNOT answer this: `--json isBlocked` (and every
-# other dependency field) errors with "Unknown JSON field". Dependency data
-# is REST-only, so this one call uses `gh api`.
-# The `has("pull_request")` filter is required — the REST issues list returns
-# pull requests alongside issues.
-gh api "repos/{owner}/{repo}/issues?state=open&per_page=100" \
+# `state` is the GraphQL enum here: uppercase OPEN, not REST's lowercase.
+# `totalCount` counts blockers in every state, which is what distinguishes
+# "blockers all closed" from "never wired" (see the note below).
+gh issue list --state open --limit 100 --json number,blockedBy,assignees \
   --jq '.[]
-       | select(has("pull_request") | not)
-       | {number, blocked_by: .issue_dependencies_summary.blocked_by, assignee: (.assignee.login // null)}' 2>/dev/null
+       | {number,
+          open_blockers: [.blockedBy.nodes[] | select(.state == "OPEN") | .number],
+          ever_wired: .blockedBy.totalCount,
+          assignee: (.assignees[0].login // null)}' 2>/dev/null
 
 # Open milestones with remaining feature issues
 gh api "repos/{owner}/{repo}/milestones?state=open" --jq '.[] | {title, open_issues, closed_issues}' 2>/dev/null
 ```
 
-The frontier call is independent of every other call in this batch and cannot fail on a guessed ref, so it belongs inside the parallel batch. `blocked_by` counts *open* blockers only — a slice whose blockers have all closed reports `0` with no bookkeeping, so this value can be trusted as current without re-reading the blockers.
+The frontier call is independent of every other call in this batch and cannot fail on a guessed ref, so it belongs inside the parallel batch. Filtering nodes to `state == "OPEN"` means a slice whose blockers have all closed reports an empty `open_blockers` with no bookkeeping, so this value can be trusted as current without re-reading the blockers.
 
-Repos whose slice issues predate native dependency wiring (see `/prd-to-issues` §7) will report `blocked_by: 0` for everything. That is indistinguishable from a genuinely flat graph, so when every open issue reports `0` and the issue bodies contain prose `Blocked by #N` lines, fall back to the prose and say so in the recommendation rather than asserting the whole backlog is takeable.
+Repos whose slice issues predate native dependency wiring (see `/prd-to-issues` §7) will report an empty `open_blockers` for everything. `ever_wired` tells that apart from a genuinely flat graph without guessing: if any issue reports `ever_wired > 0`, the repo *is* wired and the empty lists are real. If every issue reports `ever_wired: 0` and the bodies contain prose `Blocked by #N` lines, no edge was ever written — fall back to the prose and say so in the recommendation rather than asserting the whole backlog is takeable.
 
 **Parallel tool-use gotcha.** In Claude Code, when one bash call in a parallel batch errors, the harness cancels its in-flight siblings — one bad ref takes down the whole snapshot. This is why Phase 1a must run first (and alone): if base-branch detection fails, nothing in Phase 1b will try to reference `$BASE_BRANCH`. Do not chain `&&`/`||` against a guessed branch name inside a parallel batch to "save a round trip" — it will fail noisily on any repo that does not match your guess.
 
@@ -96,8 +96,8 @@ Walk through these checks in priority order. The first one that matches is the r
 |---|---|---|---|
 | 1 | Open PR on current branch | Merge the PR, then run `/compound` | "You have an open PR on `<branch>` — if review is done, merge it and capture lessons." |
 | 2 | Current branch has commits ahead of base, no open PR | `/pre-merge` | "You have `<N>` commits ahead of `<base>` with no PR yet — `/pre-merge` creates it and runs the architectural review." |
-| 3 | Open slice issues referencing a PRD, none closed | `/execute` on the highest-priority slice reporting `blocked_by == 0` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
-| 4 | Open slice issues referencing a PRD, some closed | `/execute` on the next slice reporting `blocked_by == 0` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |
+| 3 | Open slice issues referencing a PRD, none closed | `/execute` on the highest-priority slice with an empty `open_blockers` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
+| 4 | Open slice issues referencing a PRD, some closed | `/execute` on the next slice with an empty `open_blockers` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |
 | 5 | Open PRD issue with no slice issues | `/prd-to-issues` on PRD #`<prd>` | "PRD #`<prd>` is shaped but not yet decomposed — `/prd-to-issues` breaks it into slices." |
 | 6 | Recent research archive entry for this repo, no open PRD issue matching its feature | `/write-a-prd` | "A recent research file for `<feature>` is archived but there is no PRD issue — `/write-a-prd` turns it into a shaped pitch." |
 | 7 | Planning milestone with a `research-ready` feature issue | `/research` on the `research-ready` feature | "Milestone `<name>` has a `research-ready` feature — run `/research` on it." |
@@ -106,7 +106,7 @@ Walk through these checks in priority order. The first one that matches is the r
 | 10 | QA bugs open and no active feature work | `/execute` on the highest-priority QA bug | "You have `<N>` open QA bug issues — `/execute` to work through them." |
 | 11 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |
 
-"Unblocked" in signals #3 and #4 means `blocked_by == 0` from the Phase 1b frontier call — read it, do not infer it from `Blocked by` prose in the issue bodies. This is the same rule `/prd-to-issues` §9 and the Ralph loop prompt use, so all three selection sites agree by construction rather than by coincidence.
+"Unblocked" in signals #3 and #4 means an empty `open_blockers` from the Phase 1b frontier call — read it, do not infer it from `Blocked by` prose in the issue bodies. This is the same rule `/prd-to-issues` §9 and the Ralph loop prompt use, so all three selection sites agree by construction rather than by coincidence.
 
 ### 3. Present the recommendation
 

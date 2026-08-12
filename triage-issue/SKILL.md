@@ -138,6 +138,8 @@ Rules:
 
 Create a GitHub issue using `gh issue create` with the template below. Do NOT ask the user to review before creating - just create it and share the URL.
 
+**Match the repo's label convention first.** When invoked from `/qa`, this issue *replaces* the lightweight one `/qa` Step 4 would have filed — including that step's labeling, which is skipped along with the rest of Step 4. A QA session that mixes lightweight and deep issues would otherwise emit some labeled and some not, and inconsistency reads as intentional. Apply the same rule as `/qa`'s "Match the repo's label convention" step: read `gh label list` and the labels on recent issues, apply what matches, and ask before creating a new label. Do not impose a taxonomy — this skill runs in repos it does not own.
+
 <issue-template>
 
 ## Problem

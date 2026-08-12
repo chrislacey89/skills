@@ -16,6 +16,16 @@ Global install (all skills, Claude Code):
 npx skills@latest add chrislacey89/skills --skill '*' --agent claude-code --global -y
 ```
 
+### Requirements
+
+Most skills need only an agent that reads `SKILL.md` files. The pipeline's GitHub-native state has one version floor:
+
+| Requirement | Needed for | Notes |
+|---|---|---|
+| [`gh`](https://cli.github.com) **≥ 2.94.0** | issue dependencies and sub-issue relationships in `/prd-to-issues`, `/qa`, `/execute`, `/help`, `/setup-ralph-loop` | Released 2026-06-10. Earlier versions lack `gh issue edit --add-blocked-by` and the `blockedBy` / `blocking` `--json` fields. Check with `gh --version`. |
+
+On GitHub Enterprise Server, issue **types** and **sub-issues** need GHES 3.17+, and issue **dependencies** need GHES 3.19+. Where dependencies are unavailable, the filing skills degrade to the prose `## Blocked by` section and say so rather than failing.
+
 ## Keeping skills updated
 
 The skills CLI tracks content hashes. When this repo updates, your installed copies know about it:
