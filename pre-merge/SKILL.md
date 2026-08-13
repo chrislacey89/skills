@@ -9,6 +9,9 @@ sources:
     - "The Twelve-Factor App — Adam Wiggins"
     - "Release It! — Michael Nygard"
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
+    - "Noise: A Flaw in Human Judgment — Daniel Kahneman, Olivier Sibony & Cass Sunstein"
+    - "Best Kept Secrets of Peer Code Review — Jason Cohen"
+    - "Engineering a Safer World — Nancy Leveson"
 ---
 
 # Pre-Merge
@@ -38,7 +41,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 ## When to Use
 
 - **Author-mode:** after QA passes and before merging a feature branch to main; after Ralph finishes AFK execution and you've verified behavior; or for any branch you want reviewed before merge, even without a full pipeline run.
-- **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the 10-dimension architectural review to their diff and produce constructive comment text.
+- **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the 11-dimension architectural review to their diff and produce constructive comment text.
 - **Loop-mode:** when findings must survive the session that produced them — the AFK handoff from `/execute`, or any branch you will review over several sittings and do not want to re-derive each time. Use it when the cost you are paying is *losing track of findings*, not *making the fixes*.
 
 ## Execution Flow
@@ -142,10 +145,20 @@ Consult `review-checklist.md` for the review dimensions and their violation patt
 
 **Delegation exists for reviewer independence; parallelism on large diffs is a sub-case of it.** When `/pre-merge` is auto-invoked by `/execute` Step 6 it runs in the session that just wrote the code, holding every rationalization the implementing agent made while writing it. The dimensions are sound; the reviewer is not independent. Cohen's finding is that the author's job is to *annotate for* a reviewer, not to be one — so the sub-agent split below is first a way to put a clean context in front of the diff, and only second a way to halve wall-clock on a big one.
 
-- **Loop-mode: delegation is unconditional, regardless of diff size.** Each dimension pass runs in a fresh sub-agent whose context is the diff, `review-checklist.md`, the PR body's `## Review Notes` block, and — from pass 2 on — the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. Nothing else: not the implementing session's context, and not the previous pass's severity judgments. Phase 5's ledger section gives the full forward/withheld split and the reason for it.
-- **Author-mode and reviewer-mode: delegate by size.** **Small diff** (< 200 changed lines, < 10 files): run all dimensions sequentially in the main agent. **Larger diff**: spawn the two sub-agents below in parallel.
+**So delegation is unconditional in all three modes** — the session that wrote the code never reviews its own diff inline. The one exception is drawn by *content*, not size: the four trivial classes Phase 2's two body templates already name — typo fixes, dep bumps, formatting-only changes, single-line reverts — review in-session, and that is the only trivial/non-trivial distinction Phase 3 draws. The exemption covers Phase 3 only; a trivial-class diff large enough to trip Phase 4's minimum-findings guard still delegates there.
 
-The split, when sub-agents are used:
+Size then decides *how many* sub-agents, never *whether* the review leaves the authoring session:
+
+- **Small diff** (< 200 changed lines, < 10 files): one sub-agent runs all applicable dimensions.
+- **Larger diff**: spawn the two sub-agents below in parallel.
+
+**Why the trigger is content and not size.** Cohen's Cisco dataset retires the proxy on its own evidence: four reviews of 1–2 lines each ran past 15 minutes, because small physical changes carried architecture-sized ramifications. This repo has its own instance — a 34-line, 2-file diff, comfortably inside the old band, whose composition defect the authoring session's pass missed across eight findings and a clean context returned as its top Concern in one pass (`docs/solutions/architecture-decisions/self-review-blind-to-composition-2026-08-13.md`). Deleting the band retires the proxy; the four-class exemption keeps what the band was actually protecting, and is narrower.
+
+**When sub-agents are unavailable**, run the dimensions in-session and name the run **degraded mode** in the findings output: the reviewer holds the authoring session's context, so its independence is gone and the findings should be read accordingly. This is the same declaration `/improve-pipeline` Phase 4 makes when its dialectic cannot be spawned. Degraded mode is a disclosure, not a second exemption — do not reach for it because delegation is inconvenient.
+
+**Every sub-agent's context is the same in all three modes:** the diff, `review-checklist.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no such block, because `/execute` never ran on it; that is an absent input, not a missing step. **Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
+
+The split, on larger diffs:
 
 - **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope, Review-friendly Size
 - **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
@@ -177,7 +190,19 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 Combine findings from all dimensions (or sub-agents).
 
-**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
+**Check delegated findings against the tree before presenting them.** Delegation removes one failure mode and exposes another: a fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson — Phase 3 says this of summaries, and it holds equally for sub-agent output). Loop-mode already handles it, at Phase 5 Step 2, which records `refuted — <evidence>` when the tree contradicts a claim. Author-mode and reviewer-mode had no equivalent, so a sub-agent's misreport printed as an advisory with nothing between it and the reader. Now that every non-trivial review is delegated, that gap sits on the default path.
+
+So for each delegated finding, run Phase 3's "Verify, don't suspect" rule from this context — the grep, file path, and line that support or refute it; the installed type definition when the finding turns on library semantics — and then:
+
+- **Supported by the tree** — present it, with the evidence cited in the finding.
+- **Refuted by the tree** — do not present it as a finding. Record it once as a factual note (`sub-agent B reported X; path:line contradicts it`), printed after the three tiers alongside the other reporting-only notes below, so the check is visible rather than a silent deletion. It is not gated on a PRD the way Scope Notes is; a refuted finding on a no-PRD review still gets its line.
+- **Neither confirmable nor refutable from the tree** — present it at the tier the sub-agent assigned, with the unverified basis named, per that rule's downgrade clause.
+
+Checking is not re-judging. The parent verifies claims; it does not re-rank a sub-agent's severity, and it does not reconcile one sub-agent's findings against the other's.
+
+**This rule governs terminal presentation only, and loop-mode runs Phase 4.** A refuted finding still gets its ledger row, `open`, with the refutation attached — Phase 5 Step 1 takes *every* finding from Phase 3 with no filtering, and Step 2 keeps refuted ones on the explicit ground that dropping one is a decision the operator makes. Suppressing a refuted finding from the terminal is presentation; suppressing it from the ledger would be the unacknowledged report the ledger exists to prevent. Where the two rules would disagree, the ledger wins.
+
+**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. **That second pass runs in a fresh sub-agent, not as a re-read in this context.** The guard fires precisely when the first pass came back thin, and the bias blind spot means hygiene cannot be self-administered (Kahneman, Sibony & Sunstein, *Noise*) — a re-read holding the first pass's context reproduces the review that was thin, and launders it as an independent second look. Its findings go through the evidence check above like any other delegated finding. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
 
 **Author-mode** prints terminal advisories (below). **Reviewer-mode** transforms those same findings into draft PR comment text (see "Reviewer-mode comment drafts" below) — same dimensions, same severity classification, different output shape.
 
@@ -285,7 +310,7 @@ Phases 1–4 are a sensor. Without something that acknowledges, investigates, an
 
 #### Step 1 — Record every finding in the ledger
 
-Every finding from Phase 3 — all 11 dimensions, plus `/ts-audit` when its trigger fires — gets a row. No filtering, no severity cutoff, no "this one is obviously fine." A finding the loop drops silently is exactly the unacknowledged report Leveson's rule is about.
+Every finding from Phase 3 — all 11 dimensions, plus `/ts-audit` when its trigger fires — gets a row. No filtering, no severity cutoff, no "this one is obviously fine." A finding the loop drops silently is exactly the unacknowledged report Leveson's rule is about. This includes findings Phase 4's evidence check refuted and therefore did not print: the ledger's input is Phase 3's output, not Phase 4's.
 
 Findings arrive **open**. `open` means "recorded, awaiting the operator's decision," and it is the only state loop-mode may assign.
 
@@ -434,7 +459,7 @@ Output shape in the terminal:
 - [One-line note per dropped concern with the reason — kept for the user's audit, not for the PR]
 ```
 
-If after the 5P gate the per-line comment count is zero, the review may still produce a top-level approval comment — phrase it as collaborative ("ready to ship from a structural standpoint" rather than "LGTM"). Tacke notes that LGTM-only approvals are a code-review failure mode; if you ran the 10 dimensions and have nothing concrete to say, that result is meaningful and should at least name which dimensions were checked.
+If after the 5P gate the per-line comment count is zero, the review may still produce a top-level approval comment — phrase it as collaborative ("ready to ship from a structural standpoint" rather than "LGTM"). Tacke notes that LGTM-only approvals are a code-review failure mode; if you ran the 11 dimensions and have nothing concrete to say, that result is meaningful and should at least name which dimensions were checked.
 
 If a disagreement is anticipated (e.g., the finding overturns a deliberate choice the author made), draft a single comment opening the MMG Exchange offline ("Can we sync briefly on the X tradeoff before I leave detailed comments?") rather than posting an objection thread on the PR.
 

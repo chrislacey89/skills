@@ -79,7 +79,7 @@ Do not take the blind pass at face value either. Its Suggestion 5 claimed the tw
 
 **Process-level:** issue #199 proposes this fix for `/pre-merge` — an intent-blind lens, with fresh-context review made unconditional rather than size-gated. **This entry is posted as evidence on #199 rather than merely asserting the connection here.** An entry that names a consumer and leaves no trace where the consumer would read it is the footnote `advisory-to-executed-rule-promotion-2026-08-07.md` warns about — and this entry cites that warning, so reproducing it would be self-refuting. The sibling converted its own footnote into a gate by writing entry conditions into #190; this is the same move.
 
-What #199 still lacks is a **trigger predicate**, and this instance supplies a candidate worth testing: *delegate when the diff introduces a state, case, or branch and also edits the record, counter, or check that observes it — at any size.* Until #199 lands, the manual move is one sub-agent and one instruction.
+What #199 lacked at the time of writing was a **trigger predicate**, and this instance supplied a candidate: *delegate when the diff introduces a state, case, or branch and also edits the record, counter, or check that observes it — at any size.* That predicate was not adopted. #199's re-adjudication went the other way — delete the trigger rather than sharpen it — on the ground that the party judging *"does this diff touch an observing record?"* is the party whose judgment is under review, and a default is knowledge in the world where any predicate is knowledge in the head (Norman). What shipped is unconditional delegation with a four-class content exemption; see § Shelf Life.
 
 ## Planning / Calibration Notes
 
@@ -96,7 +96,7 @@ What #199 still lacks is a **trigger predicate**, and this instance supplies a c
 
 **Decision:** Spawn a blind reviewer rather than re-running `/pre-merge` in the authoring session.
 
-**Rationale:** `/pre-merge`'s small-diff rule routes a diff under 200 changed lines *and* under 10 files to the main agent, and at 34 lines across 2 files this one qualified on both counts. The skill is explicit that delegation is "first a way to put a clean context in front of the diff, and only second a way to halve wall-clock" — so the rule's *intent* was already independence, and only its *trigger* is a size proxy. That proxy is what failed: it is calibrated to reviewer load, and composition defects do not scale with reviewer load.
+**Rationale:** `/pre-merge`'s small-diff rule — deleted since, see § Shelf Life — routed a diff under 200 changed lines *and* under 10 files to the main agent, and at 34 lines across 2 files this one qualified on both counts. The skill is explicit that delegation is "first a way to put a clean context in front of the diff, and only second a way to halve wall-clock" — so the rule's *intent* was already independence, and only its *trigger* was a size proxy. That proxy is what failed: it was calibrated to reviewer load, and composition defects do not scale with reviewer load.
 
 **Alternatives considered:** re-run the dimensions in the same session (rejected — a self-similar second pass reproduces the first); ship and rely on `/closeout` (rejected — `/closeout` merges, it does not review); add a twelfth "internal consistency" dimension (rejected — the dimensions were not the failing part, and a dimension read by the author would inherit the same blindness).
 
@@ -117,4 +117,10 @@ That is worth recording plainly rather than quietly fixing: **the entry describi
 
 ## Shelf Life
 
-Retire the **instance** when `/pre-merge` makes fresh-context review unconditional (issue #199) — at that point this entry documents a closed gap. The **general rule** — self-review compares each part against remembered intent and therefore cannot see the set — outlives that fix and should migrate into whatever consolidated form the sibling entries eventually take.
+**The instance is retired.** PR #222 (2026-08-13) deleted the size gate: `/pre-merge` now delegates review to a fresh sub-agent in all three modes, exempting only four trivial content classes. The gap this entry documented is closed, and the present-tense claims above have been marked accordingly. Read the § Context and § Root Cause as a record of what the gap cost, not as a live description of the skill.
+
+**One prescription did not ship, deliberately.** § Solution says to withhold *the PR body* from the blind reviewer, not just the author's findings, because pre-conceded weak spots function as a mute. #222 forwards the `## Review Notes` block to every sub-agent, which is the opposite. That divergence is adjudicated rather than accidental: Cohen's author-preparation finding and Leveson's measuring-channel rule both argue for keeping re-runnable claims in front of the reviewer, and #199's re-adjudication lists Review Notes explicitly under *what remains unchanged*. The reconciliation is that Cohen's value is captured when the author **writes** the notes, so withholding them from **one** lens among sighted ones costs nothing measured — which is the intent-blind lens, still open on #199 and not shipped by #222. Until that lands, § Solution describes a manual move, not the skill's behavior.
+
+The **general rule** — self-review compares each part against remembered intent and therefore cannot see the set — outlives the fix and should migrate into whatever consolidated form the sibling entries eventually take.
+
+**Postscript to the postscript.** #222 — the PR that closed this gap — shipped its own composition defect, caught by the same mechanism. Its new Phase 4 rule said a refuted finding is not presented; loop-mode runs Phase 4 and its ledger says every Phase 3 finding gets a row with no filtering. A new terminal state, and the record that observes it did not admit it. Third instance in this lineage, in the change that fixes the lineage.
