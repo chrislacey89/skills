@@ -142,10 +142,18 @@ Consult `review-checklist.md` for the review dimensions and their violation patt
 
 **Delegation exists for reviewer independence; parallelism on large diffs is a sub-case of it.** When `/pre-merge` is auto-invoked by `/execute` Step 6 it runs in the session that just wrote the code, holding every rationalization the implementing agent made while writing it. The dimensions are sound; the reviewer is not independent. Cohen's finding is that the author's job is to *annotate for* a reviewer, not to be one — so the sub-agent split below is first a way to put a clean context in front of the diff, and only second a way to halve wall-clock on a big one.
 
-- **Loop-mode: delegation is unconditional, regardless of diff size.** Each dimension pass runs in a fresh sub-agent whose context is the diff, `review-checklist.md`, the PR body's `## Review Notes` block, and — from pass 2 on — the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. Nothing else: not the implementing session's context, and not the previous pass's severity judgments. Phase 5's ledger section gives the full forward/withheld split and the reason for it.
-- **Author-mode and reviewer-mode: delegate by size.** **Small diff** (< 200 changed lines, < 10 files): run all dimensions sequentially in the main agent. **Larger diff**: spawn the two sub-agents below in parallel.
+**So delegation is unconditional in all three modes** — the session that wrote the code never reviews its own diff inline. The one exception is drawn by *content*, not size: the four trivial classes this skill already names in its Phase 1 and Phase 2 body templates — typo fixes, dep bumps, formatting-only changes, single-line reverts — review in-session, and that is the only trivial/non-trivial distinction Phase 3 draws.
 
-The split, when sub-agents are used:
+Size then decides *how many* sub-agents, never *whether* the review leaves the authoring session:
+
+- **Small diff** (< 200 changed lines, < 10 files): one sub-agent runs all applicable dimensions.
+- **Larger diff**: spawn the two sub-agents below in parallel.
+
+**Why the trigger is content and not size.** A size band is calibrated to reviewer load; independence is not, so gating one on the other reads a variable it does not depend on. Cohen's Cisco dataset retires the proxy on its own evidence: four reviews of 1–2 lines each ran past 15 minutes, because small physical changes carried architecture-sized ramifications. This repo has its own instance — a 34-line, 2-file diff, comfortably inside the old band, whose composition defect the authoring session's pass missed across eight findings and a clean context returned as its top Concern in one pass (`docs/solutions/architecture-decisions/self-review-blind-to-composition-2026-08-13.md`). Deleting the band retires the proxy; the four-class exemption keeps what the band was actually protecting, and is narrower.
+
+**Every sub-agent's context is the same in all three modes:** the diff, `review-checklist.md`, and the PR body's `## Review Notes` block. Nothing else — in particular, not the implementing session's context. **Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
+
+The split, on larger diffs:
 
 - **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope, Review-friendly Size
 - **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
