@@ -185,7 +185,17 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 Combine findings from all dimensions (or sub-agents).
 
-**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
+**Check delegated findings against the tree before presenting them.** Delegation removes one failure mode and exposes another: a fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson — Phase 3 says this of summaries, and it holds equally for sub-agent output). Loop-mode already handles it, at Phase 5 Step 2, which records `refuted — <evidence>` when the tree contradicts a claim. Author-mode and reviewer-mode had no equivalent, so a sub-agent's misreport printed as an advisory with nothing between it and the reader. Now that every non-trivial review is delegated, that gap sits on the default path.
+
+So for each delegated finding, run Phase 3's "Verify, don't suspect" rule from this context — the grep, file path, and line that support or refute it; the installed type definition when the finding turns on library semantics — and then:
+
+- **Supported by the tree** — present it, with the evidence cited in the finding.
+- **Refuted by the tree** — do not present it as a finding. Record it once as a factual note (`sub-agent B reported X; path:line contradicts it`), so the check is visible rather than a silent deletion.
+- **Neither confirmable nor refutable from the tree** — present it at the tier the sub-agent assigned, with the unverified basis named, per that rule's downgrade clause.
+
+Checking is not re-judging. The parent verifies claims; it does not re-rank a sub-agent's severity, and it does not reconcile one sub-agent's findings against the other's.
+
+**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. **That second pass runs in a fresh sub-agent, not as a re-read in this context.** The guard fires precisely when the first pass came back thin, and the bias blind spot means hygiene cannot be self-administered (Kahneman, Sibony & Sunstein, *Noise*) — a re-read holding the first pass's context reproduces the review that was thin, and launders it as an independent second look. Its findings go through the evidence check above like any other delegated finding. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
 
 **Author-mode** prints terminal advisories (below). **Reviewer-mode** transforms those same findings into draft PR comment text (see "Reviewer-mode comment drafts" below) — same dimensions, same severity classification, different output shape.
 
