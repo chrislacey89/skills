@@ -184,8 +184,6 @@ The Advocate should answer:
 - Why is the proposed change better than leaving the pipeline alone?
 - What exact files or skills likely need to change?
 
-The Advocate should optimize for better real-world outcomes, not for defending current structure.
-
 The Advocate must cite at least one loaded library source that supports the change — a named principle, checklist item, or design guideline. If no book in the surveyed set supports the proposal, say so explicitly; an unsupported advocacy case is a signal, not a thing to paper over.
 
 #### Agent 2: Skeptic
@@ -201,8 +199,6 @@ The Skeptic should look for:
 - recommendations that would burden ordinary users who are not trying to improve the pipeline
 - evidence that the issue was downstream and not structural here
 - adds a feature whose cost is paid by every future user (Norman's featuritis, paired with Meadows policy resistance)
-
-The Skeptic should assume the cost of a bad pipeline change compounds across future usage.
 
 The Skeptic must cite at least one library source or established principle that warns against the change or names a known failure mode the change could create (for example, Nygard on accidental coupling, Meadows on policy resistance, Ousterhout on shallow modules, Fowler on premature abstraction).
 
