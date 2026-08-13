@@ -115,6 +115,7 @@ Three complications dissolved rather than needing answers, which is the usual si
 - Issue #190 — the deferred acting half, with entry conditions and an explicit unimplemented-is-acceptable outcome
 - `staleness-gate-intermediate-writers-2026-08-06.md` — sibling shape; see Rule Scope
 - `secondhand-source-proposal-specificity-2026-08-11.md` — the same missing edge ("an acknowledged limitation that gates nothing") at the source-gap → proposal-specificity seam
+- `self-review-blind-to-composition-2026-08-13.md` — the same missing edge one layer down: not a rule that gates nothing, but a *record* that cannot hold the state it exists to observe
 
 ## Shelf Life
 

@@ -175,7 +175,7 @@ When sub-agents are unavailable, simulate the roles sequentially and name the ru
 
 The Mediator may then call **one** reply round — see its gate below. Send both replies in a single message, so the independence that governs the opening cases governs the replies too. Each reply quotes the specific claim it answers, says what it concedes and what still stands, and stays under 250 words. The roles need not agree; the objective is the right answer rather than the win (Liang et al., *Multi-Agent Debate*).
 
-Discard a reply that concedes without quoting a claim, and rule on the opening pair instead, noting the discard in the verdict. A reply that performs agreement is the failure this round is most likely to produce, and it reads exactly like a good one.
+Discard a reply that concedes without quoting a claim, and rule on the opening pair instead, noting the discard in the verdict. A reply that performs agreement is the failure this round is most likely to produce, and it reads exactly like a good one (Du et al. call it *sycophancy*: an agent names a peer's error, then adopts it anyway).
 
 #### Agent 1: Advocate
 

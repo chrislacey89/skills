@@ -139,6 +139,7 @@ If edit-time latency ever becomes the actual pain, the right place is **lefthook
 - [cli/cli v2.94.0](https://github.com/cli/cli/releases/tag/v2.94.0) — the release that made the claim false, two months before it was written
 - [cli/cli#13899](https://github.com/cli/cli/pull/13899) — open, unmerged; the `gh issue create` deferred-failure mode that shapes the create-bare-then-wire rule
 - `staleness-gate-intermediate-writers-2026-08-06.md`, `secondhand-source-proposal-specificity-2026-08-11.md`, `advisory-to-executed-rule-promotion-2026-08-07.md` — see Rule Scope
+- `self-review-blind-to-composition-2026-08-13.md` — same family, and the reason a *second reader* is the mechanism where a snapshot is not: a claim maintained by hand across peers fails silently, and the author is the one reader who cannot see it
 
 ## Shelf Life
 
