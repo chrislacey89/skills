@@ -169,7 +169,11 @@ Each book loaded should contribute something specific the dialectic can cite —
 
 Use a structured tension pattern before writing the proposal. Spawn the Advocate and the Skeptic as sub-agents **in a single message**, so each writes its opening case without the other's in context — two cases formed at the same moment cannot anchor on each other, and weighing them against each other only means something if they were formed apart. The Mediator runs after both return.
 
-When sub-agents are unavailable, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly.
+When sub-agents are unavailable, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly. Degraded mode has no sub-agents to reply, so the reply round below does not run.
+
+The Mediator may then call **one** reply round — see its gate below. Send both replies in a single message, so the independence that governs the opening cases governs the replies too. Each reply quotes the specific claim it answers, says what it concedes and what still stands, and stays under 250 words. Aim for moderate tension: the roles need not agree, and the objective is the right answer rather than the win — forced consensus collapses the exchange into mutual confirmation, and maximal disagreement turns it into a contest (Liang et al., *Multi-Agent Debate*).
+
+Discard a reply that concedes without quoting a claim, or that restates its opening with raised confidence, and rule on the opening pair instead, noting the discard in the verdict. A reply that performs agreement is the failure this round is most likely to produce, and it reads exactly like a good one.
 
 #### Agent 1: Advocate
 
@@ -205,6 +209,8 @@ The Skeptic must cite at least one library source or established principle that 
 #### Agent 3: Mediator
 
 The Mediator synthesizes the two positions and decides what best serves the whole repository.
+
+Before writing the verdict, attribute every decisive point to quoted text from one of the two cases. Call the reply round when a decisive point has no source in either case, or when the cases contradict each other on a checkable fact. Otherwise record **no reply round** and rule. Attribution is the gate because a Mediator that supplies its own arguments does not notice that it has.
 
 The Mediator should produce one of four verdicts:
 
@@ -312,9 +318,13 @@ If no gap is identified, remove the Gap subsection rather than leaving a placeho
 
 [The strongest argument for making the change.]
 
+**Reply:** [The Advocate's answer to the Skeptic. Omit when no reply round ran.]
+
 ## Skeptic Case
 
 [The strongest argument against making the change.]
+
+**Reply:** [The Skeptic's answer to the Advocate. Omit when no reply round ran.]
 
 ## Mediator Verdict
 
@@ -398,6 +408,7 @@ A run of `/improve-pipeline` is not complete until all of the following are true
 - the `## Field Incident` and `## Why This Is a Pipeline Problem` sections meet the walkthrough shape and revision bar in `references/writing-for-humans.md`
 - the nearest affected skill and adjacent overlapping skills were reviewed
 - the Advocate and Skeptic were spawned in one message and neither received the other's case, or the filed issue names the run as degraded mode
+- the issue records the reply-round decision — either the replies appear under the two case sections, or the verdict says **no reply round**
 - `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating
 - an issue was filed or updated in `chrislacey89/skills`, or filing was intentionally deferred with a stated reason
