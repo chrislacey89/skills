@@ -171,9 +171,9 @@ Use a structured tension pattern before writing the proposal. Spawn the Advocate
 
 When sub-agents are unavailable, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly. Degraded mode has no sub-agents to reply, so the reply round below does not run.
 
-The Mediator may then call **one** reply round — see its gate below. Send both replies in a single message, so the independence that governs the opening cases governs the replies too. Each reply quotes the specific claim it answers, says what it concedes and what still stands, and stays under 250 words. Aim for moderate tension: the roles need not agree, and the objective is the right answer rather than the win — forced consensus collapses the exchange into mutual confirmation, and maximal disagreement turns it into a contest (Liang et al., *Multi-Agent Debate*).
+The Mediator may then call **one** reply round — see its gate below. Send both replies in a single message, so the independence that governs the opening cases governs the replies too. Each reply quotes the specific claim it answers, says what it concedes and what still stands, and stays under 250 words. The roles need not agree; the objective is the right answer rather than the win (Liang et al., *Multi-Agent Debate*).
 
-Discard a reply that concedes without quoting a claim, or that restates its opening with raised confidence, and rule on the opening pair instead, noting the discard in the verdict. A reply that performs agreement is the failure this round is most likely to produce, and it reads exactly like a good one.
+Discard a reply that concedes without quoting a claim, and rule on the opening pair instead, noting the discard in the verdict. A reply that performs agreement is the failure this round is most likely to produce, and it reads exactly like a good one.
 
 #### Agent 1: Advocate
 
@@ -318,13 +318,13 @@ If no gap is identified, remove the Gap subsection rather than leaving a placeho
 
 [The strongest argument for making the change.]
 
-**Reply:** [The Advocate's answer to the Skeptic. Omit when no reply round ran.]
+**Reply:** [The Advocate's answer to the Skeptic. Omit when no reply round ran, or when the reply was discarded.]
 
 ## Skeptic Case
 
 [The strongest argument against making the change.]
 
-**Reply:** [The Skeptic's answer to the Advocate. Omit when no reply round ran.]
+**Reply:** [The Skeptic's answer to the Advocate. Omit when no reply round ran, or when the reply was discarded.]
 
 ## Mediator Verdict
 
@@ -408,7 +408,7 @@ A run of `/improve-pipeline` is not complete until all of the following are true
 - the `## Field Incident` and `## Why This Is a Pipeline Problem` sections meet the walkthrough shape and revision bar in `references/writing-for-humans.md`
 - the nearest affected skill and adjacent overlapping skills were reviewed
 - the Advocate and Skeptic were spawned in one message and neither received the other's case, or the filed issue names the run as degraded mode
-- the issue records the reply-round decision — either the replies appear under the two case sections, or the verdict says **no reply round**
+- the issue records the reply round's outcome as exactly one of: **replies kept** (they appear under the two case sections), **reply discarded**, **no reply round** (the gate did not fire), or **degraded mode** (there were no sub-agents to reply). Only *no reply round* counts as a gate non-fire when judging whether the round earns its place
 - `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating
 - an issue was filed or updated in `chrislacey89/skills`, or filing was intentionally deferred with a stated reason
