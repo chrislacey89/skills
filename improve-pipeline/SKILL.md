@@ -9,6 +9,8 @@ sources:
     - "The Fifth Discipline — Peter Senge"
     - "Release It! — Michael Nygard"
     - "The Design of Everyday Things — Don Norman"
+    - "Encouraging Divergent Thinking in LLMs through Multi-Agent Debate — Liang et al. (EMNLP 2024)"
+    - "Improving Factuality and Reasoning in Language Models through Multiagent Debate — Du et al. (2023)"
 ---
 
 # Improve Pipeline
@@ -169,7 +171,11 @@ Each book loaded should contribute something specific the dialectic can cite —
 
 Use a structured tension pattern before writing the proposal. Spawn the Advocate and the Skeptic as sub-agents **in a single message**, so each writes its opening case without the other's in context — two cases formed at the same moment cannot anchor on each other, and weighing them against each other only means something if they were formed apart. The Mediator runs after both return.
 
-When sub-agents are unavailable, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly.
+When sub-agents are unavailable, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly. Degraded mode has no sub-agents to reply, so the reply round below does not run.
+
+The Mediator may then call **one** reply round — see its gate below. Send both replies in a single message, so the independence that governs the opening cases governs the replies too. Each reply quotes the specific claim it answers, says what it concedes and what still stands, and stays under 250 words. The roles need not agree; the objective is the right answer rather than the win (Liang et al., *Multi-Agent Debate*).
+
+Discard a reply that concedes without quoting a claim, and rule on the opening pair instead, noting the discard in the verdict. A reply that performs agreement is the failure this round is most likely to produce, and it reads exactly like a good one.
 
 #### Agent 1: Advocate
 
@@ -183,8 +189,6 @@ The Advocate should answer:
 - What instruction, section, or skill, if any, should be **removed or consolidated** to address this? Subtraction is a first-class option, not a fallback.
 - Why is the proposed change better than leaving the pipeline alone?
 - What exact files or skills likely need to change?
-
-The Advocate should optimize for better real-world outcomes, not for defending current structure.
 
 The Advocate must cite at least one loaded library source that supports the change — a named principle, checklist item, or design guideline. If no book in the surveyed set supports the proposal, say so explicitly; an unsupported advocacy case is a signal, not a thing to paper over.
 
@@ -202,13 +206,13 @@ The Skeptic should look for:
 - evidence that the issue was downstream and not structural here
 - adds a feature whose cost is paid by every future user (Norman's featuritis, paired with Meadows policy resistance)
 
-The Skeptic should assume the cost of a bad pipeline change compounds across future usage.
-
 The Skeptic must cite at least one library source or established principle that warns against the change or names a known failure mode the change could create (for example, Nygard on accidental coupling, Meadows on policy resistance, Ousterhout on shallow modules, Fowler on premature abstraction).
 
 #### Agent 3: Mediator
 
 The Mediator synthesizes the two positions and decides what best serves the whole repository.
+
+Before writing the verdict, attribute every decisive point to quoted text from one of the two cases. Call the reply round when a decisive point has no source in either case, or when the cases contradict each other on a checkable fact. Otherwise record **no reply round** and rule. Attribution is the gate because a Mediator that supplies its own arguments does not notice that it has.
 
 The Mediator should produce one of four verdicts:
 
@@ -316,9 +320,13 @@ If no gap is identified, remove the Gap subsection rather than leaving a placeho
 
 [The strongest argument for making the change.]
 
+**Reply:** [The Advocate's answer to the Skeptic. Omit when no reply round ran, or when the reply was discarded.]
+
 ## Skeptic Case
 
 [The strongest argument against making the change.]
+
+**Reply:** [The Skeptic's answer to the Advocate. Omit when no reply round ran, or when the reply was discarded.]
 
 ## Mediator Verdict
 
@@ -402,6 +410,7 @@ A run of `/improve-pipeline` is not complete until all of the following are true
 - the `## Field Incident` and `## Why This Is a Pipeline Problem` sections meet the walkthrough shape and revision bar in `references/writing-for-humans.md`
 - the nearest affected skill and adjacent overlapping skills were reviewed
 - the Advocate and Skeptic were spawned in one message and neither received the other's case, or the filed issue names the run as degraded mode
+- the issue records the reply round's outcome as exactly one of: **replies kept** (they appear under the two case sections), **reply discarded**, **no reply round** (the gate did not fire), or **degraded mode** (there were no sub-agents to reply). Only *no reply round* counts as a gate non-fire when judging whether the round earns its place
 - `/library` was surveyed (or its absence was recorded), and any loaded books are cited in the issue under Library Consultation and/or Suggested Further Reading
 - related issues in `chrislacey89/skills` were searched before filing or updating
 - an issue was filed or updated in `chrislacey89/skills`, or filing was intentionally deferred with a stated reason
