@@ -9,6 +9,7 @@ sources:
     - "The Twelve-Factor App — Adam Wiggins"
     - "Release It! — Michael Nygard"
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
+    - "Noise: A Flaw in Human Judgment — Daniel Kahneman, Olivier Sibony & Cass Sunstein"
 ---
 
 # Pre-Merge
