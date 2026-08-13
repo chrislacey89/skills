@@ -41,7 +41,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 ## When to Use
 
 - **Author-mode:** after QA passes and before merging a feature branch to main; after Ralph finishes AFK execution and you've verified behavior; or for any branch you want reviewed before merge, even without a full pipeline run.
-- **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the 10-dimension architectural review to their diff and produce constructive comment text.
+- **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the 11-dimension architectural review to their diff and produce constructive comment text.
 - **Loop-mode:** when findings must survive the session that produced them — the AFK handoff from `/execute`, or any branch you will review over several sittings and do not want to re-derive each time. Use it when the cost you are paying is *losing track of findings*, not *making the fixes*.
 
 ## Execution Flow
@@ -195,7 +195,7 @@ Combine findings from all dimensions (or sub-agents).
 So for each delegated finding, run Phase 3's "Verify, don't suspect" rule from this context — the grep, file path, and line that support or refute it; the installed type definition when the finding turns on library semantics — and then:
 
 - **Supported by the tree** — present it, with the evidence cited in the finding.
-- **Refuted by the tree** — do not present it as a finding. Record it once as a factual note (`sub-agent B reported X; path:line contradicts it`), so the check is visible rather than a silent deletion.
+- **Refuted by the tree** — do not present it as a finding. Record it once as a factual note (`sub-agent B reported X; path:line contradicts it`), printed after the three tiers alongside the other reporting-only notes below, so the check is visible rather than a silent deletion. It is not gated on a PRD the way Scope Notes is; a refuted finding on a no-PRD review still gets its line.
 - **Neither confirmable nor refutable from the tree** — present it at the tier the sub-agent assigned, with the unverified basis named, per that rule's downgrade clause.
 
 Checking is not re-judging. The parent verifies claims; it does not re-rank a sub-agent's severity, and it does not reconcile one sub-agent's findings against the other's.
@@ -459,7 +459,7 @@ Output shape in the terminal:
 - [One-line note per dropped concern with the reason — kept for the user's audit, not for the PR]
 ```
 
-If after the 5P gate the per-line comment count is zero, the review may still produce a top-level approval comment — phrase it as collaborative ("ready to ship from a structural standpoint" rather than "LGTM"). Tacke notes that LGTM-only approvals are a code-review failure mode; if you ran the 10 dimensions and have nothing concrete to say, that result is meaningful and should at least name which dimensions were checked.
+If after the 5P gate the per-line comment count is zero, the review may still produce a top-level approval comment — phrase it as collaborative ("ready to ship from a structural standpoint" rather than "LGTM"). Tacke notes that LGTM-only approvals are a code-review failure mode; if you ran the 11 dimensions and have nothing concrete to say, that result is meaningful and should at least name which dimensions were checked.
 
 If a disagreement is anticipated (e.g., the finding overturns a deliberate choice the author made), draft a single comment opening the MMG Exchange offline ("Can we sync briefly on the X tradeoff before I leave detailed comments?") rather than posting an objection thread on the PR.
 
