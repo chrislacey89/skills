@@ -118,6 +118,7 @@ One further correction was recorded rather than acted on: the proposal deliberat
 - `advisory-to-executed-rule-promotion-2026-08-07.md` — sibling shape; see Rule Scope
 - `staleness-gate-intermediate-writers-2026-08-06.md` — third entry in the same chain
 - `by-construction-claims-need-a-mechanism-2026-08-11.md` — fourth entry; the third instance of *this* entry's shape (issue #205, PR #206) and the reason the internal rendering read as verified
+- `self-review-blind-to-composition-2026-08-13.md` — fifth entry, and the fourth instance of this entry's shape: issue #217 deferred half a proposal on a failure mode it took from two unread papers and named backwards. Reading them inverted the rationale and changed the design, which is this entry's Prevention executed rather than deferred
 
 ## Shelf Life
 

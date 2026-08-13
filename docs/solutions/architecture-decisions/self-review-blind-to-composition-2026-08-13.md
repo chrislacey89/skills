@@ -24,7 +24,7 @@ PR #220 added a reply round to `/improve-pipeline` Phase 4. Commit `bfc71ab` int
 
 Each is defensible alone. Together they do not work. The round has four terminal states, not two — the gate did not fire, the round ran and replies were kept, the round ran and a reply was discarded, and degraded mode where the round cannot run at all. States three and four had to be recorded as "no reply round," which loses the state the discard rule exists to catch and inflates the counter the falsification test reads. **The audit built to detect dead ceremony could not read its own most important signal.**
 
-The author's `/pre-merge` pass ran all eleven dimensions and produced five findings. This was not among them. A reviewer spawned with a clean context — explicitly denied the PR body and the author's findings — returned it as its top Concern in one pass, and the fix was one line.
+The author's `/pre-merge` pass produced eight findings across three tiers, and this was not among them. It ran the seven dimensions a prose diff can reach — Dimensions 4 and 5 need a PRD, 8 needs a schema or deploy-runtime change, 9 needs a bug fix, so four of the eleven gated themselves off. A reviewer spawned with a clean context — explicitly denied the PR body and the author's findings — returned it as its top Concern in one pass, and the fix was one line.
 
 ## Symptoms
 
@@ -44,7 +44,7 @@ The second half is a **suppression effect**, and it is the more uncomfortable on
 ## Learning Level
 
 - **Level:** Structure
-- **Feedback loop or delay:** The missing feedback runs from *the composition of a commit* back to *the review that reads it*. Each of `/pre-merge`'s eleven dimensions is scoped to one property — deep modules, scope, size, contracts. None asks whether the parts of the diff agree with each other. The delay is what hides it: a composition defect produces no error, because prose has no compiler and the record is only read later, by a future run that has no way to know what it lost. Compounding this, `/pre-merge`'s delegation rule routes small diffs to the authoring session *because they are cheap* — which is precisely the case where composition defects are the only defects left, since everything else about a 34-line diff is obvious.
+- **Feedback loop or delay:** The missing feedback runs from *the composition of a commit* back to *the review that reads it*. Each of `/pre-merge`'s eleven dimensions is scoped to one property — deep modules, scope, size, contracts. None asks whether the parts of the diff agree with each other. The delay is what hides it: a composition defect produces no error, because prose has no compiler and the record is only read later, by a future run that has no way to know what it lost.
 
 ## Rule Scope
 
@@ -69,7 +69,7 @@ Spawn a reviewer with a genuinely clean context and **deny it the author's frami
 - Withhold: the author's findings, **and the PR body**. The body carries the summary narrative and the pre-conceded weak spots, and forwarding it reintroduces exactly the suppression described above.
 - Ask it directly what an author would be motivated not to see.
 
-Then **reconcile rather than merge the lists**. The blind pass here promoted one finding the author had demoted, demoted two the author had led with, and found one the author had missed entirely. The disagreements were more informative than the overlap.
+Then **reconcile rather than merge the lists**. The blind pass here promoted one finding the author had demoted, demoted two the author had led with, and found three the author had missed entirely. The disagreements were more informative than the overlap.
 
 Do not take the blind pass at face value either. Its Suggestion 5 claimed the two source papers were unreachable because `/library` is book-based; both were in fact installed as library books, and the real gap was narrower — the skill's `sources:` frontmatter. Verify a blind finding before acting on it, the same as any other.
 
@@ -77,24 +77,26 @@ Do not take the blind pass at face value either. Its Suggestion 5 claimed the tw
 
 **Code-level:** none available for the general case — the artifact is prose and the check is a judgment. But one specific, cheap check does exist and would have caught this instance: **when a commit both introduces a state and edits the record that observes it, enumerate the states and confirm the record admits each one.** A second, narrower form: when a commit ships a retirement test for the mechanism it also introduces (*"delete this if it never fires in ten runs"*), confirm the counter that test reads can distinguish *the mechanism not firing* from *the mechanism being unable to fire*. Those are different facts and only one of them is evidence.
 
-**Process-level:** issue #199 proposes exactly this fix for `/pre-merge` — an intent-blind lens, with fresh-context review made unconditional rather than size-gated. This entry is evidence for it, and specifically evidence against the size gate: the diff here was 34 lines, well inside the band that routes to the authoring session. Until #199 lands, the manual move is one sub-agent and one instruction, and it cost about three minutes.
+**Process-level:** issue #199 proposes this fix for `/pre-merge` — an intent-blind lens, with fresh-context review made unconditional rather than size-gated. **This entry is posted as evidence on #199 rather than merely asserting the connection here.** An entry that names a consumer and leaves no trace where the consumer would read it is the footnote `advisory-to-executed-rule-promotion-2026-08-07.md` warns about — and this entry cites that warning, so reproducing it would be self-refuting. The sibling converted its own footnote into a gate by writing entry conditions into #190; this is the same move.
+
+What #199 still lacks is a **trigger predicate**, and this instance supplies a candidate worth testing: *delegate when the diff introduces a state, case, or branch and also edits the record, counter, or check that observes it — at any size.* Until #199 lands, the manual move is one sub-agent and one instruction.
 
 ## Planning / Calibration Notes
 
-- **What widened the work:** nothing at implementation time. The widening was entirely in review — the blind pass produced one follow-up commit of three edits, one of them correcting a defect no amount of re-reading by the author had surfaced.
-- **What tightened the work:** the eleven dimensions were sound and needed no change. The variable was the reviewer, not the checklist. This is worth stating because the instinct on a missed finding is to add a dimension.
+- **What widened the work:** nothing at implementation time. The widening was entirely in review — the blind pass produced **two** follow-up commits: three edits correcting the state-collapse defect, and a `sources:` frontmatter addition from a second finding. Neither had surfaced under any amount of re-reading by the author.
+- **What tightened the work:** the dimensions were sound and needed no change. The variable was the reviewer, not the checklist. This is worth stating because the instinct on a missed finding is to add a dimension.
 - **Future planning adjustment:** trigger a blind review pass on **what the diff changes**, not on how large it is. A diff that touches a state machine, a record, a counter, or a retirement condition earns one at any size.
 
 ## Actuals Worth Reusing
 
 - **Comparable future work:** any Skill Kit change that introduces a state and edits the artifact meant to observe it — verification bullets, ledger schemas, marker contracts, issue-template slots.
-- **Reusable baseline:** the blind pass cost roughly 82k sub-agent tokens and about three minutes, and produced the only finding that changed the diff. Against a self-review that read the same 34 lines and missed it, that is cheap. Budget it as a default line item for state-touching changes rather than an exceptional measure.
+- **Reusable baseline:** on a single observation — treat it as an order of magnitude, not a figure — one blind pass cost roughly 82k sub-agent tokens and under three minutes, and produced both findings that changed the diff. Against a self-review that read the same 34 lines and missed both, that is cheap. Budget it as a default line item for state-touching changes rather than an exceptional measure. The token and duration figures come from the sub-agent's own usage report and are not reconstructible from the repo; the commit counts are (`git log`).
 
 ## Key Decision
 
 **Decision:** Spawn a blind reviewer rather than re-running `/pre-merge` in the authoring session.
 
-**Rationale:** `/pre-merge`'s small-diff rule routes reviews under 200 lines to the main agent, and at 34 lines this diff qualified. That rule optimizes for cost, and cost was never the binding constraint here — independence was.
+**Rationale:** `/pre-merge`'s small-diff rule routes a diff under 200 changed lines *and* under 10 files to the main agent, and at 34 lines across 2 files this one qualified on both counts. The skill is explicit that delegation is "first a way to put a clean context in front of the diff, and only second a way to halve wall-clock" — so the rule's *intent* was already independence, and only its *trigger* is a size proxy. That proxy is what failed: it is calibrated to reviewer load, and composition defects do not scale with reviewer load.
 
 **Alternatives considered:** re-run the dimensions in the same session (rejected — a self-similar second pass reproduces the first); ship and rely on `/closeout` (rejected — `/closeout` merges, it does not review); add a twelfth "internal consistency" dimension (rejected — the dimensions were not the failing part, and a dimension read by the author would inherit the same blindness).
 
@@ -102,10 +104,16 @@ Do not take the blind pass at face value either. Its Suggestion 5 claimed the tw
 
 ## Related
 
-- PR #220 — the change, both review passes, and the reconciliation
+- PR #220 — the change and the first two review passes; merged before the third pass's corrections landed
 - Issue #217 — the proposal this implements
-- Issue #199 — the pipeline fix this entry is evidence for
-- `advisory-to-executed-rule-promotion-2026-08-07.md`, `by-construction-claims-need-a-mechanism-2026-08-11.md` — see Rule Scope
+- Issue #199 — the pipeline fix this entry is posted as evidence on; see Prevention for the trigger predicate it still needs
+- `advisory-to-executed-rule-promotion-2026-08-07.md`, `by-construction-claims-need-a-mechanism-2026-08-11.md`, `secondhand-source-proposal-specificity-2026-08-11.md` — see Rule Scope; all three now link back
+
+## Postscript — the third pass
+
+A third blind pass, run on the commit that added this entry, found **six** further defects in it: an inflated dimension count ("all eleven" where four gate themselves off on a prose diff), an undercount of the blind pass's own output (one follow-up commit where there were two — a claim this entry contradicted three paragraphs earlier), a Prevention section that gated nothing while quoting a sibling entry against exactly that, a `sources:` entry claiming a paper the skill body never cited, six restatements of one argument, and two misreadings of the delegation rule this entry criticizes.
+
+That is worth recording plainly rather than quietly fixing: **the entry describing composition blindness contained a composition defect, written by an author who had just finished describing the mechanism.** Knowing the failure mode, naming it, and writing it down did not confer the ability to see it in one's own text. The corrections came from the third reader, not from the author's third reading. If any single fact in this entry deserves to survive, it is that one.
 
 ## Shelf Life
 
