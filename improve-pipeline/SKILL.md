@@ -9,6 +9,8 @@ sources:
     - "The Fifth Discipline — Peter Senge"
     - "Release It! — Michael Nygard"
     - "The Design of Everyday Things — Don Norman"
+    - "Encouraging Divergent Thinking in LLMs through Multi-Agent Debate — Liang et al. (EMNLP 2024)"
+    - "Improving Factuality and Reasoning in Language Models through Multiagent Debate — Du et al. (2023)"
 ---
 
 # Improve Pipeline
