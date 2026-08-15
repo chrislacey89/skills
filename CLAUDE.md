@@ -76,8 +76,6 @@ The roles above say *where a skill sits in the workflow*. They say nothing about
 
 The two axes are independent — a side-route or an infrastructure skill can be either. Naming the axis gives the vocabulary to ask, per skill, "can this ever usefully self-trigger in a downstream session?" For a side-route that is always typed in practice the answer is plausibly no, and its always-on description is an unpriced cost that grows monotonically as the set grows.
 
-**Standing audit (not yet actioned):** produce a per-skill list of which skills can never usefully self-trigger. **Flag flips are out of scope** until (a) the `npx skills` CLI is verified to preserve the frontmatter field and (b) every cross-skill auto-invoke chain the skill participates in — `/execute` → `/pre-merge`, `/execute` → `/tdd`, `/write-a-prd` → `/design-an-interface`, and the rest — is checked. A wrong flag silently breaks a chain the pipeline relies on.
-
 ## Handoff Contract
 
 Each pipeline skill should end with a clear transition statement:
