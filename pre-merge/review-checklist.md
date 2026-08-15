@@ -37,12 +37,13 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 
 ## 3. State Discipline
 
-**Principle:** State lives in GitHub (issues) or in code (`docs/solutions/`, skills). No ad-hoc filesystem state.
+**Principle:** State lives in GitHub (issues) or in code (`docs/solutions/`, skills). No ad-hoc filesystem state. The enforcement state that decides whether work is acceptable — hooks, harness settings, classification markers — is state too, so *changing* it is in scope here, not only creating it.
 
 **Violation patterns:**
 - New state files: `.gsd/`, `STATE.md`, `PLAN.md`, `CONTEXT.md`, `ROADMAP.md`, `SUMMARY.md`, `continue.md`, `UAT.md`
 - New state directories: `docs/brainstorms/`, `docs/specs/`
 - Any new persistent markdown file that tracks state outside of GitHub issues or `docs/solutions/`
+- Enforcement artifact changed as a passenger — the diff touches `.claude/hooks/**`, `.claude/settings.json`, or a `.claude/.tdd-active` / `.claude/.tdd-skipped` marker, and that change is not the stated task. These are the artifacts that decide whether the diff around them is acceptable, and the process being judged writes them with ordinary tools: the scaffolded classification gate fires on an extension allowlist that its own `.sh` files fall outside, so an edit to the gate passes through the gate. **This check is detective, not preventive** — it reads the diff, so it sees the path whether the change was written by `Edit`, `sed -i`, or a `Bash` heredoc, and it makes the change visible rather than attempting to stop it. A marker file appearing in the diff at all is a finding on its own: `/execute` Step 6 deletes both markers before handoff, so a committed marker means the gate's own bookkeeping leaked into the tree. When the change *is* the stated task — `/init-pipeline` scaffolding a project, a deliberate hook fix — that is not a violation, but say so explicitly in the findings rather than staying silent, so the reviewer can see the gate change was noticed and accepted. **Review-cadence note.** Added without a triggering incident, on principle grounds (Meadows Leverage Point #5: power over the rules outranks power under them; Strathern/Goodhart: an agent rationally responding to a reachable signal, no bad intent required) plus comparative source analysis of a pack that auto-rejects diffs touching its own governance files. If after a reasonable sample of PRs it fires <10% of the time on diffs that had no other reported issue — or fires mostly on legitimate, stated-task gate edits — remove it rather than leave it as ceremony.
 
 Research files produced by `/research` live in the per-user archive at `~/.claude/research/<repo-slug>/…`, outside the repo. They are not a state-discipline violation because they never enter the working tree.
 

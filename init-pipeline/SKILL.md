@@ -20,7 +20,7 @@ All files are created in the **target project**, not in the Skill Kit repo.
 
 Invoke `/git-guardrails-claude-code` with project scope.
 
-This blocks dangerous git commands (`git push`, `git reset --hard`, `git clean -f`, `git branch -D`, `git checkout .`, `git restore .`) via a PreToolUse hook on Bash.
+This blocks dangerous git commands (`git push --force`, `git reset --hard`, `git clean -f`, `git branch -D`, `git checkout .`, `git restore .`) via a PreToolUse hook on Bash.
 
 ### 2. TDD classification gate (Claude Code hook)
 
