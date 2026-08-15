@@ -17,13 +17,15 @@ Do not treat it as part of the normal feature pipeline. It is a repo or user set
 
 ## What Gets Blocked
 
-- `git push --force` / `git push -f` (regular pushes are allowed)
+- `git push --force` (regular pushes are allowed; the `-f` short form is **not** matched — see the note below)
 - `git reset --hard`
 - `git clean -f` / `git clean -fd`
 - `git branch -D`
 - `git checkout .` / `git restore .`
 
 When blocked, Claude sees a message telling it that it does not have authority to access these commands.
+
+**Known gap — `git push -f` passes.** `DANGEROUS_PATTERNS` matches the literal string `push --force`, which the `-f` short form does not contain, so `git push -f origin main` exits 0. This is a real hole in the guard, not a documentation nuance; it is tracked separately rather than patched here so the fix lands with a test. Verified by execution, not by reading.
 
 ## Steps
 
