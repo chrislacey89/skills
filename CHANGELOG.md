@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.20.4 — `/pre-merge` findings get the reader bar its PR bodies already had (#230)
+
+`/pre-merge` bundles `docs/writing-for-humans.md` and cited it twice. Both citations sat inside Phase 2's PR body templates. Phase 4 — which presents the actual review findings — had no readability bar at all.
+
+The three-tier template asked a Concern to "cite the principle, show the specific code, and explain why it matters." Those are requirements about what a finding must **contain**. None of them is a bar on whether the prose **lands**. The findings are the skill's primary product; the PR body is scaffolding around them. The bar was on the scaffolding.
+
+The failure is silent, which is why it survived: a Concern nobody can parse prints in its tier, gets a ledger row with an owner, and registers nowhere as a signal that did not transmit. That is the same shape as Leveson's unacknowledged report, one level down — the channel exists and carries noise.
+
+### Changes
+
+- **Phase 4 gets a reader bar, placed before the mode split (#230)** — each Suggestion and Concern is written to the shape and revision bar in `references/writing-for-humans.md`: domain terms, front-loaded claim, what it prevents or unlocks, clutter stripped. It sits immediately before the author-mode/reviewer-mode paragraph so it reads as governing the finding text rather than one mode's output shape. The doc is referenced, not re-encoded — `docs/skill-anatomy.md` names Sprawl as an anti-pattern, and the manifest already bundles the file into this skill, so no manifest change was needed.
+- **The bar carries into all three modes (#230)** — author-mode's terminal advisories, reviewer-mode's drafts built from the same findings, and loop-mode's ledger rows that outlive the session that produced them. The audience mismatch is deliberate and was not re-litigated: the doc's premise is a reader without the codebase in their head, and author-mode's reader is the person who just wrote the diff. A finding that author skims today is one they re-read next week, and the same text flows into the two modes where the cold reader is real.
+- **Two guards against it becoming a verbosity quota (#230)** — the doc's skip list applies unchanged, so a one-line Observation about a naming pattern stays one line; and the bar is on clarity, not length, so a finding that got longer without getting clearer failed it. This is stated next to the minimum-findings guard deliberately: that guard forbids inventing findings to hit a count, this one forbids padding the findings you have. A bar that makes findings longer rather than clearer would be a regression.
+- **Two rules placed where they bind, not collected in a list (#230)** — following the convention Phase 5's loop-safety table already states. In reviewer-mode, the bar lands on Triple-R's **Rationale**, because a citation is not an explanation; Request and Result stay terse instructions. In loop-mode it lands on the ledger's **`Finding` cell**, the narrowest slot and the coldest reader — the row must stand alone without the terminal output that produced it. The `Evidence / outcome` cell is explicitly exempt: it carries a grep, and prose there would bury the thing the operator opened the ledger to check.
+- **Deliberately unchanged** — the three tiers and their severity semantics; what a finding must contain (principle, code, why it matters), which the bar sits on top of rather than replacing; the minimum-findings guard's threshold and second-pass rule; comment-craft's tone discipline and line-anchoring; the ledger's states, write authority, and marker contract.
+
 ## v1.20.3 — `/pre-merge` stops gating reviewer independence on diff size (#199)
 
 `/pre-merge` Phase 3 opened by saying delegation exists for reviewer independence, and that halving wall-clock on a big diff is "only second." Three lines later it gated delegation on diff size. So the highest-frequency path in the pipeline — author-mode, auto-invoked by `/execute` Step 6 — reviewed its own diff in the session that wrote it whenever the diff came in under 200 lines and 10 files. The repo did not fail to know the rule's purpose; it failed to encode it.

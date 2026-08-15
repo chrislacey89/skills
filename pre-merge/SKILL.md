@@ -204,6 +204,12 @@ Checking is not re-judging. The parent verifies claims; it does not re-rank a su
 
 **Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. **That second pass runs in a fresh sub-agent, not as a re-read in this context.** The guard fires precisely when the first pass came back thin, and the bias blind spot means hygiene cannot be self-administered (Kahneman, Sibony & Sunstein, *Noise*) — a re-read holding the first pass's context reproduces the review that was thin, and launders it as an independent second look. Its findings go through the evidence check above like any other delegated finding. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
 
+**Hold each finding to the same reader bar as the PR body.** Phase 2 already requires a plain-language walkthrough for the body it writes. The findings had no equivalent bar, and they are this skill's primary product — the body is scaffolding around them. A finding a reader cannot parse fails the same way a finding that was never raised fails, and it fails silently: the tier prints, the ledger row shows an owner, and nothing registers that the signal did not transmit. So write each Suggestion and Concern to the shape and revision bar in `references/writing-for-humans.md` — name the part of the system in domain terms, front-load the claim before qualifying it, close with what it prevents or unlocks, then strip the clutter.
+
+Two limits, both from that doc. Its **skip list applies unchanged**: a one-line Observation about a naming pattern, or a finding whose domain meaning is self-evident, stays one line. And the bar is on **clarity, not length** — a finding that got longer without getting clearer failed it. Read this alongside the minimum-findings guard above: that guard forbids inventing findings to hit a count, this one forbids padding the findings you have.
+
+The bar governs the finding text itself, so it carries into all three modes — author-mode's terminal advisories, the reviewer-mode drafts built from the same findings, and the loop-mode ledger rows that outlive the session that produced them, where the reader is coldest.
+
 **Author-mode** prints terminal advisories (below). **Reviewer-mode** transforms those same findings into draft PR comment text (see "Reviewer-mode comment drafts" below) — same dimensions, same severity classification, different output shape.
 
 Present in the terminal using three tiers (author-mode):
@@ -219,12 +225,14 @@ exports 6 functions — reasonable, but worth watching if it grows."]
 ### Suggestions (action optional — would improve quality)
 
 [Grouped by dimension. Things that aren't violations but would make
-the code better.]
+the code better. Written to the reader bar above.]
 
 ### Concerns (action recommended — potential principle violation)
 
 [Grouped by dimension. Each concern cites the principle, shows the
-specific code, and explains why it matters.]
+specific code, and explains why it matters — and reads cold to someone
+who did not write the diff, per the reader bar above
+(`references/writing-for-humans.md`).]
 
 ---
 No action is required. These are advisory.
@@ -362,6 +370,8 @@ Recorded by `/pre-merge` loop-mode. Every finding below has an owner. Rows marke
 
 The **Checks not run this pass** line is where a suppressed check is recorded. A skipped check is not a finding and has no state, so it does not belong in the table — but leaving it out entirely would let the ledger read as "everything ran," which is the silent-truncation failure the ledger exists to prevent. Omit the line when every check ran.
 
+**The `Finding` cell is read cold, sittings later, by whoever picks the branch up.** It is the narrowest slot Phase 4's reader bar applies to and the one where it matters most: name the thing in domain terms and front-load the claim, so the row stands on its own without the terminal output that produced it — `Duplicate date formatter in pipeline`, not `Dim 1 issue`. The `Evidence / outcome` cell is exempt; it carries a citation, not prose, and padding it into a sentence would bury the grep the operator is there to check.
+
 **States in the `State` column.** Loop-mode writes only `open`. The operator writes the rest — `fixed` (with the commit), `filed` (with the issue number), `accepted` (won't fix, with the reason), or `dropped` (with why the finding was wrong). `/pre-merge` never overwrites an operator's state on a later pass; it appends new findings and leaves settled rows alone.
 
 Write the block with the same `mktemp` → read body → edit the block → `gh pr edit --body-file` shape Phase 4's stamp uses. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path.
@@ -421,7 +431,7 @@ For each finding, draft the comment using these rules. The full methodology is i
    - `Suggestion` → `levelup:` (non-blocking improvement)
    - `Observation` → either drop entirely (no action implied) or post as `nitpick:` if it warrants noting
 
-3. **Use Triple-R for action-requiring comments** (any blocking signal, plus most `levelup:`s). Request (transformation verb), Rationale (objective justification — cite the principle from `review-checklist.md`, the `.d.ts` line, the prior PR), Result (measurable end state).
+3. **Use Triple-R for action-requiring comments** (any blocking signal, plus most `levelup:`s). Request (transformation verb), Rationale (objective justification — cite the principle from `review-checklist.md`, the `.d.ts` line, the prior PR), Result (measurable end state). **The Rationale is where Phase 4's reader bar lands**: a citation is not an explanation, so the Rationale has to orient an author reconstructing context, not just name the rule that was broken. Request and Result stay terse — they are instructions, and the bar does not ask them to become prose.
 
 4. **Apply tone discipline.** Replace sentence-initial "you" with "we." Ask, don't command. Target the artifact, not the author.
 
