@@ -108,6 +108,7 @@ What #199 lacked at the time of writing was a **trigger predicate**, and this in
 - Issue #217 — the proposal this implements
 - Issue #199 — the pipeline fix this entry is posted as evidence on; see Prevention for the trigger predicate it still needs
 - `advisory-to-executed-rule-promotion-2026-08-07.md`, `by-construction-claims-need-a-mechanism-2026-08-11.md`, `secondhand-source-proposal-specificity-2026-08-11.md` — see Rule Scope; all three now link back
+- `fix-commit-blindness-2026-08-15.md` — the child, and it reads the Postscript below as evidence rather than as trivia. This entry answers *who* reviews; that one answers *which diff they are pointed at* — `/pre-merge` supplies a blind reader for the original diff and none for the commit written in response to its findings. The Postscript's six defects are its n=1; PR #226's two are its n=2
 
 ## Postscript — the third pass
 
