@@ -39,7 +39,7 @@ sources:
   - whether it is a direct-entry, delegated, side-route, or infrastructure skill
 - Do not put process steps in `description`.
 - `sources` should be used selectively. Only claim a source the body clearly operationalizes.
-- Invocation mechanics are a **cost axis orthogonal to pipeline role**: a *model-invoked* skill's `description` rides in the context window every turn of every session (context load), while a *user-invoked* skill (`disable-model-invocation: true` in Claude Code) costs nothing until a human types `/name` (cognitive load). Which load a skill should spend informs whether it self-triggers and whether to split or merge it. The canonical treatment and the standing per-skill audit live in `CLAUDE.md` § Invocation Roles; flag flips are out of scope there until CLI field-preservation and every auto-invoke chain are verified.
+- Invocation mechanics are a **cost axis orthogonal to pipeline role**: a *model-invoked* skill's `description` rides in the context window every turn of every session (context load), while a *user-invoked* skill (`disable-model-invocation: true` in Claude Code) costs nothing until a human types `/name` (cognitive load). Which load a skill should spend informs whether it self-triggers and whether to split or merge it. The canonical treatment lives in `CLAUDE.md` § Invocation Roles; the standing per-skill audit — and the hard gate holding flag flips until CLI field-preservation and every auto-invoke chain are verified — is tracked in issue #157.
 
 ## Required sections
 
