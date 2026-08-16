@@ -90,7 +90,14 @@ bisect_result() {
             echo '<cannot-continue>'
         elif printf '%s' "$out" | grep -qE 'bogus exit code [0-9]+ for good revision'; then
             echo '<bogus-exit-code>'
+        elif printf '%s' "$out" | grep -qE 'bisect run failed: exit code [0-9]+ .* is < 0 or >= 128'; then
+            echo '<aborted>'
         else
+            # Deliberately distinct from <aborted>. An earlier draft expected
+            # <other> on the abort rows, which made them assert only "not one of
+            # the known outcomes" — they passed even with the `git bisect start`
+            # line removed entirely. Matching the real message is what makes
+            # those rows mean what their labels say.
             echo '<other>'
         fi
     )
@@ -111,7 +118,7 @@ for code in 1 5 124 126 127; do
         "exit $code is treated as bad"
 done
 for code in 128 137 139 255; do
-    assert_eq '<other>' "$(bisect_result "$workdir/map" 5 "grep -q BUG f.txt && exit $code; exit 0")" \
+    assert_eq '<aborted>' "$(bisect_result "$workdir/map" 5 "grep -q BUG f.txt && exit $code; exit 0")" \
         "exit $code aborts the run (rider's segfault/OOM clause)"
 done
 
@@ -167,6 +174,16 @@ build_repo "$workdir/isbug" 12 "8" 8
 assert_eq '<cannot-continue>' "$(bisect_result "$workdir/isbug" 11 "$GUARDED")" \
     'skipping the first-bad commit ITSELF blocks disambiguation'
 
+build_repo "$workdir/plural" 12 "6 7" 8
+assert_eq '<cannot-continue>' "$(bisect_result "$workdir/plural" 11 "$GUARDED")" \
+    'skipping the two commits immediately older blocks it too (pins the plural)'
+
+# Pins the word "immediately". Without this case the rider could be reworded to
+# "any commit older than first-bad blocks disambiguation" and stay green.
+build_repo "$workdir/gap" 12 "5" 8
+assert_eq 'c8' "$(bisect_result "$workdir/gap" 11 "$GUARDED")" \
+    'skipping an OLDER but non-adjacent commit still resolves cleanly'
+
 build_repo "$workdir/newer" 12 "9" 8
 assert_eq 'c8' "$(bisect_result "$workdir/newer" 11 "$GUARDED")" \
     'skipping the commit immediately NEWER than first-bad resolves cleanly'
@@ -195,6 +212,7 @@ grep_skill 'git bisect run sh -c' 'rider carries the || exit 125 wrapper idiom'
 grep_skill 'exit 125' 'rider names the skip code'
 grep_skill 'bogus exit code 127 for good revision' 'rider quotes the loud-failure string'
 grep_skill 'bisect run cannot continue any more' 'rider quotes the cannot-disambiguate string'
+grep_skill 'The first bad commit could be any of:' 'rider quotes the candidate-list string'
 grep_skill 'bisect found first bad commit' 'rider quotes the silent-failure string'
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
