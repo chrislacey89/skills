@@ -160,14 +160,14 @@ Size then decides *how many* sub-agents, never *whether* the review leaves the a
 
 **Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
 
-The two reference files are **rubrics** — what to look for, and the bar the resulting prose must meet. The independence contract withholds *the change's context*; it was never about withholding the standards the review is held to. `writing-for-humans.md` is in the list because **the findings are written here**: Phase 4 states the reader bar, but Phase 3 is where the text that must meet it gets authored, and the parent is explicitly barred from re-judging what comes back (Phase 4, "Checking is not re-judging"). A bar stated only downstream of its writer governs nobody.
+Both reference files are **rubrics** — what to look for, and the bar the resulting prose must meet. The independence contract withholds *the change's context*; it was never about withholding the standards the review is held to.
 
 The split, on larger diffs:
 
 - **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope, Review-friendly Size
 - **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
 
-Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format.
+Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format — **each Suggestion and Concern written to the shape and revision bar in `references/writing-for-humans.md`**, which is handed over as a rubric for the finding text even though the doc scopes itself to issue and PR bodies. Observations are exempt, per that doc's when-to-skip rule. Phase 4 states the bar and the reason for it.
 
 **The reviewer always reads the actual diff, never a summary of it.** A summary is a lossy transformation authored by the controller under review; a fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson: no control system performs better than its measuring channel).
 
@@ -214,7 +214,9 @@ Two limits, both from that doc. Its **skip list applies unchanged**: a one-line 
 
 The bar governs the finding text itself, so it carries into all three modes — author-mode's terminal advisories, the reviewer-mode drafts built from the same findings, and the loop-mode ledger rows that outlive the session that produced them, where the reader is coldest.
 
-**It is applied at authorship, not retrofitted here.** Phase 3 hands every review sub-agent `references/writing-for-humans.md` for exactly this reason, so findings arrive already written to the bar. This phase does not rewrite them: "Checking is not re-judging" binds prose as well as severity, and in author-mode the parent is the session that wrote the code — passing an independent reviewer's findings through it to be reworded would spend the independence delegation just bought. If findings arrive below the bar, the fix belongs in the sub-agent's instructions, not in a cleanup pass here.
+**Findings arrive written to the bar; this phase does not reword them.** Phase 3 puts the obligation in the writer's brief — delegated or in-session — so the bar is met at authorship rather than retrofitted here. The prohibition is narrow and covers one act: rewriting a returned finding to fix its prose. In author-mode the parent is the session that wrote the code, so passing an independent reviewer's findings through it to be reworded would spend the independence delegation just bought. When findings arrive below the bar, the fix belongs in Phase 3's brief, not in a cleanup pass here.
+
+Parent-authored text built *from* a finding is not covered by that prohibition and is governed by the bar directly — reviewer-mode's Triple-R Rationale and loop-mode's ledger `Finding` cell are both written by the parent, and both are held to it.
 
 **Author-mode** prints terminal advisories (below). **Reviewer-mode** transforms those same findings into draft PR comment text (see "Reviewer-mode comment drafts" below) — same dimensions, same severity classification, different output shape.
 
