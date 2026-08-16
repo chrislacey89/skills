@@ -1,0 +1,201 @@
+#!/usr/bin/env bash
+# test-bisect-rider-claims.sh — pins the factual claims `/triage-issue`'s
+# regression rider makes about `git bisect run` behavior.
+#
+# Why this exists. The rider (triage-issue/SKILL.md, Step 2, "A commit the loop
+# cannot run on must be skipped, not marked bad") is copy-runnable instruction:
+# a downstream agent reads it and executes what it says. Its claims are about a
+# tool's observable behavior, so they are checkable — and across four review
+# rounds on #237, four successive claims about that behavior shipped wrong,
+# each replaced by a new wrong one. Every round was caught by a human or a
+# review sub-agent reading carefully, which is the control this repo has already
+# decided is too weak to rely on: the same argument as
+# scripts/test-review-currency-marker.sh, where two skills shared a string with
+# no shared definition of its shape.
+#
+# The recurring defect was never any single wrong sentence. It was shipping a
+# claim about git with nothing but attention behind it. This suite is that
+# missing feedback loop, and it is deliberately behavioral rather than textual:
+# it builds real repositories and runs real bisects, so it fails when *git*
+# changes as well as when the prose does.
+#
+# Scope. This pins behavior the rider asserts, not the prose. A reworded rider
+# making the same claims still passes; a reworded rider making a *different*
+# claim needs a matching case added here. The final section greps the skill for
+# the literal error strings, so those cannot drift silently.
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+skill="$repo_root/triage-issue/SKILL.md"
+
+pass=0
+fail=0
+workdir="$(mktemp -d)"
+trap 'rm -rf "$workdir"' EXIT
+
+section() { printf '\n=== %s ===\n' "$1"; }
+
+assert_eq() {
+    local expected="$1" actual="$2" label="$3"
+    if [[ "$expected" == "$actual" ]]; then
+        printf '  ok   %s\n' "$label"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s\n       expected: %q\n       got:      %q\n' "$label" "$expected" "$actual"
+        fail=$((fail + 1))
+    fi
+}
+
+# build_repo <dir> <n_commits> "<untestable commit numbers>" <bug_commit>
+#
+# Commit cN gets the loop harness unless N is listed untestable, simulating the
+# rider's stated causes (test file absent, build broken at that revision). The
+# bug is introduced at <bug_commit> and persists to HEAD.
+build_repo() {
+    local dir="$1" n="$2" untestable="$3" bug="$4" i
+    rm -rf "$dir"; mkdir -p "$dir"
+    (
+        cd "$dir"
+        git init -q
+        git config user.email t@t; git config user.name t
+        for ((i = 1; i <= n; i++)); do
+            echo "line$i" >> f.txt
+            [[ "$i" == "$bug" ]] && echo BUG >> f.txt
+            if [[ " $untestable " == *" $i "* ]]; then
+                rm -f loop.sh
+            else
+                printf '#!/bin/sh\ngrep -q BUG f.txt && exit 1\nexit 0\n' > loop.sh
+                chmod +x loop.sh
+            fi
+            git add -A
+            git commit -qm "c$i"
+        done
+    )
+}
+
+# bisect_result <dir> <good_depth> <loop_expr> -> subject of reported commit,
+# or a normalized token for the non-answer outcomes the rider names.
+bisect_result() {
+    local dir="$1" depth="$2" expr="$3" out sha
+    (
+        cd "$dir"
+        git bisect start HEAD "$(git rev-parse "HEAD~$depth")" >/dev/null 2>&1
+        out="$(git bisect run sh -c "$expr" 2>&1 || true)"
+        git bisect reset >/dev/null 2>&1
+        sha="$(printf '%s' "$out" | grep -oE '^[0-9a-f]{40} is the first bad commit' | cut -c1-40 || true)"
+        if [[ -n "$sha" ]]; then
+            git log --format='%s' -1 "$sha"
+        elif printf '%s' "$out" | grep -q 'cannot continue any more'; then
+            echo '<cannot-continue>'
+        elif printf '%s' "$out" | grep -qE 'bogus exit code [0-9]+ for good revision'; then
+            echo '<bogus-exit-code>'
+        else
+            echo '<other>'
+        fi
+    )
+}
+
+UNGUARDED='test -x ./loop.sh || exit 1; ./loop.sh'
+GUARDED='test -x ./loop.sh || exit 125; ./loop.sh'
+
+# ---------------------------------------------------------------------------
+section 'Exit-code mapping: 125 skips, 1-127 (except 125) is bad, >=128 aborts'
+# ---------------------------------------------------------------------------
+# The rider states this mapping explicitly, contradicting the intuitive
+# "non-zero means fail". Round 1 shipped the intuitive version.
+
+build_repo "$workdir/map" 6 "" 5
+for code in 1 5 124 126 127; do
+    assert_eq 'c5' "$(bisect_result "$workdir/map" 5 "grep -q BUG f.txt && exit $code; exit 0")" \
+        "exit $code is treated as bad"
+done
+for code in 128 137 139 255; do
+    assert_eq '<other>' "$(bisect_result "$workdir/map" 5 "grep -q BUG f.txt && exit $code; exit 0")" \
+        "exit $code aborts the run (rider's segfault/OOM clause)"
+done
+
+# ---------------------------------------------------------------------------
+section 'The guard works; unguarded is untrustworthy at any size or position'
+# ---------------------------------------------------------------------------
+# The rider claims no size or position of untestable region is safe, and cites
+# two measured cases. Rounds 2 and 3 each shipped a *predictive rule* for which
+# commit an unguarded run returns; both were falsified. The rider now claims
+# only that the answer need not be correct, which is what these cases pin.
+
+build_repo "$workdir/small" 12 "2 3" 5
+assert_eq 'c2' "$(bisect_result "$workdir/small" 11 "$UNGUARDED")" \
+    'two-commit stretch near the good end returns a WRONG commit'
+assert_eq 'c5' "$(bisect_result "$workdir/small" 11 "$GUARDED")" \
+    'same repo, guarded, returns the real regression'
+
+build_repo "$workdir/mid" 12 "6 7 8 9" 5
+assert_eq 'c5' "$(bisect_result "$workdir/mid" 11 "$UNGUARDED")" \
+    'four-commit stretch spanning the midpoint happens to return the RIGHT commit'
+
+build_repo "$workdir/middle" 12 "5 6 7 8" 12
+assert_eq 'c5' "$(bisect_result "$workdir/middle" 11 "$UNGUARDED")" \
+    'a mid-history stretch misreports (refutes the "last-good + 1" rule, round 3)'
+assert_eq 'c12' "$(bisect_result "$workdir/middle" 11 "$GUARDED")" \
+    'same repo, guarded, returns the real regression'
+
+# ---------------------------------------------------------------------------
+section 'The failure is silent under exit 1 and loud under exit 127'
+# ---------------------------------------------------------------------------
+# This asymmetry is the rider's core warning: the dangerous case prints exactly
+# what a correct run prints.
+
+build_repo "$workdir/silent" 12 "1 2 3 4 5 6 7 8" 12
+assert_eq 'c2' "$(bisect_result "$workdir/silent" 11 "$UNGUARDED")" \
+    'exit 1 yields a confident wrong answer, indistinguishable from a right one'
+assert_eq '<bogus-exit-code>' \
+    "$(bisect_result "$workdir/silent" 11 'test -x ./loop.sh || exit 127; ./loop.sh')" \
+    'exit 127 is caught at the good revision instead'
+
+# ---------------------------------------------------------------------------
+section "The guard's own edge case is one-sided about the boundary"
+# ---------------------------------------------------------------------------
+# Round 4 shipped "adjacent to a skipped stretch", which is wrong on the newer
+# side. Skipped commits at or older than the first-bad block disambiguation;
+# skipped commits newer than it are irrelevant.
+
+build_repo "$workdir/older" 12 "7" 8
+assert_eq '<cannot-continue>' "$(bisect_result "$workdir/older" 11 "$GUARDED")" \
+    'skipping the commit immediately OLDER than first-bad blocks disambiguation'
+
+build_repo "$workdir/isbug" 12 "8" 8
+assert_eq '<cannot-continue>' "$(bisect_result "$workdir/isbug" 11 "$GUARDED")" \
+    'skipping the first-bad commit ITSELF blocks disambiguation'
+
+build_repo "$workdir/newer" 12 "9" 8
+assert_eq 'c8' "$(bisect_result "$workdir/newer" 11 "$GUARDED")" \
+    'skipping the commit immediately NEWER than first-bad resolves cleanly'
+
+build_repo "$workdir/far" 12 "10 11" 8
+assert_eq 'c8' "$(bisect_result "$workdir/far" 11 "$GUARDED")" \
+    'skipping commits far newer than first-bad resolves cleanly'
+
+# ---------------------------------------------------------------------------
+section 'The rider still documents what this suite pins'
+# ---------------------------------------------------------------------------
+# Behavioral cases above cannot notice the prose dropping a claim. These greps
+# tie the two together, so deleting a documented string fails the suite rather
+# than silently un-documenting verified behavior.
+
+grep_skill() {
+    if grep -qF "$1" "$skill"; then
+        printf '  ok   %s\n' "$2"; pass=$((pass + 1))
+    else
+        printf '  FAIL %s\n       missing from %s: %q\n' "$2" "${skill#"$repo_root/"}" "$1"
+        fail=$((fail + 1))
+    fi
+}
+
+grep_skill 'git bisect run sh -c' 'rider carries the || exit 125 wrapper idiom'
+grep_skill 'exit 125' 'rider names the skip code'
+grep_skill 'bogus exit code 127 for good revision' 'rider quotes the loud-failure string'
+grep_skill 'bisect run cannot continue any more' 'rider quotes the cannot-disambiguate string'
+grep_skill 'bisect found first bad commit' 'rider quotes the silent-failure string'
+
+printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
+[[ "$fail" -eq 0 ]]
