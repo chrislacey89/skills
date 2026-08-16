@@ -156,14 +156,18 @@ Size then decides *how many* sub-agents, never *whether* the review leaves the a
 
 **When sub-agents are unavailable**, run the dimensions in-session and name the run **degraded mode** in the findings output: the reviewer holds the authoring session's context, so its independence is gone and the findings should be read accordingly. This is the same declaration `/improve-pipeline` Phase 4 makes when its dialectic cannot be spawned. Degraded mode is a disclosure, not a second exemption — do not reach for it because delegation is inconvenient.
 
-**Every sub-agent's context is the same in all three modes:** the diff, `review-checklist.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no such block, because `/execute` never ran on it; that is an absent input, not a missing step. **Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
+**Every sub-agent's context is the same in all three modes:** the diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no such block, because `/execute` never ran on it; that is an absent input, not a missing step.
+
+**Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
+
+Both reference files are **rubrics** — what to look for, and the bar the resulting prose must meet. The independence contract withholds *the change's context*; it was never about withholding the standards the review is held to.
 
 The split, on larger diffs:
 
 - **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope, Review-friendly Size
 - **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
 
-Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format.
+Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format — **each Suggestion and Concern written to the shape and revision bar in `references/writing-for-humans.md`**, which is handed over as a rubric for the finding text even though the doc scopes itself to issue and PR bodies. Observations are exempt, per Phase 4's exemption — not the doc's own when-to-skip list, which exempts artifact classes and reaches no finding. Phase 4 states the bar and the reason for it.
 
 **The reviewer always reads the actual diff, never a summary of it.** A summary is a lossy transformation authored by the controller under review; a fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson: no control system performs better than its measuring channel).
 
@@ -202,7 +206,19 @@ Checking is not re-judging. The parent verifies claims; it does not re-rank a su
 
 **This rule governs terminal presentation only, and loop-mode runs Phase 4.** A refuted finding still gets its ledger row, `open`, with the refutation attached — Phase 5 Step 1 takes *every* finding from Phase 3 with no filtering, and Step 2 keeps refuted ones on the explicit ground that dropping one is a decision the operator makes. Suppressing a refuted finding from the terminal is presentation; suppressing it from the ledger would be the unacknowledged report the ledger exists to prevent. Where the two rules would disagree, the ledger wins.
 
-**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. **That second pass runs in a fresh sub-agent, not as a re-read in this context.** The guard fires precisely when the first pass came back thin, and the bias blind spot means hygiene cannot be self-administered (Kahneman, Sibony & Sunstein, *Noise*) — a re-read holding the first pass's context reproduces the review that was thin, and launders it as an independent second look. Its findings go through the evidence check above like any other delegated finding. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
+**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. **That second pass runs in a fresh sub-agent, on the same context Phase 3 specifies — not as a re-read in this context.** It is spawned from Phase 4, so say so explicitly: it gets the diff, `review-checklist.md`, `references/writing-for-humans.md`, and the `## Review Notes` block, and its findings are held to the same reader bar as any other. The guard fires precisely when the first pass came back thin, and the bias blind spot means hygiene cannot be self-administered (Kahneman, Sibony & Sunstein, *Noise*) — a re-read holding the first pass's context reproduces the review that was thin, and launders it as an independent second look. Its findings go through the evidence check above like any other delegated finding. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
+
+**Hold each finding to the same reader bar as the PR body.** Phase 2 already requires a plain-language walkthrough for the bodies it writes on non-trivial PRs. The findings had no equivalent bar, and they are this skill's primary product — the body is scaffolding around them. A finding a reader cannot parse fails the same way a finding that was never raised fails, and it fails silently: the tier prints, the ledger row shows an owner, and nothing registers that the signal did not transmit. So write each Suggestion and Concern to the shape and revision bar in `references/writing-for-humans.md` — name the part of the system in domain terms, front-load the claim before qualifying it, close with what it prevents or unlocks, then strip the clutter.
+
+Two limits. **Observations are exempt, as is any finding whose domain meaning is self-evident** — a one-line note about a naming pattern carries no domain setup. That exemption is stated here as this skill's own rule rather than borrowed from the doc's when-to-skip list, which exempts *artifact classes* (typo fixes, dep bumps, formatting-only PRs, single-line reverts, trivially-reproducible bugs) and reaches no finding. Four of those five are diffs Phase 3 never delegates, so the list a review sub-agent holds is inapplicable to it by construction; what does transfer is the closing rule beneath it — when in doubt, one sentence beats a padded walkthrough.
+
+Second, the bar is on **clarity, not length** — a finding that got longer without getting clearer failed it. Read this alongside the minimum-findings guard above: that guard forbids inventing findings to hit a count, this one forbids padding the findings you have.
+
+The bar governs the finding text itself, so it carries into all three modes — author-mode's terminal advisories, the reviewer-mode drafts built from the same findings, and the loop-mode ledger rows that outlive the session that produced them, where the reader is coldest.
+
+**Findings arrive written to the bar; this phase does not reword them.** Phase 3 puts the obligation in the writer's brief — delegated or in-session — so the bar is met at authorship rather than retrofitted here. The prohibition is narrow and covers one act: rewriting a returned finding to fix its prose. In author-mode the parent is the session that wrote the code, so passing an independent reviewer's findings through it to be reworded would spend the independence delegation just bought. When findings arrive below the bar, the fix belongs in Phase 3's brief, not in a cleanup pass here.
+
+Parent-authored text built *from* a finding is not covered by that prohibition and is governed by the bar directly — reviewer-mode's Triple-R Rationale and loop-mode's ledger `Finding` cell are both written by the parent, and both are held to it.
 
 **Author-mode** prints terminal advisories (below). **Reviewer-mode** transforms those same findings into draft PR comment text (see "Reviewer-mode comment drafts" below) — same dimensions, same severity classification, different output shape.
 
@@ -219,12 +235,14 @@ exports 6 functions — reasonable, but worth watching if it grows."]
 ### Suggestions (action optional — would improve quality)
 
 [Grouped by dimension. Things that aren't violations but would make
-the code better.]
+the code better. Written to the reader bar above.]
 
 ### Concerns (action recommended — potential principle violation)
 
 [Grouped by dimension. Each concern cites the principle, shows the
-specific code, and explains why it matters.]
+specific code, and explains why it matters — and reads cold to someone
+who did not write the diff, per the reader bar above
+(`references/writing-for-humans.md`).]
 
 ---
 No action is required. These are advisory.
@@ -362,6 +380,8 @@ Recorded by `/pre-merge` loop-mode. Every finding below has an owner. Rows marke
 
 The **Checks not run this pass** line is where a suppressed check is recorded. A skipped check is not a finding and has no state, so it does not belong in the table — but leaving it out entirely would let the ledger read as "everything ran," which is the silent-truncation failure the ledger exists to prevent. Omit the line when every check ran.
 
+**The `Finding` cell is read cold, sittings later, by whoever picks the branch up.** It is the narrowest slot Phase 4's reader bar applies to and the one where it matters most: name the thing in domain terms and front-load the claim, so the row stands on its own without the terminal output that produced it — `Duplicate date formatter in pipeline`, not `Dim 1 issue`. Two cells are outside the bar. The `Evidence / outcome` cell carries a citation, not prose, and padding it into a sentence would bury the grep the operator is there to check. And Observation rows are exempt here as they are in Phase 4 — the ledger takes every finding, so Observations do get rows, but a naming-pattern note is not made to carry domain setup to sit in one.
+
 **States in the `State` column.** Loop-mode writes only `open`. The operator writes the rest — `fixed` (with the commit), `filed` (with the issue number), `accepted` (won't fix, with the reason), or `dropped` (with why the finding was wrong). `/pre-merge` never overwrites an operator's state on a later pass; it appends new findings and leaves settled rows alone.
 
 Write the block with the same `mktemp` → read body → edit the block → `gh pr edit --body-file` shape Phase 4's stamp uses. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path.
@@ -421,7 +441,7 @@ For each finding, draft the comment using these rules. The full methodology is i
    - `Suggestion` → `levelup:` (non-blocking improvement)
    - `Observation` → either drop entirely (no action implied) or post as `nitpick:` if it warrants noting
 
-3. **Use Triple-R for action-requiring comments** (any blocking signal, plus most `levelup:`s). Request (transformation verb), Rationale (objective justification — cite the principle from `review-checklist.md`, the `.d.ts` line, the prior PR), Result (measurable end state).
+3. **Use Triple-R for action-requiring comments** (any blocking signal, plus most `levelup:`s). Request (transformation verb), Rationale (objective justification — cite the principle from `review-checklist.md`, the `.d.ts` line, the prior PR), Result (measurable end state). **The Rationale is where Phase 4's reader bar lands**: a citation is not an explanation, so the Rationale has to orient an author reconstructing context, not just name the rule that was broken. Request and Result stay terse — they are instructions, and the bar does not ask them to become prose.
 
 4. **Apply tone discipline.** Replace sentence-initial "you" with "we." Ask, don't command. Target the artifact, not the author.
 
