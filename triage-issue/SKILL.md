@@ -58,22 +58,31 @@ At triage rigor, the answer must be substantive — by the time deep diagnosis i
 **If the bug is a regression, bisect before you read code.** A regression is the one bug class where the answer is already recorded: some change turned working code into broken code, and the history knows which one. When the failure is a regression *and* the user can name a last-good reference — a release tag, a commit, a deploy they remember working — isolate the failure-inducing change before generating hypotheses from code reading. The loop you just built is exactly the oracle this needs, so the cost is one command:
 
 ```bash
-git bisect start <first-bad-ref> <last-good-ref>
-git bisect run <the-loop-command>   # exit 0 = pass, non-zero = fail
-git bisect reset                    # always, including after a failed run
+git bisect start HEAD <last-good-ref>   # HEAD is known-bad: the loop reproduces there
+git bisect run <the-loop-command>
+git bisect reset                        # always, including after a failed run
 ```
 
-Zeller, Ch. 13: *"For regressions, isolate the failure-inducing commit first. […] Examining the minimal change set is cheaper than investigating the full current state."*
+Zeller's rule for regressions (Ch. 13): isolate the failure-inducing commit first, because examining the minimal change set is cheaper than investigating the full current state.
 
-Three conditions govern it:
+Four conditions govern it:
 
-- **A flaky loop breaks the oracle — do not bisect on one.** `git bisect run` trusts the loop's exit code at every step and has no way to notice that a "pass" was luck. One intermittent result marks a good commit bad and the search returns a confident wrong answer, indistinguishable from a right one. This is the same rule Zeller states for delta debugging — *"Match failure identity in the test function"* (Ch. 4–5): the oracle must fail on *this* failure and nothing else. If the loop is not yet reliably reproducing the reported failure, finish that first.
+- **A flaky loop breaks the oracle — do not bisect on one.** `git bisect run` trusts the loop's exit code at every step and has no way to notice that a "pass" was luck. One intermittent result marks a good commit bad and the search returns a confident wrong answer, indistinguishable from a right one. It is the same rule Zeller applies to delta debugging (Ch. 4–5): the oracle must match the identity of *this* failure and nothing else, or the search minimizes onto a different bug. If the loop is not yet reliably reproducing the reported failure, finish that first.
+- **A commit the loop cannot run on must be skipped, not marked bad.** `git bisect run` reads the loop's exit code, and the mapping is not the obvious one: `0` is good, `1`–`127` is bad *except* `125`, which means "this commit is untestable — skip it," and anything `128` or above aborts the run outright. The untestable case is the common one in practice, because the further back the search walks the more likely it is that the test file does not exist yet, the dependencies do not match, or the build is simply broken at that revision. Guard the setup so those commits exit 125:
+
+  ```bash
+  git bisect run sh -c '<build-or-setup> || exit 125; <the-loop-command>'
+  ```
+
+  Left unguarded, every untestable commit is marked bad, which drags the search toward the good end and returns the oldest commit the loop could run at all — a commit that merely predates the harness, not the one that introduced the bug. How that surfaces depends on the exit code, and the quieter case is the more common one. A missing *command* exits 127, and git catches it on reaching the known-good revision and stops with `error: bogus exit code 127 for good revision` — no answer, but no false one either. A missing *test file* usually exits 1, because that is what most test runners return when their target is absent, and nothing anywhere catches it: on a 12-commit history whose regression was in the last commit, the unguarded run reported the second commit as first-bad and printed `bisect found first bad commit` exactly as it does when it is right.
+
+  A loop whose failure mode is a crash needs the same care in the other direction: a segfault exits 139 and an OOM kill exits 137, and both abort the bisect rather than marking the commit bad. Since crash-shaped failures are exactly what this skill is often called on to reproduce, normalize the exit code inside the wrapper rather than passing it through raw.
 - **Squash-merged history returns a PR, not a line.** In a repo where each PR lands as one commit, the first-bad commit is a whole merged pull request — a narrowed diff, often several files, not a single changed line. That is still a large reduction and worth having. Report it as what it is: say "the regression entered in PR #N's merge, which touched these files," not "the regression is at commit `abc123`," which reads as a precision the history cannot supply.
 - **No last-good reference → skip it and say so.** Never guess a range to have something to run. A bisect started from an invented last-good returns an answer with exactly the same confidence as a correct one, and it will be wrong in a way nothing downstream checks. Note in the issue that no last-good state was available, and continue with the trace below.
 
 **Treat the result as evidence, not as the answer.** The failure-inducing change tells you *when* the infection entered, not *where* the defect is — the two are often different files, and a change can expose a latent defect it did not introduce. Zeller still governs localization: start from the failure and trace backward (Ch. 15). Feed the change into the trace below as a strong prior on which code path to read first, and confirm it the ordinary way — by showing the loop passes when that behavior is corrected. Do not skip the trace because bisect named a commit.
 
-Use the Agent tool with subagent_type=Explore to deeply investigate the codebase. Your goal is to find:
+Use the Agent tool with subagent_type=Explore to deeply investigate the codebase. **If the regression branch above isolated a failure-inducing change, name it and the files it touched in the Explore prompt** and have the trace start there — a prior that stays in this context never reaches the agent doing the reading. Your goal is to find:
 
 - **Where** the bug manifests (entry points, UI, API responses)
 - **What** code path is involved (trace the flow)
@@ -93,7 +102,7 @@ Look at:
 
 Rank by strength of evidence — recent changes to the suspect path, structural plausibility, prior incident patterns. Show the ranked list to the user in one short message before testing the top hypothesis. The user checkpoint is cheap and catches insights you cannot infer from code reading alone ("we just deployed a change to candidate #3" is a common save). Drive the loop against the top hypothesis, revise the ranking when evidence contradicts it, and avoid anchoring on the first plausible idea — Zeller's scientific-method recipe.
 
-**"Prior incident patterns" means prior fix commits touching a candidate path.** A file that has been fixed before is more likely to be the one broken now — Zeller's bug-cache finding (Ch. 16) is that around 10% of components account for most defects across a project's history, and that files which contained defects before are *far more likely* to contain them again. Read that history from the commit log, not the issue tracker:
+**"Prior incident patterns" means prior fix commits touching a candidate path.** A file that has been fixed before is more likely to be the one broken now — the bug-cache result Zeller reports (Kim et al., 2007; Ch. 16) is that around 10% of components account for most defects across a project's history, and that files which contained defects before are *far more likely* to contain them again. Read that history from the commit log, not the issue tracker:
 
 ```bash
 git log --oneline -i --grep='fix\|bug\|regress\|revert' -- <candidate-path>
@@ -101,7 +110,7 @@ git log --oneline -i --grep='fix\|bug\|regress\|revert' -- <candidate-path>
 
 Three conditions, all binding:
 
-- **Confirmatory, never generative.** Run this only over the 3–5 candidates the failure trace has already nominated. It may reorder them; it may never add one. Zeller's rule is *"Start from the failure, not from code you suspect"* (Ch. 15) — what it forbids is suspicion-led *search*, and evidence about a candidate already in hand is a different act. If you are reaching for this command before you have a candidate list, stop: you are searching, not ranking.
+- **Confirmatory, never generative.** Run this only over the 3–5 candidates the failure trace has already nominated. It may reorder them; it may never add one. Zeller's rule is to start from the failure rather than from code you suspect (Ch. 15) — what it forbids is suspicion-led *search*, and evidence about a candidate already in hand is a different act. If you are reaching for this command before you have a candidate list, stop: you are searching, not ranking.
 - **The count alone never reorders — name the mechanism first.** Zeller's own counterexample is Erich Gamma, who ranked second-highest in defect density at Eclipse; the cause was that the most experienced developers get assigned the riskiest work, so acting on the correlation would have raised the defect rate. Before a fix count moves anything in the ranking, state the mechanism in one line — "three prior fixes here, all null-guards at the same boundary, and this failure is a null at that boundary." If you cannot state one, leave the ranking as the trace left it.
 - **Best-effort — skip it where the convention is absent.** This presupposes that the repo marks fixes in commit messages, and many do not. If the grep returns noise or nothing, say so in the ranked list and move on. An empty result is not evidence that the file is clean; it is the absence of evidence either way, and the two must not be reported as the same thing.
 
