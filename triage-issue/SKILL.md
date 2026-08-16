@@ -55,6 +55,24 @@ At triage rigor, the answer must be substantive — by the time deep diagnosis i
 
 **Recognize the Heisenbug pattern.** If the failure disappears under a debugger, vanishes when logging is added, or shifts shape under different observation tools, the bug is almost certainly undefined behavior interacting with environmental differences (memory layout, optimization level, instrumentation overhead). The remedy is to find the undefined behavior in the code — uninitialized memory, a data race, reliance on unspecified ordering — not to switch debuggers or strip the logging. A vanishing bug is evidence about the bug's *shape*, not a reason to abandon the trace; do not silently downgrade Heisenbug-shaped reports to "live-only failure."
 
+**If the bug is a regression, bisect before you read code.** A regression is the one bug class where the answer is already recorded: some change turned working code into broken code, and the history knows which one. When the failure is a regression *and* the user can name a last-good reference — a release tag, a commit, a deploy they remember working — isolate the failure-inducing change before generating hypotheses from code reading. The loop you just built is exactly the oracle this needs, so the cost is one command:
+
+```bash
+git bisect start <first-bad-ref> <last-good-ref>
+git bisect run <the-loop-command>   # exit 0 = pass, non-zero = fail
+git bisect reset                    # always, including after a failed run
+```
+
+Zeller, Ch. 13: *"For regressions, isolate the failure-inducing commit first. […] Examining the minimal change set is cheaper than investigating the full current state."*
+
+Three conditions govern it:
+
+- **A flaky loop breaks the oracle — do not bisect on one.** `git bisect run` trusts the loop's exit code at every step and has no way to notice that a "pass" was luck. One intermittent result marks a good commit bad and the search returns a confident wrong answer, indistinguishable from a right one. This is the same rule Zeller states for delta debugging — *"Match failure identity in the test function"* (Ch. 4–5): the oracle must fail on *this* failure and nothing else. If the loop is not yet reliably reproducing the reported failure, finish that first.
+- **Squash-merged history returns a PR, not a line.** In a repo where each PR lands as one commit, the first-bad commit is a whole merged pull request — a narrowed diff, often several files, not a single changed line. That is still a large reduction and worth having. Report it as what it is: say "the regression entered in PR #N's merge, which touched these files," not "the regression is at commit `abc123`," which reads as a precision the history cannot supply.
+- **No last-good reference → skip it and say so.** Never guess a range to have something to run. A bisect started from an invented last-good returns an answer with exactly the same confidence as a correct one, and it will be wrong in a way nothing downstream checks. Note in the issue that no last-good state was available, and continue with the trace below.
+
+**Treat the result as evidence, not as the answer.** The failure-inducing change tells you *when* the infection entered, not *where* the defect is — the two are often different files, and a change can expose a latent defect it did not introduce. Zeller still governs localization: start from the failure and trace backward (Ch. 15). Feed the change into the trace below as a strong prior on which code path to read first, and confirm it the ordinary way — by showing the loop passes when that behavior is corrected. Do not skip the trace because bisect named a commit.
+
 Use the Agent tool with subagent_type=Explore to deeply investigate the codebase. Your goal is to find:
 
 - **Where** the bug manifests (entry points, UI, API responses)
@@ -74,6 +92,20 @@ Look at:
 > If **X** is the cause, then changing **Y** will make the loop pass, and changing **Z** will make the failure worse or leave it unchanged.
 
 Rank by strength of evidence — recent changes to the suspect path, structural plausibility, prior incident patterns. Show the ranked list to the user in one short message before testing the top hypothesis. The user checkpoint is cheap and catches insights you cannot infer from code reading alone ("we just deployed a change to candidate #3" is a common save). Drive the loop against the top hypothesis, revise the ranking when evidence contradicts it, and avoid anchoring on the first plausible idea — Zeller's scientific-method recipe.
+
+**"Prior incident patterns" means prior fix commits touching a candidate path.** A file that has been fixed before is more likely to be the one broken now — Zeller's bug-cache finding (Ch. 16) is that around 10% of components account for most defects across a project's history, and that files which contained defects before are *far more likely* to contain them again. Read that history from the commit log, not the issue tracker:
+
+```bash
+git log --oneline -i --grep='fix\|bug\|regress\|revert' -- <candidate-path>
+```
+
+Three conditions, all binding:
+
+- **Confirmatory, never generative.** Run this only over the 3–5 candidates the failure trace has already nominated. It may reorder them; it may never add one. Zeller's rule is *"Start from the failure, not from code you suspect"* (Ch. 15) — what it forbids is suspicion-led *search*, and evidence about a candidate already in hand is a different act. If you are reaching for this command before you have a candidate list, stop: you are searching, not ranking.
+- **The count alone never reorders — name the mechanism first.** Zeller's own counterexample is Erich Gamma, who ranked second-highest in defect density at Eclipse; the cause was that the most experienced developers get assigned the riskiest work, so acting on the correlation would have raised the defect rate. Before a fix count moves anything in the ranking, state the mechanism in one line — "three prior fixes here, all null-guards at the same boundary, and this failure is a null at that boundary." If you cannot state one, leave the ranking as the trace left it.
+- **Best-effort — skip it where the convention is absent.** This presupposes that the repo marks fixes in commit messages, and many do not. If the grep returns noise or nothing, say so in the ranked list and move on. An empty result is not evidence that the file is clean; it is the absence of evidence either way, and the two must not be reported as the same thing.
+
+This ranks paths, never people. Do not extend it to author history.
 
  ### 2.5. Structural Diagnosis
  
