@@ -156,7 +156,11 @@ Size then decides *how many* sub-agents, never *whether* the review leaves the a
 
 **When sub-agents are unavailable**, run the dimensions in-session and name the run **degraded mode** in the findings output: the reviewer holds the authoring session's context, so its independence is gone and the findings should be read accordingly. This is the same declaration `/improve-pipeline` Phase 4 makes when its dialectic cannot be spawned. Degraded mode is a disclosure, not a second exemption — do not reach for it because delegation is inconvenient.
 
-**Every sub-agent's context is the same in all three modes:** the diff, `review-checklist.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no such block, because `/execute` never ran on it; that is an absent input, not a missing step. **Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
+**Every sub-agent's context is the same in all three modes:** the diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no such block, because `/execute` never ran on it; that is an absent input, not a missing step.
+
+**Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
+
+The two reference files are **rubrics** — what to look for, and the bar the resulting prose must meet. The independence contract withholds *the change's context*; it was never about withholding the standards the review is held to. `writing-for-humans.md` is in the list because **the findings are written here**: Phase 4 states the reader bar, but Phase 3 is where the text that must meet it gets authored, and the parent is explicitly barred from re-judging what comes back (Phase 4, "Checking is not re-judging"). A bar stated only downstream of its writer governs nobody.
 
 The split, on larger diffs:
 
@@ -209,6 +213,8 @@ Checking is not re-judging. The parent verifies claims; it does not re-rank a su
 Two limits, both from that doc. Its **skip list applies unchanged**: a one-line Observation about a naming pattern, or a finding whose domain meaning is self-evident, stays one line. And the bar is on **clarity, not length** — a finding that got longer without getting clearer failed it. Read this alongside the minimum-findings guard above: that guard forbids inventing findings to hit a count, this one forbids padding the findings you have.
 
 The bar governs the finding text itself, so it carries into all three modes — author-mode's terminal advisories, the reviewer-mode drafts built from the same findings, and the loop-mode ledger rows that outlive the session that produced them, where the reader is coldest.
+
+**It is applied at authorship, not retrofitted here.** Phase 3 hands every review sub-agent `references/writing-for-humans.md` for exactly this reason, so findings arrive already written to the bar. This phase does not rewrite them: "Checking is not re-judging" binds prose as well as severity, and in author-mode the parent is the session that wrote the code — passing an independent reviewer's findings through it to be reworded would spend the independence delegation just bought. If findings arrive below the bar, the fix belongs in the sub-agent's instructions, not in a cleanup pass here.
 
 **Author-mode** prints terminal advisories (below). **Reviewer-mode** transforms those same findings into draft PR comment text (see "Reviewer-mode comment drafts" below) — same dimensions, same severity classification, different output shape.
 
