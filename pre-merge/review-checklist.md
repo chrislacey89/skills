@@ -190,7 +190,7 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 - **Speculative additions** — type hints, docstrings, new abstractions, or parameter additions that the task didn't ask for and no test demands
 - **Adjacent fix-while-here** — patching a different bug or removing unrelated dead code in the same diff (file separately, even if the adjacent fix is correct)
 - **Style drift** — applying a personal style preference (preferred quote, preferred test framework idiom, preferred import order) to existing code the task didn't require touching
-- **Refactor-and-feature interleave** — Beck's "shame, shame": a behavior change and a structural cleanup in the same commit, leaving any future bisect unable to attribute regressions
+- **Refactor-and-feature interleave** — Beck's "shame, shame": a behavior change and a structural cleanup in the same commit, so a reviewer cannot tell whether a hunk changed behavior or only moved it. Where the repo preserves individual commits on base, it also leaves any future bisect unable to attribute regressions
 
 **Verification procedure — cited hunks, not yes/no.** A finding under this dimension must cite the file path and the hunk's starting line. *"Looks scope-creepy"* is not a finding; *"`utils/format.ts:42–58` adds type hints and renames `result` to `formatted` — neither is mentioned in the task statement"* is. If the dimension produces zero findings on a non-trivial diff, that is a real outcome — do not invent findings to fill the section, and do not rubber-stamp it (Meadows policy resistance: required sections that go unused get filled with filler; the cited-hunk requirement is the mitigation).
 
