@@ -498,4 +498,3 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
 | Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next skill with a one-line reason |
 | Compact a long session into a fresh-start doc | `/handoff [next-session focus]` — writes a transient doc at a `mktemp` path referencing durable state rather than duplicating it; for mid-skill, exploratory, or cross-agent handoffs, not routine inter-skill ones |
-| Audit knowledge base | Review `docs/solutions/` quarterly |
