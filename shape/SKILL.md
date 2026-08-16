@@ -136,7 +136,7 @@ Hand off to `/research` by default. For work that requires multiple independent 
 - **Carries forward:** choices, assumptions with their confidence tags, impositions, and structural signals
 - **Comes next by default:** `/research`, or `/create-milestone` when the shaped work requires multiple independent PRDs
 
-**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first: **→ `/research` (recommended)**, **→ `/create-milestone` (multiple independent PRDs)**, **Keep shaping**. The platform's free-text "Other" option is the escape hatch — don't add one.
+**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/research` (recommended — verify the unknowns before the PRD)**, **→ `/create-milestone` (this needs multiple independent PRDs)**, **Keep shaping — the problem is still fuzzy**. The platform's free-text "Other" option is the escape hatch — don't add one.
 
 ## What to Avoid
 
