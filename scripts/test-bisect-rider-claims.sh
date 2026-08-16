@@ -174,13 +174,21 @@ build_repo "$workdir/isbug" 12 "8" 8
 assert_eq '<cannot-continue>' "$(bisect_result "$workdir/isbug" 11 "$GUARDED")" \
     'skipping the first-bad commit ITSELF blocks disambiguation'
 
+# Every case here must actually skip something. An earlier draft used untestable
+# c5 (older, non-adjacent) and c10-c11 (far newer) with the bug at c8 — but the
+# probe path for that configuration never visits those commits, so `git bisect
+# log` recorded zero skips and both rows passed with their skip lists emptied
+# entirely. Pick positions the search actually probes, and check `bisect skip`
+# appears in the log when adding a case.
+
 build_repo "$workdir/plural" 12 "6 7" 8
 assert_eq '<cannot-continue>' "$(bisect_result "$workdir/plural" 11 "$GUARDED")" \
     'skipping the two commits immediately older blocks it too (pins the plural)'
 
 # Pins the word "immediately". Without this case the rider could be reworded to
-# "any commit older than first-bad blocks disambiguation" and stay green.
-build_repo "$workdir/gap" 12 "5" 8
+# "any commit older than first-bad blocks disambiguation" and stay green. c6 is
+# probed and skipped here (c5 would not be), so the row measures its label.
+build_repo "$workdir/gap" 12 "6" 8
 assert_eq 'c8' "$(bisect_result "$workdir/gap" 11 "$GUARDED")" \
     'skipping an OLDER but non-adjacent commit still resolves cleanly'
 
@@ -188,9 +196,23 @@ build_repo "$workdir/newer" 12 "9" 8
 assert_eq 'c8' "$(bisect_result "$workdir/newer" 11 "$GUARDED")" \
     'skipping the commit immediately NEWER than first-bad resolves cleanly'
 
-build_repo "$workdir/far" 12 "10 11" 8
-assert_eq 'c8' "$(bisect_result "$workdir/far" 11 "$GUARDED")" \
-    'skipping commits far newer than first-bad resolves cleanly'
+# ---------------------------------------------------------------------------
+section 'Exit 127 is only loud when the good reference is itself untestable'
+# ---------------------------------------------------------------------------
+# The rider claimed 126/127 fails loudly, full stop. Git re-runs the loop at the
+# known-good reference and errors only if it fails there too — so the guard
+# fires on an untestable good ref and not otherwise. These two rows differ only
+# in whether the good reference is inside the untestable stretch.
+
+build_repo "$workdir/badgood" 12 "1 2 3 4 5 6 7 8" 12
+assert_eq '<bogus-exit-code>' \
+    "$(bisect_result "$workdir/badgood" 11 'test -x ./loop.sh || exit 127; ./loop.sh')" \
+    'untestable GOOD ref: exit 127 stops loudly'
+
+build_repo "$workdir/goodgood" 12 "5 6 7" 12
+assert_eq 'c5' \
+    "$(bisect_result "$workdir/goodgood" 11 'test -x ./loop.sh || exit 127; ./loop.sh')" \
+    'testable GOOD ref: exit 127 is silent and names the wrong commit'
 
 # ---------------------------------------------------------------------------
 section 'The rider still documents what this suite pins'
