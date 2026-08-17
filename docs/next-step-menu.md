@@ -20,6 +20,62 @@ Render a menu only at:
 - **In place of a deliberate checkpoint.** The menu appears *after* a verification gate, never instead of it. It must never let the user skip a pause the skill put there on purpose (e.g. `/execute`'s Step 5 acceptance-criteria confirmation).
 - **On AFK / Ralph iterations.** There is no user to answer a menu; autonomous runs exit on their own rules.
 
+## Show the comparison before you take the choice
+
+A menu is a *commit* mechanism. It asks which option, and it never shows the options against
+each other. For most branch points that is fine — two successors, one attribute each, and the
+labels carry it. But the pipeline also manufactures genuine N-way forks: `/design-an-interface`
+emits candidate interface shapes, `/api-design-review` weighs REST/RPC/GraphQL,
+`/improve-pipeline` returns a four-way verdict, `/correct-course` chooses supersede/revise/discard,
+`/pre-merge` Phase 4 disposes of each finding four ways. Rendered as prose, those arrive one
+after another — and the reader is asked to hold every option's every attribute in memory to
+compare them.
+
+**Threshold — all three must hold, or it is prose plus the menu as usual:**
+
+1. **≥3 mutually exclusive options.** Picking one rules the others out.
+2. **Each carries ≥3 attributes.** What it buys, what it costs, what state it leaves behind, when to pick it.
+3. **They are not orderable on one axis.** If one option is simply better, say so in a sentence and recommend it.
+
+Three options × three attributes is nine items; four × five is twenty. Norman puts practical
+short-term-memory capacity at 3–5 items — *"systems that require users to hold more than a
+handful of items simultaneously will fail routinely — not occasionally."* And Tufte names
+sequential display as the comparison anti-pattern outright: *"The viewer cannot compare what
+they cannot see at the same time. Memory is not vision."* Above the threshold, prose is not a
+weaker presentation of the comparison; it is the absence of one.
+
+**How to render it.** Attributes as rows, options as columns, same attributes in the same order
+down every column (Tufte's Constancy of Design — only the content differs). **A markdown table
+in chat satisfies this and is the default**: it costs nothing, needs no artifact, and delivers
+the eyespan, which is where the work happens. Reach for the HTML panel skeleton
+(`docs/visual-recap-design.md` §11, the `options-comparison` block in
+`docs/visual-rendering-core.md` §3) when the cells carry code, long resulting text, or enough
+bands that a chat table stops being scannable — and only in a skill that bundles those docs.
+Either way the artifact is transient: gitignored `.context/` or `mktemp`, never committed.
+
+**Grounding is the block's defining constraint, not a refinement.** N identically-weighted
+columns claim N equally-evidenced options, and the options do not exist yet, so most cells have
+nothing to derive from. Every cell is therefore either **cited** — quoted from something that
+already exists (current text at `file:line`, an issue or PR body, a research entry, test
+output) and showing that source — or visibly marked **asserted**, the model's judgment about a
+state that does not exist. Support asymmetry must show as visual asymmetry, and **every option
+carries at least one cited cell**; an option with nothing citable is a finding to state, not a
+column to pad. The full rule is `docs/visual-rendering-core.md` §1, "Forward-looking blocks."
+
+**Then render the menu.** The comparison shows; `AskUserQuestion` commits. The two compose —
+this does not replace the menu, add an option to it, or change how its options are shaped.
+
+> **Reach, priced.** This doc is bundled to `/execute`, `/pre-merge`, `/shape`, and `/closeout`
+> (`scripts/skill-references.manifest`), so those are the skills that currently see this
+> threshold — `/pre-merge` Phase 4's finding disposition is the fork that triggered the rule.
+> The other fork-producing skills named above do not hold this doc, and giving them the trigger
+> means bundling it to them and pointing their `## Handoff` sections at it. That is a separate
+> change, deliberately not made here.
+>
+> **Falsification.** If, over the next several multi-option forks, this either never fires
+> (threshold too high) or fires on forks a sentence would have settled (too low), retune the
+> threshold once — then delete this section rather than leave it as ceremony.
+
 ## How to shape the options
 
 - **Use the platform's question tool, one question per turn.** In Claude Code, `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise present numbered options in chat and wait. This is one question (the next step), not a form — keep it consistent with the repo's [Conversational Principles](../CLAUDE.md) and the per-skill "use the platform's question tool" note.

@@ -86,7 +86,7 @@ Each pipeline skill should end with a clear transition statement:
 
 If a skill can branch, the branch condition should be explicit. Example: `/shape` normally hands off to `/research`, but branches to `/create-milestone` when the work requires multiple independent PRDs. Example: `/write-a-prd` creates a container milestone for big-batch appetite before creating the PRD issue. If a skill advances an issue through maturity states, name them explicitly (`roadmap bet` → `research-ready` → `prd`) so downstream skills do not guess what artifact they are consuming.
 
-At branch-point handoffs (and high-frequency control-yield seams like `/execute` → `/pre-merge`), offer the next step as an `AskUserQuestion` menu rather than leaving the user to retype a command — see `docs/next-step-menu.md` for when this applies and how to shape the options. The menu *renders* the `What comes next` line and *composes with* existing auto-invokes; it does not replace them, and it never appears on linear single-successor handoffs or AFK runs.
+At branch-point handoffs (and high-frequency control-yield seams like `/execute` → `/pre-merge`), offer the next step as an `AskUserQuestion` menu rather than leaving the user to retype a command — see `docs/next-step-menu.md` for when this applies and how to shape the options. The menu *renders* the `What comes next` line and *composes with* existing auto-invokes; it does not replace them, and it never appears on linear single-successor handoffs or AFK runs. The same doc carries the threshold above which a fork's options must be *compared* — as a table or panel matrix, cells cited or marked asserted — before the menu takes the choice.
 
 ## Conversational Principles
 
