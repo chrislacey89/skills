@@ -130,7 +130,7 @@ Under #222's shipped behavior the notes were forwarded **verbatim** to the blind
 
 Two details from #241 sharpen § Symptoms rather than adding to them:
 
-- **The disconfirming evidence was not merely nearby — for one menu it was inside the edited line.** `/closeout`'s exit criteria sat nine lines above the menu, which is the ordinary case. `/pre-merge`'s two menus live in a single prose paragraph, so the sibling menu that treated the missing branch as slot-worthy was in the same line being rewritten. Proximity is not the protective factor it feels like.
+- **The disconfirming evidence was not merely nearby — for one menu it was inside the edited line.** `/closeout`'s exit criteria sat nine lines above the menu, which is the ordinary case. `/pre-merge`'s two author-mode menus live in a single prose paragraph — the third set in that paragraph is reviewer-mode — so the sibling menu that treated the missing branch as slot-worthy was in the same line being rewritten. Proximity is not the protective factor it feels like.
 - **A cheap check that would have caught it:** when a commit authors a rule and applies it, record verdicts **per clause × per site**, not per site. The #241 audit recorded per-site verdicts ("this menu passes"), which lets one clause go unevaluated across every site at once. A grid makes that an empty column.
 
 Round 2 of the same PR's review found the fix for this had itself opened a new defect, and round 3 found the `docs/solutions/` entry written about it was a near-restatement of this one — which is why that entry does not exist and this paragraph carries the lesson instead.
