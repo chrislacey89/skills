@@ -318,7 +318,7 @@ Infer surfaces from the module body as it existed before deletion (git show, or 
 - Test wall-clock duration didn't unexpectedly jump. A sudden multi-second increase in a previously fast test, especially after adding retry, sleep, backoff, or interval code, signals a real-time primitive was introduced without being injected. See `/tdd` § Timing-coupled primitives. Fix via injection, not `testTimeout` bumps.
 - Build succeeds
 - Lint is clean
-- Any CLI commands the feature exposes actually work when invoked
+- Any command the diff documents — a CLI the feature exposes, or a command block a reader is expected to copy and run — was actually invoked, not written from memory
 
 #### Tier 2.5: Runtime Startup Verification
 **Mandatory when the slice touches schema, migrations, environment config, server initialization, or new routes. Skip only for pure-logic changes to existing modules where nothing about app startup changed.**
