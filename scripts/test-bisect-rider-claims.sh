@@ -31,6 +31,45 @@ skill="$repo_root/triage-issue/SKILL.md"
 
 pass=0
 fail=0
+
+# --- git version floor -------------------------------------------------------
+# The assertions below are statements about git's observable behavior, so the
+# installed git is an untracked input to a suite that otherwise looks hermetic.
+# One assertion is version-gated: the `bogus exit code N for good revision`
+# guard was introduced in **git 2.36.0** (release notes: "A user can forget to
+# make a script file executable before giving it to `git bisect run`… Try to
+# recognize this situation and stop iteration early"). Established by bisecting
+# git's own tags — v2.35.0 `builtin/bisect--helper.c` lacks the string, v2.36.0
+# has it. Below 2.36 exit 126/127 is marked bad silently and that row fails.
+#
+# Fail here with the reason rather than letting four assertions fail opaquely.
+# Measured green on 2.43.0 (local) and 2.54.0 (ubuntu-latest); see
+# ~/.claude/research/chrislacey89-skills/git-version-floor-2026-08-16.md
+GIT_FLOOR_MAJOR=2
+GIT_FLOOR_MINOR=36
+
+git_version="$(git --version | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+git_major="${git_version%%.*}"
+git_minor_rest="${git_version#*.}"
+git_minor="${git_minor_rest%%.*}"
+
+if [[ -z "$git_version" ]]; then
+    printf 'FAIL  could not parse a version from git --version (got: %q)\n' \
+        "$(git --version)" >&2
+    exit 1
+fi
+
+if (( git_major < GIT_FLOOR_MAJOR )) ||
+   (( git_major == GIT_FLOOR_MAJOR && git_minor < GIT_FLOOR_MINOR )); then
+    printf 'SKIPPED  git %s is below the required %d.%d.\n' \
+        "$git_version" "$GIT_FLOOR_MAJOR" "$GIT_FLOOR_MINOR" >&2
+    printf '         git bisect run gained its 126/127 broken-script guard in 2.36.0;\n' >&2
+    printf '         before that the guarded behavior does not exist to assert.\n' >&2
+    printf '         Upgrade git to run this suite.\n' >&2
+    exit 1
+fi
+# -----------------------------------------------------------------------------
+
 workdir="$(mktemp -d)"
 trap 'rm -rf "$workdir"' EXIT
 
@@ -213,6 +252,18 @@ build_repo "$workdir/goodgood" 12 "5 6 7" 12
 assert_eq 'c5' \
     "$(bisect_result "$workdir/goodgood" 11 'test -x ./loop.sh || exit 127; ./loop.sh')" \
     'testable GOOD ref: exit 127 is silent and names the wrong commit'
+
+# The guard's condition is rc == res (git's own source), not "the good ref also
+# failed". Here the loop exits 127 where untestable and 1 everywhere else, so the
+# good ref fails with a DIFFERENT code than the probes and the guard stays quiet.
+# The expected value is c2, not <bogus-exit-code>: exiting 1 at every testable
+# revision marks them all bad, so the search collapses to good+1. What this row
+# pins is the absence of the guard. Without it the rider could say the guard
+# fires when the loop "fails there too" — which it did, wrongly — and stay green.
+build_repo "$workdir/diffcode" 12 "5 6 7" 12
+assert_eq 'c2' \
+    "$(bisect_result "$workdir/diffcode" 11 'test -x ./loop.sh || exit 127; exit 1')" \
+    'GOOD ref failing with a DIFFERENT code (1 vs 127) does not trip the guard'
 
 # ---------------------------------------------------------------------------
 section 'The rider still documents what this suite pins'

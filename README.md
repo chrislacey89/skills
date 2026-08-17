@@ -23,6 +23,7 @@ Most skills need only an agent that reads `SKILL.md` files. The pipeline's GitHu
 | Requirement | Needed for | Notes |
 |---|---|---|
 | [`gh`](https://cli.github.com) **≥ 2.94.0** | issue dependencies and sub-issue relationships in `/prd-to-issues`, `/qa`, `/execute`, `/help`, `/setup-ralph-loop` | Released 2026-06-10. Earlier versions lack `gh issue edit --add-blocked-by` and the `blockedBy` / `blocking` `--json` fields. Check with `gh --version`. |
+| [`git`](https://git-scm.com) **≥ 2.36.0** | the `git bisect run` procedure in `/triage-issue`, and `scripts/test-bisect-rider-claims.sh` | Released April 2022. Earlier versions treat a test script's exit code 126/127 as an ordinary "bad" result, so a missing or non-executable script silently returns a wrong commit; 2.36 added the guard that stops with `bogus exit code … for good revision`. The suite enforces this floor and exits early below it. Check with `git --version`. |
 
 On GitHub Enterprise Server, issue **types** and **sub-issues** need GHES 3.17+, and issue **dependencies** need GHES 3.19+. Where dependencies are unavailable, the filing skills degrade to the prose `## Blocked by` section and say so rather than failing.
 
