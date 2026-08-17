@@ -22,9 +22,20 @@ Concrete consequences:
 - A callout's `lines` attribute must name lines that exist in the real hunk. If you cannot point at a real line, you have an observation, not a callout — write it as overview prose instead.
 - **Lie Factor ≤ 1** (Tufte, *graphical integrity*): visual emphasis must not exceed the real change. Do not render a one-line tweak with the same weight as a 200-line rewrite; do not flag a file as "high-risk, load-bearing" when the diff is a rename. The visual restatement of this rule *is* the Grounding Rule — emphasis tracks the diff, never the narrative you wish the diff told.
 - If a derived value and your prose disagree, the derived value wins and the prose is wrong. Fix the prose.
-- The one model-*authored* structured block is the **UI wireframe** (`visual-recap-design.md` §9). Its labels, controls, and states must still come from diff-visible strings and component names — never invented copy — and when the layout is inferred rather than read from the diff, the caption must say "layout inferred."
+- Model-*authored* structured blocks are the exception, and there are two. The first is the **UI wireframe** (`visual-recap-design.md` §9). Its labels, controls, and states must still come from diff-visible strings and component names — never invented copy — and when the layout is inferred rather than read from the diff, the caption must say "layout inferred." The second is the **options-comparison**, below.
 
 A recap that violates grounding is worse than no recap. When in doubt, show less and assert less.
+
+### Forward-looking blocks: cited or visibly asserted
+
+The **options-comparison** block (`visual-recap-design.md` §11) compares futures that have not been built. Most of its cells therefore have no diff to derive from, which makes it a *categorically wider* carve-out than the wireframe's — the wireframe is still bounded to diff-visible strings, and this one has no diff at all. Grounding cannot mean "derived by tooling" here, so it shifts to a question the block can actually answer: **does this claim have a source, and does the render say so?**
+
+- **Cited** — the cell is quoted from, or directly derived from, something that already exists: the current text at `file:line`, an issue or PR body, a research-archive entry, test output, a published spec. The cell renders normally and **shows its source**.
+- **Asserted** — the cell is the model's judgment about a state that does not exist yet: a projected cost, a claimed benefit, drafted replacement text. The cell renders with a visible `asserted` treatment and never carries a cited cell's weight.
+- **Support asymmetry must render as visual asymmetry.** N identically-weighted panels claim N equally-evidenced options. If one option is three-quarters cited and another is three-quarters asserted, the panels must not look the same — show the per-option cited/asserted split, and chip the ones that are mostly asserted. This is **Lie Factor ≤ 1 applied to argument** rather than to magnitude: the same rule as "do not render a one-line tweak with the weight of a 200-line rewrite," measured in evidence instead of lines.
+- **Floor — every option carries at least one cited cell.** An option grounded in nothing is not an alternative rendered at the same size as the alternatives; it is a fiction rendered at that size. If an option has nothing citable, *that is the finding* — say so in prose and drop or rework the option. Do not pad the panel to make the grid look even.
+
+The status quo this replaces is not neutral. N prose bullets are also model-authored, also identically weighted, and carry **no** requirement to name their evidence — so the uncodified version is the same Lie Factor with no bar at all.
 
 ---
 
@@ -44,7 +55,7 @@ If redaction removed anything, say so once in the overview ("N value(s) masked")
 
 ## 3. Component vocabulary
 
-Nine blocks cover the review surface. Each is a *semantic role* with a canonical shape: **copy the per-block markup from the canonical skeleton (`visual-recap-design.md`), fill the grounded data and prose, and deviate only where the change genuinely needs it.** Keep it minimal, and only render the blocks the change actually needs. The skeleton is a copyable reference you inline (exactly like the §4 serializer), not a shipped widget — copying it instead of re-deriving the markup each run is what keeps two recaps of similar changes recognizably the same surface, so the reviewer reads the diff instead of re-learning the layout.
+Ten blocks cover the surface — nine for reviewing a finished change, plus one forward-looking block for comparing options that do not exist yet. Each is a *semantic role* with a canonical shape: **copy the per-block markup from the canonical skeleton (`visual-recap-design.md`), fill the grounded data and prose, and deviate only where the change genuinely needs it.** Keep it minimal, and only render the blocks the change actually needs. The skeleton is a copyable reference you inline (exactly like the §4 serializer), not a shipped widget — copying it instead of re-deriving the markup each run is what keeps two recaps of similar changes recognizably the same surface, so the reviewer reads the diff instead of re-learning the layout.
 
 | Block | Role | Grounded inputs (tooling) | Authored (prose) |
 |---|---|---|---|
@@ -57,6 +68,7 @@ Nine blocks cover the review surface. Each is a *semantic role* with a canonical
 | **data-model card** | The resulting schema shape of a changed entity, per-field change flags with struck-through `was:` prior types | the migration/schema diff text | the change-flag judgments and one compatibility sentence (breaking / risky / non-breaking, for whom) |
 | **api-endpoint card** | The resulting API contract of a changed route — method, path, changed params/responses flagged | the route/handler diff text | same as data-model card |
 | **wireframe** | The visible UI delta when the diff changes rendered UI: entry surface → interaction surface → resulting state (+ role variants when permissions changed) | diff-visible labels, strings, component names | the wireframe HTML itself (the model-authored exception, §1) — mark inferred layout as inferred |
+| **options-comparison** | N mutually exclusive options as identical panels in one eyespan — same attributes, same order, down every column (the forward-looking block; no diff exists yet) | the **cited** cells: current text at `file:line`, issue/PR bodies, research entries, test output | the **asserted** cells — projected costs, benefits, drafted resulting text — each marked `asserted` and each option's cited/asserted split shown (§1) |
 
 **CSS-first diagrams; Mermaid for complex graphs.** A recap's diagrams are almost always a simple flow or short sequence — these have no layout problem to solve, so the default is the pure-CSS diagram primitive (`.fc-*`, `visual-recap-design.md` §1/§5): it renders identically offline, needs no CDN, and has no parse grammar. Reach for embedded Mermaid (via `/mermaid`) **only** for genuinely complex graphs — a dense DAG, ER, or class diagram — that need real auto-layout; that is the case the "do not hand-roll graph layout" rule still guards. This is a different context from issue #83, which chose Mermaid for **GitHub-bound markdown** (rendered natively, no CDN) — that decision stands. The boundary: GitHub-rendered markdown → Mermaid; self-contained offline HTML → CSS-first. The rendering core owns callouts and diffs, not graph layout.
 
@@ -66,6 +78,8 @@ surface, the reviewer wants the *resulting contract* — "`sessions` gained `ref
 hunk. Render it as a data-model / api-endpoint card (`visual-recap-design.md` §8), grounded
 field-by-field in the real diff; keep the literal SQL/handler excerpt for when the exact
 statement still matters.
+
+**Options compare as panels, never as sequence.** When a skill has generated N mutually exclusive options, prose describes them one after another — and Tufte names that as the comparison anti-pattern outright: *"The viewer cannot compare what they cannot see at the same time. Memory is not vision."* Constancy of Design is what makes panels comparable, so every option carries the same attributes in the same order, and only the content differs. Two things are visible in panels and invisible in prose by construction: **domination** (one option paying a cost while closing no question — a relation *between* options, which sequence never shows two of at once) and **a missing option**, which the empty space in a matrix makes obvious. The threshold that triggers this block, and its relationship to the `AskUserQuestion` menu that takes the choice afterward, live in `docs/next-step-menu.md`; the markup lives in `visual-recap-design.md` §11.
 
 **Callouts are direct labels, not legends** (Tufte, *direct labeling over legends*; Norman, *natural mapping*). The note lives spatially where the thing it explains is — clicking the inline marker highlights the exact line and rings its card. Never collect notes into a separate keyed legend the reviewer has to cross-reference; that puts the topology back in their head, which is the whole problem this surface exists to remove.
 
@@ -88,6 +102,7 @@ Every annotatable unit carries a stable, diff-derived `data-feedback-id` — nev
 - data-model card → `dm-<entity-slug>` (e.g. `dm-sessions`)
 - api-endpoint card → `ep-<method>-<path-slug>` (e.g. `ep-post-api-auth-refresh`)
 - wireframe → `wf-<slug>` (e.g. `wf-share-popover`)
+- options-comparison option → `opt-<option-slug>` (e.g. `opt-reconcile-182-now`)
 
 ### The Copy-feedback button (a forcing function)
 

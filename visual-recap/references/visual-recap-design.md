@@ -3,7 +3,8 @@
 The fixed token system and per-block markup that Skill Kit's visual review surfaces copy
 from. It is the **canonical skeleton** referenced by `visual-rendering-core.md` §3 and §6,
 shared by `/visual-recap`, the `/walk-commits` per-commit callouts, and the future
-`/visual-plan`.
+`/visual-plan`. §1–§10 render a change that already exists; §11 is the one forward-looking
+block, used by any skill that emits an N-way fork of options that do not exist yet.
 
 > **This is a reference you inline, not a library you ship.** Exactly like the
 > `recap-feedback v1` serializer in `visual-rendering-core.md` §4: copy the token core and
@@ -755,6 +756,129 @@ unchanged.
 
 ---
 
+## 11. Block: options-comparison (forward-looking)
+
+**Scope note — this is the one block that is not about a finished diff.** Every section above
+renders a change that already exists. This one renders N mutually exclusive options that do
+*not* exist yet, for any skill that emits an N-way fork: `/design-an-interface`'s candidate
+shapes, `/api-design-review`'s REST/RPC/GraphQL weighing, `/improve-pipeline`'s four-way
+verdict, `/correct-course`'s supersede/revise/discard, `/pre-merge` Phase 4's finding
+disposition. It lives here so it inherits the §1 tokens rather than re-deriving a palette,
+and it is numbered last because it is a sibling of the recap blocks, not one of them.
+
+**Read `visual-rendering-core.md` §1 "Forward-looking blocks" before rendering this.** It is
+the block's defining constraint, not background: every cell is either **cited** (quoted from
+something that already exists, and showing its source) or **asserted** (the model's judgment
+about a state that does not exist), asserted cells render visibly weaker, each option shows
+its cited/asserted split, and **every option must carry at least one cited cell**. The
+threshold for rendering at all — ≥3 mutually exclusive options, each carrying ≥3 attributes,
+not orderable on one axis — lives in `docs/next-step-menu.md`, along with the rule that the
+comparison *shows* and `AskUserQuestion` *commits*.
+
+**The shape is a matrix, not N independent cards.** Attributes are rows, options are columns,
+and the row label is written once on the left instead of repeated inside every card (Tufte:
+direct labeling, and less redundant ink). Cells in one band are grid siblings, so they stretch
+to the tallest and stay aligned — which is what makes the comparison an eyespan rather than a
+scroll. A missing option shows up as visibly empty space in the matrix; a dominated option
+shows up as a column that pays a cost in every band and closes no question.
+
+Paste this style block alongside the §1 core only when rendering an options comparison:
+
+```html
+<style>
+  /* options-comparison primitives (§11) — same tokens, no new palette */
+  /* Narrow viewports cannot hold N columns in one eyespan, and stacking the grid would
+     group cells by attribute — detaching every cell from its option header. Pan instead:
+     the matrix keeps its alignment and its option→cell association, and costs a scroll. */
+  .oc-scroll{overflow-x:auto}
+  .oc-matrix{display:grid;gap:0;min-width:680px;border:1px solid var(--border);
+    border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);overflow:hidden}
+  .oc-cell{padding:var(--s3) var(--s4);border-top:1px solid var(--border);
+    border-left:1px solid var(--border);font-size:13px;color:var(--fg)}
+  .oc-cell.is-head{border-top:none;background:var(--bg-subtle)}
+  .oc-rowlabel{padding:var(--s3) var(--s4);border-top:1px solid var(--border);
+    font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--fg-faint);font-family:var(--sans)}
+  .oc-rowlabel.is-head{border-top:none;background:var(--bg-subtle)}
+  .oc-name{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)}
+  .oc-split{margin-top:3px;font-family:var(--mono);font-size:10.5px;color:var(--fg-muted)}
+  .oc-chip{display:inline-block;margin-top:var(--s2);border-radius:999px;padding:2px 9px;
+    font-family:var(--sans);font-size:10px;font-weight:600}
+  .oc-chip.is-asserted{border:1px solid var(--risk);color:var(--risk);
+    background:color-mix(in srgb,var(--risk) 12%,transparent)}
+  .oc-chip.is-dominated{border:1px solid var(--del);color:var(--del);
+    background:color-mix(in srgb,var(--del) 12%,transparent)}
+  /* the support asymmetry, made visual: cited reads normally on a solid neutral spine;
+     asserted is muted, italic, and on a dashed --risk spine. Emphasis marks what is NOT
+     evidenced, which is what the reader needs to notice. Diff hues stay out of it. */
+  .oc-cited{border-left:2px solid var(--fg-faint);padding-left:var(--s3);color:var(--fg)}
+  .oc-asserted{border-left:2px dashed var(--risk);padding-left:var(--s3);
+    color:var(--fg-muted);font-style:italic}
+  .oc-src{display:block;margin-top:var(--s1);font-family:var(--mono);font-size:10.5px;
+    color:var(--fg-faint);font-style:normal}
+</style>
+```
+
+**Worked example (N = 4)** — the real fork this block was written for: PR #239 changed one line
+of `pre-merge/review-checklist.md`, review found its principle paragraph (line 182) and its
+violation bullet (line 193) disagreeing, and four mutually exclusive dispositions were on the
+table. Five attribute bands (resulting 182, resulting 193, buys, costs, take it if) × four
+options is the ~20 items that overran the reader in prose. Three bands are shown here; render
+all of them.
+
+```html
+<section id="sec-options" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">01</span> &nbsp;Four ways to dispose of the 182/193 mismatch</div>
+
+  <div class="oc-scroll">
+    <div class="oc-matrix" style="grid-template-columns:132px repeat(4,minmax(0,1fr))">
+      <!-- header band: one cell per option, each with its cited/asserted split -->
+      <div class="oc-rowlabel is-head"></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-reconcile-182-now" data-feedback-kind="option"><div class="oc-name">A · Reconcile 182 now</div><div class="oc-split">2 cited · 3 asserted</div></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-merge-file-followup" data-feedback-kind="option"><div class="oc-name">B · Merge, file follow-up</div><div class="oc-split">2 cited · 3 asserted</div></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-soften-193" data-feedback-kind="option"><div class="oc-name">C · Soften 193 to echo 182</div><div class="oc-split">2 cited · 3 asserted</div><span class="oc-chip is-dominated">dominated — closes neither question</span></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-revert-wontfix" data-feedback-kind="option"><div class="oc-name">D · Revert, close #238 wontfix</div><div class="oc-split">1 cited · 4 asserted</div><span class="oc-chip is-asserted">mostly asserted</span></div>
+
+      <!-- attribute band: CITED cells — verbatim current text, each showing its source -->
+      <div class="oc-rowlabel">Resulting line 182</div>
+      <div class="oc-cell"><div class="oc-asserted">…proposed rewrite, drafted for this option…<span class="oc-src">asserted — draft, not yet written</span></div></div>
+      <div class="oc-cell"><div class="oc-cited">"…if something breaks you can no longer attribute the cause"<span class="oc-src">pre-merge/review-checklist.md:182 — unchanged</span></div></div>
+      <div class="oc-cell"><div class="oc-cited">"…if something breaks you can no longer attribute the cause"<span class="oc-src">pre-merge/review-checklist.md:182 — unchanged</span></div></div>
+      <div class="oc-cell"><div class="oc-cited">"…if something breaks you can no longer attribute the cause"<span class="oc-src">pre-merge/review-checklist.md:182 — unchanged</span></div></div>
+
+      <!-- attribute band: ASSERTED cells — judgments about states that do not exist yet -->
+      <div class="oc-rowlabel">Costs</div>
+      <div class="oc-cell"><div class="oc-asserted">Widens the PR past #238's declared non-goal.<span class="oc-src">asserted</span></div></div>
+      <div class="oc-cell"><div class="oc-asserted">Leaves the mismatch live until the follow-up lands.<span class="oc-src">asserted</span></div></div>
+      <div class="oc-cell"><div class="oc-asserted">Reinstates the reason #239 just demoted.<span class="oc-src">asserted</span></div></div>
+      <div class="oc-cell"><div class="oc-asserted">Discards a change two reviews found correct.<span class="oc-src">asserted</span></div></div>
+
+      <!-- …remaining bands: Resulting line 193, Buys, Take it if… -->
+    </div>
+  </div>
+
+  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same attributes, same order, every column — only the option differs. Solid spine = cited, dashed = asserted.</p>
+</section>
+```
+
+**Choosing is not this block's job.** The comparison ends at understanding; the choice is taken
+by the skill's `AskUserQuestion` menu immediately after (`docs/next-step-menu.md`). The
+`data-feedback-id="opt-<slug>"` handles exist so a reviewer can attach a *note* to a specific
+option and have it serialize with everything else via the §4 `recap-feedback v1` blob — the §4
+serializer skips units with neither a verdict nor a note, so untouched options cost nothing.
+Do not add per-option "select" buttons; that would put the commit mechanism in a transient
+file instead of the menu.
+
+**A markdown table is a legitimate render of this block.** The epistemic work is done by
+constancy of design and one eyespan, not by HTML — a table with attributes as rows, options as
+columns, and each cell marked cited (with its source) or `asserted` delivers both, costs
+nothing, and needs none of this skeleton. Reach for the HTML when the cells carry code, long
+resulting text, or enough bands that a chat table stops being scannable. Either way the
+artifact stays transient (`visual-rendering-core.md` §8) — gitignored `.context/` or `mktemp`,
+never committed.
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
@@ -774,6 +898,10 @@ unchanged.
   the diff.
 - **Don't** introduce a third font family or a web font — two native system stacks only, so
   the file reads identically offline.
+- **Don't** render an options comparison (§11) whose columns all read the same weight when
+  their support doesn't — an all-asserted column beside a mostly-cited one, drawn identically,
+  is the Lie Factor the block exists to prevent. Mark every cell cited or asserted, show each
+  option's split, and drop any option with nothing citable.
 - **Don't** turn this skeleton into a shipped/versioned/imported component library — it is a
   copyable reference, exactly like the §4 serializer. If you reach for an npm package, a
   build step, or a CDN runtime, pull it back.
