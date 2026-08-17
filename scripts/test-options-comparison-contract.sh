@@ -58,10 +58,12 @@ section "the threshold's three conditions agree wherever they are restated"
 # The menu doc owns the threshold; the design doc restates it for §11's readers.
 # Both must carry the same two numbers and the same third condition.
 
-menu_opts=$(grep -oE '≥[0-9]+ mutually exclusive options' "$MENU" | head -1)
+# `|| true` throughout: under `set -e` a missed grep would abort the run with no
+# FAIL row and no summary, leaving the operator to bisect for the broken rule.
+menu_opts=$( { grep -oE '≥[0-9]+ mutually exclusive options' "$MENU" || true; } | head -1)
 assert_eq "≥3 mutually exclusive options" "$menu_opts" "menu doc states the option count"
 
-menu_attrs=$(grep -oE 'Each carries ≥[0-9]+ attributes' "$MENU" | head -1)
+menu_attrs=$( { grep -oE 'Each carries ≥[0-9]+ attributes' "$MENU" || true; } | head -1)
 assert_eq "Each carries ≥3 attributes" "$menu_attrs" "menu doc states the attribute count"
 
 # The design doc and both consuming skills restate the same threshold in prose.
@@ -99,10 +101,22 @@ assert_found "two-thirds or more of its cells asserted" "$CORE" "core states a n
 # Every option header declaring N cited / M asserted must carry the asserted
 # chip if and only if M/(N+M) >= 2/3.
 chip_violations=0
+floor_violations=0
 while IFS= read -r line; do
-    cited=$(printf '%s' "$line" | grep -oE '([0-9]+) cited' | grep -oE '[0-9]+')
-    asserted=$(printf '%s' "$line" | grep -oE '([0-9]+) asserted' | grep -oE '[0-9]+')
-    [ -z "$cited" ] && continue
+    cited=$( { printf '%s' "$line" | grep -oE '[0-9]+ cited' || true; } | grep -oE '[0-9]+' || true)
+    asserted=$( { printf '%s' "$line" | grep -oE '[0-9]+ asserted' || true; } | grep -oE '[0-9]+' || true)
+    if [ -z "$cited" ] || [ -z "$asserted" ]; then
+        floor_violations=$((floor_violations + 1))
+        printf '       option unit declares no cited/asserted split\n'
+        continue
+    fi
+    # The floor, checked against the example rather than only as prose. §11's markup
+    # is copied verbatim, so a zero-cited column in the skeleton would propagate as the
+    # sanctioned shape of the exact Lie Factor the block exists to prevent.
+    if [ "$cited" -lt 1 ]; then
+        floor_violations=$((floor_violations + 1))
+        printf '       option unit has %s cited cells; the floor is at least 1\n' "$cited"
+    fi
     total=$((cited + asserted))
     has_chip=0
     printf '%s' "$line" | grep -qF 'oc-chip is-asserted' && has_chip=1
@@ -116,6 +130,7 @@ while IFS= read -r line; do
     fi
 done < <(grep -F 'data-feedback-kind="option"' "$DESIGN")
 assert_eq "0" "$chip_violations" "worked example's chips obey the two-thirds bar"
+assert_eq "0" "$floor_violations" "every option in the worked example carries a cited cell"
 
 # ---------------------------------------------------------------------------
 section "the opt- id shape agrees between its registry and its use"
@@ -145,9 +160,28 @@ section "every option unit can actually serialize"
 
 assert_found 'data-feedback-note' "$CORE" "core's serializer reads a note field"
 
+# Scoped to the unit's own element, not merely its source line: the serializer calls
+# el.querySelector('[data-feedback-note]'), so an input that sits on the same line but
+# outside the unit's closing tag serializes nothing while a line-wise grep still passes.
 option_units=$(grep -cF 'data-feedback-kind="option"' "$DESIGN")
-notes=$(grep -F 'data-feedback-kind="option"' "$DESIGN" | grep -cF 'data-feedback-note')
-assert_eq "$option_units" "$notes" "every option unit carries a note input"
+
+# Walks div depth from the unit's opening tag and counts a note only if it appears
+# before the matching close. A line-wise grep would also pass on markup where the
+# input sits after the unit's </div>, which serializes nothing.
+notes=$(awk '
+  /data-feedback-kind="option"/ {
+    rest = $0; sub(/^.*data-feedback-kind="option"/, "", rest)
+    depth = 1; scoped = ""
+    while (length(rest) > 0 && depth > 0) {
+      if (substr(rest, 1, 6) == "</div>") { depth--; if (depth == 0) break
+                                            scoped = scoped "</div>"; rest = substr(rest, 7) }
+      else if (substr(rest, 1, 4) == "<div") { depth++; scoped = scoped "<div"; rest = substr(rest, 5) }
+      else { scoped = scoped substr(rest, 1, 1); rest = substr(rest, 2) }
+    }
+    if (scoped ~ /data-feedback-note/) n++
+  }
+  END { print n + 0 }' "$DESIGN")
+assert_eq "$option_units" "$notes" "every option unit contains a note input as a descendant"
 
 # ---------------------------------------------------------------------------
 section "the block count in the core matches its own table"

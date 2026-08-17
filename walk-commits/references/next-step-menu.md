@@ -27,7 +27,7 @@ each other. For most branch points that is fine — two successors, one attribut
 labels carry it. But the pipeline also manufactures genuine N-way forks: `/design-an-interface`
 emits candidate interface shapes, `/api-design-review` weighs REST/RPC/GraphQL,
 `/improve-pipeline` returns a four-way verdict, `/correct-course` chooses supersede/revise/discard,
-`/pre-merge` Phase 4 disposes of each finding four ways. Rendered as prose, those arrive one
+`/pre-merge` presents each finding against a four-way disposition. Rendered as prose, those arrive one
 after another — and the reader is asked to hold every option's every attribute in memory to
 compare them.
 
