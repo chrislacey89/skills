@@ -47,14 +47,14 @@ weaker presentation of the comparison; it is the absence of one.
 **How to render it.** Attributes as rows, options as columns, same attributes in the same order
 down every column (Tufte's Constancy of Design — only the content differs). **A markdown table
 in chat satisfies this and is the default**: it costs nothing, needs no artifact, and delivers
-the eyespan, which is where the work happens. **For every skill that holds this doc, the table
-is the whole render** — the HTML skeleton lives in `visual-recap-design.md` §11, which is
-bundled only to `/visual-recap` and `/walk-commits`, so those two read it as a sibling of this
-file and reach for it when the cells carry code, long resulting
-text, or enough bands that a chat table stops being scannable. Naming the two skills rather
-than posing a condition is deliberate: an escape hatch stated as "when you have the file" is
-one every reader has to go check, and four of the six holders can never satisfy it.
-Either way the artifact is transient: gitignored `.context/` or `mktemp`, never committed.
+the eyespan, which is where the work happens. **In `/execute`, `/pre-merge`, `/shape`, and
+`/closeout` the table is the whole render** — those four do not bundle the HTML skeleton. It
+lives in `visual-recap-design.md` §11, bundled to `/visual-recap` and `/walk-commits` only, so
+those two read it as a sibling of this file and reach for it when the cells carry code, long
+resulting text, or enough bands that a chat table stops being scannable. Naming the skills
+rather than posing a condition is deliberate: an escape hatch stated as "when you have the
+file" is one every reader has to go check. Either way the artifact is transient — `.context/`
+or `mktemp`, never committed.
 
 **Grounding is the block's defining constraint, not a refinement.** N identically-weighted
 columns claim N equally-evidenced options, and the options do not exist yet, so most cells have
@@ -72,13 +72,18 @@ this does not replace the menu, add an option to it, or change how its options a
 
 > **Reach, priced — in both directions.** This doc is bundled to `/execute`, `/pre-merge`,
 > `/shape`, `/closeout`, `/visual-recap`, and `/walk-commits`
-> (`scripts/skill-references.manifest`). `/pre-merge` Phase 4's finding disposition is the fork
-> that triggered the rule; `/visual-recap` and `/walk-commits` are here because they hold §11's
-> markup and its pointers to this threshold would otherwise resolve to nothing post-install.
-> That inbound direction cost 101 lines and two rows. The outbound direction — bundling the
-> 210-line core and the 779-line design doc so the other four holders could render HTML — was
-> priced at 989 lines per run and declined; they render the table, which is why the table is
-> the default rather than a fallback.
+> (`scripts/skill-references.manifest`). Two of those are load-bearing for this section
+> specifically: `/pre-merge` Phase 4 cites the threshold at its finding disposition — the fork
+> that triggered the rule — and `/visual-recap` + `/walk-commits` hold §11's markup, whose
+> pointers back to this threshold would otherwise resolve to nothing post-install. That inbound
+> direction cost two manifest rows and this one file.
+>
+> The outbound direction — bundling the rendering core and the design doc so the other four
+> holders could render HTML — was declined: together they are an order of magnitude larger than
+> this file, loaded on every run of skills that fire this block rarely. They render the table,
+> which is why the table is the default rather than a fallback. Deliberately no line counts
+> here: an earlier draft quoted four, and three of them went stale inside the same PR that
+> wrote them, because that PR was growing the very files it was pricing.
 >
 > The fork-producing skills named above (`/design-an-interface`, `/api-design-review`,
 > `/improve-pipeline`, `/correct-course`) hold this doc not at all, so they do not see the
@@ -91,7 +96,7 @@ this does not replace the menu, add an option to it, or change how its options a
 
 ## How to shape the options
 
-- **Use the platform's question tool, one question per turn.** In Claude Code, `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise present numbered options in chat and wait. This is one question (the next step), not a form — keep it consistent with the repo's [Conversational Principles](../CLAUDE.md) and the per-skill "use the platform's question tool" note.
+- **Use the platform's question tool, one question per turn.** In Claude Code, `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise present numbered options in chat and wait. This is one question (the next step), not a form — keep it consistent with the repo's one-question-per-turn convention (ask one question, wait for the answer, never present a numbered or bulleted set of questions) and the per-skill "use the platform's question tool" note.
 - **Recommended step first.** Pre-surface the `Comes next by default:` step as the first/default option — Nudge's "defaults are the master lever," and Krug's *satisficing* (after Herbert Simon): people take the first reasonable option rather than weighing all of them. That is why first position works, and also why it is not a safety net — a badly worded first option gets taken anyway. Ordering never compensates for wording. Label it so the recommendation is obvious (e.g. "→ `/pre-merge` (recommended)").
 - **Keep it to ≤4 options.** `AskUserQuestion` caps options. If a handoff has more legitimate paths than fit, group the rare ones under one option or rely on the free-text "Other" hatch.
 - **Don't add an "Other / something else" option.** The platform supplies a free-text escape hatch automatically; adding one wastes a slot.

@@ -177,7 +177,7 @@ When editing a skill:
 Install Lefthook (`brew install lefthook` or see <https://github.com/evilmartians/lefthook>) and ShellCheck (`brew install shellcheck`), then run `lefthook install` once per clone. This wires:
 
 - **Pre-commit** — runs `sync-skill-references.sh --check` and `shellcheck` on any staged shell script. Cheap (<1s), catches drift and shell gotchas before CI does.
-- **Pre-push** — runs the full `test-sync-references.sh` and `test-verify-install.sh` suites plus `shellcheck` across all scripts.
+- **Pre-push** — runs every `scripts/test-*.sh` suite plus `shellcheck` across all scripts. The list is not repeated here; `lefthook.yml` and `.github/workflows/validate-skills.yml` are the two places a new suite must be registered.
 
 Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The repo intentionally has no `package.json` — no JS/TS to tend — so Biome and other Node-ecosystem linters are out of scope until that changes.
 

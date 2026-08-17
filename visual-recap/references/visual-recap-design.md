@@ -3,8 +3,10 @@
 The fixed token system and per-block markup that Skill Kit's visual review surfaces copy
 from. It is the **canonical skeleton** referenced by `visual-rendering-core.md` §3 and §6,
 shared by `/visual-recap`, the `/walk-commits` per-commit callouts, and the future
-`/visual-plan`. §1–§10 render a change that already exists; §11 is the one forward-looking
-block, used by any skill that emits an N-way fork of options that do not exist yet.
+`/visual-plan`. §3–§9 are the blocks that render a change which already exists (§1, §2, and §10
+are the token core, the shell, and the interactions they all share); §11 is the one
+forward-looking block, used by any skill that emits an N-way fork of options that do not exist
+yet.
 
 > **This is a reference you inline, not a library you ship.** Exactly like the
 > `recap-feedback v1` serializer in `visual-rendering-core.md` §4: copy the token core and
@@ -758,8 +760,8 @@ unchanged.
 
 ## 11. Block: options-comparison (forward-looking)
 
-**Scope note — this is the one block that is not about a finished diff.** Every section above
-renders a change that already exists. This one renders N mutually exclusive options that do
+**Scope note — this is the one block that is not about a finished diff.** Every block above
+(§3–§9) renders a change that already exists. This one renders N mutually exclusive options that do
 *not* exist yet, for any skill that emits an N-way fork: `/design-an-interface`'s candidate
 shapes, `/api-design-review`'s REST/RPC/GraphQL weighing, `/improve-pipeline`'s four-way
 verdict, `/correct-course`'s supersede/revise/discard, `/pre-merge` Phase 4's finding
@@ -771,9 +773,10 @@ the block's defining constraint, not background: every cell is either **cited** 
 something that already exists, and showing its source) or **asserted** (the model's judgment
 about a state that does not exist), asserted cells render visibly weaker, each option shows
 its cited/asserted split, and **every option must carry at least one cited cell**. The
-threshold for rendering at all — ≥3 mutually exclusive options, each carrying ≥3 attributes,
-not orderable on one axis — lives in `next-step-menu.md`, along with the rule that the
-comparison *shows* and `AskUserQuestion` *commits*.
+threshold for rendering at all — three or more mutually exclusive options,
+each carrying three or more attributes, not orderable on one axis — lives in
+`next-step-menu.md`, along with the rule that the comparison *shows* and
+`AskUserQuestion` *commits*.
 
 **The shape is a matrix, not N independent cards.** Attributes are rows, options are columns,
 and the row label is written once on the left instead of repeated inside every card (Tufte:
@@ -795,14 +798,14 @@ Paste this style block alongside the §1 core only when rendering an options com
     border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);overflow:hidden}
   .oc-cell{padding:var(--s3) var(--s4);border-top:1px solid var(--border);
     border-left:1px solid var(--border);font-size:13px;color:var(--fg)}
-  .oc-cell.is-head{border-top:none;background:var(--bg-subtle)}
+  .oc-cell.is-head{border-top:none;background:var(--bg-subtle);display:flex;flex-direction:column;gap:var(--s2)}
   .oc-rowlabel{padding:var(--s3) var(--s4);border-top:1px solid var(--border);
     font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
     color:var(--fg-faint);font-family:var(--sans)}
   .oc-rowlabel.is-head{border-top:none;background:var(--bg-subtle)}
   .oc-name{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)}
-  .oc-split{margin-top:3px;font-family:var(--mono);font-size:10.5px;color:var(--fg-muted)}
-  .oc-chip{display:inline-block;margin-top:var(--s2);border-radius:999px;padding:2px 9px;
+  .oc-split{font-family:var(--mono);font-size:10.5px;color:var(--fg-muted)}
+  .oc-chip{display:inline-block;align-self:flex-start;border-radius:999px;padding:2px 9px;
     font-family:var(--sans);font-size:10px;font-weight:600}
   .oc-chip.is-asserted{border:1px solid var(--risk);color:var(--risk);
     background:color-mix(in srgb,var(--risk) 12%,transparent)}
@@ -816,6 +819,11 @@ Paste this style block alongside the §1 core only when rendering an options com
     color:var(--fg-muted);font-style:italic}
   .oc-src{display:block;margin-top:var(--s1);font-family:var(--mono);font-size:10.5px;
     color:var(--fg-faint);font-style:normal}
+  /* Per-option note. Without a [data-feedback-note] descendant the §4 serializer skips the
+     unit outright, so the opt- handles would be inert and the round-trip below fictional. */
+  .oc-note{display:block;width:100%;margin-top:auto;padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);font-family:var(--sans);
+    font-size:11.5px;outline:none}
 </style>
 ```
 
@@ -834,10 +842,10 @@ cited-heavy, one wholly asserted; render all five.
     <div class="oc-matrix" style="grid-template-columns:132px repeat(4,minmax(0,1fr))">
       <!-- header band: one cell per option, each with its cited/asserted split -->
       <div class="oc-rowlabel is-head"></div>
-      <div class="oc-cell is-head" data-feedback-id="opt-reconcile-182-now" data-feedback-kind="option"><div class="oc-name">A · Reconcile 182 now</div><div class="oc-split">2 cited · 3 asserted</div></div>
-      <div class="oc-cell is-head" data-feedback-id="opt-merge-file-followup" data-feedback-kind="option"><div class="oc-name">B · Merge, file follow-up</div><div class="oc-split">2 cited · 3 asserted</div></div>
-      <div class="oc-cell is-head" data-feedback-id="opt-soften-193" data-feedback-kind="option"><div class="oc-name">C · Soften 193 to echo 182</div><div class="oc-split">2 cited · 3 asserted</div><span class="oc-chip is-dominated">dominated — closes neither question</span></div>
-      <div class="oc-cell is-head" data-feedback-id="opt-revert-wontfix" data-feedback-kind="option"><div class="oc-name">D · Revert, close #238 wontfix</div><div class="oc-split">1 cited · 4 asserted</div><span class="oc-chip is-asserted">mostly asserted</span></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-reconcile-182-now" data-feedback-kind="option"><div class="oc-name">A · Reconcile 182 now</div><div class="oc-split">2 cited · 3 asserted</div><input data-feedback-note class="oc-note" placeholder="note…"></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-merge-file-followup" data-feedback-kind="option"><div class="oc-name">B · Merge, file follow-up</div><div class="oc-split">2 cited · 3 asserted</div><input data-feedback-note class="oc-note" placeholder="note…"></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-soften-193" data-feedback-kind="option"><div class="oc-name">C · Soften 193 to echo 182</div><div class="oc-split">2 cited · 3 asserted</div><span class="oc-chip is-dominated">dominated — closes neither question</span><input data-feedback-note class="oc-note" placeholder="note…"></div>
+      <div class="oc-cell is-head" data-feedback-id="opt-revert-wontfix" data-feedback-kind="option"><div class="oc-name">D · Revert, close #238 wontfix</div><div class="oc-split">1 cited · 4 asserted</div><span class="oc-chip is-asserted">mostly asserted</span><input data-feedback-note class="oc-note" placeholder="note…"></div>
 
       <!-- attribute band: CITED cells — verbatim current text, each showing its source -->
       <div class="oc-rowlabel">Resulting line 182</div>
@@ -864,8 +872,12 @@ cited-heavy, one wholly asserted; render all five.
 **Choosing is not this block's job.** The comparison ends at understanding; the choice is taken
 by the skill's `AskUserQuestion` menu immediately after (`next-step-menu.md`). The
 `data-feedback-id="opt-<slug>"` handles exist so a reviewer can attach a *note* to a specific
-option and have it serialize with everything else via the §4 `recap-feedback v1` blob — the §4
-serializer skips units with neither a verdict nor a note, so untouched options cost nothing.
+option and have it serialize with everything else via the §4 `recap-feedback v1` blob. The
+`.oc-note` input inside each option header is what makes that true rather than aspirational:
+the §4 serializer looks for a `[data-feedback-note]` **descendant of the unit** and returns
+early when a unit has neither a verdict nor a note, so a header cell without one is skipped
+unconditionally and the handle is inert. Untouched options still cost nothing — an empty input
+serializes to nothing.
 Do not add per-option "select" buttons; that would put the commit mechanism in a transient
 file instead of the menu.
 

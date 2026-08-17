@@ -279,6 +279,8 @@ If the person about to merge did not author the diff — or hasn't internalized 
 
 Omit any tier that has zero findings.
 
+**When disposing of a finding forks three or more ways, compare the options before asking.** A finding whose disposition is obvious needs no ceremony — but this phase routinely generates genuine N-way forks (fix on this branch, hand off as an issue, accept with a reason, revert the hunk), each carrying its own resulting state, cost, and "take it if." When such a fork clears the threshold in `references/next-step-menu.md` § *Show the comparison before you take the choice* — three or more mutually exclusive options, each with three or more attributes, not orderable on one axis — render the comparison first as a table whose cells are each cited or marked asserted, then take the choice with `AskUserQuestion`. Below the threshold, prose and the menu as usual. This is the fork the convention was written for: a four-way disposition described in sequence asks the reader to hold roughly twenty items at once.
+
 **Stamp the reviewed head SHA into the PR (author-mode and loop-mode).** The review above covers one specific commit. Record which one in the PR body, so a later — possibly fresh-session — `/closeout` can tell whether the diff it is about to merge is still the diff that was reviewed. Prospective memory fails silently (Norman), so the marker goes into durable GitHub state rather than into the operator's head; `/closeout` Step 2's review-currency precondition is its only reader.
 
 Write it only after the findings above have been presented — the stamp asserts "a review completed at this SHA," so writing it earlier would certify a review that had not run.
