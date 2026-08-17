@@ -627,8 +627,8 @@ model owns; the fields themselves stay mechanically derived.
 
 When the diff changes rendered UI — layout, controls, navigation, dialogs, visible states,
 design tokens — show the visual delta; code diffs are not a substitute for what the user
-will see. Wireframes are the one **model-authored** structured block (the Grounding Rule
-exception, `visual-rendering-core.md` §1): every label, control, and state must come from
+will see. Wireframes are one of the two **model-authored** structured blocks (the Grounding
+Rule exceptions, `visual-rendering-core.md` §1; the other is the options-comparison, §11): every label, control, and state must come from
 diff-visible strings and component names, and when the layout is inferred rather than read
 from the diff, the caption says so ("layout inferred").
 
@@ -823,8 +823,8 @@ Paste this style block alongside the §1 core only when rendering an options com
 of `pre-merge/review-checklist.md`, review found its principle paragraph (line 182) and its
 violation bullet (line 193) disagreeing, and four mutually exclusive dispositions were on the
 table. Five attribute bands (resulting 182, resulting 193, buys, costs, take it if) × four
-options is the ~20 items that overran the reader in prose. Three bands are shown here; render
-all of them.
+options is the ~20 items that overran the reader in prose. Two of the five are shown here — one
+cited-heavy, one wholly asserted; render all five.
 
 ```html
 <section id="sec-options" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">

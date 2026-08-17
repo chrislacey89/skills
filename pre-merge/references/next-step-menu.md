@@ -47,10 +47,13 @@ weaker presentation of the comparison; it is the absence of one.
 **How to render it.** Attributes as rows, options as columns, same attributes in the same order
 down every column (Tufte's Constancy of Design — only the content differs). **A markdown table
 in chat satisfies this and is the default**: it costs nothing, needs no artifact, and delivers
-the eyespan, which is where the work happens. Reach for the HTML panel skeleton
-(`docs/visual-recap-design.md` §11, the `options-comparison` block in
-`docs/visual-rendering-core.md` §3) when the cells carry code, long resulting text, or enough
-bands that a chat table stops being scannable — and only in a skill that bundles those docs.
+the eyespan, which is where the work happens. **For every skill that holds this doc, the table
+is the whole render** — the HTML skeleton lives in `visual-recap-design.md` §11, which is
+bundled only to `/visual-recap` and `/walk-commits`, so those two read it at
+`references/visual-recap-design.md` and reach for it when the cells carry code, long resulting
+text, or enough bands that a chat table stops being scannable. Naming the two skills rather
+than posing a condition is deliberate: an escape hatch stated as "when you have the file" is
+one every reader has to go check, and four of the six holders can never satisfy it.
 Either way the artifact is transient: gitignored `.context/` or `mktemp`, never committed.
 
 **Grounding is the block's defining constraint, not a refinement.** N identically-weighted
@@ -60,17 +63,27 @@ already exists (current text at `file:line`, an issue or PR body, a research ent
 output) and showing that source — or visibly marked **asserted**, the model's judgment about a
 state that does not exist. Support asymmetry must show as visual asymmetry, and **every option
 carries at least one cited cell**; an option with nothing citable is a finding to state, not a
-column to pad. The full rule is `docs/visual-rendering-core.md` §1, "Forward-looking blocks."
+column to pad. The paragraph above is the whole rule as it applies here; `visual-rendering-core.md`
+§1 "Forward-looking blocks" states it once canonically, with the render treatments, for the two
+skills that bundle that file.
 
 **Then render the menu.** The comparison shows; `AskUserQuestion` commits. The two compose —
 this does not replace the menu, add an option to it, or change how its options are shaped.
 
-> **Reach, priced.** This doc is bundled to `/execute`, `/pre-merge`, `/shape`, and `/closeout`
-> (`scripts/skill-references.manifest`), so those are the skills that currently see this
-> threshold — `/pre-merge` Phase 4's finding disposition is the fork that triggered the rule.
-> The other fork-producing skills named above do not hold this doc, and giving them the trigger
-> means bundling it to them and pointing their `## Handoff` sections at it. That is a separate
-> change, deliberately not made here.
+> **Reach, priced — in both directions.** This doc is bundled to `/execute`, `/pre-merge`,
+> `/shape`, `/closeout`, `/visual-recap`, and `/walk-commits`
+> (`scripts/skill-references.manifest`). `/pre-merge` Phase 4's finding disposition is the fork
+> that triggered the rule; `/visual-recap` and `/walk-commits` are here because they hold §11's
+> markup and its pointers to this threshold would otherwise resolve to nothing post-install.
+> That inbound direction cost 101 lines and two rows. The outbound direction — bundling the
+> 210-line core and the 779-line design doc so the other four holders could render HTML — was
+> priced at 989 lines per run and declined; they render the table, which is why the table is
+> the default rather than a fallback.
+>
+> The fork-producing skills named above (`/design-an-interface`, `/api-design-review`,
+> `/improve-pipeline`, `/correct-course`) hold this doc not at all, so they do not see the
+> threshold. Giving it to them means bundling this file and pointing their `## Handoff`
+> sections at it. That is a separate change, deliberately not made here.
 >
 > **Falsification.** If, over the next several multi-option forks, this either never fires
 > (threshold too high) or fires on forks a sentence would have settled (too low), retune the
