@@ -772,7 +772,7 @@ something that already exists, and showing its source) or **asserted** (the mode
 about a state that does not exist), asserted cells render visibly weaker, each option shows
 its cited/asserted split, and **every option must carry at least one cited cell**. The
 threshold for rendering at all — ≥3 mutually exclusive options, each carrying ≥3 attributes,
-not orderable on one axis — lives in `docs/next-step-menu.md`, along with the rule that the
+not orderable on one axis — lives in `next-step-menu.md`, along with the rule that the
 comparison *shows* and `AskUserQuestion` *commits*.
 
 **The shape is a matrix, not N independent cards.** Attributes are rows, options are columns,
@@ -862,7 +862,7 @@ cited-heavy, one wholly asserted; render all five.
 ```
 
 **Choosing is not this block's job.** The comparison ends at understanding; the choice is taken
-by the skill's `AskUserQuestion` menu immediately after (`docs/next-step-menu.md`). The
+by the skill's `AskUserQuestion` menu immediately after (`next-step-menu.md`). The
 `data-feedback-id="opt-<slug>"` handles exist so a reviewer can attach a *note* to a specific
 option and have it serialize with everything else via the §4 `recap-feedback v1` blob — the §4
 serializer skips units with neither a verdict nor a note, so untouched options cost nothing.

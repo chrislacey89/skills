@@ -49,8 +49,8 @@ down every column (Tufte's Constancy of Design — only the content differs). **
 in chat satisfies this and is the default**: it costs nothing, needs no artifact, and delivers
 the eyespan, which is where the work happens. **For every skill that holds this doc, the table
 is the whole render** — the HTML skeleton lives in `visual-recap-design.md` §11, which is
-bundled only to `/visual-recap` and `/walk-commits`, so those two read it at
-`references/visual-recap-design.md` and reach for it when the cells carry code, long resulting
+bundled only to `/visual-recap` and `/walk-commits`, so those two read it as a sibling of this
+file and reach for it when the cells carry code, long resulting
 text, or enough bands that a chat table stops being scannable. Naming the two skills rather
 than posing a condition is deliberate: an escape hatch stated as "when you have the file" is
 one every reader has to go check, and four of the six holders can never satisfy it.
