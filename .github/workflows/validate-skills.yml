@@ -100,3 +100,6 @@ jobs:
 
       - name: Run selection-idiom consistency suite
         run: bash scripts/test-selection-idiom-consistency.sh
+
+      - name: Run bisect-rider claims suite
+        run: bash scripts/test-bisect-rider-claims.sh
