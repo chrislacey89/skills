@@ -2,7 +2,7 @@
 date: 2026-08-11
 category: architecture-decisions
 problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it
-components: [prd-to-issues, execute, help, setup-ralph-loop, qa, SYSTEM-OVERVIEW]
+components: [prd-to-issues, execute, help, setup-ralph-loop, qa, pre-merge, SYSTEM-OVERVIEW]
 technologies: [pipeline-design, gh-cli, github-api, cross-file-contracts]
 severity: medium
 volatility: stable
@@ -33,6 +33,7 @@ The false claim survived from 2026-08-04 to 2026-08-11 and was found only becaus
 - Prose asserts a consistency property — "agree by construction," "cannot drift," "by definition" — that no test, script, or generator enforces.
 - A negative claim was generalized from a single probe (*one field errored* → *the whole family is unavailable*).
 - The pinning that does exist covers the easy axis (one canonical file → its copies) and not the hard one (several peer files that must agree).
+- A cross-reference **enumerates** the thing it refers to — "the same A → B → C → D shape X uses" — and the enumeration is missing a step that X actually has. This reads as referring and behaves as restating; see the 2026-08-17 instance below.
 
 ## Root Cause
 
@@ -57,6 +58,8 @@ The two compound. A claim believed to be verified, asserted to be consistent, an
 - **Inverts or does not apply when:**
   - **The claim is about the repo's own code**, where a test can assert it directly and the codebase is the source of truth. Write the test; no snapshot needed.
   - **A single file owns the rule and others reference it by name.** Cross-skill references (`see /prd-to-issues §7`) are the correct shape and need no pinning — the point of failure is *restating*, not *referring*.
+
+    **Amended 2026-08-17 — referring and restating are not a clean binary, and this clause as originally written would have cleared the defect it was meant to catch.** A reference that *enumerates* its target ("the same `mktemp` → read body → edit → `gh pr edit --body-file` shape Phase 4's stamp uses") is a restatement wearing a reference's clothes: the reader reconstructs the procedure from the enumeration, not from the target, so any step the list omits is omitted in practice no matter what an adjacent sentence claims. The test is not "does this name its source" but **"could a reader build the thing from this sentence alone, and if they did, would they get it right?"** Reference by *name* or by *section* is safe because it cannot be built from — it forces the reader to the source. Reference by *partial enumeration* is the dangerous middle, and it is the shape most likely to be written, because enumerating feels more helpful than pointing.
   - **The tool genuinely has no versioned contract** (an undocumented search qualifier, an unreleased endpoint). Then the honest record is the probe plus its date, marked as such — which is what this PR did for GitHub's broken `parent-issue:` qualifier, and correctly so.
   - **The copies are generated.** `scripts/sync-skill-references.sh` already makes canonical→bundled copies safe; this lesson is about peer files that must agree, which no generator covers.
 - **Sibling docs:**
@@ -100,6 +103,18 @@ Cross-file consistency is entirely tree-verifiable, so a hook would *narrow* who
 
 If edit-time latency ever becomes the actual pain, the right place is **lefthook pre-commit**, not a Claude hook — it catches every edit path rather than one agent's.
 
+### Fifth instance, 2026-08-17 (PR #254, issue #253) — and what it says about this entry
+
+PR #254 added two guards to `/pre-merge`'s stamp write, then wrote, one bullet below them: *"Phase 5's ledger write is the same read-modify-write against the same API and reuses this shape, guards included."* The reference site in Phase 5 read: *"Write the block with the same `mktemp` → read body → edit the block → `gh pr edit --body-file` shape Phase 4's stamp uses."* Four steps, none of them the guards. An agent building the ledger write from that sentence — which is the sentence it is given — writes unguarded, in the mode that rewrites the PR body most often. The commit message asserted the inheritance too.
+
+Three things make this instance worth more than a tally mark:
+
+1. **The entry was in hand and did not fire.** The same PR body cites this file, by path, for an unrelated decision. Reading a diagnostic entry at citation time does not make its rule fire at authoring time. That is a property of the entry, not of the author — a lesson that only fires when you are already thinking about it is not a mechanism, which is the thing this entry exists to say about *other* claims.
+2. **Its Rule Scope cleared the defect.** The "reference by name is the correct shape" carve-out reads as covering any sentence that names its source, and this one did. The amendment above narrows it.
+3. **A reviewer caught it, the author did not** — the same asymmetry `self-review-blind-to-composition-2026-08-13.md` records. The author reads the assertion as true because they know it is true; the reviewer reads only what the sentence would produce.
+
+The instance fix was to name the guards in the enumeration. The mechanism fix is unbuilt and is the same one named below: extract both fences and assert the guard lines appear in each. Recorded, not built — which is exactly what this entry's own Key Decision did in August, and the reason there is now a fifth instance to write up.
+
 **Process-level.** Two changes, neither yet made:
 
 1. **A capability claim about an external tool needs a version and a re-check command**, the same way `/research` requires a docs URL at the verified version. `"gh issue list --json cannot see dependency data"` should never have been writable without a `gh` version beside it. A claim with a version attached is falsifiable by inspection; without one it is folklore on its first read.
@@ -134,6 +149,7 @@ If edit-time latency ever becomes the actual pain, the right place is **lefthook
 ## Related
 
 - PR #206 — this implementation
+- PR #254 / issue #253 — the fifth instance (2026-08-17): a guard asserted as inherited "by reference" whose reference site enumerated four steps and named neither guard. Source of the Rule Scope amendment above
 - Issue #205 — the proposal; its first draft recommended propagating the mechanism this PR deletes, corrected in a comment on the issue
 - Issue #168 / PR #170 — where both claims were introduced
 - [cli/cli v2.94.0](https://github.com/cli/cli/releases/tag/v2.94.0) — the release that made the claim false, two months before it was written
@@ -146,3 +162,5 @@ If edit-time latency ever becomes the actual pain, the right place is **lefthook
 The *instance* closed in the PR that opened it — `scripts/test-selection-idiom-consistency.sh` now constructs what the prose asserts. Retire this entry's instance half when that suite is deleted or the "agree by construction" claim is removed; the suite's own check 5 fails if the claim disappears without it, so the two retire together by design.
 
 The *general* rule outlives it and is now the fourth entry in a chain saying one thing four ways: **a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism.** Four instances is past the point where the siblings should be consolidated into one entry; that consolidation is the real successor to all four, and this entry should be folded into it rather than deleted.
+
+**Updated 2026-08-17.** A fifth instance landed (above), and it was deliberately folded in here rather than filed as a fifth sibling file — adding one would have been the exact move this section warns against. But folding in is a holding action, not the fix. The consolidation is now overdue by one instance, and the fifth instance is itself evidence for why: the entry did not fire at authoring time for an author who had it open. A consolidated entry is only worth writing if it is shaped as a **trigger** — a named shape you can check a sentence against ("could a reader build this from the sentence alone?") — rather than as a fourth retelling of the diagnosis. If the consolidation gets written as more prose, expect a sixth instance.
