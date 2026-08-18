@@ -426,14 +426,29 @@ Edit safely — toggle only the checkbox lines you actually verified, and never 
 
 ```bash
 BODY_FILE=$(mktemp)  # unique per run — two parallel worktrees / Ralph iterations must not share a temp path
-gh issue view <slice-issue-number> --json body -q .body > "$BODY_FILE"
+
+# Guard the read half. A 5xx makes `gh` fail, and the edit below would then
+# replace the whole issue body with whatever this file happens to hold.
+if ! gh issue view <slice-issue-number> --json body -q .body > "$BODY_FILE"; then
+  echo "writeback aborted: issue body fetch failed" >&2; rm -f "$BODY_FILE"; exit 1
+fi
+[ -s "$BODY_FILE" ] || { echo "writeback aborted: issue body came back empty" >&2; rm -f "$BODY_FILE"; exit 1; }
+ORIG_BYTES=$(wc -c < "$BODY_FILE")
+
 # In "$BODY_FILE", change ONLY the verified criterion lines under
 # "## Acceptance Criteria" from "- [ ]" to "- [x]". Leave every other line untouched.
+
+# Guard the write half. Flipping "- [ ]" to "- [x]" preserves length exactly,
+# so the edited body is never shorter. Shorter means the edit dropped content.
+[ "$(wc -c < "$BODY_FILE")" -ge "$ORIG_BYTES" ] || { echo "writeback aborted: edited body is shorter than the body read" >&2; rm -f "$BODY_FILE"; exit 1; }
+
 gh issue edit <slice-issue-number> --body-file "$BODY_FILE"
 rm -f "$BODY_FILE"
 ```
 
 Do not flip a box you did not actually verify, and do not touch lines outside the criteria you confirmed — a careless edit can corrupt issue content. `/execute` is the single writer for these boxes; `/pre-merge` reads them but never writes, so there is no second editor to contradict this one.
+
+**The guards are not optional, and the AFK writeback in Step 6 reuses them.** This is a read-modify-write against an API that returns 5xx under load, and `gh issue edit --body*` replaces the entire body — so a failed fetch here does not lose a stamp, it loses the acceptance criteria `/prd-to-issues` authored and `/pre-merge` Phase 4 reconciles against. `/pre-merge`'s stamp carries the same two guards for the same reason. Retry the fetch **once**; if the second attempt also aborts, leave the boxes unflipped and say so rather than writing.
 
 #### Ready for PR Review
 
@@ -455,7 +470,7 @@ Remove the classification markers:
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped"
 ```
 
-**AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 (read body, flip only confirmed `- [ ]` lines, write back). AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
+**AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 — including both of its guards: check the fetch's exit status and refuse the write if the edited body came out shorter than what was read. AFK is the mode with nobody watching the write, so it is the one that most needs them. AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
 
 **Write review notes into the PR body.** `/execute` finishes holding things no artifact records: which verification tiers ran versus were skipped and why, which scope was absorbed under Step 0's Consumes gate, which assumptions shifted, where the implementation is thinnest. Author preparation is the strongest empirical correlate with low defect density (Cohen) and a structured reading plan measurably raises detection (Dunsmore) — but only if the reviewer receives it. Left in the Step 5 checklist alone, that knowledge reaches a user and stops there — and on an AFK run no checklist is ever presented, so it reaches nobody.
 

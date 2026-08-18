@@ -392,7 +392,7 @@ Recorded by `/pre-merge` loop-mode. Every finding below has an owner. Rows marke
 |---|---|---|---|---|
 | 1 | Duplicate date formatter in pipeline | 1 — Deep Modules | fixed | `abc1234` — operator |
 | 1 | Same pattern in `lib/export/` | 1 — Deep Modules | filed | #199 — operator |
-| 1 | Stamp block "no-ops" | 7 — docs/solutions | open | refuted — `/execute` Step 5 uses the same shape (`execute/SKILL.md:419`) |
+| 1 | Stamp block "no-ops" | 7 — docs/solutions | open | refuted — `/execute` Step 5 uses the same shape ("Write verified status back to the issue") |
 | 2 | Presence helper claimed as Effect Layer | 4 — Boundary Map | open | confirmed — `lib/presence.ts:12` exports a plain function |
 
 **Checks not run this pass:** `/ts-audit` — delta is 12 changed `.ts` lines across 1 file, below the 50-line / 2-file trigger.
