@@ -162,6 +162,16 @@ When modifying a skill:
 
 A stale surface routes agents and users to a skill that no longer exists, or under a role it no longer holds — the drift #143 reconciled once by hand. Keeping the surfaces in lockstep with the change that causes the drift makes that reconciliation standing rather than after-the-fact, and puts the inventory knowledge in the world instead of the maintainer's head.
 
+### Commands a skill documents
+
+Skills ship executable prose: a downstream agent copies a fenced block out of a `SKILL.md` and runs it unsupervised in someone else's repo. A wrong command does not fail here — it fails later, quietly, somewhere the author will never see. Two rules govern it, and they apply in this order.
+
+**(a) Reference, don't re-author.** When a skill's prose needs a third-party tool's exit codes, flag behavior, or defaults, link or quote that tool's own documentation instead of paraphrasing it from memory. A paraphrase is a permanent drift liability this repo then owns and has to maintain, and it is usually unforced: #243 records six successive drafts of one passage each shipping a wrong claim about a git subcommand that the triggering issue had never asked anyone to document. Before writing the claim, ask whether the skill needs it at all — the cheapest command claim to keep accurate is the one you did not make.
+
+**(b) Route to the mechanism.** When a skill's prose *does* make a checkable claim about tool behavior, pin it with an executable contract test under `scripts/test-*.sh` and wire it into both `.github/workflows/validate-skills.yml` and `lefthook.yml`. That glob is the inventory — do not restate the list here, it drifts. `test-review-currency-marker.sh` and `test-context-block-contract.sh` are the readable entry points into the shape: a header naming the drift class and the incident behind it, then assertions that extract the real text from the real files rather than restating it. Careful reading is not the mechanism — in #243, every wrong draft was caught by a human or a review sub-agent, and none by a check.
+
+Rule (a) runs before rule (b): the subtraction shrinks the set of claims that need pinning, and pinning a claim that should never have been written is the more expensive order.
+
 ## Shared reference files
 
 The `skills` npm CLI installs each skill as a self-contained directory under `~/.claude/skills/<skill>/`. It does **not** copy repo-root files (`SYSTEM-OVERVIEW.md`) or sibling top-level directories (`docs/`). Any skill that needs to read those at runtime must bundle its own copy inside `<skill>/references/`.
