@@ -100,3 +100,6 @@ jobs:
 
       - name: Run selection-idiom consistency suite
         run: bash scripts/test-selection-idiom-consistency.sh
+
+      - name: Run documented git command contract suite
+        run: bash scripts/test-documented-git-commands.sh
