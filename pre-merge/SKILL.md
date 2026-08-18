@@ -281,6 +281,10 @@ If the person about to merge did not author the diff — or hasn't internalized 
 
 Omit any tier that has zero findings.
 
+**When a single finding's disposition forks three or more ways, present the options as a comparison.** Most findings have an obvious disposition and need no ceremony. Occasionally one does not: the same Concern can be fixed on this branch, filed as an issue, accepted with a reason, or dropped as wrong — the four states the Phase 5 ledger already names — and each carries its own resulting state, cost, and "take it if." When that fork clears the threshold in `references/next-step-menu.md` § *Show the comparison before you take the choice* — three or more mutually exclusive options, each with three or more attributes, not orderable on one axis — present it as a table, attributes as rows and dispositions as columns, each cell cited to a `file:line` or marked asserted. Below the threshold, prose as usual.
+
+This phase **presents**; it does not take the choice, and this paragraph does not change that. The comparison is a presentation device that makes the finding legible, exactly like the three-tier format around it. The operator disposes — at the Handoff menu below in author-mode, or by writing a state into the ledger in loop-mode — and the comparison is what they read before doing so. Do not add options to that menu on the strength of a comparison rendered here.
+
 **Stamp the reviewed head SHA into the PR (author-mode and loop-mode).** The review above covers one specific commit. Record which one in the PR body, so a later — possibly fresh-session — `/closeout` can tell whether the diff it is about to merge is still the diff that was reviewed. Prospective memory fails silently (Norman), so the marker goes into durable GitHub state rather than into the operator's head; `/closeout` Step 2's review-currency precondition is its only reader.
 
 Write it only after the findings above have been presented — the stamp asserts "a review completed at this SHA," so writing it earlier would certify a review that had not run.
