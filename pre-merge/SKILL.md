@@ -289,6 +289,12 @@ Write it only after the findings above have been presented — the stamp asserts
 REVIEWED_SHA=$(git rev-parse HEAD)
 BODY_FILE=$(mktemp)   # unique per run — parallel worktrees must not share a temp path
 gh pr view <pr-number> --json body -q .body > "$BODY_FILE"
+
+# Guard the read half. A 5xx or a truncated response leaves this file empty,
+# and the edit below would then replace the whole PR body with a stamp.
+[ -s "$BODY_FILE" ] || { echo "stamp aborted: PR body fetch came back empty" >&2; rm -f "$BODY_FILE"; exit 1; }
+ORIG_BYTES=$(wc -c < "$BODY_FILE")
+
 # In "$BODY_FILE": replace the existing "## Review Currency" section if one is
 # present; otherwise append this block, substituting the real SHAs:
 #
@@ -298,9 +304,17 @@ gh pr view <pr-number> --json body -q .body > "$BODY_FILE"
 #   Reviewed by `/pre-merge` at `<short-sha>`. Commits pushed after this SHA have
 #   not been through the review dimensions — `/closeout` surfaces the delta before merge.
 #
+
+# Guard the write half. Stamping only ever appends one block or swaps one
+# fixed-width block for another, so the edited body is never shorter than
+# what was read. Shorter means the edit dropped content — refuse the write.
+[ "$(wc -c < "$BODY_FILE")" -ge "$ORIG_BYTES" ] || { echo "stamp aborted: edited body is shorter than the body read" >&2; rm -f "$BODY_FILE"; exit 1; }
+
 gh pr edit <pr-number> --body-file "$BODY_FILE"
 rm -f "$BODY_FILE"
 ```
+
+- **Both guards refuse rather than repair, and an abort is not a failed review.** On either abort, retry the fetch and re-run the stamp; leave the findings you already presented standing. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of. Phase 5's ledger write is the same read-modify-write against the same API and reuses this shape, guards included.
 
 - **The HTML comment carries the full 40-character SHA — never the short form.** The two placeholders sit on adjacent lines and are not interchangeable: `<full-sha>` is the untruncated `git rev-parse HEAD` output, `<short-sha>` is the abbreviated form and belongs *only* in the visible prose line. `/closeout` compares the extracted marker against `headRefOid`, which is always 40 characters, so a short SHA in the comment can never compare equal — the gate would then report divergence on a PR whose head never moved, and a gate that cries wolf is one that gets clicked through. `/closeout`'s parser requires exactly 40 hex characters, so a swapped placeholder does not degrade quietly into a prefix match; it fails to parse. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this contract by round-tripping this template through `/closeout`'s own extraction, so the two skills cannot drift apart silently.
 - **Exactly one stamp per PR.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer.
