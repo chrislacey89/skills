@@ -63,6 +63,7 @@ The two compound. A claim believed to be verified, asserted to be consistent, an
   - `staleness-gate-intermediate-writers-2026-08-06.md` — closest sibling, and the inverted axis: that one is a contract between **two** skills over a mutable interval, this one is a claim copied to **N** peers with no interval at all. Its prescription (enumerate the writers mechanically rather than from memory) is the same move applied to a different asymmetry.
   - `secondhand-source-proposal-specificity-2026-08-11.md` — the upstream cause in this instance. #205 was drafted from `/prd-to-issues` §7 rather than from `gh --help`, because §7 read as verified.
   - `advisory-to-executed-rule-promotion-2026-08-07.md` — the family's shared shape: *a recorded limitation that gates nothing is a footnote.* This entry adds the mirror case — **a recorded *verification* that expires nothing is also a footnote.**
+  - `sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` — the empirical case for this entry's *timing* clause. It records three consecutive sweeps on one branch that each introduced a fresh instance of the class they were correcting, including the sweep that finally added the pinning test. That is why "the assertion and the test should be added in the same change" is load-bearing rather than tidy: the change that defers the test is the change most likely to need it.
 
 ## Solution
 
