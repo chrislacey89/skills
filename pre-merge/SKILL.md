@@ -30,7 +30,7 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
 
 `/pre-merge` runs in one of three modes. All three reuse Phase 3's 11 architectural review dimensions (`review-checklist.md`); they differ in what they consume and what they produce.
 
-- **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4). This is the mode auto-invoked by `/execute` Step 6 on the HITL path.
+- **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4), then hands back there — **it makes no fix commits of its own and opens no second pass.** This is the mode auto-invoked by `/execute` Step 6 on the HITL path.
 - **Reviewer-mode** — invoked as `/pre-merge --pr <number>` against a PR you did not author. The skill skips PR creation (the PR already exists) and produces *draft comment text* (Phase 4) for you to review and post, structured per `references/comment-craft.md` (5P gate, Triple-R, Comment Signals, MMG Exchange).
 - **Loop-mode** — invoked as `/pre-merge --loop`, or entered automatically when `/execute` hands off on an AFK run. Runs Phases 1–4 as author-mode does, then continues into **Phase 5**: it records every finding in a durable ledger on the PR, attaches the evidence that supports or refutes each one, and hands back to the operator. Findings stop being terminal output in this mode; they become durable rows with owners. **Loop-mode does not fix anything and makes no commits** — the operator decides what happens to each finding (see Phase 5 § Why the loop does not fix).
 
@@ -249,6 +249,8 @@ No action is required. These are advisory.
 When ready, merge the PR at <PR-URL>.
 ```
 
+**Author-mode's execution ends with this block.** Printing the three tiers is the last review action it takes: it does not fix a finding it just raised, and it does not open a pass on a diff it just changed. Finish the remaining Phase 4 output below — Scope Notes, the reporting-only reconciliations, the stamp, and the `/compound` line — then hand back at the `## Handoff` next-step menu (`references/next-step-menu.md`), which is where what-happens-to-a-finding is decided. Fixing one on this branch is among its options, and picking it is the user's call, not this session's.
+
 **Scope Notes (only when a PRD with slice issues was provided):**
 
 After the three-tier findings, note any significant scope drift between the planned decomposition and the actual diff:
@@ -304,7 +306,7 @@ rm -f "$BODY_FILE"
 - **Exactly one stamp per PR.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer.
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
 - **Reviewer-mode does not stamp.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify.
-- **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed. Re-running `/pre-merge` after the fixes re-stamps and clears the divergence.
+- **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed.
 - **Loop-mode stamps exactly as author-mode does.** It makes no commits of its own, so the head does not move underneath it and none of the rules above need a loop-mode exception. Fixes the *operator* makes in response to the ledger move the head past the stamp, which is the bullet immediately above: real, unreviewed, and cleared by the next invocation.
 
 **At the very end of Phase 4 output, if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from, recommend capturing it in this PR before merge.** `/compound`'s default is to commit the `docs/solutions/` entry onto this still-open PR branch, so the lesson is reviewed in the same pass as the code and merged atomically with it — capture it now, before `/closeout`, rather than as a separate post-merge session. Print the runtime handoff line:
