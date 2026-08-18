@@ -249,7 +249,7 @@ No action is required. These are advisory.
 When ready, merge the PR at <PR-URL>.
 ```
 
-**Author-mode's execution ends with this block.** Printing the three tiers is the last review action it takes: it does not fix a finding it just raised, and it does not open a pass on a diff it just changed. Finish the remaining Phase 4 output below — Scope Notes, the reporting-only reconciliations, the stamp, and the `/compound` line — then hand back at the `## Handoff` next-step menu (`references/next-step-menu.md`), which is where what-happens-to-a-finding is decided. Fixing one on this branch is among its options, and picking it is the user's call, not this session's.
+**This block is the last review action author-mode takes.** Finish the rest of Phase 4 below, then hand back at the `## Handoff` next-step menu (`references/next-step-menu.md`) — that menu is where what-happens-to-a-finding gets decided, and the user picks, not this session.
 
 **Scope Notes (only when a PRD with slice issues was provided):**
 
@@ -287,12 +287,17 @@ Write it only after the findings above have been presented — the stamp asserts
 
 ```bash
 REVIEWED_SHA=$(git rev-parse HEAD)
+SHORT_SHA=${REVIEWED_SHA:0:7}   # pinned, not `git rev-parse --short` — see the width note below
 BODY_FILE=$(mktemp)   # unique per run — parallel worktrees must not share a temp path
-gh pr view <pr-number> --json body -q .body > "$BODY_FILE"
 
-# Guard the read half. A 5xx or a truncated response leaves this file empty,
-# and the edit below would then replace the whole PR body with a stamp.
-[ -s "$BODY_FILE" ] || { echo "stamp aborted: PR body fetch came back empty" >&2; rm -f "$BODY_FILE"; exit 1; }
+# Guard the read half. Check the fetch's exit status, not just the file's size:
+# a 5xx makes `gh` fail, and the edit below would then replace the whole PR body
+# with a stamp. `--json` parses the response, so a success exit means the body is
+# whole; the emptiness check below is for a PR whose body is genuinely blank.
+if ! gh pr view <pr-number> --json body -q .body > "$BODY_FILE"; then
+  echo "stamp aborted: PR body fetch failed" >&2; rm -f "$BODY_FILE"; exit 1
+fi
+[ -s "$BODY_FILE" ] || { echo "stamp aborted: PR body came back empty" >&2; rm -f "$BODY_FILE"; exit 1; }
 ORIG_BYTES=$(wc -c < "$BODY_FILE")
 
 # In "$BODY_FILE": replace the existing "## Review Currency" section if one is
@@ -305,23 +310,24 @@ ORIG_BYTES=$(wc -c < "$BODY_FILE")
 #   not been through the review dimensions — `/closeout` surfaces the delta before merge.
 #
 
-# Guard the write half. Stamping only ever appends one block or swaps one
-# fixed-width block for another, so the edited body is never shorter than
-# what was read. Shorter means the edit dropped content — refuse the write.
+# Guard the write half. With $SHORT_SHA pinned above, stamping only ever appends
+# one block or swaps one fixed-width block for another, so the edited body is
+# never shorter than what was read. Shorter means the edit dropped content.
 [ "$(wc -c < "$BODY_FILE")" -ge "$ORIG_BYTES" ] || { echo "stamp aborted: edited body is shorter than the body read" >&2; rm -f "$BODY_FILE"; exit 1; }
 
 gh pr edit <pr-number> --body-file "$BODY_FILE"
 rm -f "$BODY_FILE"
 ```
 
-- **Both guards refuse rather than repair, and an abort is not a failed review.** On either abort, retry the fetch and re-run the stamp; leave the findings you already presented standing. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of. Phase 5's ledger write is the same read-modify-write against the same API and reuses this shape, guards included.
+- **Both guards refuse rather than repair, and an abort is not a failed review.** Retry the fetch **once**; if the second attempt also aborts, report it and hand back with the findings you already presented standing. The bound matters — an unbudgeted retry loop against a flaking API was an untimed contributor to the incident this guard came from. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of.
+- **`$SHORT_SHA` is pinned to 7 characters rather than taken from `git rev-parse --short`.** The abbreviation `--short` picks is variable-width and grows as a repo does, so a re-stamp could swap an 8-character short form for a 7-character one and leave the body one byte shorter than what was read — which the write guard would correctly refuse, on a write that was correct. Pinning the width is what makes the guard's "never shorter" premise true rather than nearly true.
 
 - **The HTML comment carries the full 40-character SHA — never the short form.** The two placeholders sit on adjacent lines and are not interchangeable: `<full-sha>` is the untruncated `git rev-parse HEAD` output, `<short-sha>` is the abbreviated form and belongs *only* in the visible prose line. `/closeout` compares the extracted marker against `headRefOid`, which is always 40 characters, so a short SHA in the comment can never compare equal — the gate would then report divergence on a PR whose head never moved, and a gate that cries wolf is one that gets clicked through. `/closeout`'s parser requires exactly 40 hex characters, so a swapped placeholder does not degrade quietly into a prefix match; it fails to parse. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this contract by round-tripping this template through `/closeout`'s own extraction, so the two skills cannot drift apart silently.
 - **Exactly one stamp per PR.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer.
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
 - **Reviewer-mode does not stamp.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify.
 - **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed.
-- **Loop-mode stamps exactly as author-mode does.** It makes no commits of its own, so the head does not move underneath it and none of the rules above need a loop-mode exception. Fixes the *operator* makes in response to the ledger move the head past the stamp, which is the bullet immediately above: real, unreviewed, and cleared by the next invocation.
+- **Loop-mode stamps exactly as author-mode does.** It makes no commits of its own, so the head does not move underneath it and none of the rules above need a loop-mode exception. Fixes the *operator* makes in response to the ledger move the head past the stamp, which is the bullet immediately above: real and unreviewed.
 
 **At the very end of Phase 4 output, if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from, recommend capturing it in this PR before merge.** `/compound`'s default is to commit the `docs/solutions/` entry onto this still-open PR branch, so the lesson is reviewed in the same pass as the code and merged atomically with it — capture it now, before `/closeout`, rather than as a separate post-merge session. Print the runtime handoff line:
 
@@ -400,7 +406,7 @@ The **Checks not run this pass** line is where a suppressed check is recorded. A
 
 **States in the `State` column.** Loop-mode writes only `open`. The operator writes the rest — `fixed` (with the commit), `filed` (with the issue number), `accepted` (won't fix, with the reason), or `dropped` (with why the finding was wrong). `/pre-merge` never overwrites an operator's state on a later pass; it appends new findings and leaves settled rows alone.
 
-Write the block with the same `mktemp` → read body → edit the block → `gh pr edit --body-file` shape Phase 4's stamp uses. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path.
+Write the block with the same `mktemp` → **check the fetch's exit status** → read body → **record its byte count** → edit the block → **refuse the write if the result is shorter** → `gh pr edit --body-file` shape Phase 4's stamp uses. The two guards are named here rather than left to "same shape," because they are the half of that shape a reader reconstructing it from the four visible steps would omit — and the ledger is the block this skill rewrites most often. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path.
 
 **What passes forward to the next pass, and what is withheld.** Independence and efficiency pull opposite ways here, and the split resolves them:
 
