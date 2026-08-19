@@ -109,6 +109,7 @@ What #199 lacked at the time of writing was a **trigger predicate**, and this in
 - Issue #217 — the proposal this implements
 - Issue #199 — the pipeline fix this entry is posted as evidence on; see Prevention for the trigger predicate it still needs
 - `advisory-to-executed-rule-promotion-2026-08-07.md`, `by-construction-claims-need-a-mechanism-2026-08-11.md`, `secondhand-source-proposal-specificity-2026-08-11.md` — see Rule Scope; all three now link back
+- `../testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md` — a second instance of this entry's narrower Prevention rule, in executable code rather than prose. A polarity probe added to a contract suite chained its setup and its oracle into one exit status, on an assertion that passes when that status is non-zero — so a failed setup satisfied it exactly as well as a working oracle, and the suite stayed green with the assertion measuring nothing. That is *"the counter cannot distinguish the mechanism not firing from the mechanism being unable to fire"*, and it was written by an author who had just fixed the same defect one commit earlier — evidence the rule needs to be a checklist item rather than a paragraph
 
 ## Postscript — the third pass
 
