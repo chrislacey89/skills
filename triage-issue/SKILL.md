@@ -67,8 +67,9 @@ Read `git bisect --help` § "Bisect run" for the exit-status contract your loop 
 
 Treat the result as **evidence, not a suspect**. The failure-inducing change tells you when the infection entered the code; it does not tell you which line is defective, and the change that introduces a latent defect is often not the change that made it observable. Carry the diff into the trace below as a fact, and keep tracing backward from the failure.
 
-Three conditions bound this:
+Four conditions bound this:
 
+- **Check the oracle's polarity on both ends before starting.** Run the loop on the known-bad ref and on the known-good ref, and confirm it returns non-zero and zero respectively. This is the cheapest check here and the one most worth doing, because the loop you built in Step 2 is a *reproducing* loop, and "the loop passes" reads two ways — *the bug is gone*, which is what bisect needs, or *the reproduction succeeded*, which is a natural shape for a script written to demonstrate a failure. Hand bisect the second reading and it will name the commit that **fixed** something as the culprit. An oracle that answers the same at both ends still produces a confident first-bad commit, so a green run is not evidence the polarity was right.
 - **Squash-merged history yields a first-bad *PR*, not a first-bad commit.** That is still a narrowed diff and still worth having — but it is not a single line, so do not report it as one.
 - **A nondeterministic loop breaks the oracle.** Bisect trusts every verdict it is handed, so a loop that reproduces intermittently will confidently name an innocent change. If the loop is flaky — the Heisenbug case above included — repair it first or skip bisect. Never bisect on a "usually reproduces" signal.
 - **No known last-good state means skip it, and say so.** Do not guess a range. A bisect started from an invented `good` ref returns its answer with exactly the confidence of a real one, which is worse than returning nothing.
@@ -94,8 +95,10 @@ Look at:
 Rank by strength of evidence — recent changes to the suspect path, structural plausibility, prior incident patterns. **"Prior incident patterns" means prior fix commits touching a candidate path**, read from the commit log rather than the issue tracker:
 
 ```bash
-git log --oneline -i --grep='fix\|bug\|regress\|revert' -- <candidate-path>
+git log --oneline -i -E --grep='fix|bug|regress|revert' -- <candidate-path>
 ```
+
+`-E` is passed explicitly rather than relying on the default dialect. `git log --grep` honors the `grep.patternType` config key, so in a repo or user account that sets it to `extended`, `perl`, or `fixed`, an escaped-alternation pattern matches **nothing** — and returns zero quietly, which the "best-effort" bullet below would then read as "no fix-commit convention here." An explicit flag beats config and makes the command mean the same thing in every repo the skill runs in.
 
 Two conditions bind that count, and both are load-bearing:
 

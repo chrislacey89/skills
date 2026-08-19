@@ -14,10 +14,26 @@
 # from the skill rather than restated here, against real git in a real
 # repository. A block that stops being a valid invocation fails this suite.
 #
-# Covered today: /triage-issue Step 2's regression-bisect block and its
-# "prior incident patterns" fix-commit grep (#236). Extend the suite when a
-# skill documents another runnable command; do not maintain a list of the
-# commands in prose, since that list is itself the thing that drifts.
+# Covered today: /triage-issue Step 2's regression-bisect block (all three of
+# its lines) and its "prior incident patterns" fix-commit grep (#236). Extend
+# the suite when a skill documents another runnable command; do not maintain a
+# list of the commands in prose, since that list is itself the thing that
+# drifts.
+#
+# Highest-value next extension: /closeout, which documents 13 runnable git
+# invocations including `git worktree remove`, `git branch -d`, and
+# `git pull --ff-only` — the destructive ones, run unsupervised at merge time.
+#
+# Two lessons from this suite's own first draft, both found in review and both
+# worth keeping in mind when extending it:
+#   1. Assert the *answer*, not the presence of its parts. The first draft
+#      checked for the expected SHA anywhere in bisect's output and for the
+#      phrase "is the first bad commit" anywhere, independently. Both passed
+#      while git named a different commit.
+#   2. Mutate the fixture's oracle, not only the command under test. The same
+#      draft's oracle answered "good" on every revision, so the bisect half
+#      verified nothing at all — and every mutation of the *command* still went
+#      red, which is what made it look verified.
 
 set -euo pipefail
 
@@ -61,14 +77,28 @@ fatal() {
 
 bisect_start="$(grep -m1 '^git bisect start ' "$triage_skill" || true)"
 bisect_run="$(grep -m1 '^git bisect run ' "$triage_skill" || true)"
+bisect_reset="$(grep -m1 '^git bisect reset' "$triage_skill" || true)"
 fix_grep="$(grep -m1 '^git log --oneline .*--grep=' "$triage_skill" || true)"
 
 [[ -n "$bisect_start" ]] || fatal "no 'git bisect start' line found in $triage_skill"
 [[ -n "$bisect_run" ]]   || fatal "no 'git bisect run' line found in $triage_skill"
+[[ -n "$bisect_reset" ]] || fatal "no 'git bisect reset' line found in $triage_skill"
 [[ -n "$fix_grep" ]]     || fatal "no 'git log --grep' fix-commit line found in $triage_skill"
+
+# The placeholder tokens are a private format shared between the skill's fenced
+# blocks and this file, and the greps above do not notice if one is renamed —
+# the substitutions below would silently no-op and the failure would surface as
+# an assertion about a command that is in fact correct. Name them here so a
+# rename fails loudly, pointing at the real cause.
+for placeholder in '<bad-ref>' '<good-ref>'; do
+    [[ "$bisect_start" == *"$placeholder"* ]] || fatal "placeholder $placeholder is gone from the 'git bisect start' line"
+done
+[[ "$bisect_run" == *'<the-loop-command>'* ]] || fatal "placeholder <the-loop-command> is gone from the 'git bisect run' line"
+[[ "$fix_grep" == *'<candidate-path>'* ]]     || fatal "placeholder <candidate-path> is gone from the 'git log --grep' line"
 
 printf 'bisect start (triage-issue/SKILL.md): %s\n' "$bisect_start"
 printf 'bisect run   (triage-issue/SKILL.md): %s\n' "$bisect_run"
+printf 'bisect reset (triage-issue/SKILL.md): %s\n' "$bisect_reset"
 printf 'fix grep     (triage-issue/SKILL.md): %s\n' "$fix_grep"
 
 # -----------------------------------------------------------------------------
@@ -100,6 +130,16 @@ section "build a synthetic repository with a planted regression"
 sandbox="$(mktemp -d)"
 trap 'rm -rf "$sandbox"' EXIT
 
+# Neutralize global and system git config for every command in this suite.
+# Without this the fixture is not hermetic: `grep.patternType` is a common
+# personal setting and it silently changes the dialect `git log --grep` parses,
+# so a contributor who sets it would get red assertions unrelated to anything
+# they changed. Exported rather than set per-command, because the invocations
+# under test are extracted verbatim from the skill and cannot carry test-only
+# environment of their own.
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+
 (
     cd "$sandbox"
     git init -q .
@@ -118,20 +158,38 @@ trap 'rm -rf "$sandbox"' EXIT
 
     # Touches value.txt only — so the path-filtered grep below must NOT see it,
     # even though "the regression" matches the 'regress' alternative.
-    echo broken > value.txt
+    #
+    # The marker is "spoiled", not "broken": the oracle greps for a whole line
+    # equal to "ok", and "broken" *contains* "ok" (br-ok-en). A substring oracle
+    # answered "good" on every revision here, bisect walked to HEAD, and the
+    # suite still reported green — the defect this fixture now exists to prevent.
+    # Keeping the word distinct means the fixture stays correct even if some
+    # future edit relaxes the oracle back to a substring match.
+    echo spoiled > value.txt
     git add value.txt
     git commit -q -m 'the regression'
     git rev-parse HEAD > .expected-first-bad
 
+    # One commit per alternative in the documented --grep pattern, so dropping
+    # any of the four from the skill fails an assertion below. 'FIX' is
+    # uppercase so it is matched only by -i.
     echo 4 > noise.txt
     git add noise.txt
-    git commit -q -m 'FIX: guard the null boundary'   # uppercase — only -i matches
+    git commit -q -m 'FIX: guard the null boundary'
 
     echo 5 > noise.txt
     git add noise.txt
     git commit -q -m 'Revert "an earlier change"'
 
     echo 6 > noise.txt
+    git add noise.txt
+    git commit -q -m 'handle the bug in the parser'
+
+    echo 7 > noise.txt
+    git add noise.txt
+    git commit -q -m 'stop the layout regressing on resize'
+
+    echo 8 > noise.txt
     git add noise.txt
     git commit -q -m 'tidy up the module layout'      # matches nothing
 )
@@ -152,10 +210,17 @@ grep_status=$?
 set -e
 assert_eq 0 "$grep_status" "the fix-commit grep exits 0 against a real repository"
 
+# One assertion per alternative in the documented pattern. Without all four,
+# half the pattern can be deleted from the skill and this suite stays green —
+# it did, before this was written.
 assert_contains "$grep_out" 'FIX: guard the null boundary' \
-    "matches a fix commit case-insensitively (the -i flag is doing work)"
+    "matches the 'fix' alternative, case-insensitively (the -i flag is doing work)"
 assert_contains "$grep_out" 'Revert "an earlier change"' \
-    "matches a revert commit (the alternation is doing work)"
+    "matches the 'revert' alternative (the alternation is doing work)"
+assert_contains "$grep_out" 'handle the bug in the parser' \
+    "matches the 'bug' alternative"
+assert_contains "$grep_out" 'stop the layout regressing on resize' \
+    "matches the 'regress' alternative"
 
 if [[ "$grep_out" != *'tidy up the module layout'* ]]; then
     printf '  ok   a non-incident commit is filtered out, so the pattern is not matching everything\n'
@@ -173,6 +238,28 @@ else
     fail=$((fail + 1))
 fi
 
+# The documented command must mean the same thing in every repo the skill runs
+# in. `git log --grep` honors `grep.patternType`, so a pattern that relies on
+# the default dialect returns zero matches — silently — for any user who sets
+# it. Zero is the dangerous answer here, because the skill's "best-effort"
+# bullet reads it as "this repo has no fix-commit convention" and skips the
+# step. Run the skill's own line under each hostile setting and require it to
+# keep matching.
+for dialect in extended perl fixed basic; do
+    set +e
+    dialect_out="$(cd "$sandbox" && git config grep.patternType "$dialect" \
+        && eval "$grep_cmd" 2>&1)"
+    set -e
+    (cd "$sandbox" && git config --unset grep.patternType)
+    if [[ "$dialect_out" == *'FIX: guard the null boundary'* ]]; then
+        printf '  ok   the documented pattern survives grep.patternType=%s\n' "$dialect"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL grep.patternType=%s silently zeroes the documented pattern\n' "$dialect"
+        fail=$((fail + 1))
+    fi
+done
+
 # The skill ships this line for downstream repos, so it must also be a valid
 # invocation here. Exit status only — this repo is cloned shallow in CI, so
 # what it matches is not a stable assertion.
@@ -189,22 +276,61 @@ section "the bisect block finds a known first-bad commit"
 expected_bad="$(cat "$sandbox/.expected-first-bad")"
 good_ref="$(cd "$sandbox" && git rev-list --max-parents=0 HEAD)"
 
-# `grep -q ok value.txt` is the stand-in for Step 2's deterministic loop: exit 0
+# `grep -qx ok value.txt` is the stand-in for Step 2's deterministic loop: exit 0
 # on a good revision, non-zero on a bad one, which is the contract the skill
 # sends the reader to `git bisect --help` § "Bisect run" to satisfy.
+#
+# -x (whole-line match) is load-bearing, not stylistic. A substring oracle
+# reports "good" on a revision whose marker merely contains "ok", which is the
+# oracle-polarity failure the skill's first rider now warns about — and it is
+# the failure this suite shipped with: bisect walked to HEAD and the assertions
+# passed anyway.
 start_cmd="${bisect_start//<bad-ref>/HEAD}"
 start_cmd="${start_cmd//<good-ref>/$good_ref}"
-run_cmd="${bisect_run//<the-loop-command>/grep -q ok value.txt}"
+run_cmd="${bisect_run//<the-loop-command>/grep -qx ok value.txt}"
+
+# Verify the oracle's polarity at both ends before trusting anything it says
+# mid-bisect — the same pre-flight the skill now asks its readers to run.
+set +e
+(cd "$sandbox" && git checkout -q "$good_ref" -- value.txt && grep -qx ok value.txt); good_end=$?
+(cd "$sandbox" && git checkout -q HEAD -- value.txt && grep -qx ok value.txt); bad_end=$?
+(cd "$sandbox" && git checkout -q HEAD -- value.txt)
+set -e
+assert_eq 0 "$good_end" "the oracle answers 'good' (exit 0) at the known-good end"
+if [[ "$bad_end" -ne 0 ]]; then
+    printf '  ok   the oracle answers "bad" (non-zero) at the known-bad end, so its polarity is real\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the oracle answers the same at both ends; bisect would name a commit regardless\n'
+    fail=$((fail + 1))
+fi
 
 set +e
 bisect_out="$(cd "$sandbox" && eval "$start_cmd" 2>&1 && eval "$run_cmd" 2>&1)"
 bisect_status=$?
 set -e
-(cd "$sandbox" && git bisect reset -q >/dev/null 2>&1 || true)
+# Extracted from the skill like its siblings rather than restated — this is the
+# third command in the documented block, and a restated copy of it shipped here
+# with an invalid `-q` flag that `|| true` hid.
+#
+# `set +e` around it is what makes an invalid reset line surface as a named
+# failed assertion instead of killing the run at this line under `set -e`,
+# where it would report no assertions at all and send the reader hunting.
+set +e
+(cd "$sandbox" && eval "$bisect_reset" >/dev/null 2>&1)
+reset_status=$?
+set -e
 
 assert_eq 0 "$bisect_status" "the skill's bisect start + run pair completes successfully"
-assert_contains "$bisect_out" "$expected_bad" "bisect names the planted regression commit"
-assert_contains "$bisect_out" 'is the first bad commit' "bisect reports a first-bad result"
+assert_eq 0 "$reset_status" "the skill's 'git bisect reset' line is a valid invocation"
+
+# Bind the SHA to the answer. Asserting the SHA and the phrase separately lets
+# both pass while git names a different commit: the planted SHA appears in an
+# intermediate "Bisecting: ... [<sha>]" checkout line, and the phrase attaches
+# to whatever git actually concluded. That is precisely how this suite reported
+# a wrong answer as green.
+assert_contains "$bisect_out" "$expected_bad is the first bad commit" \
+    "bisect names the planted regression commit as the first bad commit"
 
 # -----------------------------------------------------------------------------
 
