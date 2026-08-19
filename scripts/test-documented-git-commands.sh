@@ -110,9 +110,15 @@ section "the subcommands the skill names still exist in this git"
 # render. The skill points readers at the man page for the exit-status
 # contract; this pins only that the subcommands it invokes are still spelled
 # the way it spells them.
+#
+# The subcommand names are taken from the extracted lines, not typed here. A
+# hardcoded literal would keep passing if the skill renamed a subcommand, which
+# is restatement — the exact thing this suite's header says not to do.
 bisect_usage="$(git bisect -h 2>&1 || true)"
-assert_contains "$bisect_usage" 'git bisect start' "git still declares 'bisect start'"
-assert_contains "$bisect_usage" 'git bisect run' "git still declares 'bisect run'"
+for extracted in "$bisect_start" "$bisect_run" "$bisect_reset"; do
+    subcommand="$(printf '%s' "$extracted" | awk '{print $1, $2, $3}')"
+    assert_contains "$bisect_usage" "$subcommand" "git still declares '${subcommand#git }'"
+done
 
 # -----------------------------------------------------------------------------
 
@@ -245,17 +251,30 @@ fi
 # bullet reads it as "this repo has no fix-commit convention" and skips the
 # step. Run the skill's own line under each hostile setting and require it to
 # keep matching.
+#
+# Each dialect's result is compared against the baseline run above rather than
+# against a hardcoded commit subject. Keying on a specific subject would couple
+# these four assertions to whichever alternative that subject exercises, so
+# deleting one alternative from the skill would redden them too — reporting a
+# dialect problem to a reader whose actual mistake was a missing alternative.
+# Comparing to the baseline isolates the one thing this loop is about: whether
+# the config key changes the result.
 for dialect in extended perl fixed basic; do
     set +e
-    dialect_out="$(cd "$sandbox" && git config grep.patternType "$dialect" \
-        && eval "$grep_cmd" 2>&1)"
+    (cd "$sandbox" && git config grep.patternType "$dialect"); dialect_set=$?
+    dialect_out="$(cd "$sandbox" && eval "$grep_cmd" 2>&1)"
     set -e
-    (cd "$sandbox" && git config --unset grep.patternType)
-    if [[ "$dialect_out" == *'FIX: guard the null boundary'* ]]; then
+    # --unset exits 5 when the key is absent, which would kill the run under
+    # `set -e` with no assertion summary if the set above ever failed.
+    (cd "$sandbox" && git config --unset grep.patternType) || true
+    if [[ "$dialect_set" -ne 0 ]]; then
+        printf '  FAIL could not set grep.patternType=%s, so this dialect went unchecked\n' "$dialect"
+        fail=$((fail + 1))
+    elif [[ "$dialect_out" == "$grep_out" ]]; then
         printf '  ok   the documented pattern survives grep.patternType=%s\n' "$dialect"
         pass=$((pass + 1))
     else
-        printf '  FAIL grep.patternType=%s silently zeroes the documented pattern\n' "$dialect"
+        printf '  FAIL grep.patternType=%s changes what the documented pattern matches\n' "$dialect"
         fail=$((fail + 1))
     fi
 done
@@ -264,7 +283,7 @@ done
 # invocation here. Exit status only — this repo is cloned shallow in CI, so
 # what it matches is not a stable assertion.
 set +e
-(cd "$repo_root" && eval "${fix_grep//<candidate-path>/triage-issue\/SKILL.md}" >/dev/null 2>&1)
+(cd "$repo_root" && eval "${fix_grep//<candidate-path>/triage-issue/SKILL.md}" >/dev/null 2>&1)
 home_status=$?
 set -e
 assert_eq 0 "$home_status" "the same line runs against Skill Kit's own repository"
@@ -291,17 +310,37 @@ run_cmd="${bisect_run//<the-loop-command>/grep -qx ok value.txt}"
 
 # Verify the oracle's polarity at both ends before trusting anything it says
 # mid-bisect — the same pre-flight the skill now asks its readers to run.
+#
+# The checkout and the oracle are run as separate statements on purpose. Chained
+# with && they share one exit status, and the bad-end assertion passes on
+# *non-zero* — so a failed checkout would satisfy it just as well as a working
+# oracle, and the check would silently measure nothing. That is the same
+# pass-for-the-wrong-reason shape this whole suite exists to catch, so it is not
+# allowed to live inside the safety net.
+oracle_setup() { ( cd "$sandbox" && git checkout -q "$1" -- value.txt ); }
+oracle_run()   { ( cd "$sandbox" && grep -qx ok value.txt ); }
+
 set +e
-(cd "$sandbox" && git checkout -q "$good_ref" -- value.txt && grep -qx ok value.txt); good_end=$?
-(cd "$sandbox" && git checkout -q HEAD -- value.txt && grep -qx ok value.txt); bad_end=$?
-(cd "$sandbox" && git checkout -q HEAD -- value.txt)
+oracle_setup "$good_ref"; good_setup=$?
+oracle_run;               good_end=$?
+oracle_setup HEAD;        bad_setup=$?
+oracle_run;               bad_end=$?
+oracle_setup HEAD >/dev/null 2>&1
 set -e
+
+assert_eq 0 "$good_setup" "the known-good end can be checked out (the polarity probe is really running)"
+assert_eq 0 "$bad_setup"  "the known-bad end can be checked out (the polarity probe is really running)"
 assert_eq 0 "$good_end" "the oracle answers 'good' (exit 0) at the known-good end"
-if [[ "$bad_end" -ne 0 ]]; then
-    printf '  ok   the oracle answers "bad" (non-zero) at the known-bad end, so its polarity is real\n'
+
+# git bisect run treats 1-127 except 125 as "bad"; 125 means untestable and
+# anything above 127 aborts the run. Asserting the range rather than merely
+# "non-zero" means a fixture whose oracle dies for an unrelated reason fails
+# here instead of passing as a healthy negative.
+if [[ "$bad_end" -ge 1 && "$bad_end" -le 127 && "$bad_end" -ne 125 ]]; then
+    printf '  ok   the oracle answers "bad" at the known-bad end with exit %s, in git bisect'"'"'s bad range\n' "$bad_end"
     pass=$((pass + 1))
 else
-    printf '  FAIL the oracle answers the same at both ends; bisect would name a commit regardless\n'
+    printf '  FAIL the oracle returned %s at the known-bad end; it is not a "bad" verdict, so bisect would name a commit regardless\n' "$bad_end"
     fail=$((fail + 1))
 fi
 
@@ -317,12 +356,13 @@ set -e
 # failed assertion instead of killing the run at this line under `set -e`,
 # where it would report no assertions at all and send the reader hunting.
 set +e
-(cd "$sandbox" && eval "$bisect_reset" >/dev/null 2>&1)
+reset_err="$(cd "$sandbox" && eval "$bisect_reset" 2>&1 >/dev/null)"
 reset_status=$?
 set -e
 
 assert_eq 0 "$bisect_status" "the skill's bisect start + run pair completes successfully"
 assert_eq 0 "$reset_status" "the skill's 'git bisect reset' line is a valid invocation"
+[[ "$reset_status" -eq 0 ]] || printf '       git said: %s\n' "$reset_err"
 
 # Bind the SHA to the answer. Asserting the SHA and the phrase separately lets
 # both pass while git names a different commit: the planted SHA appears in an
