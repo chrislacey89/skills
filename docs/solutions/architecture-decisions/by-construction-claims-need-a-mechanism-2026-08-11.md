@@ -157,6 +157,7 @@ The instance fix was to name the guards in the enumeration. The mechanism fix is
 - [cli/cli#13899](https://github.com/cli/cli/pull/13899) — open, unmerged; the `gh issue create` deferred-failure mode that shapes the create-bare-then-wire rule
 - `staleness-gate-intermediate-writers-2026-08-06.md`, `secondhand-source-proposal-specificity-2026-08-11.md`, `advisory-to-executed-rule-promotion-2026-08-07.md` — see Rule Scope
 - `self-review-blind-to-composition-2026-08-13.md` — same family, and the reason a *second reader* is the mechanism where a snapshot is not: a claim maintained by hand across peers fails silently, and the author is the one reader who cannot see it
+- `../testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md` — the failure one step past this entry's remedy, and the reason its mutation-testing requirement is necessary but not sufficient. In PR #255 a contract suite built under this entry's Prevention section was mutation-tested before commit exactly as prescribed, went red on all four mutations, and still verified nothing: every mutation named the artifact under test, none named the fixture's oracle, so the battery established only that the suite detects a crash. Read alongside the Prevention section above before writing the next `scripts/test-*.sh`
 
 ## Shelf Life
 

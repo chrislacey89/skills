@@ -55,6 +55,25 @@ At triage rigor, the answer must be substantive — by the time deep diagnosis i
 
 **Recognize the Heisenbug pattern.** If the failure disappears under a debugger, vanishes when logging is added, or shifts shape under different observation tools, the bug is almost certainly undefined behavior interacting with environmental differences (memory layout, optimization level, instrumentation overhead). The remedy is to find the undefined behavior in the code — uninitialized memory, a data race, reliance on unspecified ordering — not to switch debuggers or strip the logging. A vanishing bug is evidence about the bug's *shape*, not a reason to abandon the trace; do not silently downgrade Heisenbug-shaped reports to "live-only failure."
 
+**If the bug is a regression and a last-good state is known, bisect before reading code.** A regression is the one bug class where the answer is already recorded: some change turned working code into broken code, and the history knows which one. The loop you just built is exactly the oracle `git bisect run` needs, so hand it over and let history answer instead of reasoning toward it:
+
+```bash
+git bisect start <bad-ref> <good-ref>
+git bisect run <the-loop-command>
+git bisect reset
+```
+
+Read `git bisect --help` § "Bisect run" for the exit-status contract your loop has to satisfy — in particular the code reserved for revisions that cannot be built or tested — and confirm the loop meets it before starting, rather than discovering it partway through a run.
+
+Treat the result as **evidence, not a suspect**. The failure-inducing change tells you when the infection entered the code; it does not tell you which line is defective, and the change that introduces a latent defect is often not the change that made it observable. Carry the diff into the trace below as a fact, and keep tracing backward from the failure.
+
+Four conditions bound this:
+
+- **Check the oracle's polarity on both ends before starting.** Run the loop on the known-bad ref and on the known-good ref, and confirm it returns non-zero and zero respectively. This is the cheapest check here and the one most worth doing, because the loop you built in Step 2 is a *reproducing* loop, and "the loop passes" reads two ways — *the bug is gone*, which is what bisect needs, or *the reproduction succeeded*, which is a natural shape for a script written to demonstrate a failure. Hand bisect an inverted or a constant oracle and it still terminates and still names a commit; it just names an innocent one, with exactly the confidence it would report a correct answer. So a completed run is not evidence the polarity was right — only the two-ended check is.
+- **Squash-merged history yields a first-bad *PR*, not a first-bad commit.** That is still a narrowed diff and still worth having — but it is not a single line, so do not report it as one.
+- **A nondeterministic loop breaks the oracle.** Bisect trusts every verdict it is handed, so a loop that reproduces intermittently will confidently name an innocent change. If the loop is flaky — the Heisenbug case above included — repair it first or skip bisect. Never bisect on a "usually reproduces" signal.
+- **No known last-good state means skip it, and say so.** Do not guess a range. A bisect started from an invented `good` ref returns its answer with exactly the confidence of a real one, which is worse than returning nothing.
+
 Use the Agent tool with subagent_type=Explore to deeply investigate the codebase. Your goal is to find:
 
 - **Where** the bug manifests (entry points, UI, API responses)
@@ -73,7 +92,22 @@ Look at:
 
 > If **X** is the cause, then changing **Y** will make the loop pass, and changing **Z** will make the failure worse or leave it unchanged.
 
-Rank by strength of evidence — recent changes to the suspect path, structural plausibility, prior incident patterns. Show the ranked list to the user in one short message before testing the top hypothesis. The user checkpoint is cheap and catches insights you cannot infer from code reading alone ("we just deployed a change to candidate #3" is a common save). Drive the loop against the top hypothesis, revise the ranking when evidence contradicts it, and avoid anchoring on the first plausible idea — Zeller's scientific-method recipe.
+Rank by strength of evidence — recent changes to the suspect path, structural plausibility, prior incident patterns. **"Prior incident patterns" means prior fix commits touching a candidate path**, read from the commit log rather than the issue tracker:
+
+```bash
+git log --oneline -i -E --grep='fix|bug|regress|revert' -- <candidate-path>
+```
+
+`-E` is passed explicitly rather than relying on the default dialect. `git log --grep` honors the `grep.patternType` config key, so in a repo or user account that sets it to `extended`, `perl`, or `fixed`, an escaped-alternation pattern matches **nothing** — and returns zero quietly, which the "best-effort" bullet below would then read as "no fix-commit convention here." An explicit flag beats config and makes the command mean the same thing in every repo the skill runs in.
+
+Two conditions bind that count, and both are load-bearing:
+
+- **Confirmatory, never generative.** It may only reorder candidates the failure trace already nominated; it must never nominate one. Zeller's rule is to start from the failure rather than from code you suspect, and a file's history is legitimate evidence about a candidate already in hand — it becomes suspicion-led search the moment it puts a file on the list.
+- **Best-effort.** The grep presupposes that this repo's authors label fix commits recognizably. Absent such a convention the count is noise, so skip the step and say so rather than ranking on it.
+
+**State the mechanism before reordering anything.** A high fix count is a correlation, and the standard counterexample is that senior developers get assigned the riskiest work, so their files top every defect ranking without those files being defect-prone. Name the mechanism in one line — "three prior fixes here, all null-guards at the same boundary" — or leave the ranking as it stands.
+
+Show the ranked list to the user in one short message before testing the top hypothesis. The user checkpoint is cheap and catches insights you cannot infer from code reading alone ("we just deployed a change to candidate #3" is a common save). Drive the loop against the top hypothesis, revise the ranking when evidence contradicts it, and avoid anchoring on the first plausible idea — Zeller's scientific-method recipe.
 
  ### 2.5. Structural Diagnosis
  
