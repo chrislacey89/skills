@@ -20,9 +20,83 @@ Render a menu only at:
 - **In place of a deliberate checkpoint.** The menu appears *after* a verification gate, never instead of it. It must never let the user skip a pause the skill put there on purpose (e.g. `/execute`'s Step 5 acceptance-criteria confirmation).
 - **On AFK / Ralph iterations.** There is no user to answer a menu; autonomous runs exit on their own rules.
 
+## Show the comparison before you take the choice
+
+A menu is a *commit* mechanism. It asks which option, and it never shows the options against
+each other. For most branch points that is fine — two successors, one attribute each, and the
+labels carry it. But the pipeline also manufactures genuine N-way forks: `/design-an-interface`
+emits candidate interface shapes, `/api-design-review` weighs REST/RPC/GraphQL,
+`/improve-pipeline` returns a four-way verdict, `/correct-course` chooses supersede/revise/discard,
+`/pre-merge` presents each finding against a four-way disposition. Rendered as prose, those arrive one
+after another — and the reader is asked to hold every option's every attribute in memory to
+compare them.
+
+**Threshold — all three must hold, or it is prose plus the menu as usual:**
+
+1. **≥3 mutually exclusive options.** Picking one rules the others out.
+2. **Each carries ≥3 attributes.** What it buys, what it costs, what state it leaves behind, when to pick it.
+3. **They are not orderable on one axis.** If one option is simply better, say so in a sentence and recommend it.
+
+Three options × three attributes is nine items; four × five is twenty. Norman puts practical
+short-term-memory capacity at 3–5 items — *"systems that require users to hold more than a
+handful of items simultaneously will fail routinely — not occasionally."* And Tufte names
+sequential display as the comparison anti-pattern outright: *"The viewer cannot compare what
+they cannot see at the same time. Memory is not vision."* Above the threshold, prose is not a
+weaker presentation of the comparison; it is the absence of one.
+
+**How to render it.** Attributes as rows, options as columns, same attributes in the same order
+down every column (Tufte's Constancy of Design — only the content differs). **A markdown table
+in chat satisfies this and is the default**: it costs nothing, needs no artifact, and delivers
+the eyespan, which is where the work happens. **In `/execute`, `/pre-merge`, `/shape`, and
+`/closeout` the table is the whole render** — those four do not bundle the HTML skeleton. It
+lives in `visual-recap-design.md` §11, bundled to `/visual-recap` and `/walk-commits` only, so
+those two read it as a sibling of this file and reach for it when the cells carry code, long
+resulting text, or enough bands that a chat table stops being scannable. Naming the skills
+rather than posing a condition is deliberate: an escape hatch stated as "when you have the
+file" is one every reader has to go check. Either way the artifact is transient — `.context/`
+or `mktemp`, never committed.
+
+**Grounding is the block's defining constraint, not a refinement.** N identically-weighted
+columns claim N equally-evidenced options, and the options do not exist yet, so most cells have
+nothing to derive from. Every cell is therefore either **cited** — quoted from something that
+already exists (current text at `file:line`, an issue or PR body, a research entry, test
+output) and showing that source — or visibly marked **asserted**, the model's judgment about a
+state that does not exist. Support asymmetry must show as visual asymmetry, and **every option
+carries at least one cited cell**; an option with nothing citable is a finding to state, not a
+column to pad. The paragraph above is the whole rule as it applies here; `visual-rendering-core.md`
+§1 "Forward-looking blocks" states it once canonically, with the render treatments, for the two
+skills that bundle that file.
+
+**Then render the menu.** The comparison shows; `AskUserQuestion` commits. The two compose —
+this does not replace the menu, add an option to it, or change how its options are shaped.
+
+> **Reach, priced — in both directions.** This doc is bundled to `/execute`, `/pre-merge`,
+> `/shape`, `/closeout`, `/visual-recap`, and `/walk-commits`
+> (`scripts/skill-references.manifest`). Two of those are load-bearing for this section
+> specifically: `/pre-merge` Phase 4 cites the threshold at its finding disposition — the fork
+> that triggered the rule — and `/visual-recap` + `/walk-commits` hold §11's markup, whose
+> pointers back to this threshold would otherwise resolve to nothing post-install. That inbound
+> direction cost two manifest rows and this one file.
+>
+> The outbound direction — bundling the rendering core and the design doc so the other four
+> holders could render HTML — was declined: together they are an order of magnitude larger than
+> this file, loaded on every run of skills that fire this block rarely. They render the table,
+> which is why the table is the default rather than a fallback. Deliberately no line counts
+> here: an earlier draft quoted four, and three of them went stale inside the same PR that
+> wrote them, because that PR was growing the very files it was pricing.
+>
+> The fork-producing skills named above (`/design-an-interface`, `/api-design-review`,
+> `/improve-pipeline`, `/correct-course`) hold this doc not at all, so they do not see the
+> threshold. Giving it to them means bundling this file and pointing their `## Handoff`
+> sections at it. That is a separate change, deliberately not made here.
+>
+> **Falsification.** If, over the next several multi-option forks, this either never fires
+> (threshold too high) or fires on forks a sentence would have settled (too low), retune the
+> threshold once — then delete this section rather than leave it as ceremony.
+
 ## How to shape the options
 
-- **Use the platform's question tool, one question per turn.** In Claude Code, `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise present numbered options in chat and wait. This is one question (the next step), not a form — keep it consistent with the repo's [Conversational Principles](../CLAUDE.md) and the per-skill "use the platform's question tool" note.
+- **Use the platform's question tool, one question per turn.** In Claude Code, `AskUserQuestion`; in Codex, `request_user_input`; in Gemini, `ask_user`. Otherwise present numbered options in chat and wait. This is one question (the next step), not a form — keep it consistent with the repo's one-question-per-turn convention (ask one question, wait for the answer, never present a numbered or bulleted set of questions) and the per-skill "use the platform's question tool" note.
 - **Recommended step first.** Pre-surface the `Comes next by default:` step as the first/default option — Nudge's "defaults are the master lever," and Krug's *satisficing* (after Herbert Simon): people take the first reasonable option rather than weighing all of them. That is why first position works, and also why it is not a safety net — a badly worded first option gets taken anyway. Ordering never compensates for wording. Label it so the recommendation is obvious (e.g. "→ `/pre-merge` (recommended)").
 - **Keep it to ≤4 options.** `AskUserQuestion` caps options. If a handoff has more legitimate paths than fit, group the rare ones under one option or rely on the free-text "Other" hatch.
 - **Don't add an "Other / something else" option.** The platform supplies a free-text escape hatch automatically; adding one wastes a slot.

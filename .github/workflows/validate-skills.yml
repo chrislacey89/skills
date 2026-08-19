@@ -101,5 +101,8 @@ jobs:
       - name: Run selection-idiom consistency suite
         run: bash scripts/test-selection-idiom-consistency.sh
 
+      - name: Run options-comparison contract suite
+        run: bash scripts/test-options-comparison-contract.sh
+
       - name: Run documented git command contract suite
         run: bash scripts/test-documented-git-commands.sh

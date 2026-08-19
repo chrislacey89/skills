@@ -54,6 +54,7 @@ The deeper condition is that **the oracle is part of the mechanism but does not 
 - **Inverts or does not apply when:** the test asserts directly on a value it computed itself with no intermediary (`assert_eq 3 "$(add 1 2)"`). There is no oracle to mutate, and adding a "mutate the oracle" step is ceremony. It also does not apply to tests whose only meaningful failure mode genuinely *is* a crash — a smoke test that asserts a binary starts.
 - **Sibling docs:**
   - `../architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md` — the parent family, and the entry this one refines. That entry's class is *a property asserted with no mechanism behind it*, and its remedy is to build the extract-and-compare test. This is the failure one step past that remedy: the mechanism exists, runs, and is green, and still establishes nothing. Its line *"a contract suite that has only ever been observed passing is itself an unverified claim"* is correct and was followed here — the suite was mutation-tested — and it was still not enough, because the battery is itself an artifact that can be incomplete.
+  - `../architecture-decisions/sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` — names the pattern behind this entry's most striking symptom: a corrective change written in the idiom that produced the defect reintroduces it. This entry is a fourth instance falling **outside** that entry's three stated preconditions (single-site not multi-site, executable bash not restated prose, found by reasoning not by a grep sweep), which is why it is filed here rather than as another row there — and why it is evidence for promoting that entry from Pattern to Structure. See Solution.
   - `../architecture-decisions/self-review-blind-to-composition-2026-08-13.md` — supplies a second instance of its narrower Prevention rule: *"confirm the counter that test reads can distinguish the mechanism not firing from the mechanism being unable to fire. Those are different facts and only one of them is evidence."* The polarity check added as this defect's own safety net violated exactly that (see Solution), which is strong evidence the rule should be promoted from prose into a checklist item.
 
 ## Solution
@@ -99,7 +100,11 @@ assert_eq 0 "$good_end"   "oracle says good at the known-good end"
 assert_contains "$bisect_out" "$expected_bad is the first bad commit"
 ```
 
-**The safety net needed the same treatment.** The polarity pre-flight above was added to catch this defect class and shipped containing it: the first draft chained `git checkout … && grep -qx ok value.txt` into one status, on an assertion that passes when the status is non-zero. Pointing the checkout at a nonexistent ref left the suite fully green with that assertion measuring nothing. This is worth recording because it shows the rule is not obvious even to someone who has just been burned by it — the same author, in the same hour, writing the check *for* this defect, reproduced it.
+**The safety net needed the same treatment.** The polarity pre-flight above was added to catch this defect class and shipped containing it: the first draft chained `git checkout … && grep -qx ok value.txt` into one status, on an assertion that passes when the status is non-zero. Pointing the checkout at a nonexistent ref left the suite fully green with that assertion measuring nothing. The same author, in the same hour, writing the check *for* this defect, reproduced it.
+
+**That is a named pattern, not a novelty**, and the entry that names it landed the day before this one: `../architecture-decisions/sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md`, whose sharpest recorded instance is *"the artifact written specifically to prevent this defect class contained the defect class."* Its first root cause is the operative one here — *"the sweeper edits in the idiom that produced the defect … the correction and the defect are drawn from the same well."*
+
+What this instance adds is a **boundary test of that entry's Rule Scope**, which currently requires all three of: the defect is textual and multi-site, the sweep is enumerated by search, and the correction is written in the same medium as the defect. This instance satisfies none of them. It is a single-site defect in executable bash rather than restated prose, found by reasoning about an oracle rather than by a grep sweep. The mechanism still fired. That is evidence the root cause generalizes past the stated preconditions to *any* corrective change, which bears directly on that entry's own note that it is **"Level: Pattern … not yet Structure."** A fourth instance outside its declared scope is the kind of evidence that would promote it.
 
 ## Prevention
 
@@ -150,7 +155,8 @@ If the answer includes anything other than "the behavior I am claiming," the ass
 
 - PR #255 / issue #236 — the change that produced this entry
 - Issue #243 — the incident behind `CLAUDE.md` rule (b), which required the suite this entry is about
-- `../architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md` and `../architecture-decisions/self-review-blind-to-composition-2026-08-13.md` — see Rule Scope; both link back
+- `../architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md`, `../architecture-decisions/self-review-blind-to-composition-2026-08-13.md`, and `../architecture-decisions/sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` — see Rule Scope
+- PR #246 / issue #245 — landed on `prod` while this PR was open; its `sweep-commits` entry is why the safety-net observation above is framed as a scope-boundary instance of a known pattern rather than as a new finding
 
 ## Shelf Life
 

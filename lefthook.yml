@@ -31,6 +31,8 @@ pre-push:
       run: bash scripts/test-context-block-contract.sh
     selection-idiom-consistency-tests:
       run: bash scripts/test-selection-idiom-consistency.sh
+    options-comparison-contract-tests:
+      run: bash scripts/test-options-comparison-contract.sh
     documented-git-command-tests:
       run: bash scripts/test-documented-git-commands.sh
     shellcheck-all:
