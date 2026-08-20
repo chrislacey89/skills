@@ -13,7 +13,7 @@ pre-commit:
     sync-references-check:
       run: bash scripts/sync-skill-references.sh --check
     shellcheck:
-      glob: "*.sh"
+      glob: "**/*.sh"
       run: shellcheck {staged_files}
 
 pre-push:
@@ -38,4 +38,4 @@ pre-push:
     git-guardrail-tests:
       run: bash scripts/test-git-guardrails.sh
     shellcheck-all:
-      run: shellcheck scripts/*.sh git-guardrails-claude-code/scripts/*.sh
+      run: shellcheck $(git ls-files "*.sh")
