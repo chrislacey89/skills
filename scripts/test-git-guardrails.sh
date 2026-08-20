@@ -66,6 +66,19 @@ run_guard() {
     printf '%s' "$?"
 }
 
+# assert_eq <expected> <actual> <label> — plain value comparison, for the checks
+# that are not "run this command through the guard".
+assert_eq() {
+    local expected="$1" actual="$2" label="$3"
+    if [[ "$expected" == "$actual" ]]; then
+        printf '  ok   %s\n' "$label"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s\n       expected: %q\n       got:      %q\n' "$label" "$expected" "$actual"
+        fail=$((fail + 1))
+    fi
+}
+
 # assert_verdict <expected-exit> <command> <label>
 assert_verdict() {
     local expected="$1" cmd="$2" label="$3" actual
@@ -87,12 +100,21 @@ ALLOWED=0
 
 # Every backticked `git ...` span in the bullet list under one "## " heading.
 #
-# Two narrowings, both learned the hard way while writing this. The section ends
-# at the next heading of ANY level, so a "###" subsection's illustrative
-# examples are not mistaken for contract entries. And only "- " list items are
-# read, because the prose around the list discusses commands too — the sentence
-# explaining that `git push -f` was wrongly documented as blocked would
-# otherwise be extracted as a claim that it is allowed.
+# Three rules, each learned the hard way. The section ends at the next heading
+# of ANY level, so a "###" subsection's illustrative examples are not mistaken
+# for contract entries. Only list items are read, because the prose around the
+# list discusses commands too — the sentence explaining that `git push -f` was
+# wrongly documented as blocked would otherwise be extracted as a claim that it
+# is allowed. And a list item CONTINUES across wrapped lines until a blank line
+# or the next bullet, which is the rule that stops a routine markdown re-wrap
+# from silently deleting entries from the contract.
+#
+# That third rule is not hypothetical. Before it existed, wrapping the five-way
+# `git clean` bullet onto a second line dropped `git clean -df` and
+# `git clean -d -f` from the extraction, and the suite reported
+# "65 passed, 0 failed" and exit 0 while asserting nothing about either. The
+# count assertion below is the second line of defense against the same class:
+# extraction that silently returns less than the document contains.
 #
 # The headings are named here because they are the contract's public shape. If
 # either is renamed the extraction returns nothing and the guard below fires,
@@ -101,17 +123,45 @@ ALLOWED=0
 section_commands() {
     local heading="$1"
     awk -v want="$heading" '
-        $0 == want { inside = 1; next }
-        /^#/ { inside = 0 }
-        inside && /^- / { print }
+        $0 == want { inside = 1; in_item = 0; next }
+        /^#/ { inside = 0; in_item = 0 }
+        !inside { next }
+        /^[[:space:]]*$/ { in_item = 0; next }
+        /^[-*+] / { in_item = 1; print; next }
+        in_item { print }
     ' "$skill" | grep -o '`git [^`]*`' | sed 's/^`//; s/`$//'
 }
 
-mapfile -t documented_blocked < <(section_commands '## What Gets Blocked')
-mapfile -t documented_allowed < <(section_commands '## What Stays Allowed')
+# `while read` rather than `mapfile`: mapfile is a bash 4 builtin, and /bin/bash
+# on macOS is 3.2. Using it made this the only suite in scripts/ that could not
+# run on a stock Mac — it died with "unbound variable" having run no assertions.
+documented_blocked=()
+while IFS= read -r extracted_line; do
+    [ -n "$extracted_line" ] || continue
+    documented_blocked+=("$extracted_line")
+done < <(section_commands '## What Gets Blocked')
+
+documented_allowed=()
+while IFS= read -r extracted_line; do
+    [ -n "$extracted_line" ] || continue
+    documented_allowed+=("$extracted_line")
+done < <(section_commands '## What Stays Allowed')
 
 ((${#documented_blocked[@]} > 0)) || fatal "no commands found under '## What Gets Blocked' in $skill"
 ((${#documented_allowed[@]} > 0)) || fatal "no commands found under '## What Stays Allowed' in $skill"
+
+# Pin the counts. Without this the extractor can quietly return a subset and
+# every remaining assertion still passes — the failure mode is a green suite
+# that verifies less than it did yesterday, which is #227's own defect class
+# (a claim nothing executes) relocated into the test that was meant to end it.
+# Changing either documented list is expected to change these numbers; that is
+# the forcing function, not an obstacle.
+EXPECTED_BLOCKED=20
+EXPECTED_ALLOWED=10
+[ "${#documented_blocked[@]}" -eq "$EXPECTED_BLOCKED" ] || \
+    fatal "extracted ${#documented_blocked[@]} blocked forms, expected $EXPECTED_BLOCKED. If you changed '## What Gets Blocked', update EXPECTED_BLOCKED; if you did not, the extractor is dropping entries."
+[ "${#documented_allowed[@]}" -eq "$EXPECTED_ALLOWED" ] || \
+    fatal "extracted ${#documented_allowed[@]} allowed forms, expected $EXPECTED_ALLOWED. If you changed '## What Stays Allowed', update EXPECTED_ALLOWED; if you did not, the extractor is dropping entries."
 
 printf 'documented blocked forms: %d\n' "${#documented_blocked[@]}"
 printf 'documented allowed forms: %d\n' "${#documented_allowed[@]}"
@@ -178,6 +228,18 @@ assert_blocked_form 'git checkout -- .'                'pathspec after the -- se
 assert_blocked_form 'git restore -- .'                 'pathspec after the -- separator'
 assert_blocked_form 'git checkout ./'                  'trailing-slash spelling of the cwd pathspec'
 
+# Force and "the whole tree" each have spellings that carry no recognizable
+# flag. Enumerating them is what the substring matcher did; the parser must
+# recognize the concept, so these probe the reduction rather than a list.
+assert_blocked_form 'git push origin +main'            'leading + on a refspec is a force push'
+assert_blocked_form 'git push origin +HEAD:main'       'leading + on a full refspec'
+assert_blocked_form 'git checkout :/'                  'the :/ top-level magic pathspec'
+assert_blocked_form 'git restore :/'                   'the :/ top-level magic pathspec'
+assert_blocked_form 'git checkout :/.'                 'magic prefix with a dot'
+assert_blocked_form 'git checkout ./.'                 'the cwd written one character longer'
+assert_blocked_form 'git checkout -- ./'               'trailing slash after the -- separator'
+assert_blocked_form 'git restore --staged --worktree .' 'staged AND worktree does reach the files'
+
 # Leading global options sit between `git` and the subcommand.
 assert_blocked_form 'git -C /tmp/repo push -f'         'global -C before the subcommand'
 assert_blocked_form 'git --no-pager reset --hard'      'global flag before the subcommand'
@@ -222,6 +284,17 @@ assert_allowed_form 'git diff --stat'                  'a read-only command with
 # dry-run flag wins and the files survive. Allowing it keeps the guard honest
 # about what it is actually preventing.
 assert_allowed_form 'git clean -f -n'                  'dry-run neutralizes force, verified against git'
+
+# Index-only and interactive variants. The rewrite briefly blocked these: it
+# treated `restore` exactly like `checkout` and looked only at operands, so
+# unstaging was refused. Removing the old matcher's false positives was the
+# point of that rewrite, which makes a fresh one worth pinning.
+assert_allowed_form 'git restore --staged .'           'unstaging never touches the working tree'
+assert_allowed_form 'git restore --cached .'           'the --cached spelling of the same'
+assert_allowed_form 'git checkout -p .'                'patch mode prompts before discarding'
+assert_allowed_form 'git restore --patch .'            'long patch-mode spelling'
+assert_allowed_form 'git push origin main:main'        'an ordinary refspec with no leading +'
+assert_allowed_form 'git checkout .config/wt.toml'     'a dot-directory path, not the whole tree'
 
 # The guard must not choke on input that is not a git command at all.
 assert_allowed_form 'echo hello'                       'a non-git command'
@@ -297,19 +370,99 @@ done <<< "$verify_cases"
 
 # -----------------------------------------------------------------------------
 
+section "no second skill restates the blocked list"
+
+# The contract above is only enforceable where it is extracted from, so a copy
+# of the list in another skill is a claim nothing executes. init-pipeline/SKILL.md
+# had one, and it was wrong the same way #227 was — it asserted plain `git push`
+# was blocked, which it never has been. That file is the one most downstream
+# projects read, because /execute Step 0 auto-invokes /init-pipeline.
+#
+# Rather than test the other file's prose for correctness, forbid the
+# restatement: a skill that describes the guard must point at the canonical
+# lists instead of enumerating them.
+restating_files=""
+while IFS= read -r candidate; do
+    [ "$candidate" = "$skill" ] && continue
+    # A line that both talks about blocking git commands and enumerates
+    # backticked `git <verb>` forms is a restatement of the contract.
+    if grep -qiE '(block|guard)[^.]*git command' "$candidate" 2>/dev/null; then
+        if grep -iE '(block|guard)[^.]*git command' "$candidate" | grep -q '`git '; then
+            restating_files="$restating_files $candidate"
+        fi
+    fi
+done <<EOF
+$(find "$repo_root" -name SKILL.md -not -path '*/node_modules/*')
+EOF
+
+if [ -z "$restating_files" ]; then
+    printf '  ok   no other SKILL.md enumerates the blocked commands\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL these files restate the blocked list instead of pointing at it:%s\n' "$restating_files"
+    printf '       A second copy is a second thing to keep true; #227 is what that costs.\n'
+    fail=$((fail + 1))
+fi
+
+# -----------------------------------------------------------------------------
+
 section "a blocked command explains itself on stderr"
 
 # Claude only sees stderr when the hook exits non-zero, so the message is the
 # entire feedback channel. An empty one turns a deliberate block into what looks
 # like a broken tool, and the agent retries instead of stopping.
 stderr_out="$(jq -nc '{tool_input: {command: "git push -f origin main"}}' | bash "$script" 2>&1 >/dev/null)"
-if [[ "$stderr_out" == *BLOCKED* && "$stderr_out" == *"git push -f origin main"* ]]; then
-    printf '  ok   the block message names BLOCKED and echoes the command\n'
+
+# Bind the identity of the block to its stated reason in ONE assertion. Checking
+# for "BLOCKED" and the command as two independent substrings let the reason go
+# empty — every REASON= assignment could be blanked, producing
+# "...is a destructive git command ()." — and the suite still reported green.
+# That is Prevention rule 1 of
+# docs/solutions/testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md:
+# assert the answer, not the presence of its parts.
+if [[ "$stderr_out" == *"BLOCKED: 'git push -f origin main' is a destructive git command (force push"* ]]; then
+    printf '  ok   the block message names BLOCKED, the command, and a non-empty reason\n'
     pass=$((pass + 1))
 else
-    printf '  FAIL the block message is missing BLOCKED or the offending command\n       got: %q\n' "$stderr_out"
+    printf '  FAIL the block message lost BLOCKED, the command, or its reason\n       got: %q\n' "$stderr_out"
     fail=$((fail + 1))
 fi
+
+# Every blocked form must carry a reason, not just the one probed above. An
+# empty parenthetical turns a deliberate refusal into what reads as a broken
+# tool, and the agent retries instead of stopping.
+for probe_cmd in 'git reset --hard' 'git clean -fd' 'git branch -D x' 'git checkout .' 'git push origin +main'; do
+    probe_err="$(jq -nc --arg c "$probe_cmd" '{tool_input: {command: $c}}' | bash "$script" 2>&1 >/dev/null)"
+    if [[ "$probe_err" == *"destructive git command ("* && "$probe_err" != *"destructive git command ()"* ]]; then
+        printf '  ok   %-30s is refused with a non-empty reason\n' "$probe_cmd"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %-30s was refused with an empty or missing reason\n       got: %q\n' "$probe_cmd" "$probe_err"
+        fail=$((fail + 1))
+    fi
+done
+
+# -----------------------------------------------------------------------------
+
+section "the guard refuses git commands rather than failing open when jq is gone"
+
+# Without jq the command cannot be extracted at all. Reporting "nothing
+# dangerous here" would silently disarm the guard — a force push exited 0 with
+# empty stderr before this was added. Non-git input stays unaffected, so a
+# missing dependency does not halt the whole session.
+jq_stub_dir="$(mktemp -d)"
+printf '#!/bin/sh\nexit 127\n' > "$jq_stub_dir/jq"
+chmod +x "$jq_stub_dir/jq"
+
+nojq_status="$(printf '%s' '{"tool_input":{"command":"git push --force origin main"}}' \
+    | PATH="$jq_stub_dir:/usr/bin:/bin" bash "$script" >/dev/null 2>&1; printf '%s' "$?")"
+assert_eq 2 "$nojq_status" "a force push is refused when jq is unavailable"
+
+nojq_benign="$(printf '%s' '{"tool_input":{"command":"ls -la"}}' \
+    | PATH="$jq_stub_dir:/usr/bin:/bin" bash "$script" >/dev/null 2>&1; printf '%s' "$?")"
+assert_eq 0 "$nojq_benign" "a non-git command still runs when jq is unavailable"
+
+rm -rf "$jq_stub_dir"
 
 # -----------------------------------------------------------------------------
 

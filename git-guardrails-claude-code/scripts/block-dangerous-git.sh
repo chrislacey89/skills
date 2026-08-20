@@ -22,7 +22,27 @@
 set -f  # No globbing: the command is data to inspect, never a pattern to expand.
 
 INPUT=$(cat)
-COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+
+# jq is a hard dependency: without it the command cannot be extracted, and a
+# guard that cannot read its input must not report "nothing dangerous here".
+#
+# The test is whether the extraction SUCCEEDED, not whether a jq binary exists.
+# `command -v jq` answers the wrong question — a jq that is present but broken
+# passes it and then fails on the next line, which is how a force push once
+# exited 0 here with empty stderr.
+#
+# Refusing only git-looking input keeps the blast radius at the commands this
+# hook is responsible for, instead of halting every Bash call in the session.
+if ! COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null); then
+    case "$INPUT" in
+        *git*)
+            echo "BLOCKED: the git guardrail hook could not run 'jq', so this git command cannot be inspected. Install or repair jq to restore the guard." >&2
+            exit 2
+            ;;
+    esac
+    exit 0
+fi
+
 [ -n "$COMMAND" ] || exit 0
 
 REASON=""
@@ -34,6 +54,46 @@ has() {
     case "$1" in
         *" $2 "*) return 0 ;;
     esac
+    return 1
+}
+
+# has_force_refspec <operands> — true when any operand is a refspec git will
+# treat as a force update. A leading `+` is git's other spelling of --force, and
+# it arrives as an operand, so the flag check alone cannot see it.
+has_force_refspec() {
+    local word
+    for word in $1; do
+        case "$word" in
+            +*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
+# pathspec_is_everything <operands> — true when any operand names the whole
+# working tree. Recognized by reduction rather than by listing spellings: git
+# accepts `.`, `./`, `./.`, the `:/` top-level magic prefix, and `:/.`, and
+# enumerating that set is how the substring matcher this replaced kept leaking.
+# A path that merely begins with a dot (`.gitignore`) reduces to itself and is
+# left alone.
+pathspec_is_everything() {
+    local word candidate
+    for word in $1; do
+        candidate=$word
+        case "$candidate" in
+            :/*) candidate=${candidate#:/} ;;
+        esac
+        while :; do
+            case "$candidate" in
+                */.) candidate=${candidate%/.} ;;
+                */)  candidate=${candidate%/} ;;
+                *)   break ;;
+            esac
+        done
+        if [ -z "$candidate" ] || [ "$candidate" = "." ]; then
+            return 0
+        fi
+    done
     return 1
 }
 
@@ -111,6 +171,11 @@ inspect_git() {
                 REASON="force push — rewrites published history"
                 return 1
             fi
+            # `git push origin +main` is a force push with no force flag.
+            if has_force_refspec "$operands"; then
+                REASON="force push via + refspec — rewrites published history"
+                return 1
+            fi
             ;;
         reset)
             # --soft, --mixed, and --keep all leave the working tree intact.
@@ -145,11 +210,23 @@ inspect_git() {
             fi
             ;;
         checkout|restore)
-            # A pathspec of `.` discards every working-tree change at once. A
-            # path that merely starts with a dot is an ordinary file and is
-            # left alone — that over-match is what made the old matcher block
-            # `git checkout .github/workflows/ci.yml`.
-            if has "$operands" . || has "$operands" ./; then
+            # Patch mode prompts per hunk before discarding anything, so the
+            # operator is already being asked.
+            if has "$flags" -p || has "$flags" --patch; then
+                return 0
+            fi
+            # `git restore --staged .` unstages; it does not touch the working
+            # tree. Only `--worktree` alongside it reaches the files.
+            if ! has "$flags" --worktree; then
+                if has "$flags" --staged || has "$flags" --cached; then
+                    return 0
+                fi
+            fi
+            # A pathspec naming the whole tree discards every working-tree
+            # change at once. A path that merely starts with a dot is an
+            # ordinary file and is left alone — that over-match is what made
+            # the old matcher block `git checkout .github/workflows/ci.yml`.
+            if pathspec_is_everything "$operands"; then
                 REASON="discards all working-tree changes"
                 return 1
             fi
