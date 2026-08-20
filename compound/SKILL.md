@@ -9,6 +9,7 @@ sources:
     - "Software Estimation — Steve McConnell"
     - "Thinking in Bets — Annie Duke"
     - "The Fifth Discipline — Peter Senge"
+    - "The Checklist Manifesto — Atul Gawande"
 ---
 
 # Compound
@@ -267,7 +268,7 @@ If a related solution already exists:
 - **If it's a related but distinct problem:** Create the new file and add cross-references in both documents.
 - **If the existing solution is now outdated:** Update or supersede it. Never silently let stale solutions persist.
 
-**Defect clustering check.** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry with the same `problem_type`, this one is the *second* recording of a single pattern — prose was the deliverable the first time and the pattern recurred anyway. This entry ships with a test, gate, or linter rule that would catch the next instance. If no mechanism is possible, the entry states in one line why not. A third prose-only entry on the same `problem_type` is not a valid outcome.
+**Defect clustering check (DO-CONFIRM — verify before committing the entry).** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry with the same `problem_type`, this one is the *second* recording of a single pattern — prose was the deliverable the first time and the pattern recurred anyway. This entry ships with a test, gate, or linter rule that would catch the next instance. If no mechanism is possible, the entry states in one line why not. A third prose-only entry on the same `problem_type` is not a valid outcome.
 
 Name the pattern in the entry as well (e.g., "both auth integration bugs were specification errors — the PRD never addresses token refresh"). This feeds back into `/write-a-prd`'s omitted activities scan and `/shape`'s probing.
 
