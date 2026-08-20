@@ -82,11 +82,11 @@ Before writing, classify the lesson at the right level:
 
 Prefer capturing the highest level you can support with evidence. If the lesson is structural, name the feedback loop, missing feedback, or delayed effect that made the outcome likely.
 
-**Before proceeding, consider three questions** (guidance, not a gate — if the answer is unclear, proceed and let the writing process clarify):
+**Before proceeding, consider four questions:**
 
 1. **Is this genuinely novel?** Check official library docs and existing `docs/solutions/` files. If the lesson is already well-documented elsewhere, skip it or link to the existing source.
 2. **Will this still be accurate in 3 months?** If the lesson is tightly coupled to a dependency version or a temporary workaround, note that — it affects the `volatility` classification below.
-3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision. If the lesson can be fully captured in a higher-fidelity artifact, do that instead of (or in addition to) writing prose.
+3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision. If the lesson can be captured in a higher-fidelity artifact, do that instead of writing prose.
 4. **Was the process fixed?** (Bug-fix compounds only.) Was the fix a correction (removed the defect) or a workaround (suppressed the failure)? Were structurally similar patterns elsewhere in the codebase found and addressed? What process change would prevent this defect class from entering the codebase again — a stronger test, a linter rule, an assertion, a planning checklist item? If the answer is "nothing," the mechanism that produced this defect is still active.
 
 **Rabbit Hole review.** If a PRD issue exists for this feature, read its Rabbit Holes section. For each one, check: did the pre-decided resolution hold, or did it need to be revised during implementation? Rabbit Holes that bit — required a different resolution than planned, or surfaced late despite being named — are high-value compound targets. Capture the risk pattern and the *actual* resolution in `docs/solutions/` so future `/write-a-prd` sessions surface them during the completeness scan. Rabbit Holes that held as planned are less valuable to document unless the risk pattern is likely to recur in unrelated features.
@@ -267,7 +267,9 @@ If a related solution already exists:
 - **If it's a related but distinct problem:** Create the new file and add cross-references in both documents.
 - **If the existing solution is now outdated:** Update or supersede it. Never silently let stale solutions persist.
 
-**Defect clustering check.** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` has 3+ entries in the same category with the same root-cause pattern, that pattern is a systemic issue worth noting in the solution (e.g., "all three auth integration bugs were specification errors — the PRD never addresses token refresh"). This feeds back into `/write-a-prd`'s omitted activities scan and `/shape`'s probing.
+**Defect clustering check.** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry with the same `problem_type`, this one is the *second* recording of a single pattern — prose was the deliverable the first time and the pattern recurred anyway. This entry ships with a test, gate, or linter rule that would catch the next instance. If no mechanism is possible, the entry states in one line why not. A third prose-only entry on the same `problem_type` is not a valid outcome.
+
+Name the pattern in the entry as well (e.g., "both auth integration bugs were specification errors — the PRD never addresses token refresh"). This feeds back into `/write-a-prd`'s omitted activities scan and `/shape`'s probing.
 
 ### Phase 5: Commit
 
