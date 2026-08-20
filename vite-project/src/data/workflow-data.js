@@ -105,7 +105,7 @@ export const STEPS = [
     source: "Compound Eng.",
     time: "5-10 min",
     summary: "Capture what was learned",
-    detail: "Pre-filter: is this novel, will it last, could it be a test/linter rule instead of prose, and was the process fixed? Reviews PRD Rabbit Holes against actual outcomes — ones that bit are high-value compound targets. For bug fixes, classifies defect origin phase and splits prevention into code-level vs. process-level. Flags systemic patterns when 3+ solutions share the same root cause. Writes one YAML-frontmatted file to docs/solutions/ with volatility classification and a Shelf Life section.",
+    detail: "Pre-filter: is this novel, will it last, could it be a test/linter rule instead of prose, and was the process fixed? Reviews PRD Rabbit Holes against actual outcomes — ones that bit are high-value compound targets. For bug fixes, classifies defect origin phase and splits prevention into code-level vs. process-level. On a second entry naming a pattern already recorded, ships a mechanism rather than more prose. Writes one YAML-frontmatted file to docs/solutions/ with volatility classification and a Shelf Life section.",
     produces: "docs/solutions/<category>/<slug>.md (with volatility + shelf life)",
     consumes: "Git history, issue thread, your key lessons",
     stateLocation: "docs/solutions/ (permanent)",

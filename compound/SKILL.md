@@ -87,7 +87,7 @@ Prefer capturing the highest level you can support with evidence. If the lesson 
 
 1. **Is this genuinely novel?** Check official library docs and existing `docs/solutions/` files. If the lesson is already well-documented elsewhere, skip it or link to the existing source.
 2. **Will this still be accurate in 3 months?** If the lesson is tightly coupled to a dependency version or a temporary workaround, note that — it affects the `volatility` classification below.
-3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision. If the lesson can be captured in a higher-fidelity artifact, do that instead of writing prose.
+3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision. If the lesson can be captured in a higher-fidelity artifact, do that instead of writing prose. This is about *carrying the lesson* — Phase 4's clustering check asks a different question, whether a mechanism should *catch the next instance*, and a recurrence can require one even though the lesson itself needed prose.
 4. **Was the process fixed?** (Bug-fix compounds only.) Was the fix a correction (removed the defect) or a workaround (suppressed the failure)? Were structurally similar patterns elsewhere in the codebase found and addressed? What process change would prevent this defect class from entering the codebase again — a stronger test, a linter rule, an assertion, a planning checklist item? If the answer is "nothing," the mechanism that produced this defect is still active.
 
 **Rabbit Hole review.** If a PRD issue exists for this feature, read its Rabbit Holes section. For each one, check: did the pre-decided resolution hold, or did it need to be revised during implementation? Rabbit Holes that bit — required a different resolution than planned, or surfaced late despite being named — are high-value compound targets. Capture the risk pattern and the *actual* resolution in `docs/solutions/` so future `/write-a-prd` sessions surface them during the completeness scan. Rabbit Holes that held as planned are less valuable to document unless the risk pattern is likely to recur in unrelated features.
@@ -268,9 +268,11 @@ If a related solution already exists:
 - **If it's a related but distinct problem:** Create the new file and add cross-references in both documents.
 - **If the existing solution is now outdated:** Update or supersede it. Never silently let stale solutions persist.
 
-**Defect clustering check (DO-CONFIRM — verify before committing the entry).** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. Two entries reading "a claim asserted as holding by construction is maintained by hand" and "a rule promoted from advisory to executed keeps evidence adequate only for advice" share no words and are the same pattern.
+**Defect clustering check (DO-CONFIRM — verify before committing the entry).** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. For a worked pair, this repo's own `staleness-gate-intermediate-writers` (`problem_type: staleness gate invalidated by an unenumerated intermediate writer`) and `by-construction-claims-need-a-mechanism` (`problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it`) share not one word. The second entry names them as the same pattern anyway — *"a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism"* — which is the judgment this check is asking you to make, and which no string match would ever reach.
 
-This entry ships with a test, gate, or linter rule that would catch the next instance. If none of the four mechanisms Q4 names — a stronger test, a linter rule, an assertion, a planning checklist item — can be built here, the entry states in one line which was closest and what blocked it. A third prose-only entry on the same pattern is not a valid outcome.
+This entry ships with a mechanism that would catch the next instance — one of the four Q4 names: a test, a linter rule, an assertion, or a planning checklist item. If none of the four can be built here, the entry states in one line which came closest and what blocked it. A third prose-only entry on the same pattern is not a valid outcome.
+
+Record the judgment either way. Deciding that an existing entry names a *different* pattern is also an exit from this check, and it is the cheaper one — so it leaves a line too: name the nearest entry and say why it is not the same pattern. An escape that has to be written down is one a reader can argue with; an escape taken silently is the shape this whole check exists to close.
 
 Name the pattern in the entry as well (e.g., "both auth integration bugs were specification errors — the PRD never addresses token refresh"). This feeds back into `/write-a-prd`'s omitted activities scan and `/shape`'s probing.
 
@@ -280,12 +282,12 @@ Name the pattern in the entry as well (e.g., "both auth integration bugs were sp
 
 ```bash
 git add docs/solutions/<category>/<filename>.md
-git add <path/to/mechanism>   # the test, gate, or linter rule, when Phase 4 required one
+git add <path/to/mechanism>   # Phase 4's mechanism — omit when Phase 4 did not fire, or recorded that none could be built
 git commit -m "docs: compound — <brief description of what was learned>"
 git push        # in-PR path: push so the entry joins the open PR for review
 ```
 
-**Stage the mechanism with the entry.** When Phase 4's clustering check required a test, gate, or linter rule, it is part of this commit — an entry that claims a mechanism ships with it, committed while the mechanism sits unstaged in the working tree, is the same unenforced-claim shape Phase 4 exists to close. Drop the second line only when Phase 4 did not fire or recorded that no mechanism was possible.
+An entry claiming a mechanism, committed while that mechanism sits unstaged, is the unenforced-claim shape Phase 4 exists to close.
 
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
 
@@ -297,7 +299,7 @@ Tell the user what was captured, then print the closing block that matches the p
 
 ```
 Compounded onto PR #<n>: docs/solutions/<category>/<filename>.md
-Mechanism: <path/to/mechanism>   [or: none possible — <the one-line reason from the entry>]
+Mechanism: <path/to/mechanism>   [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
 
 Key lesson: [One sentence summary of the most important takeaway]
 
@@ -311,7 +313,7 @@ This rides the PR — reviewed and merged with the code that taught it — and w
 
 ```
 Compounded: docs/solutions/<category>/<filename>.md
-Mechanism: <path/to/mechanism>   [or: none possible — <the one-line reason from the entry>]
+Mechanism: <path/to/mechanism>   [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
 
 Key lesson: [One sentence summary of the most important takeaway]
 
