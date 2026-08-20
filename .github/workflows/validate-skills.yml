@@ -76,7 +76,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
 
       - name: Lint shell scripts
-        run: shellcheck scripts/*.sh
+        run: shellcheck scripts/*.sh git-guardrails-claude-code/scripts/*.sh
 
   script-tests:
     runs-on: ubuntu-latest
@@ -106,3 +106,6 @@ jobs:
 
       - name: Run documented git command contract suite
         run: bash scripts/test-documented-git-commands.sh
+
+      - name: Run git guardrail contract suite
+        run: bash scripts/test-git-guardrails.sh
