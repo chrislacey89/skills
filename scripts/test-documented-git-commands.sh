@@ -34,6 +34,12 @@
 #      draft's oracle answered "good" on every revision, so the bisect half
 #      verified nothing at all — and every mutation of the *command* still went
 #      red, which is what made it look verified.
+#   3. Match git's own prose loosely; match the fixture's prose exactly. An
+#      assertion on text *git* emits must tolerate wording drift across git
+#      versions (see the `'?bad'?` regex below, added after this suite passed on
+#      git 2.43 and failed on 2.55 for every PR in the repo). An assertion on
+#      text the *fixture* planted — the commit subjects around line 230 — is a
+#      string this suite controls, so it stays exact.
 
 set -euo pipefail
 
@@ -63,6 +69,17 @@ assert_contains() {
         pass=$((pass + 1))
     else
         printf '  FAIL %s\n       missing: %q\n       in:      %q\n' "$label" "$needle" "$haystack"
+        fail=$((fail + 1))
+    fi
+}
+
+assert_matches() {
+    local haystack="$1" pattern="$2" label="$3"
+    if [[ "$haystack" =~ $pattern ]]; then
+        printf '  ok   %s\n' "$label"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s\n       no match: %q\n       in:      %q\n' "$label" "$pattern" "$haystack"
         fail=$((fail + 1))
     fi
 }
@@ -368,8 +385,18 @@ assert_eq 0 "$reset_status" "the skill's 'git bisect reset' line is a valid invo
 # both pass while git names a different commit: the planted SHA appears in an
 # intermediate "Bisecting: ... [<sha>]" checkout line, and the phrase attaches
 # to whatever git actually concluded. That is precisely how this suite reported
-# a wrong answer as green.
-assert_contains "$bisect_out" "$expected_bad is the first bad commit" \
+# a wrong answer as green. The regex below keeps that binding — the SHA and the
+# phrase must be adjacent in one line, never matched independently.
+#
+# `'?bad'?` because git's wording of this line is not stable across versions:
+# git 2.43 prints `<sha> is the first bad commit`, git 2.55 prints
+# `<sha> is the first 'bad' commit` (the term is now quoted, since `bad` is a
+# renameable bisect term). Pinning either spelling makes the suite pass on one
+# git and fail on the other — which is what it did: green on 2.43 locally,
+# red on 2.55 in CI, for every PR in the repo until this fix. That is CLAUDE.md
+# rule (a) — do not re-author a third-party tool's output — applied to a suite
+# whose own purpose is enforcing rule (a) one layer up.
+assert_matches "$bisect_out" "$expected_bad is the first '?bad'? commit" \
     "bisect names the planted regression commit as the first bad commit"
 
 # -----------------------------------------------------------------------------
