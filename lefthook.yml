@@ -35,5 +35,7 @@ pre-push:
       run: bash scripts/test-options-comparison-contract.sh
     documented-git-command-tests:
       run: bash scripts/test-documented-git-commands.sh
+    compound-clustering-single-source-tests:
+      run: bash scripts/test-compound-clustering-single-source.sh
     shellcheck-all:
       run: shellcheck scripts/*.sh

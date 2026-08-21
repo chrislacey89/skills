@@ -106,3 +106,6 @@ jobs:
 
       - name: Run documented git command contract suite
         run: bash scripts/test-documented-git-commands.sh
+
+      - name: Run compound clustering single-source suite
+        run: bash scripts/test-compound-clustering-single-source.sh
