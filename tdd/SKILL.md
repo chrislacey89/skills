@@ -11,6 +11,7 @@ sources:
     - "Extreme Programming Explained — Kent Beck"
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
     - "Introduction to Software Testing — Ammann & Offutt"
+    - "Domain Modeling Made Functional — Scott Wlaschin"
 ---
 
 # Test-Driven Development
@@ -74,7 +75,7 @@ Before writing any code:
 - [ ] Confirm with user which behaviors to test (prioritize)
 - [ ] Identify opportunities for [deep modules](deep-modules.md) (small interface, deep implementation)
 - [ ] Classify code under test using the [code classification quadrant](code-classification.md): domain model → unit test, controller → integration test, trivial → skip, overcomplicated → refactor first
-- [ ] Design interfaces for [testability](interface-design.md)
+- [ ] Design interfaces for [testability](interface-design.md), including which preconditions belong in the *type* rather than in a runtime check — [interface-design.md](interface-design.md) § *Make an illegal input unconstructable, not merely detectable*
 - [ ] List the behaviors to test (not implementation steps)
 - [ ] Partition the input domain into characteristics and blocks (see below)
 - [ ] Get user approval on the plan
