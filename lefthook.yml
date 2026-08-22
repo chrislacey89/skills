@@ -37,5 +37,7 @@ pre-push:
       run: bash scripts/test-documented-git-commands.sh
     compound-clustering-single-source-tests:
       run: bash scripts/test-compound-clustering-single-source.sh
+    q4-mechanism-name-tests:
+      run: bash scripts/test-q4-mechanism-names.sh
     shellcheck-all:
       run: shellcheck scripts/*.sh

@@ -109,3 +109,6 @@ jobs:
 
       - name: Run compound clustering single-source suite
         run: bash scripts/test-compound-clustering-single-source.sh
+
+      - name: Run Q4 mechanism-name contract suite
+        run: bash scripts/test-q4-mechanism-names.sh
