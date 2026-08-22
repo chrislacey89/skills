@@ -28,14 +28,25 @@
 #   4. The pack-level name (the one that points at another repo) appears in
 #      both lists — it is the member most likely to be dropped from one site,
 #      being the only one with no downstream artifact behind it.
-#   5. Its ownership guard is declared exactly once, and Phase 6's two report
+#   5. Its POSITION in the list matches every ordinal the prose spends on it —
+#      the guard heading and Phase 5's staging exemption. Pinning the count
+#      alone left those hand-maintained: adding a sixth name and updating both
+#      number-words kept the suite green while the ordinals silently began
+#      naming a different member, which would scope the ownership guard to the
+#      wrong mechanism and exempt one that does need staging.
+#   6. Its ownership guard is declared exactly once, and Phase 6's two report
 #      blocks can represent it. A mechanism the report cannot print is the
 #      "Phase 5 was staging the prose and not the mechanism" defect (#257).
+#   7. Phase 5 still carries the DO-CONFIRM that verifies a cited pack-level
+#      issue actually exists. See that section for why this is a weaker pin
+#      than the rest and why it is the honest ceiling here.
 #
 # Deliberately NOT pinned: the wording of the names. Q4 says "a stronger test"
 # where Phase 4 says "a test"; forcing those to match would be a false
-# uniformity, and a suite that forbids legitimate rewording gets deleted. Only
-# the count, the pack-level member, and the report states are pinned.
+# uniformity, and a suite that forbids legitimate rewording gets deleted. Nor is
+# WHICH name sits at a non-pack position — swapping "an assertion" for "a
+# fixture" at one site while the count holds stays green. That is a disclosed
+# limit, not an oversight: pinning it means pinning the wording.
 #
 # PARSING NOTE. Each list is read to its sentence terminator — "?" for Q4, the
 # first ". " for Phase 4 — and split on ", ". A name containing ", " or ". "
@@ -68,11 +79,24 @@ bad() { printf '  FAIL %s\n' "$1"; if [ -n "${2:-}" ]; then printf '       %s\n'
 
 fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 2; }
 
+# Two tables, because the prose uses two registers: Phase 4 counts the list with
+# a CARDINAL ("the five Q4 names"), while the guard heading and Phase 5's staging
+# exemption pick a member with an ORDINAL ("The fifth name is scoped by...").
+# Feeding an ordinal to the cardinal table returns empty, which reads as "could
+# not parse" rather than "mismatch" — a false red that hides the real assertion.
 word_to_int() {
     case "$1" in
         two) echo 2 ;; three) echo 3 ;; four) echo 4 ;; five) echo 5 ;;
         six) echo 6 ;; seven) echo 7 ;; eight) echo 8 ;; nine) echo 9 ;;
         ten) echo 10 ;; *) echo "" ;;
+    esac
+}
+
+ordinal_to_int() {
+    case "$1" in
+        second) echo 2 ;; third) echo 3 ;; fourth) echo 4 ;; fifth) echo 5 ;;
+        sixth) echo 6 ;; seventh) echo 7 ;; eighth) echo 8 ;; ninth) echo 9 ;;
+        tenth) echo 10 ;; *) echo "" ;;
     esac
 }
 
@@ -88,12 +112,21 @@ word_to_int() {
 # real list happens to be that long — which is exactly when nobody would look.
 # Up here there is no parsed count in scope for it to launder.
 section "the oracle's number table (self-check)"
-for expect in two:2 four:4 five:5 ten:10; do
+# EVERY entry, not a sample. A loop over four of the nine left five reachable
+# labels unpinned, and laundering one of those turned a genuine 10-passed/1-failed
+# drift into a full 11-passed green — verified, not theorized. A self-check that
+# covers part of its table states a property it does not have.
+for expect in two:2 three:3 four:4 five:5 six:6 seven:7 eight:8 nine:9 ten:10; do
     if [ "$(word_to_int "${expect%%:*}")" != "${expect##*:}" ]; then
         fatal "word_to_int(\"${expect%%:*}\") is not ${expect##*:} — the oracle's number table is wrong or no longer constant."
     fi
 done
-ok "constant and correct: two/four/five/ten"
+for expect in second:2 third:3 fourth:4 fifth:5 sixth:6 seventh:7 eighth:8 ninth:9 tenth:10; do
+    if [ "$(ordinal_to_int "${expect%%:*}")" != "${expect##*:}" ]; then
+        fatal "ordinal_to_int(\"${expect%%:*}\") is not ${expect##*:} — the oracle's ordinal table is wrong or no longer constant."
+    fi
+done
+ok "constant and correct: cardinals two..ten and ordinals second..tenth"
 
 [ -f "$compound_skill" ] || fatal "$compound_skill not found. The skill moved, or this suite is stale."
 
@@ -181,6 +214,90 @@ for pair in "Q4:$q4_list" "Phase 4:$p4_list"; do
             "a lesson whose preventing change belongs to the pack has nothing legal to become again — the #266 defect"
     fi
 done
+
+# -----------------------------------------------------------------------------
+section "the pack-level name's ordinal is constructed, not hand-maintained"
+
+# The count agreement above says HOW MANY names there are and nothing about WHICH
+# one is the pack-level member. Six ordinal claims elsewhere ("The fifth name is
+# scoped by ownership", "The fifth Q4 name has nothing to stage", plus CLAUDE.md,
+# SYSTEM-OVERVIEW.md and its four synced copies) all name a position. Adding a
+# sixth mechanism and updating both number-words leaves every one of those stale
+# while this suite stays green — verified. Deriving the ordinal from the list is
+# what turns those claims from a hand-maintained cross-reference into a
+# constructed one, which is the whole point of the file.
+pack_index() {
+    split_names "$1" | grep -n -F -- "$pack_name_token" | head -1 | cut -d: -f1
+}
+
+q4_idx="$(pack_index "$q4_list")"
+p4_idx="$(pack_index "$p4_list")"
+
+if [ -z "$q4_idx" ] || [ -z "$p4_idx" ]; then
+    bad "the pack-level name has no position in one of the lists" "Q4:'$q4_idx' Phase 4:'$p4_idx'"
+elif [ "$q4_idx" = "$p4_idx" ]; then
+    ok "the pack-level name is at position $q4_idx in both lists"
+else
+    bad "the pack-level name sits at different positions in the two lists" \
+        "Q4 position $q4_idx, Phase 4 position $p4_idx — the ordinal prose below can only match one"
+fi
+
+# The ordinal word used in the guard heading must be that position.
+guard_line="$(grep -F -- "$guard_marker" "$compound_skill" | head -1 || true)"
+guard_ord="$(printf '%s' "$guard_line" | sed -n 's/.*\*\*The \([a-z]*\) name is scoped.*/\1/p')"
+guard_n="$(ordinal_to_int "$guard_ord")"
+if [ -z "$guard_n" ]; then
+    bad "could not read the ordinal in the ownership guard heading" "got: \"$guard_ord\""
+elif [ "$guard_n" = "$q4_idx" ]; then
+    ok "the guard heading says \"$guard_ord\" and the pack-level name is at position $q4_idx"
+else
+    bad "the guard heading says \"$guard_ord\" but the pack-level name is at position $q4_idx" \
+        "the guard now scopes whichever name landed there instead of the pack-level one"
+fi
+
+# Phase 5's staging exemption carries the same ordinal and the same failure mode:
+# attached to the wrong name it exempts a mechanism that DOES need staging.
+stage_line="$(grep -F -- 'Q4 name has nothing to stage' "$compound_skill" | head -1 || true)"
+if [ -z "$stage_line" ]; then
+    bad "Phase 5's staging exemption for the pack-level name is missing" \
+        "without it, the fifth name has no stated equivalent of staging"
+else
+    stage_ord="$(printf '%s' "$stage_line" | sed -n 's/.*The \([a-z]*\) Q4 name has nothing to stage.*/\1/p')"
+    stage_n="$(ordinal_to_int "$stage_ord")"
+    if [ -z "$stage_n" ]; then
+        bad "could not read the ordinal in Phase 5's staging exemption" "got: \"$stage_ord\""
+    elif [ "$stage_n" = "$q4_idx" ]; then
+        ok "Phase 5's staging exemption says \"$stage_ord\" and matches position $q4_idx"
+    else
+        bad "Phase 5's staging exemption says \"$stage_ord\" but the pack-level name is at position $q4_idx" \
+            "it would exempt a mechanism that does need staging — an inversion of Phase 5's rule"
+    fi
+fi
+
+# -----------------------------------------------------------------------------
+section "Phase 5 verifies the filing instead of asserting it"
+
+# The one claim this whole change rests on — "the pack-level issue was filed" —
+# is the one the suite cannot assert directly: the citation lives in a DOWNSTREAM
+# repo's docs/solutions/ entry, which this repo's CI has no way to read. So the
+# check runs where the claim is made (a DO-CONFIRM in Phase 5) and what is pinned
+# here is that the check is still there. That is a weaker guarantee than the
+# assertions above, and naming the weakness is the point: an unpinned DO-CONFIRM
+# is one deletion away from the prose-only outcome the rule forbids.
+filing_check_cmd='gh issue view -R chrislacey89/skills'
+if grep -qF -- "$filing_check_cmd" "$compound_skill"; then
+    ok "Phase 5 carries the filing-verification command"
+else
+    bad "Phase 5 has no command verifying the cited pack-level issue exists" \
+        "\"the issue was filed\" is then a sentence, which is what this mechanism exists to stop being"
+fi
+
+if grep -qF -- 'Pack-level filing check (DO-CONFIRM' "$compound_skill"; then
+    ok "the filing check is marked DO-CONFIRM"
+else
+    bad "the filing check is not marked DO-CONFIRM" \
+        "the repo's other verify-before-commit rules carry the marker; an unmarked one reads as advisory"
+fi
 
 # -----------------------------------------------------------------------------
 section "the ownership guard is declared once and the report can print it"
