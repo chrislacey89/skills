@@ -40,6 +40,13 @@
 #   7. Phase 5 still carries the DO-CONFIRM that verifies a cited pack-level
 #      issue actually exists. See that section for why this is a weaker pin
 #      than the rest and why it is the honest ceiling here.
+#   8. The filing-owner gate and the anonymization contract are both present.
+#      These are the confidentiality half: the fifth mechanism is the only one
+#      that moves words OUT of the repo that learned the lesson, a local gh
+#      account guard routes identity rather than content and so does not stop
+#      it, and the body is a narrative about the work rather than a copy of
+#      its code. Both are prose an agent applies — pinning their presence is
+#      what stops a future edit from quietly deleting the boundary.
 #
 # Deliberately NOT pinned: the wording of the names. Q4 says "a stronger test"
 # where Phase 4 says "a test"; forcing those to match would be a false
@@ -272,6 +279,120 @@ else
         bad "Phase 5's staging exemption says \"$stage_ord\" but the pack-level name is at position $q4_idx" \
             "it would exempt a mechanism that does need staging — an inversion of Phase 5's rule"
     fi
+fi
+
+# -----------------------------------------------------------------------------
+section "filing cannot cross a repo boundary it was not permitted to cross"
+
+# WHY THIS IS PINNED. Four of the five mechanisms stay inside the repo that
+# learned the lesson. The fifth moves words OUT of it, into a public repo. A
+# local `gh` account guard does not stop that and is not meant to: it routes
+# IDENTITY, so a filing from a work repo resolves correctly to the personal
+# account and therefore SUCCEEDS. Verified against this machine's guard from
+# three work checkouts — all three resolved to the personal account rather
+# than refusing. The guard doing its job is what makes the write land.
+#
+# So the confidentiality boundary has to live here, in the skill, and it has to
+# be an ALLOWLIST. The tempting inversion — block the owners known to be work —
+# admits a client org onboarded last week, which is precisely the repo whose
+# confidentiality posture is least established. Fail closed on unknown.
+
+if grep -qF -- 'Filing-owner gate (DO-CONFIRM' "$compound_skill"; then
+    ok "the filing-owner gate is present and marked DO-CONFIRM"
+else
+    bad "no filing-owner gate before the outbound filing step" \
+        "the fifth mechanism would file from any repo it happens to run in, including a client's"
+fi
+
+# The gate must resolve the owner from the repo, not trust an assertion about it.
+if grep -qF -- 'git remote get-url origin' "$compound_skill"; then
+    ok "the gate derives the owner from origin"
+else
+    bad "the gate names no command that resolves the current repo's owner" \
+        "an unresolved gate is a gate an agent satisfies by assuming it passed"
+fi
+
+# The allowlist must be a fenced list, and it must fail closed. Pin the
+# fail-closed sentence rather than the list's contents — owners are expected to
+# be added over time, and pinning them would make a legitimate edit turn the
+# suite red.
+if grep -qF -- 'Fail closed on unknown.' "$compound_skill"; then
+    ok "the gate states the fail-closed direction explicitly"
+else
+    bad "the gate does not say what happens for an unrecognized owner" \
+        "silence there reads as permission, which is the wrong default for an outbound write"
+fi
+
+if grep -qF -- 'the fifth name is unavailable' "$compound_skill"; then
+    ok "a non-allowlisted owner has a stated fallback"
+else
+    bad "no stated fallback when the owner is not permitted" \
+        "without one, a blocked filing has no defined outcome and the lesson is silently dropped"
+fi
+
+# The allowlist must be MACHINE-EXTRACTABLE, which is not the same as present.
+# The gate subsection holds several fenced blocks, so "the list is the code
+# block below" is ambiguous — an extractor that guesses by position pulls prose
+# instead, and then every owner fails the check including the permitted ones.
+# That is a fail-OPEN direction for the human reading the result ("the gate
+# seems broken, skip it"), so the markers are pinned rather than assumed.
+# This suite mis-parsed it exactly that way on first run, which is why it is here.
+# Both markers are asserted independently. `sed -n '/start/,/end/p'` runs to
+# EOF when the END pattern is missing, so the extraction stays NON-EMPTY and a
+# presence-only check passes while silently returning the rest of the file.
+# That mutation survived the first version of this assertion — the same
+# partial-coverage shape recorded in
+# docs/solutions/testing-patterns/partial-oracle-selfcheck-2026-08-22.md,
+# reproduced inside the check written after it. Hence: both ends, and a
+# sanity bound on the size of what came back.
+allow_start="$(grep -c 'filing-allowlist:start' "$compound_skill" || true)"
+allow_end="$(grep -c 'filing-allowlist:end' "$compound_skill" || true)"
+allow_block="$(sed -n '/filing-allowlist:start/,/filing-allowlist:end/p' "$compound_skill" \
+    | sed '/```/d;/filing-allowlist/d' | awk 'NF' || true)"
+allow_lines="$(printf '%s' "$allow_block" | grep -c . || true)"
+
+if [ "$allow_start" != "1" ] || [ "$allow_end" != "1" ]; then
+    bad "the allowlist markers are not a matched pair (start=$allow_start end=$allow_end)" \
+        "an unterminated range extracts to EOF and still looks non-empty — the failure this check exists to catch"
+elif [ -z "$allow_block" ]; then
+    bad "the filing allowlist is empty between its markers" \
+        "expected a fenced list of permitted owners"
+elif [ "$allow_lines" -gt 20 ]; then
+    bad "the allowlist extraction returned $allow_lines lines — that is prose, not a list of owners" \
+        "the markers are probably mispositioned; a gate that extracts prose fails every owner including the permitted ones"
+else
+    ok "the allowlist extracts cleanly between matched markers ($allow_lines owner(s))"
+fi
+
+
+# -----------------------------------------------------------------------------
+section "what crosses is anonymized"
+
+# The gate decides WHETHER a filing may happen; this decides WHAT travels. Both
+# are needed: a permitted repo can still carry a client's identifiers, and the
+# issue body is a narrative about the work rather than a copy of its code.
+if grep -qF -- 'Write the body anonymized' "$compound_skill"; then
+    ok "the body contract requires anonymization"
+else
+    bad "the filing procedure does not require an anonymized body" \
+        "the body describes what was being built and why the pipeline missed it — that is the leak surface, not the code"
+fi
+
+if grep -qF -- 'Do not name' "$compound_skill"; then
+    ok "the contract enumerates what must not be named"
+else
+    bad "the anonymization rule names no specifics" \
+        "\"be careful\" is not a contract; the list of what to strip is what makes it checkable by a reader"
+fi
+
+# The evidence-pointer rule is the one most likely to be dropped as pedantry,
+# and it is the one that leaks by construction: a docs/solutions/ path is a
+# filename from a repo the reader cannot open.
+if grep -qF -- "Do not cite this entry's path as the evidence" "$compound_skill"; then
+    ok "the contract forbids citing the local entry path as evidence"
+else
+    bad "the contract still allows citing this entry's path in the filed issue" \
+        "that path proves nothing to a reader without access and identifies the work to everyone else"
 fi
 
 # -----------------------------------------------------------------------------

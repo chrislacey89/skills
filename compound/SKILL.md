@@ -96,7 +96,31 @@ Prefer capturing the highest level you can support with evidence. If the lesson 
 
 **The fifth name is scoped by ownership, not by difficulty.** The first four are artifacts of *this* codebase; the fifth exists because some preventing changes are not — they are changes to a skill's prose, gate, handoff, or contract test in `chrislacey89/skills`, which no downstream artifact can carry at all. That, and only that, is when the fifth name qualifies. It does **not** qualify because the first four are hard, expensive, or unclear here: that is the compliance exit #257 deliberately left closed, and "I could not build one" still resolves the way it always did — by naming in the entry which of the four came closest and what blocked it.
 
-When it does qualify, **filing is the mechanism, and `/compound` files it** — the prescription reaching this repo is the artifact, not a sentence recommending that someone carry it there. First check for overlap and comment on the existing issue rather than filing a new one; a new outbound channel into a backlog is only worth having if it does not fill with restatements.
+##### Filing-owner gate (DO-CONFIRM — check before writing anything outbound)
+
+**Filing moves words out of the repo you are standing in, into a public one.** That is a different act from every other mechanism in the list — a test, a linter rule, an assertion, and a checklist item all stay put. So before composing a body, confirm the current repo's owner is one you are permitted to file *from*:
+
+```bash
+git remote get-url origin | sed -E 's#(git@[^:]+:|https://[^/]+/)([^/]+)/.*#\2#'
+```
+
+Compare it against the allowlist below. **The allowlist is the whole gate — an owner that is not on it is not permitted, including an owner you do not recognize.** Do not invert this into "block the owners I know are work": a client org that was onboarded last week is on nobody's list yet, so a denylist admits exactly the repo with the least-known confidentiality posture. Fail closed on unknown.
+
+<!-- filing-allowlist:start -->
+```text
+chrislacey89
+```
+<!-- filing-allowlist:end -->
+
+The markers around that fence are load-bearing: this subsection contains several fenced blocks, so "the list is the code block below" is ambiguous to anything reading mechanically — a reader that guesses wrong extracts prose and every owner then fails the check. Match the markers, not the position.
+
+Add an owner to that list only as a deliberate, reviewed edit — one line, offline, greppable. A public repo you contribute to qualifies once you name it; it does **not** qualify merely for being public. Visibility is a mutable remote property, a public fork can front a private parent, and — the reason that matters here — *what gets filed is a narrative about the work, not the repo's code*. Public source and a confidential engagement around it is an ordinary combination, and "we hit this while building X for Y" leaks the relationship even when every line is world-readable.
+
+**When the owner is not on the allowlist, the fifth name is unavailable.** Fall back to the behavior that predates this mechanism: record the prescription in the entry's Prevention → Process-level slot, recommend `/improve-pipeline`, and let a human carry it across. The lesson is not lost; it just does not travel automatically.
+
+##### Composing and filing
+
+When both the ownership guard and the filing-owner gate pass, **filing is the mechanism, and `/compound` files it** — the prescription reaching this repo is the artifact, not a sentence recommending that someone carry it there. First check for overlap and comment on the existing issue rather than filing a new one; a new outbound channel into a backlog is only worth having if it does not fill with restatements.
 
 ```bash
 gh issue list -R chrislacey89/skills --state all --search "<pipeline area> <failure-mode keywords>"
@@ -105,7 +129,15 @@ gh issue create -R chrislacey89/skills --title "[improve-pipeline] <pipeline are
 
 `--title` and `--body*` are required, not stylistic: `gh issue create` with neither errors out under any non-interactive runner, which is every AFK path this mechanism is meant to survive.
 
-Keep it short. Name the pack file the change targets, what the pipeline did and should have done, and this entry's path as the evidence. This is a proposal stub, not a worked proposal — `/improve-pipeline` is what develops one, and the `/improve-pipeline` recommendation later in this phase still stands: recommend it, do not invoke it. **Cite the issue number in the entry.** An uncited filing is prose again: the entry names `#N`, or the fifth name was not used.
+**Write the body anonymized, and treat that as part of the contract rather than good manners.** The gate above decides *whether* you may file; this decides *what crosses*. Describe the incident's shape, not its subject:
+
+- **Name** the pack file the change targets, the pipeline step that missed it, and what it should have done instead.
+- **Do not name** the downstream repo, its owner, its client, its paths, its identifiers, or its issue and PR numbers. Characterize it — *"a downstream TypeScript web/page-analysis repo"* — the way #266 did, which is the worked example: it opens `Triggering repo: anonymized` and records that the source was *deliberately stripped of identifiers*.
+- **Do not cite this entry's path as the evidence.** A `docs/solutions/…` path is a filename from a repo the reader may have no access to, so it proves nothing to them and identifies the work to everyone else. Carry the reasoning across instead; the entry stays home.
+
+The pack file and the failure shape are what make a proposal actionable here. Everything the anonymization rule strips is detail that was only ever legible in the repo it came from.
+
+Keep it short. This is a proposal stub, not a worked proposal — `/improve-pipeline` is what develops one, and the `/improve-pipeline` recommendation later in this phase still stands: recommend it, do not invoke it. **Cite the issue number in the entry.** An uncited filing is prose again: the entry names `#N`, or the fifth name was not used.
 
 **Rabbit Hole review.** If a PRD issue exists for this feature, read its Rabbit Holes section. For each one, check: did the pre-decided resolution hold, or did it need to be revised during implementation? Rabbit Holes that bit — required a different resolution than planned, or surfaced late despite being named — are high-value compound targets. Capture the risk pattern and the *actual* resolution in `docs/solutions/` so future `/write-a-prd` sessions surface them during the completeness scan. Rabbit Holes that held as planned are less valuable to document unless the risk pattern is likely to recur in unrelated features.
 
