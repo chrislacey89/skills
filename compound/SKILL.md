@@ -88,7 +88,17 @@ Prefer capturing the highest level you can support with evidence. If the lesson 
 1. **Is this genuinely novel?** Check official library docs and existing `docs/solutions/` files. If the lesson is already well-documented elsewhere, skip it or link to the existing source.
 2. **Will this still be accurate in 3 months?** If the lesson is tightly coupled to a dependency version or a temporary workaround, note that — it affects the `volatility` classification below.
 3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision. If the lesson can be captured in a higher-fidelity artifact, do that instead of writing prose. This is about *carrying the lesson* — Phase 4's clustering check asks a different question, whether a mechanism should *catch the next instance*, and a recurrence can require one even though the lesson itself needed prose.
-4. **Was the process fixed?** (Bug-fix compounds only.) Was the fix a correction (removed the defect) or a workaround (suppressed the failure)? Were structurally similar patterns elsewhere in the codebase found and addressed? What process change would prevent this defect class from entering the codebase again — a stronger test, a linter rule, an assertion, a planning checklist item? If the answer is "nothing," the mechanism that produced this defect is still active.
+4. **Was the process fixed?** (Bug-fix compounds only.) Was the fix a correction (removed the defect) or a workaround (suppressed the failure)? Were structurally similar patterns elsewhere in the codebase found and addressed? What process change would prevent this defect class from entering the codebase again — a stronger test, a linter rule, an assertion, a planning checklist item, or a filed issue in `chrislacey89/skills`? If the answer is "nothing," the mechanism that produced this defect is still active.
+
+**The fifth name is scoped by ownership, not by difficulty.** The first four are artifacts of *this* codebase; the fifth exists because some preventing changes are not — they are changes to a skill's prose, gate, handoff, or contract test in `chrislacey89/skills`, which no downstream artifact can carry at all. That, and only that, is when the fifth name qualifies. It does **not** qualify because the first four are hard, expensive, or unclear here: that is the compliance exit #257 deliberately left closed, and "I could not build one" still resolves the way it always did — by naming in the entry which of the four came closest and what blocked it.
+
+When it does qualify, **filing is the mechanism, and `/compound` files it** — the prescription reaching this repo is the artifact, not a sentence recommending that someone carry it there. First check for overlap (`gh issue list -R chrislacey89/skills --search "<pipeline area> <failure-mode keywords>"`, open and closed) and comment on the existing issue rather than filing a duplicate; a new outbound channel into a backlog is only worth having if it does not fill with restatements. Then:
+
+```bash
+gh issue create -R chrislacey89/skills   # title: [improve-pipeline] <pipeline area> — <prescription>
+```
+
+Keep it short. Name the pack file the change targets, what the pipeline did and should have done, and this entry's path as the evidence. This is a proposal stub, not a worked proposal — `/improve-pipeline` is what develops one, and `:102` below still stands: recommend it, do not invoke it. **Cite the issue number in the entry.** An uncited filing is prose again: the entry names `#N`, or the fifth name was not used.
 
 **Rabbit Hole review.** If a PRD issue exists for this feature, read its Rabbit Holes section. For each one, check: did the pre-decided resolution hold, or did it need to be revised during implementation? Rabbit Holes that bit — required a different resolution than planned, or surfaced late despite being named — are high-value compound targets. Capture the risk pattern and the *actual* resolution in `docs/solutions/` so future `/write-a-prd` sessions surface them during the completeness scan. Rabbit Holes that held as planned are less valuable to document unless the risk pattern is likely to recur in unrelated features.
 
@@ -270,7 +280,7 @@ If a related solution already exists:
 
 **Defect clustering check (DO-CONFIRM — verify before committing the entry).** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. For a worked pair, this repo's own `staleness-gate-intermediate-writers` (`problem_type: staleness gate invalidated by an unenumerated intermediate writer`) and `by-construction-claims-need-a-mechanism` (`problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it`) share not one word. The second entry names them as the same pattern anyway — *"a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism"* — which is the judgment this check is asking you to make, and which no string match would ever reach.
 
-This entry ships with a mechanism that would catch the next instance — one of the four Q4 names: a test, a linter rule, an assertion, or a planning checklist item. If none of the four can be built here, the entry states in one line which came closest and what blocked it. A third prose-only entry on the same pattern is not a valid outcome.
+This entry ships with a mechanism that would catch the next instance — one of the five Q4 names: a test, a linter rule, an assertion, a planning checklist item, or a filed issue in `chrislacey89/skills`. The fifth is available only under Q4's ownership guard — the preventing change belongs to the pipeline rather than to this codebase — and is not an exit for the first four being hard; the enumeration is borrowed from Q4 independently of Q4's own bug-fix flag, since this check is not gated to bug fixes. If none of the five can be built here, the entry states in one line which came closest and what blocked it. A third prose-only entry on the same pattern is not a valid outcome.
 
 Record the judgment either way. Deciding that an existing entry names a *different* pattern is also an exit from this check, and it is the cheaper one — so it leaves a line too: name the nearest entry and say why it is not the same pattern. An escape that has to be written down is one a reader can argue with; an escape taken silently is the shape this whole check exists to close.
 
@@ -289,6 +299,8 @@ git push        # in-PR path: push so the entry joins the open PR for review
 
 An entry claiming a mechanism, committed while that mechanism sits unstaged, is the unenforced-claim shape Phase 4 exists to close.
 
+The fifth Q4 name has nothing to stage — it lives in another repo. Its equivalent of staging is that the issue is **already filed** and its number is cited in the entry before this commit. Committing an entry that says a pack-level issue will be filed is the same unenforced claim with a longer fuse.
+
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
 
 ### Phase 6: Report
@@ -299,7 +311,7 @@ Tell the user what was captured, then print the closing block that matches the p
 
 ```
 Compounded onto PR #<n>: docs/solutions/<category>/<filename>.md
-Mechanism: <path/to/mechanism>   [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
+Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
 
 Key lesson: [One sentence summary of the most important takeaway]
 
@@ -313,7 +325,7 @@ This rides the PR — reviewed and merged with the code that taught it — and w
 
 ```
 Compounded: docs/solutions/<category>/<filename>.md
-Mechanism: <path/to/mechanism>   [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
+Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
 
 Key lesson: [One sentence summary of the most important takeaway]
 
