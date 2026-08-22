@@ -41,5 +41,7 @@ pre-push:
       run: bash scripts/test-q4-mechanism-names.sh
     oracle-table-coverage-tests:
       run: bash scripts/test-oracle-table-coverage.sh
+    widened-domain-tell-tests:
+      run: bash scripts/test-widened-domain-tell.sh
     shellcheck-all:
       run: shellcheck scripts/*.sh
