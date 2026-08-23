@@ -280,8 +280,10 @@ undeclared=0
 # already-declared suite passed 15/0 — verified. The header states the rule per
 # population, so the check has to be per population. A declaration must sit
 # within DECL_WINDOW lines above the population it excuses, which is what ties
-# the two together instead of letting them merely coexist.
-DECL_WINDOW=6
+# the two together instead of letting them merely coexist. The constant is
+# declared once, above declared_within_window() — a second assignment here
+# shadowed it and made the ceiling check below unfalsifiable, which is the
+# restated-constant defect one more time.
 
 while IFS= read -r suite; do
     [ -n "$suite" ] || continue
@@ -395,16 +397,41 @@ probe_escape "a declared population is excused" \
     '# coverage: enumerated — probe
 for f in tdd/a.md tdd/b.md; do :; done
 ' declared
-probe_escape "a declaration too far above does not reach" \
-    '# coverage: enumerated — probe
+# DERIVED FROM THE CONSTANT, not calibrated to its current value. The first
+# version hardcoded a run of filler lines sized for a window of 6, so the
+# fixture's distance was fixed while the window was not: widening the constant
+# made the "too far" fixture no longer too far, and the probe went on reporting
+# ok while asserting the opposite of its own name — verified at 19/0.
+too_far_fixture() {  # DECL_WINDOW + 1 filler lines: always just outside the window
+    printf '# coverage: enumerated — probe\n'
+    local i=0
+    while [ "$i" -le "$DECL_WINDOW" ]; do printf '#\n'; i=$((i + 1)); done
+    printf 'for f in tdd/a.md tdd/b.md; do :; done\n'
+}
+probe_escape "a declaration DECL_WINDOW+1 lines above does not reach" \
+    "$(too_far_fixture)
+" undeclared
+# AND A BOUND ON THE CONSTANT ITSELF, which the derived probe above cannot give.
+# That probe sizes its fixture from DECL_WINDOW, so it is correct at the boundary
+# for ANY value — and therefore blind to the value being wrong. A window of 9999
+# means a `coverage:` note anywhere above in the file excuses any population
+# below it, which is exactly the per-file behavior the per-population gate was
+# written to remove: the constant would silently revert the fix with every probe
+# still green.
 #
-#
-#
-#
-#
-#
-for f in tdd/a.md tdd/b.md; do :; done
-' undeclared
+# The bound is asserted on the value, not through a fixture. A fixture-based
+# version was tried first and is the wrong instrument — it must encode a
+# distance, and any distance is either derived from the constant (blind) or
+# hardcoded (drifts). The property is numeric, so assert the number. Tuning 6 to
+# 8 stays legal; tuning it to 9999 does not.
+DECL_WINDOW_CEILING=40
+if [ "$DECL_WINDOW" -le "$DECL_WINDOW_CEILING" ]; then
+    ok "DECL_WINDOW is $DECL_WINDOW, within the ceiling of $DECL_WINDOW_CEILING"
+else
+    bad "DECL_WINDOW is $DECL_WINDOW, above the ceiling of $DECL_WINDOW_CEILING" \
+        "a window this wide lets a coverage: note anywhere above excuse any population below it — the per-file behavior the per-population gate removed, restored by a constant"
+fi
+
 rm -f "$esc_probe"
 
 # -----------------------------------------------------------------------------
