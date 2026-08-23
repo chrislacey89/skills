@@ -132,6 +132,9 @@ section "the subcommands the skill names still exist in this git"
 # hardcoded literal would keep passing if the skill renamed a subcommand, which
 # is restatement — the exact thing this suite's header says not to do.
 bisect_usage="$(git bisect -h 2>&1 || true)"
+# coverage: enumerated — the three bisect lines triage-issue/SKILL.md documents.
+# Derived is not available: each is extracted by its own anchor above, and the
+# set is fixed by what the skill actually documents, not by what a scan finds.
 for extracted in "$bisect_start" "$bisect_run" "$bisect_reset"; do
     subcommand="$(printf '%s' "$extracted" | awk '{print $1, $2, $3}')"
     assert_contains "$bisect_usage" "$subcommand" "git still declares '${subcommand#git }'"

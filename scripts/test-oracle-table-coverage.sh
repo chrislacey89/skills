@@ -222,8 +222,22 @@ section "every hand-listed population of subject files is declared"
 # argue with beats one taken in silence, which is the shape this family exists
 # to close.
 hand_listed() {  # $1 = suite; prints each hand-listed population found
-    grep -nE '^[[:space:]]*[a-z_]+="(\$[a-z_]+[[:space:]]+){1,}\$[a-z_]+"[[:space:]]*$' "$1" || true
-    grep -nE '^[[:space:]]*for [a-z_]+ in ([^;]*[a-z0-9_-]+/[a-z0-9_.-]+\.(md|sh|yml)[^;]*){1}[^;]*[[:space:]]+[^;]*\.(md|sh|yml)' "$1" || true
+    # C5 FIX. The first draft matched two syntaxes and the prose claimed a
+    # property. Probed with four real shapes it found ONE, and run against
+    # scripts/test-widened-domain-tell.sh -- which hand-lists subject files in
+    # two loops -- it returned nothing, so the scan printed "no hand-listed
+    # populations" about a tree that demonstrably had them. That is root cause
+    # (2) of the entry this mechanism ships with: zero hits is the healthy
+    # state, so silence carries no signal. Four forms now, all verified against
+    # real instances in this repo:
+    #   a="$x $y"                       -- list of path-holding variables
+    #   for f in "$a" "$b" "$c"         -- quoted variable refs in a loop header
+    #   for f in a/X.md b/Y.md          -- literal paths, any case
+    #   for f in "a/x.md" "b/y.md"      -- quoted literal paths
+    { grep -nE '^[[:space:]]*[a-z_]+="(\$[a-z_]+[[:space:]]+){1,}\$[a-z_]+"[[:space:]]*$' "$1" || true
+      grep -nE '^[[:space:]]*for [a-z_]+ in ("?\$\{?[a-z_]+\}?"?[[:space:]]+){1,}"?\$\{?[a-z_]+\}?"?;?[[:space:]]*do' "$1" || true
+      grep -nEi '^[[:space:]]*for [a-z_]+ in ("?[a-z0-9_.-]+/[a-z0-9_.-]+\.(md|sh|yml)"?[[:space:]]+){1,}"?[a-z0-9_.-]+/[a-z0-9_.-]+\.(md|sh|yml)"?;?[[:space:]]*do' "$1" || true
+    } | sort -t: -k1,1n -u
 }
 
 populations=0
@@ -262,40 +276,46 @@ fi
 # -----------------------------------------------------------------------------
 section "the population detector still detects (self-test)"
 
-# Without this, the section above is one broken regex away from a permanent
-# silent pass -- and unlike the table check it has no floor to catch that. Plant
-# the exact shape from #268's pre-fix suite and require a hit.
+# C4 FIX. Without this the section above is one broken regex from a permanent
+# silent pass -- and unlike the table check it has no floor to catch that. The
+# first draft planted ONE of the shapes the detector claims: breaking the second
+# regex alone left the suite at 7/0, verified. A self-check over an enumerable
+# set must enumerate all of it (partial-oracle-selfcheck-2026-08-22, Prevention
+# #1) -- so every form the detector advertises gets a probe, and every near-miss
+# that must stay silent gets one too.
 probe="$(mktemp)"
-cat > "$probe" <<'PROBE'
-#!/usr/bin/env bash
-refac="tdd/refactoring.md"
-skill="tdd/SKILL.md"
-citers="$refac $skill"
-for f in $citers; do
-    echo "$f"
-done
-PROBE
-if [ -n "$(hand_listed "$probe")" ]; then
-    ok "the detector finds a planted hand-listed population"
-else
-    bad "the detector no longer finds the shape it was written for" \
-        "the section above is passing vacuously; every suite could hand-list a population and none would be reported"
-fi
-# And the inverse, so the detector is not simply matching everything: a single
-# named subject is the normal opening of every suite here and must NOT trip it.
-cat > "$probe" <<'PROBE'
-#!/usr/bin/env bash
-compound_skill="compound/SKILL.md"
-for label in Discipline Candidates; do
-    echo "$label"
-done
-PROBE
-if [ -z "$(hand_listed "$probe")" ]; then
-    ok "the detector ignores a single named subject and a non-file loop"
-else
-    bad "the detector fires on a single named subject" \
-        "every suite in this repo opens that way; a detector that reddens all of them gets deleted"
-fi
+
+plant() {  # $1 = label, $2 = body that MUST be detected
+    printf '%s\n' "$2" > "$probe"
+    if [ -n "$(hand_listed "$probe")" ]; then
+        ok "detector finds: $1"
+    else
+        bad "detector no longer finds: $1" \
+            "the section above is passing vacuously for this form; a suite could hand-list it and go unreported"
+    fi
+}
+
+miss() {  # $1 = label, $2 = body that MUST NOT be detected
+    printf '%s\n' "$2" > "$probe"
+    if [ -z "$(hand_listed "$probe")" ]; then
+        ok "detector ignores: $1"
+    else
+        bad "detector fires on: $1" \
+            "a false positive here pushes an author toward a 'coverage:' comment that is a lie"
+    fi
+}
+
+# shellcheck disable=SC2016  # the probes are literal source text; expansion would defeat them
+plant "a list of path-holding variables"      'citers="$refac $skill"'
+# shellcheck disable=SC2016
+plant "quoted variable refs in a loop header" 'for pair in "$iface" "$checklist"; do'
+plant "literal paths in a loop header"        'for f in tdd/SKILL.md tdd/tests.md; do'
+plant "quoted literal paths"                  'for f in "a/x.md" "b/y.md"; do'
+miss  "a single named subject"                'compound_skill="compound/SKILL.md"'
+miss  "a loop over non-file labels"           'for label in Discipline Candidates; do'
+# shellcheck disable=SC2016
+miss  "a loop over one variable"              'for f in "$only"; do'
+
 rm -f "$probe"
 
 # -----------------------------------------------------------------------------

@@ -103,6 +103,9 @@ ok()  { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf '  FAIL %s\n' "$1"; if [ -n "${2:-}" ]; then printf '       %s\n' "$2"; fi; fail=$((fail + 1)); }
 fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 2; }
 
+# coverage: enumerated — the four files this suite asserts against, each bound
+# to a named variable above. Not derivable: the set is "the files this suite
+# makes claims about", which is a property of the assertions, not of the tree.
 for f in "$iface" "$refac" "$skill" "$checklist"; do
     [ -f "$f" ] || fatal "$f not found. The file moved, or this suite is stale."
 done
