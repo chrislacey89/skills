@@ -368,7 +368,7 @@ This is a silent-degradation check: if an operator ran this without `--dry-run`,
 
 The deeper fix usually lives upstream in `/tdd`: a seam that had to be mocked to stay green (a platform crypto API, the filesystem, the deploy copy) is exactly the seam GOOS says you should *not* mock — wrap external types you don't own in a thin adapter and integration-test the adapter. This rung catches the parity gap; owned adapters plus a faithful test runtime keep it from recurring.
 
-**Review-cadence note.** Added on convergent grounds (Continuous Delivery's smoke-against-production-like-environment, Twelve-Factor Factor X, Release It! "Design for Deployment", the GOOS walking skeleton) plus one triggering incident (mimir audit-publish slices #8/#9, 2026-06-25 — both green under the test suite, both broke only in the workerd/deployed runtime). If after a reasonable sample of slices this rung fires <10% of the time on diffs that had no other issue, demote it to advisory or remove it rather than leave it as ceremony.
+**Review-cadence note.** Added on convergent grounds (Continuous Delivery's smoke-against-production-like-environment, Twelve-Factor Factor X, Release It! "Design for Deployment", the GOOS walking skeleton) plus one triggering incident (a downstream Cloudflare Workers repo's audit-publish slices, 2026-06-25 — both green under the test suite, both broke only in the workerd/deployed runtime). If after a reasonable sample of slices this rung fires <10% of the time on diffs that had no other issue, demote it to advisory or remove it rather than leave it as ceremony.
 
 #### Tier 3: Behavioral Verification
 - API endpoints return the expected responses (use curl or httpie to verify)
