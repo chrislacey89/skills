@@ -67,6 +67,9 @@ menu_attrs=$( { grep -oE 'Each carries ≥[0-9]+ attributes' "$MENU" || true; } 
 assert_eq "Each carries ≥3 attributes" "$menu_attrs" "menu doc states the attribute count"
 
 # The design doc and both consuming skills restate the same threshold in prose.
+# coverage: enumerated — the four holders of the options-comparison contract.
+# Not derivable: the set is 'the files that must agree on this block', which is
+# a property of the contract rather than something a scan of the tree can find.
 for f in "$DESIGN" pre-merge/SKILL.md visual-recap/SKILL.md walk-commits/SKILL.md; do
     assert_found "three or more mutually exclusive options" "$f" \
         "$(basename "$(dirname "$f")")/$(basename "$f"): option count agrees"

@@ -122,7 +122,7 @@ ok()  { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf '  FAIL %s\n' "$1"; if [ -n "${2:-}" ]; then printf '       %s\n' "$2"; fi; fail=$((fail + 1)); }
 fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 2; }
 
-# coverage: enumerated — the four files this suite asserts against, each bound
+# coverage: enumerated — the files this suite asserts against, each bound
 # to a named variable above. Not derivable: the set is "the files this suite
 # makes claims about", which is a property of the assertions, not of the tree.
 for f in "$iface" "$refac" "$skill" "$checklist"; do
@@ -192,7 +192,20 @@ shape2_total=0
 # regex metacharacters (parentheses, dots, `*`), and an unescaped one turns a
 # literal match into a pattern match — the same widening this function was fixed
 # for, one level down.
-# shellcheck disable=SC2329  # invoked below inside resolves(), via command substitution
+#
+# THERE MUST BE EXACTLY ONE OF THESE, and the way the second one was found is
+# the lesson. Two definitions shipped together. Bash resolves at call time, so
+# the LATER one won — and it emitted `\\&` (a literal backslash followed by
+# any-char) where `\&` was meant. A perfectly correct citation to a heading
+# containing a dot then false-RED, which is the failure that gets a suite
+# deleted rather than fixed. Every probe used a metachar-free heading, so four
+# probes and four review rounds missed it.
+#
+# ShellCheck did not. It reported SC2329 (never invoked) against the dead
+# definition, and a hand-written `disable` directive claiming the opposite —
+# "invoked below inside resolves()" — silenced it. The lint was right and the
+# annotation was wrong. Do not re-add a directive here: if SC2329 fires again it
+# means a definition has gone dead again, which is exactly what it is telling you.
 esc_re() {
     printf '%s' "$1" | sed 's/[][\.^$*+?(){}|/]/\\&/g'
 }
@@ -214,14 +227,6 @@ resolves() {  # $1 = target file, $2 = heading text
     e="$(esc_re "$2")"
     grep -qE -- "^## ${e}[[:space:]]*$" "$1" \
         || grep -qE -- "[*][*]${e}[[:punct:]]?[*][*]" "$1"
-}
-
-# Escape a heading for use inside a POSIX ERE. Headings carry regex
-# metacharacters routinely (parentheses, dots, `*`), and an unescaped one turns
-# a literal match into a pattern match — which is the same widening this
-# function was just fixed for, one level down.
-esc_re() {
-    printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|\/]/\\\\&/g'
 }
 
 check_ref() {  # $1 = source file, $2 = target basename, $3 = heading
@@ -346,10 +351,13 @@ section "the heading resolver still resolves (self-test)"
 # uses for its detector, and for the same reason: a matcher whose healthy state
 # is "everything matches" cannot report its own death.
 res_probe="$(mktemp)"
-printf '## The Oracle\n\n**Cover Both Failure Directions.** body text\n' > "$res_probe"
+# The metachar heading is here deliberately: every probe used to be
+# metachar-free, which is why a broken esc_re() went undetected through four
+# rounds. A heading with a dot and parens exercises the escape path.
+printf '## The Oracle v2.0 (revised)\n\n**Cover Both Failure Directions.** body text\n' > "$res_probe"
 
-if resolves "$res_probe" "The Oracle"; then
-    ok "resolver: an exact `## ` heading resolves"
+if resolves "$res_probe" "The Oracle v2.0 (revised)"; then
+    ok "resolver: an exact heading with regex metacharacters resolves"
 else
     bad "resolver: an exact heading no longer resolves" "every reference check above is now failing for the wrong reason"
 fi
@@ -358,7 +366,7 @@ if resolves "$res_probe" "Cover Both Failure Directions"; then
 else
     bad "resolver: an exact bold rule no longer resolves" "the second arm is dead; bold-rule citations cannot be checked"
 fi
-if resolves "$res_probe" "The Oracle Problem"; then
+if resolves "$res_probe" "The Oracle v2.0 (revised) Extra"; then
     bad "resolver: a heading that does NOT exist resolved anyway" \
         "the matcher accepts more than it names — a stale citation would pass"
 else
@@ -366,8 +374,8 @@ else
 fi
 # The NEW-A regression, pinned directly: the citation is a strict prefix of a
 # longer real heading. This is the one that shipped.
-printf '## The Oracle (deprecated, see below)\n' > "$res_probe"
-if resolves "$res_probe" "The Oracle"; then
+printf '## The Oracle v2.0 (revised, deprecated)\n' > "$res_probe"
+if resolves "$res_probe" "The Oracle v2.0 (revised)"; then
     bad "resolver: a citation that is only a PREFIX of the real heading resolved" \
         "an append-rename leaves every citation to the old heading silently valid — the defect this anchor fixes"
 else

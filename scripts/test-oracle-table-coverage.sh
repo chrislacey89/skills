@@ -222,36 +222,32 @@ section "every hand-listed population of subject files is declared"
 # argue with beats one taken in silence, which is the shape this family exists
 # to close.
 hand_listed() {  # $1 = suite; prints each hand-listed population found
-    # NAMED FOR SUBJECT FILES, SO IT MATCHES SUBJECT FILES. An earlier revision
-    # matched any `for` over two-or-more quoted variables, regardless of what
-    # they held. Its three hits in this repo were: one real file population, one
-    # loop over extracted *git command strings*, and one over *HTML comment
-    # templates*. Two false positives out of three, in a section titled "every
-    # hand-listed population of subject FILES" — and the response at the time
-    # was to annotate around them, which this suite's own miss() message warns
-    # is how you get "a 'coverage:' comment that is a lie."
+    # MATCHES THE PROPERTY, NOT A LIST OF SPELLINGS. Two earlier revisions each
+    # enumerated the syntaxes they had seen, and each missed real populations in
+    # this repo — the second still missed two:
+    #   test-options-comparison-contract.sh:70  a MIXED var + literal list
+    #   test-selection-idiom-consistency.sh:66  a repo-ROOT literal, no slash
+    # Both are exactly what the section is named for, and both went undeclared
+    # while the section reported green on a population of one.
     #
-    # The variable-list arms now require the variable NAMES to look like they
-    # hold paths (file/path/doc/skill/md/sh/yml/checklist/iface/refac/suite/
-    # template is deliberately excluded). That is a heuristic on naming rather
-    # than on values — bash cannot see values statically — so it is the honest
-    # ceiling, and it is stated rather than implied. Literal-path arms need no
-    # such guess: a `/` and a known extension are visible in the source text.
-    local pathish='(file|path|doc|docs|skill|skills|md|sh|yml|iface|refac|checklist|suite|entry|target|src|source)'
-    { # a="$x $y"  — list of path-named variables
-      grep -nEi "^[[:space:]]*[a-z_]*${pathish}[a-z_]*=\"(\\\$[a-z_]*${pathish}[a-z_]*[[:space:]]+){1,}\\\$[a-z_]*${pathish}[a-z_]*\"[[:space:]]*$" "$1" || true
-      # a="tdd/x.md tdd/y.md"  — list of literal paths (the literal twin of the
-      # incident's own shape, which the first revision missed entirely)
-      grep -nEi "^[[:space:]]*[a-z_]+=\"([a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)[[:space:]]+){1,}[a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)\"" "$1" || true
-      # for f in "$a" "$b"  — path-named variables in a loop header
-      grep -nEi "^[[:space:]]*for [a-z_]+ in (\"?\\\$\\{?[a-z_]*${pathish}[a-z_]*\\}?\"?[[:space:]]+){1,}\"?\\\$\\{?[a-z_]*${pathish}[a-z_]*\\}?\"?;?[[:space:]]*do" "$1" || true
-      # for f in a/X.md b/Y.md  — literal paths in a loop header, any case
-      grep -nEi "^[[:space:]]*for [a-z_]+ in (\"?[a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)\"?[[:space:]]+){1,}\"?[a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)\"?;?[[:space:]]*do" "$1" || true
+    # So the test is now: a `for` header, or a string assignment, whose members
+    # are two or more FILE-ISH tokens — a path-named variable, or a literal
+    # ending in a source-text extension, with or without a directory. Members may
+    # mix. That is the property; the previous versions were guesses at its
+    # spellings.
+    #
+    # The eleven probes below cannot find this class of gap on their own: every
+    # fixture is synthetic and written to the detector's own shape. The two
+    # misses were found by running the detector over the real tree, which is the
+    # check a probe cannot replace.
+    local var='"?\$\{?[a-z_]*(file|path|doc|docs|skill|skills|md|sh|yml|iface|refac|checklist|suite|entry|target|src|source|design)[a-z_]*\}?"?'
+    local lit='"?[a-z0-9_.-]*/?[a-z0-9_.-]+\.(md|sh|yml)"?'
+    local member="(${var}|${lit})"
+    { grep -nEi "^[[:space:]]*for [a-z_]+ in (${member}[[:space:]]+){1,}${member};?[[:space:]]*do" "$1" || true
+      grep -nEi "^[[:space:]]*[a-z_]+=\"(${member}[[:space:]]+){1,}${member}\"[[:space:]]*$" "$1" || true
     } | sort -t: -k1,1n -u
 }
 
-
-# -----------------------------------------------------------------------------
 # THE ESCAPE PREDICATE, extracted so there is exactly ONE implementation.
 # A `coverage:` declaration excuses a population only if it sits within
 # DECL_WINDOW lines above it — that proximity is what ties the declaration to the
@@ -304,6 +300,27 @@ while IFS= read -r suite; do
 $found
 EOF
 done <<< "$(suites)"
+
+# A FLOOR, mirroring MIN_TABLES — this section had none, and no summary line
+# either, so a detector that found nothing printed NOTHING between its headers
+# while the suite reported full green. Verified by renaming this repo's
+# population variables out of the detector's reach: 19 passed, 0 failed, section
+# body empty. That is the vacuous pass MIN_TABLES exists to abolish, one section
+# over.
+#
+# It also retires the "zero is the healthy state, so a floor would redden a clean
+# repo" reasoning that stood here. That argument does not survive contact with
+# the tree: this repo demonstrably has populations in three separate suites, so a
+# scan finding none is a detector regression, not an empty repo. The comment was
+# reasoning about a hypothetical repo while sitting in one that contradicted it.
+MIN_POPULATIONS=3
+if [ "$populations" -lt "$MIN_POPULATIONS" ]; then
+    fatal "scan found $populations hand-listed population(s), expected at least $MIN_POPULATIONS.
+       The detector is broken, not the repo — a scan that finds nothing passes this
+       section vacuously. If populations were genuinely derived away, lower
+       MIN_POPULATIONS in this file as a deliberate edit."
+fi
+ok "checked $populations hand-listed population(s), $undeclared undeclared (floor: $MIN_POPULATIONS)"
 
 section "the population detector still detects (self-test)"
 

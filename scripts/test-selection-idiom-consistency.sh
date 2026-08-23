@@ -63,6 +63,9 @@ section "the three FRONTIER copies are one script"
 # worked example, are the same selection block at three indentation levels.
 # Normalize leading whitespace and assert one distinct value.
 frontier_blocks="$(
+    # coverage: enumerated — the two files that restate the frontier-selection
+    # idiom. Not derivable for the same reason: membership follows from which
+    # documents make the claim, not from a pattern in the tree.
     for f in setup-ralph-loop/SKILL.md SYSTEM-OVERVIEW.md; do
         awk '/FRONTIER=\$\(gh issue list/{c=1}
              c{gsub(/^[ \t]+/,""); print}
