@@ -42,6 +42,26 @@
 #      vacuously — a floor on the table count turns a broken detector into a
 #      FATAL rather than a green run. The first draft lacked this and reported
 #      full green when its own detection regex was mutated.
+#   4. A suite that iterates a HAND-LISTED POPULATION OF SUBJECT FILES declares
+#      how that population was obtained. See the second section below.
+#
+# THE SECOND SHAPE, and why it is here rather than in a new file. This suite's
+# parent entry (docs/solutions/testing-patterns/partial-oracle-selfcheck-2026-08-22.md)
+# closes with: "scripts/test-oracle-table-coverage.sh is bash-and-`case`-specific
+# and *will* need extending if a suite adds a lookup table in another shape; that
+# is a gap in the mechanism, not in the lesson." That prediction came true on the
+# very next suite added to this repo. scripts/test-widened-domain-tell.sh (#268)
+# held its enumerable set as `citers="$refac $skill"` — two files named in one
+# string — and appending a THIRD citing file carrying a stale heading passed
+# 17/17. Same class as a partial `case` table: a guard whose own coverage is a
+# hand-maintained subset of the thing it guards. Different syntax, so the
+# `case`-shaped detector above was silent throughout.
+#
+# The fix in that suite was to DERIVE the set (the parent entry's Prevention #2).
+# The check below does not require deriving — sometimes you cannot, and the
+# parent entry's Rule Scope allows enumeration provided the sampling is
+# *declared* rather than implied by the absence of a statement. So it requires
+# the declaration, which is the one part a machine can settle.
 #
 # Deliberately NOT pinned: whether the self-check's expected values are
 # *correct*. The suite that owns the table asserts that itself, and asserting
@@ -183,6 +203,100 @@ if [ "$tables_found" -lt "$MIN_TABLES" ]; then
        in this file as a deliberate edit."
 fi
 ok "checked $tables_found lookup-table oracle(s) (floor: $MIN_TABLES)"
+
+# -----------------------------------------------------------------------------
+section "every hand-listed population of subject files is declared"
+
+# THE DETECTOR. A suite iterating a population of subject FILES, written out by
+# hand. Two syntaxes, both seen in this repo:
+#     citers="$refac $skill"          -- a list of path-holding variables
+#     for f in a/X.md b/Y.md; do      -- literal paths in the loop header
+# One name is a subject, not a population (`compound_skill="compound/SKILL.md"`
+# is how every suite here opens and is not the defect). Two or more is a claim
+# about how many there are, and that claim is what goes stale.
+#
+# THE ESCAPE, and it is deliberately one that must be written down. A suite may
+# enumerate rather than derive; it may not do so silently. `coverage:` on any
+# line satisfies this — one sentence saying the set is derived, or that it is
+# enumerated and why that is the honest ceiling here. An escape a reader can
+# argue with beats one taken in silence, which is the shape this family exists
+# to close.
+hand_listed() {  # $1 = suite; prints each hand-listed population found
+    grep -nE '^[[:space:]]*[a-z_]+="(\$[a-z_]+[[:space:]]+){1,}\$[a-z_]+"[[:space:]]*$' "$1" || true
+    grep -nE '^[[:space:]]*for [a-z_]+ in ([^;]*[a-z0-9_-]+/[a-z0-9_.-]+\.(md|sh|yml)[^;]*){1}[^;]*[[:space:]]+[^;]*\.(md|sh|yml)' "$1" || true
+}
+
+populations=0
+undeclared=0
+
+while IFS= read -r suite; do
+    [ -n "$suite" ] || continue
+    found="$(hand_listed "$suite")"
+    [ -n "$found" ] || continue
+    populations=$((populations + 1))
+    if grep -q 'coverage:' "$suite"; then
+        ok "$(basename "$suite"): hand-listed population, and it declares its coverage"
+    else
+        undeclared=$((undeclared + 1))
+        bad "$(basename "$suite"): iterates a hand-listed population of subject files and never says so" \
+            "the set and the thing it stands for are written in two places and agree only because someone made them agree; derive the set, or add a one-line 'coverage:' note saying why enumeration is the ceiling here — $(printf '%s' "$found" | head -1)"
+    fi
+done <<< "$(suites)"
+
+# NO FLOOR HERE, and that is a real difference from the table check above. A
+# repo can legitimately contain zero hand-listed populations — this one does,
+# now that #268's suite derives its set — so "found none" is the healthy state
+# rather than a detector regression, and flooring it would redden a clean repo.
+#
+# That leaves this detector able to rot silently, which the table check's floor
+# exists to prevent. It is a disclosed asymmetry, not an oversight: the honest
+# guard is the self-test below, which plants the shape and requires the detector
+# to find it. A floor asserts the repo still has the defect; a self-test asserts
+# the detector still sees it. The second is what is actually wanted.
+if [ "$populations" -eq 0 ]; then
+    ok "no hand-listed populations of subject files (detector self-tested below)"
+else
+    ok "checked $populations hand-listed population(s), $undeclared undeclared"
+fi
+
+# -----------------------------------------------------------------------------
+section "the population detector still detects (self-test)"
+
+# Without this, the section above is one broken regex away from a permanent
+# silent pass -- and unlike the table check it has no floor to catch that. Plant
+# the exact shape from #268's pre-fix suite and require a hit.
+probe="$(mktemp)"
+cat > "$probe" <<'PROBE'
+#!/usr/bin/env bash
+refac="tdd/refactoring.md"
+skill="tdd/SKILL.md"
+citers="$refac $skill"
+for f in $citers; do
+    echo "$f"
+done
+PROBE
+if [ -n "$(hand_listed "$probe")" ]; then
+    ok "the detector finds a planted hand-listed population"
+else
+    bad "the detector no longer finds the shape it was written for" \
+        "the section above is passing vacuously; every suite could hand-list a population and none would be reported"
+fi
+# And the inverse, so the detector is not simply matching everything: a single
+# named subject is the normal opening of every suite here and must NOT trip it.
+cat > "$probe" <<'PROBE'
+#!/usr/bin/env bash
+compound_skill="compound/SKILL.md"
+for label in Discipline Candidates; do
+    echo "$label"
+done
+PROBE
+if [ -z "$(hand_listed "$probe")" ]; then
+    ok "the detector ignores a single named subject and a non-file loop"
+else
+    bad "the detector fires on a single named subject" \
+        "every suite in this repo opens that way; a detector that reddens all of them gets deleted"
+fi
+rm -f "$probe"
 
 # -----------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
