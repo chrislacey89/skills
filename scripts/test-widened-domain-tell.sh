@@ -88,6 +88,13 @@ refac="tdd/refactoring.md"
 skill="tdd/SKILL.md"
 checklist="pre-merge/review-checklist.md"
 
+# Floors. Named rather than inline, so lowering one is a visible edit to a
+# constant instead of a silent condition — the convention
+# scripts/test-oracle-table-coverage.sh sets with MIN_TABLES.
+MIN_SHAPE1=3   # [t.md](t.md) § *H*  — the dominant idiom
+MIN_SHAPE2=2   # [t.md § H](t.md)    — tdd/SKILL.md's older form
+MIN_TO_RULE=3  # references aimed at the type-level rule itself
+
 pass=0
 fail=0
 
@@ -156,6 +163,8 @@ section "every cross-reference in tdd/ resolves to a heading that exists"
 
 ref_total=0
 ref_bad=0
+shape1_total=0
+shape2_total=0
 
 resolves() {  # $1 = target file, $2 = heading text
     grep -qF -- "## $2" "$1" || grep -qF -- "**$2" "$1"
@@ -183,7 +192,7 @@ while IFS= read -r line; do
     src="${line%%:*}"; rest="${line#*:}"
     tgt="$(printf '%s' "$rest" | sed -n 's/.*\](\([a-z0-9-]*\.md\)) § \*.*/\1/p')"
     head="$(printf '%s' "$rest" | sed -n 's/.*\.md) § \*\([^*]*\)\*.*/\1/p')"
-    [ -n "$tgt" ] && [ -n "$head" ] && check_ref "$src" "$tgt" "$head"
+    [ -n "$tgt" ] && [ -n "$head" ] && { shape1_total=$((shape1_total + 1)); check_ref "$src" "$tgt" "$head"; }
 done <<EOF
 $(grep -n -- '\.md) § \*' tdd/*.md | sed 's|^\(tdd/[A-Za-z0-9.-]*\):[0-9]*:|\1:|' || true)
 EOF
@@ -194,27 +203,39 @@ while IFS= read -r line; do
     src="${line%%:*}"; rest="${line#*:}"
     tgt="$(printf '%s' "$rest" | sed -n 's/.*\[\([a-z0-9-]*\.md\) § .*/\1/p')"
     head="$(printf '%s' "$rest" | sed -n 's/.*\.md § \([^]]*\)\].*/\1/p')"
-    [ -n "$tgt" ] && [ -n "$head" ] && check_ref "$src" "$tgt" "$head"
+    [ -n "$tgt" ] && [ -n "$head" ] && { shape2_total=$((shape2_total + 1)); check_ref "$src" "$tgt" "$head"; }
 done <<EOF
 $(grep -n -- '\[[a-z0-9-]*\.md § ' tdd/*.md | sed 's|^\(tdd/[A-Za-z0-9.-]*\):[0-9]*:|\1:|' || true)
 EOF
 
-# The extractor is the single point of vacuous green here: a broken regex finds
-# nothing, every loop body is skipped, and the section prints clean. Floor it.
-if [ "$ref_total" -ge 4 ]; then
-    ok "$ref_total cross-references discovered and resolved ($ref_bad unresolved)"
-else
-    fatal "only $ref_total § cross-references discovered in tdd/ — the reference idiom changed and the extractor no longer finds them. A resolver that finds nothing passes everything."
-fi
+# Each extractor is a separate point of vacuous green: a broken regex finds
+# nothing, every loop body is skipped, and the section prints clean. PER-SHAPE
+# floors, not one aggregate — the first draft floored the sum at 4, so breaking
+# Shape 2 alone left Shape 1's 5 references clearing the bar and a genuinely stale
+# Shape-2 reference passed 21/0. Verified before the fix. A shared floor cannot
+# distinguish "this shape found nothing" from "the other shape found plenty."
+for shape in "1:$shape1_total:$MIN_SHAPE1" "2:$shape2_total:$MIN_SHAPE2"; do
+    n="${shape#*:}"; found="${n%%:*}"; floor="${n##*:}"
+    [ "$found" -ge "$floor" ] || fatal "extractor for reference shape ${shape%%:*} found $found reference(s), expected at least $floor — that regex no longer matches the idiom. An extractor that finds nothing passes everything it was meant to check."
+done
+ok "$ref_total cross-references discovered and resolved — shape 1: $shape1_total, shape 2: $shape2_total ($ref_bad unresolved)"
 
 # The resolver proves references RESOLVE. It does not prove the type-level rule is
 # still REACHABLE -- delete every pointer and zero broken references remain. Floor
 # the count of references aimed at this specific heading.
-to_rule="$(grep -c -F -- "§ *${heading}*" tdd/*.md | awk -F: '{n+=$2} END {print n+0}')"
-if [ "$to_rule" -ge 3 ]; then
+# `|| true` is load-bearing, not defensive noise. `grep -c` exits 1 when NO file
+# matches, and under `set -euo pipefail` (above) that kills the script inside this
+# command substitution — on precisely the condition the floor below exists to
+# report. Verified before the fix: deleting every pointer produced a bare `exit 1`
+# with no FAIL line, no reason, no summary, and four later sections silently
+# skipped. Every other grep in this file that can legitimately return zero carries
+# the same guard; this one was the omission.
+to_rule="$(grep -c -F -- "§ *${heading}*" tdd/*.md 2>/dev/null | awk -F: '{n+=$2} END {print n+0}' || true)"
+to_rule="${to_rule:-0}"
+if [ "$to_rule" -ge "$MIN_TO_RULE" ]; then
     ok "$to_rule cross-references point at the type-level rule"
 else
-    bad "only $to_rule cross-reference(s) point at the type-level rule; expected at least 3" \
+    bad "only $to_rule cross-reference(s) point at the type-level rule; expected at least $MIN_TO_RULE" \
         "the reader arrives at the planning and refactor steps with no route to it"
 fi
 
@@ -269,24 +290,85 @@ section "the tell is stated at both the implement-time and review-time sites"
 # name to a neutral one. Two tokens per site, because the widening alone is the
 # condition and the rename alone is the signal — a site keeping one and losing
 # the other keeps a rule nobody can spot in a diff.
+# C1/C8 FIX. The first draft grepped each whole FILE for the two tokens. Two
+# defects, both reproduced:
+#
+#   (a) SELF-SATISFYING. This branch also appended a retirement clause to the
+#       review bullet that names the tokens while describing the checker
+#       ("...pins this bullet's *widened input domain* and *neutral one*
+#       wording..."). So the assertion matched a sentence ABOUT the rule instead
+#       of the rule. Deleting the real tell outright left the suite at 23/0 —
+#       the sentence written to make retirement go red was what stopped it.
+#   (b) UNSCOPED. tdd/interface-design.md:90 tells the reader this pins the tell
+#       at "the review-time site (pre-merge/review-checklist.md Dimension 6)".
+#       A whole-file grep does not check Dimension 6. Moving the tell out of
+#       Dimension 6 into Dimension 1 also left the suite at 23/0.
+#
+# Both fixes are the same shape: read the SECTION the claim is about, and drop
+# the self-referential sentence before searching what remains.
+tell_body() {  # $1 = file, $2 = section heading prefix ("" = whole file)
+    if [ -n "$2" ]; then
+        awk -v want="$2" '
+            index($0, want) == 1 { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+        ' "$1"
+    else
+        cat "$1"
+    fi \
+        | sed -e 's/\*\*Removing the field-provenance half.*$//' \
+              -e 's/ — and delete .scripts\/test-widened-domain-tell\.sh. in the same change.*$//'
+}
+
 tell_seen=0
-for pair in "implement-time:$iface" "review-time:$checklist"; do
-    label="${pair%%:*}"
-    f="${pair#*:}"
+for spec in "implement-time:$iface:" "review-time:$checklist:## 6. Test Quality"; do
+    label="${spec%%:*}"; rest="${spec#*:}"
+    f="${rest%%:*}"; section="${rest#*:}"
     tell_seen=$((tell_seen + 1))
-    if grep -qi -- 'widened input domain' "$f"; then
-        ok "$label site ($f) states the widened-input-domain condition"
-    else
-        bad "$label site ($f) no longer states the widened-input-domain condition" \
-            "the other site's prose claims this half exists; it now says something false"
+
+    body="$(tell_body "$f" "$section")"
+    if [ -z "$body" ]; then
+        fatal "could not extract the tell body from $f (section: '${section:-whole file}') — the heading moved, or the exclusion filter now removes everything."
     fi
-    if grep -qi -- 'neutral one' "$f"; then
-        ok "$label site ($f) states the neutral-rename signal"
-    else
-        bad "$label site ($f) no longer states the neutral-rename signal" \
-            "the condition survives with nothing to spot it by, which is the pre-#266 state"
+    if [ -n "$section" ] && printf '%s' "$body" | grep -q '^## '; then
+        fatal "the '$section' extraction from $f still contains a '## ' heading — the range overran its section."
     fi
+
+    for token in 'widened input domain' 'neutral one'; do
+        if printf '%s' "$body" | grep -qi -- "$token"; then
+            ok "$label site ($f${section:+ $section}) states \"$token\""
+        else
+            bad "$label site ($f${section:+ $section}) no longer states \"$token\"" \
+                "the other site's prose claims this half exists; it now says something false. Expected the literal text: $token"
+        fi
+    done
 done
+
+# ORACLE SELF-CHECK for the exclusion filter, run against the REAL tell_body().
+# The filter exists to stop a sentence *about* the checker satisfying the
+# assertion. If it over-matched and stripped the real tell too, every site would
+# fail LOUD — so the dangerous direction is the filter silently doing NOTHING.
+# Both directions are pinned here, on a synthetic fixture, because a filter that
+# no longer filters restores the C1 defect and nothing else would notice.
+probe_file="$(mktemp)"
+cat > "$probe_file" <<'PROBE'
+## 6. Test Quality
+The tell is a widened input domain with no new guard — renamed to a neutral one.
+**Removing the field-provenance half also requires editing a suite which pins this bullet's widened input domain and neutral one wording.
+## 7. Next
+PROBE
+probe_out="$(tell_body "$probe_file" "## 6. Test Quality")"
+rm -f "$probe_file"
+
+if printf '%s' "$probe_out" | grep -q -- 'Removing the field-provenance half'; then
+    bad "the meta-sentence exclusion no longer excludes" \
+        "the review-time assertion can again be satisfied by prose describing the checker — the C1 defect, restored"
+elif ! printf '%s' "$probe_out" | grep -qi -- 'widened input domain'; then
+    bad "the exclusion over-matched and stripped the real tell too" \
+        "the assertion would now fail on correct prose, which is how a suite gets deleted"
+else
+    ok "the exclusion removes the sentence about the checker and keeps the rule itself"
+fi
 
 # Same vacuous-green hazard as the citer loop, and worse here: the whole point
 # of this section is that BOTH halves carry the tell, so a loop silently reduced
