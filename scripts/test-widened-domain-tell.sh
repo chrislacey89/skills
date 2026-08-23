@@ -169,8 +169,40 @@ ref_bad=0
 shape1_total=0
 shape2_total=0
 
+# Escape a heading for literal use inside a POSIX ERE. Headings routinely carry
+# regex metacharacters (parentheses, dots, `*`), and an unescaped one turns a
+# literal match into a pattern match — the same widening this function was fixed
+# for, one level down.
+# shellcheck disable=SC2329  # invoked below inside resolves(), via command substitution
+esc_re() {
+    printf '%s' "$1" | sed 's/[][\.^$*+?(){}|/]/\\&/g'
+}
+
 resolves() {  # $1 = target file, $2 = heading text
-    grep -qF -- "## $2" "$1" || grep -qF -- "**$2" "$1"
+    # ANCHORED, both arms. The first draft used bare `grep -qF`, so a citation
+    # only had to be a PREFIX of the real heading: renaming `## The Oracle` to
+    # `## The Oracle (deprecated, see below)` left every citation to the old
+    # name resolving and the suite at 24/0, while a non-prefix rename was
+    # correctly caught. That is this branch's own thesis turned on its own
+    # mechanism — a check whose accepted input domain is wider than its name
+    # records.
+    #
+    # `$` anchors the `## ` form to end-of-line. The bold form is anchored by
+    # its closing `**`, allowing exactly ONE optional trailing punctuation mark:
+    # real rules read `**…call sites.**` while citations omit the period. One
+    # mark, not `.*` — anything looser reopens the prefix hole.
+    local e
+    e="$(esc_re "$2")"
+    grep -qE -- "^## ${e}[[:space:]]*$" "$1" \
+        || grep -qE -- "[*][*]${e}[[:punct:]]?[*][*]" "$1"
+}
+
+# Escape a heading for use inside a POSIX ERE. Headings carry regex
+# metacharacters routinely (parentheses, dots, `*`), and an unescaped one turns
+# a literal match into a pattern match — which is the same widening this
+# function was just fixed for, one level down.
+esc_re() {
+    printf '%s' "$1" | sed 's/[][\\.^$*+?(){}|\/]/\\\\&/g'
 }
 
 check_ref() {  # $1 = source file, $2 = target basename, $3 = heading
@@ -285,6 +317,46 @@ else
         "the section list was shortened; a per-section check that skips a section is a whole-file check wearing its name"
 fi
 
+# -----------------------------------------------------------------------------
+section "the heading resolver still resolves (self-test)"
+
+# Seven assertions above ride on resolves(). Neutering its body to `return 0`
+# left the suite at 24 passed, 0 failed with every "resolves in" line still
+# printing ok — verified. It had no probe, and the header disclosed two ceilings
+# but not this one. Same plant/miss shape scripts/test-oracle-table-coverage.sh
+# uses for its detector, and for the same reason: a matcher whose healthy state
+# is "everything matches" cannot report its own death.
+res_probe="$(mktemp)"
+printf '## The Oracle\n\n**Cover Both Failure Directions.** body text\n' > "$res_probe"
+
+if resolves "$res_probe" "The Oracle"; then
+    ok "resolver: an exact `## ` heading resolves"
+else
+    bad "resolver: an exact heading no longer resolves" "every reference check above is now failing for the wrong reason"
+fi
+if resolves "$res_probe" "Cover Both Failure Directions"; then
+    ok "resolver: an exact bold rule resolves"
+else
+    bad "resolver: an exact bold rule no longer resolves" "the second arm is dead; bold-rule citations cannot be checked"
+fi
+if resolves "$res_probe" "The Oracle Problem"; then
+    bad "resolver: a heading that does NOT exist resolved anyway" \
+        "the matcher accepts more than it names — a stale citation would pass"
+else
+    ok "resolver: a non-existent heading does not resolve"
+fi
+# The NEW-A regression, pinned directly: the citation is a strict prefix of a
+# longer real heading. This is the one that shipped.
+printf '## The Oracle (deprecated, see below)\n' > "$res_probe"
+if resolves "$res_probe" "The Oracle"; then
+    bad "resolver: a citation that is only a PREFIX of the real heading resolved" \
+        "an append-rename leaves every citation to the old heading silently valid — the defect this anchor fixes"
+else
+    ok "resolver: a prefix-only citation does not resolve"
+fi
+rm -f "$res_probe"
+
+# -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 section "the tell is stated at both the implement-time and review-time sites"
 
