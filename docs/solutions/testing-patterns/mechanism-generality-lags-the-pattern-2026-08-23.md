@@ -93,21 +93,29 @@ done <<EOF
 $(grep -n -- '\.md) § \*' tdd/*.md | sed 's|^\(tdd/[A-Za-z0-9.-]*\):[0-9]*:|\1:|' || true)
 EOF
 
-[ "$ref_total" -ge 4 ] || fatal "only $ref_total § cross-references discovered — the idiom
-    changed and the extractor no longer finds them. A resolver that finds nothing
-    passes everything."
+# One floor PER SHAPE, not one for the sum. Each extractor is its own point of
+# vacuous green, and a shared floor cannot tell "this shape found nothing" from
+# "the other shape found plenty."
+for shape in "1:$shape1_total:$MIN_SHAPE1" "2:$shape2_total:$MIN_SHAPE2"; do
+    n="${shape#*:}"; found="${n%%:*}"; floor="${n##*:}"
+    [ "$found" -ge "$floor" ] || fatal "extractor for reference shape ${shape%%:*} found $found reference(s), expected at least $floor — that regex no longer matches the idiom."
+done
 ```
+
+**The per-shape floor is the corrected version, and the aggregate one is the instructive mistake.** The first draft floored `ref_total` at 4 for both extractors together. Breaking shape 2 alone then left shape 1's five references clearing the bar, and a genuinely stale shape-2 reference passed `21/0` — verified. An earlier revision of *this entry* shipped that aggregate floor as the worked example, which is the entry's own thesis applied to itself: a mechanism's prose and its matcher must be read together, and here the prose was the mechanism.
 
 Deriving raised coverage from 2 hand-picked files to every § reference in `tdd/` — picking up two **pre-existing** references the hand-list never covered, and one this branch itself created that it had missed.
 
-**The class fix** is a second detector in `scripts/test-oracle-table-coverage.sh`, the file the parent entry shipped. It finds a hand-listed *population of subject files* in either syntax seen here, and requires the suite to declare how the population was obtained — `coverage:` on any line satisfies it. The escape is deliberately one that must be **written down**: enumeration is allowed (the parent entry's Rule Scope permits it), silence is not.
+**The class fix** is a second detector in `scripts/test-oracle-table-coverage.sh`, the file the parent entry shipped. It finds a hand-listed *population of subject files* and requires the suite to declare how the population was obtained. Scope note, because the Context above records **two** instances: the detector reaches the file-population one only. The second — `for label in Discipline Candidates` over overrunning `sed` ranges — is a population of *sections*, was fixed by bounding those ranges rather than by the detector, and is pinned as a required non-match so the detector's name stays true — `coverage:` on any line satisfies it. The escape is deliberately one that must be **written down**: enumeration is allowed (the parent entry's Rule Scope permits it), silence is not.
 
 Two properties worth stating, because they are where this mechanism differs from its sibling:
 
-- **It has no floor, and that is disclosed rather than an oversight.** The table check floors at `MIN_TABLES=2` because the repo demonstrably has tables, so a zero scan is a detector regression. Hand-listed populations are different: the healthy state is zero, so flooring would redden a clean repo.
+- **It has no floor, and that is disclosed rather than an oversight.** The table check floors at `MIN_TABLES=2` because the repo demonstrably has tables, so a zero scan is a detector regression. Hand-listed populations are different: zero is a *permissible* state, so a floor could redden a legitimately clean repo. Note what this does **not** claim — the repo's actual count is not zero, and the scan reports several declared populations. The design argument is about what a floor would forbid, not about the current tree.
 - **So the guard is a self-test instead.** The suite plants the exact pre-fix shape and requires the detector to find it, plus the inverse — a single named subject (`compound_skill="compound/SKILL.md"`, how every suite here opens) must **not** trip it. A floor asserts the repo still has the defect; a self-test asserts the detector still sees it. The second is what was actually wanted, and it closes the "zero hits carries no signal" root cause directly.
 
-Verified against the real artifact: restoring `test-widened-domain-tell.sh` to its pre-fix commit makes the scan fail at the exact line (`125:citers="$refac $skill"`); adding a `coverage:` line makes it pass; breaking the detector's regex makes the self-test fail.
+Verified against the real artifact: restoring `test-widened-domain-tell.sh` to its pre-fix commit makes the scan fail on the hand-listed `citers=` assignment; adding a `coverage:` line makes it pass; breaking the detector's regex makes the self-test fail.
+
+**This paragraph originally cited the failing line by number, and that citation is why it is worth reading twice.** It was accurate when written. Two commits later — in the same PR — the detector was widened, so the scan began reporting a *different* line first, and the claim became false with nothing to notice. A line number in an evergreen entry is a hand-maintained cross-reference to a file that moves: the same class this entry is about, in the entry itself. Cite the *shape* that fails, not its coordinates.
 
 ## Prevention
 
