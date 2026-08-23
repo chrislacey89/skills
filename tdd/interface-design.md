@@ -51,14 +51,23 @@ Good interfaces make testing natural:
    declare function containsVerbatim(needle: string, haystack: string): boolean;
 
    // Provenance is now part of the type. A second provenance cannot arrive
-   // silently — it has to be constructed, and construction is the one place
-   // the rule lives.
-   type ReadingText = string & { readonly __brand: "ReadingText" };
+   // by accident — reaching this parameter without going through the
+   // constructor takes a deliberate `as`, which is greppable.
+   declare const brand: unique symbol;
+   type Brand<T, TBrand> = T & { [brand]: TBrand };
+   type ReadingText = Brand<string, "ReadingText">;
+
+   // A *conversion* constructor: extraction cannot fail, so this one has no
+   // rejecting path to test. See the table below for the validating shape.
    const toReadingText = (html: string): ReadingText =>
      extractText(html) as ReadingText;
 
    declare function containsVerbatim(needle: string, haystack: ReadingText): boolean;
    ```
+
+   **Use a `unique symbol` for the brand key, not a string property.** `string & { readonly __brand: "ReadingText" }` is the common shorthand and it is weaker in two checkable ways. `keyof` on it resolves to `number | "__brand" | "anchor" | … ` — the brand key is public, so it reaches autocomplete and any mapped type over the brand. And a *different* module declaring a structurally identical `__brand` type is silently accepted where yours is required, because the shapes match; two independently declared `unique symbol`s do not, and the compiler says so (`Property '[brand]' is missing`). Zod's `.brand()` uses the string form, which is fine — you are consuming its type, not re-declaring it.
+
+   **What branding does and does not buy.** It moves bypassing the constructor from *free* to *one deliberate `as`*. `"raw <script>" as ReadingText` still compiles, on both shapes. That is the honest ceiling: the type stops silent assignment, not determined circumvention — and it makes every bypass a greppable token in review rather than an invisible one.
 
    Pick the shape by what the callee has to do:
 
@@ -67,11 +76,12 @@ Good interfaces make testing natural:
    | One legal kind; everything else is a construction error | Branded type + a single constructor (`toReadingText`) |
    | Several legal kinds, and the callee must handle each | Discriminated union (`{ kind: "reading-text"; value: string } \| { kind: "raw-html"; value: string }`) |
    | The value already crosses a parse boundary | `z.string().brand<"ReadingText">()` — parse once at the edge |
-   | "At least one", "exactly one of these combinations" | Reshape so the invalid shape is unbuildable (`[T, ...T[]]`, an explicit combination union) rather than checking at runtime |
+   | "At least one", "exactly one of these combinations" | Reshape so the invalid shape is unbuildable (`[T, ...T[]]` for a non-empty array, an explicit combination union) rather than checking at runtime |
+   | The constraint can only be decided at runtime | A **validating** constructor returning a discriminated result (`{ ok: true; value: ReadingText } \| { ok: false; error: string }`), or an assertion function — `function assertIsReadingText(v: string): asserts v is ReadingText`. Prefer the `function` declaration: an arrow assigned to an un-annotated `const` declares fine and then fails at every **call site** with `TS2775`, *"Assertions require every name in the call target to be declared with an explicit type annotation"* |
 
    **Construct once, at the boundary; never re-validate downstream.** A defensive re-check inside a function that already receives the branded type is not extra safety — it re-teaches every reader that the type cannot be trusted, which is the state this technique exists to leave.
 
-   **What this does to the tests.** A whole category disappears. You do not need a test that this function rejects an out-of-range value, because the type rejects it before the test would run. What you test instead is the constructor: it accepts what should be accepted and returns an error for what should not. One test at the boundary replaces N tests at N call sites — which is the same trade the technique makes in the production code.
+   **What this does to the tests.** A whole category disappears. You do not need a test that this function rejects an out-of-range value, because the type rejects it before the test would run. What you test instead is the constructor — and *which* constructor decides what there is to test. A **validating** constructor has both directions: it accepts what should be accepted and returns an error for what should not. A **conversion** constructor like `toReadingText` has only one, because no input can fail it; the coverage it buys is that every call site now names the converted type. Either way, one test at the boundary replaces N tests at N call sites — which is the same trade the technique makes in the production code.
 
    **Proportion.** This is not "brand every primitive." Wlaschin calls one maximal form of the trick — F# units of measure, `5.0<kg>` — "probably design overkill" for his own domain, and frames the guideline as proportionate use rather than maximal type ceremony. Reach for it when the constraint is one a *downstream* function depends on and cannot re-derive — provenance, validation status, units, cardinality. A value that never crosses a function boundary does not need a brand, and a rule that reads as "wrap every string" will be ignored or, worse, followed.
 
