@@ -35,10 +35,8 @@
 #      finds nothing, skips every loop body, and prints clean), and a minimum on
 #      references aimed at the type-level rule (resolving is not reaching — delete
 #      every pointer and zero broken references remain).
-#   3. Both files carry the tell — the widened-input-domain trigger and the
-#      neutral-rename signal — at the implement-time site (tdd/interface-design.md)
-#      and the review-time site (pre-merge/review-checklist.md). Each file's
-#      prose asserts the other half exists; delete one and the survivor lies.
+#   3. (WITHDRAWN.) This suite used to assert that both files carried the tell's
+#      wording. Those assertions are cut — see NOT PINNED, below.
 #   4. tdd/SKILL.md declares Wlaschin under `sources:`. CLAUDE.md § Editing
 #      Skills says only to claim a source the body operationalizes; the inverse
 #      drift — operationalizing one and never declaring it — is what a body
@@ -71,7 +69,28 @@
 # to a scratch directory per mutation, and assert the mutation actually landed
 # before believing the result.
 #
-# Deliberately NOT pinned: the wording of the technique, the table of type
+# NOT PINNED — WORDING, and this is a deliberate subtraction rather than a gap.
+# Two assertions used to check that a specific sentence appeared at both the
+# implement-time and review-time sites. They are gone. The reasoning, from the
+# independent reviewer who called it:
+#
+#   These assertions pinned the wording of one sentence at two sites. Wording is
+#   not a checkable property — every green they produced was a guess about
+#   phrasing that happened to hold, and four rounds of tightening the pattern
+#   never changed that. They were defeated by a one-word reword at one site and
+#   by moving the sentence to a different rule at the other, at every revision
+#   including the last. The cross-reference resolver stays: "does this heading
+#   exist in that file" is decidable, and it caught every stale-citation
+#   mutation four independent passes threw at it. CLAUDE.md rule (a) before
+#   rule (b) — the cheapest claim to keep accurate is the one not made.
+#
+# Do not restore them as a tighter grep. A tighter grep is a narrower guess
+# about how the sentence will be phrased next year, which is the same bet at
+# worse odds. If the two halves need to stay in sync, the checkable version is a
+# reference one file makes to the other that the resolver can decide — not a
+# substring of prose.
+#
+# Also deliberately NOT pinned: the wording of the technique, the table of type
 # shapes, the code examples, or the review-cadence note's threshold. Forcing
 # those to hold still would forbid legitimate rewriting, and a suite that
 # reddens on good edits gets deleted. Also not pinned: that the technique is
@@ -357,113 +376,6 @@ fi
 rm -f "$res_probe"
 
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-section "the tell is stated at both the implement-time and review-time sites"
-
-# The trigger #268 settled on: a parameter's accepted input domain widens while
-# its type does not, most visibly a rename from a domain/provenance-specific
-# name to a neutral one. Two tokens per site, because the widening alone is the
-# condition and the rename alone is the signal — a site keeping one and losing
-# the other keeps a rule nobody can spot in a diff.
-# C1/C8 FIX. The first draft grepped each whole FILE for the two tokens. Two
-# defects, both reproduced:
-#
-#   (a) SELF-SATISFYING. This branch also appended a retirement clause to the
-#       review bullet that names the tokens while describing the checker
-#       ("...pins this bullet's *widened input domain* and *neutral one*
-#       wording..."). So the assertion matched a sentence ABOUT the rule instead
-#       of the rule. Deleting the real tell outright left the suite at 23/0 —
-#       the sentence written to make retirement go red was what stopped it.
-#   (b) UNSCOPED. tdd/interface-design.md:90 tells the reader this pins the tell
-#       at "the review-time site (pre-merge/review-checklist.md Dimension 6)".
-#       A whole-file grep does not check Dimension 6. Moving the tell out of
-#       Dimension 6 into Dimension 1 also left the suite at 23/0.
-#
-# Both fixes are the same shape: read the SECTION the claim is about, and drop
-# the self-referential sentence before searching what remains.
-tell_body() {  # $1 = file, $2 = section heading prefix ("" = whole file)
-    if [ -n "$2" ]; then
-        awk -v want="$2" '
-            index($0, want) == 1 { inside = 1; next }
-            inside && /^## / { exit }
-            inside { print }
-        ' "$1"
-    else
-        cat "$1"
-    fi \
-        | sed -e 's/\*\*Removing the field-provenance half.*$//' \
-              -e 's/ — and delete .scripts\/test-widened-domain-tell\.sh. in the same change.*$//'
-}
-
-tell_seen=0
-for spec in "implement-time:$iface:" "review-time:$checklist:## 6. Test Quality"; do
-    label="${spec%%:*}"; rest="${spec#*:}"
-    f="${rest%%:*}"; section="${rest#*:}"
-    tell_seen=$((tell_seen + 1))
-
-    body="$(tell_body "$f" "$section")"
-    if [ -z "$body" ]; then
-        fatal "could not extract the tell body from $f (section: '${section:-whole file}') — the heading moved, or the exclusion filter now removes everything."
-    fi
-    if [ -n "$section" ] && printf '%s' "$body" | grep -q '^## '; then
-        fatal "the '$section' extraction from $f still contains a '## ' heading — the range overran its section."
-    fi
-
-    for token in 'widened input domain' 'neutral one'; do
-        if printf '%s' "$body" | grep -qi -- "$token"; then
-            ok "$label site ($f${section:+ $section}) states \"$token\""
-        else
-            bad "$label site ($f${section:+ $section}) no longer states \"$token\"" \
-                "the other site's prose claims this half exists; it now says something false. Expected the literal text: $token"
-        fi
-    done
-done
-
-# ORACLE SELF-CHECK for the exclusion filter, run against the REAL tell_body().
-# The filter exists to stop a sentence *about* the checker satisfying the
-# assertion. If it over-matched and stripped the real tell too, every site would
-# fail LOUD — so the dangerous direction is the filter silently doing NOTHING.
-# Both directions are pinned here, on a synthetic fixture, because a filter that
-# no longer filters restores the C1 defect and nothing else would notice.
-probe_file="$(mktemp)"
-cat > "$probe_file" <<'PROBE'
-## 6. Test Quality
-The tell is a widened input domain with no new guard — renamed to a neutral one.
-**Removing the field-provenance half also requires editing a suite which pins this bullet's widened input domain and neutral one wording.
-## 7. Next
-PROBE
-probe_out="$(tell_body "$probe_file" "## 6. Test Quality")"
-rm -f "$probe_file"
-
-if printf '%s' "$probe_out" | grep -q -- 'Removing the field-provenance half'; then
-    bad "the meta-sentence exclusion no longer excludes" \
-        "the review-time assertion can again be satisfied by prose describing the checker — the C1 defect, restored"
-elif ! printf '%s' "$probe_out" | grep -qi -- 'widened input domain'; then
-    bad "the exclusion over-matched and stripped the real tell too" \
-        "the assertion would now fail on correct prose, which is how a suite gets deleted"
-else
-    ok "the exclusion removes the sentence about the checker and keeps the rule itself"
-fi
-
-# Same vacuous-green hazard as the citer loop, and worse here: the whole point
-# of this section is that BOTH halves carry the tell, so a loop silently reduced
-# to one site asserts the exact opposite of what it is named for.
-if [ "$tell_seen" -eq 2 ]; then
-    ok "both halves were checked"
-else
-    bad "expected to check 2 sites, checked $tell_seen" \
-        "a one-site check cannot show the two halves agree, which is this section's only claim"
-fi
-
-# Each half claims the other exists. Pin the claim, so deleting the far half
-# turns the surviving cross-reference red instead of quietly false.
-if grep -qF -- 'review-checklist.md' "$iface"; then
-    ok "$iface names the review-time site it is the other half of"
-else
-    bad "$iface no longer names its review-time counterpart" \
-        "the two halves become independent restatements, which is how they drift apart"
-fi
-
 # -----------------------------------------------------------------------------
 section "the source is declared where it is operationalized"
 
