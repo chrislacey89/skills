@@ -46,9 +46,12 @@ Good interfaces make testing natural:
    **The TypeScript translation.** Wlaschin's smart constructor is a branded type plus a constructor that is the only way to make one:
 
    ```typescript
-   // The type lies. Both arguments are `string`, so raw markup can arrive
-   // where extracted reading text is required, and nothing says otherwise.
-   declare function containsVerbatim(needle: string, haystack: string): boolean;
+   // BEFORE — the type lies. Both arguments are `string`, so raw markup can
+   // arrive where extracted reading text is required, and nothing says otherwise.
+   // (Named `_before` on purpose: two `declare function`s sharing one name are an
+   // *overload set*, not a replacement, so the loose signature would keep
+   // accepting the raw string and the example would disprove nothing.)
+   declare function containsVerbatim_before(needle: string, haystack: string): boolean;
 
    // Provenance is now part of the type. A second provenance cannot arrive
    // by accident — reaching this parameter without going through the
@@ -62,10 +65,11 @@ Good interfaces make testing natural:
    const toReadingText = (html: string): ReadingText =>
      extractText(html) as ReadingText;
 
+   // AFTER — the only signature. A raw `string` is now a compile error here.
    declare function containsVerbatim(needle: string, haystack: ReadingText): boolean;
    ```
 
-   **Use a `unique symbol` for the brand key, not a string property.** `string & { readonly __brand: "ReadingText" }` is the common shorthand and it is weaker in two checkable ways. `keyof` on it resolves to `number | "__brand" | "anchor" | … ` — the brand key is public, so it reaches autocomplete and any mapped type over the brand. And a *different* module declaring a structurally identical `__brand` type is silently accepted where yours is required, because the shapes match; two independently declared `unique symbol`s do not, and the compiler says so (`Property '[brand]' is missing`). Zod's `.brand()` uses the string form, which is fine — you are consuming its type, not re-declaring it.
+   **Use a `unique symbol` for the brand key, not a string property.** `string & { readonly __brand: "ReadingText" }` is the common shorthand and it is weaker in two checkable ways. `keyof` on it resolves to `number | "__brand" | "anchor" | … ` — the brand key is public, so it reaches autocomplete and any mapped type over the brand. And a *different* module declaring a structurally identical `__brand` type is silently accepted where yours is required, because the shapes match; two independently declared `unique symbol`s do not, and the compiler says so (`Property '[brand]' is missing`). Zod does the same thing: `.brand()` is backed by an exported `unique symbol` (`$brand` in `zod/v4/core/core.d.ts`, `BRAND` in `v3/types.d.ts`), so a zod-branded type leaks no public key either. Its caveat is the opposite one — because every module imports *that same* symbol, two modules independently writing `z.string().brand<"ReadingText">()` produce the **same** type and are mutually assignable. Tag distinctly if you need them kept apart.
 
    **What branding does and does not buy.** It moves bypassing the constructor from *free* to *one deliberate `as`*. `"raw <script>" as ReadingText` still compiles, on both shapes. That is the honest ceiling: the type stops silent assignment, not determined circumvention — and it makes every bypass a greppable token in review rather than an invisible one.
 
