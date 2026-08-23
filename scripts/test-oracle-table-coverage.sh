@@ -252,6 +252,25 @@ hand_listed() {  # $1 = suite; prints each hand-listed population found
 
 
 # -----------------------------------------------------------------------------
+# THE ESCAPE PREDICATE, extracted so there is exactly ONE implementation.
+# A `coverage:` declaration excuses a population only if it sits within
+# DECL_WINDOW lines above it — that proximity is what ties the declaration to the
+# thing it declares, instead of letting them merely coexist in one file.
+#
+# It is a function rather than an inline expression because the first version was
+# inline and its probe RESTATED it: the probe ran a verbatim copy of the same
+# `sed | grep` against a synthetic fixture, so it certified its own copy. Neuter
+# the real check and the copy stayed green — 18/0, verified. That is the third
+# instance on this branch of a guard whose self-check duplicates its subject
+# instead of calling it, and duplication is the defect, not the pattern used.
+# One implementation; the check calls it, both probes call it.
+DECL_WINDOW=6
+declared_within_window() {  # $1 = file, $2 = line number of the population
+    local start
+    start=$(( $2 > DECL_WINDOW ? $2 - DECL_WINDOW : 1 ))
+    sed -n "${start},${2}p" "$1" | grep -q 'coverage:'
+}
+
 populations=0
 undeclared=0
 
@@ -272,8 +291,7 @@ while IFS= read -r suite; do
         [ -n "$hit" ] || continue
         populations=$((populations + 1))
         lineno="${hit%%:*}"
-        start=$(( lineno > DECL_WINDOW ? lineno - DECL_WINDOW : 1 ))
-        if sed -n "${start},${lineno}p" "$suite" | grep -q 'coverage:'; then
+        if declared_within_window "$suite" "$lineno"; then
             ok "$(basename "$suite"):${lineno}: hand-listed population, declared"
         else
             undeclared=$((undeclared + 1))
@@ -345,22 +363,48 @@ rm -f "$probe"
 # failure branch is therefore unreachable — an assertion that cannot fail is not
 # an assertion. Plant both states.
 esc_probe="$(mktemp)"
-printf 'for f in tdd/a.md tdd/b.md; do :; done\n' > "$esc_probe"
-hit="$(hand_listed "$esc_probe" | head -1)"; ln="${hit%%:*}"
-st=$(( ln > DECL_WINDOW ? ln - DECL_WINDOW : 1 ))
-if sed -n "${st},${ln}p" "$esc_probe" | grep -q 'coverage:'; then
-    bad "escape check: an UNdeclared population read as declared" "the coverage: gate is not gating"
-else
-    ok "escape check: an undeclared population is not excused"
-fi
-printf '# coverage: enumerated — probe\nfor f in tdd/a.md tdd/b.md; do :; done\n' > "$esc_probe"
-hit="$(hand_listed "$esc_probe" | head -1)"; ln="${hit%%:*}"
-st=$(( ln > DECL_WINDOW ? ln - DECL_WINDOW : 1 ))
-if sed -n "${st},${ln}p" "$esc_probe" | grep -q 'coverage:'; then
-    ok "escape check: a declared population is excused"
-else
-    bad "escape check: a DECLARED population was not excused" "the window is too narrow; correct suites would redden"
-fi
+
+probe_escape() {  # $1 = label, $2 = fixture body, $3 = expected (declared|undeclared)
+    printf '%s' "$2" > "$esc_probe"
+    local hit ln
+    hit="$(hand_listed "$esc_probe" | head -1)"; ln="${hit%%:*}"
+    if [ -z "$ln" ]; then
+        bad "escape probe fixture was not detected at all: $1" \
+            "the fixture no longer trips hand_listed(), so this probe proves nothing"
+        return
+    fi
+    if declared_within_window "$esc_probe" "$ln"; then
+        if [ "$3" = "declared" ]; then
+            ok "escape check: $1"
+        else
+            bad "escape check: $1 — an UNdeclared population read as declared" "the coverage: gate is not gating"
+        fi
+    else
+        if [ "$3" = "undeclared" ]; then
+            ok "escape check: $1"
+        else
+            bad "escape check: $1 — a DECLARED population was not excused" "the window is too narrow; correct suites would redden"
+        fi
+    fi
+}
+
+probe_escape "an undeclared population is not excused" \
+    'for f in tdd/a.md tdd/b.md; do :; done
+' undeclared
+probe_escape "a declared population is excused" \
+    '# coverage: enumerated — probe
+for f in tdd/a.md tdd/b.md; do :; done
+' declared
+probe_escape "a declaration too far above does not reach" \
+    '# coverage: enumerated — probe
+#
+#
+#
+#
+#
+#
+for f in tdd/a.md tdd/b.md; do :; done
+' undeclared
 rm -f "$esc_probe"
 
 # -----------------------------------------------------------------------------
