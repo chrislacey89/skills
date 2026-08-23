@@ -105,7 +105,6 @@ cd "$repo_root"
 iface="tdd/interface-design.md"
 refac="tdd/refactoring.md"
 skill="tdd/SKILL.md"
-checklist="pre-merge/review-checklist.md"
 
 # Floors. Named rather than inline, so lowering one is a visible edit to a
 # constant instead of a silent condition — the convention
@@ -125,7 +124,7 @@ fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 2; }
 # coverage: enumerated — the files this suite asserts against, each bound
 # to a named variable above. Not derivable: the set is "the files this suite
 # makes claims about", which is a property of the assertions, not of the tree.
-for f in "$iface" "$refac" "$skill" "$checklist"; do
+for f in "$iface" "$refac" "$skill"; do
     [ -f "$f" ] || fatal "$f not found. The file moved, or this suite is stale."
 done
 
@@ -420,6 +419,25 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# THESE TWO ARE WORDING GREPS, AND THE HEADER ARGUES AGAINST WORDING GREPS.
+# The distinction is real and was unstated, which made the file read as
+# contradicting its own NOT PINNED section. Stating it:
+#
+# The cut assertions claimed two sites AGREED on a sentence. That is a claim
+# about a relationship, and it broke whenever either side was reworded for
+# perfectly good reasons — which is why every green they produced was a guess.
+#
+# These two claim a single load-bearing NEGATIVE has not been DELETED. #268
+# asked for both by name: the total-function precondition, because without it
+# the compiler-worklist rule gets applied where it does nothing; and the
+# proportionality bound, because without it the rule reads as "wrap every
+# string." Deletion is the failure mode they guard, and deletion is decidable.
+#
+# They are still on the same spectrum, and the honest caveat is that a reword
+# ("brand every string") false-reds them. That is acceptable only while the
+# phrases stay distinctive and the sentences stay load-bearing. If either is
+# reworded in good faith, do not tighten the pattern — cut the assertion, the
+# way the two-site ones were cut.
 section "the two most deletable sentences are still there"
 
 # Both are load-bearing negatives: prose that constrains where the rule applies
