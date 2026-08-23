@@ -99,9 +99,6 @@ section "marker values carry no angle brackets"
 # model=<model-id>` with checklist and prompt gone. Both assertions above would
 # have failed for a reason that looks like a missing field rather than a broken
 # parse, so pin the cause directly.
-# coverage: enumerated — the two marker templates the ledger block defines.
-# Both are extracted by name above; a third marker would need its own anchor,
-# so a scan could not discover it either.
 for template in "$pass_template" "$judge_template"; do
     body="${template#<!-- }"
     body="${body%-->}"

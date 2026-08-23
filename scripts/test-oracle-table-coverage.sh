@@ -222,58 +222,69 @@ section "every hand-listed population of subject files is declared"
 # argue with beats one taken in silence, which is the shape this family exists
 # to close.
 hand_listed() {  # $1 = suite; prints each hand-listed population found
-    # C5 FIX. The first draft matched two syntaxes and the prose claimed a
-    # property. Probed with four real shapes it found ONE, and run against
-    # scripts/test-widened-domain-tell.sh -- which hand-lists subject files in
-    # two loops -- it returned nothing, so the scan printed "no hand-listed
-    # populations" about a tree that demonstrably had them. That is root cause
-    # (2) of the entry this mechanism ships with: zero hits is the healthy
-    # state, so silence carries no signal. Four forms now, all verified against
-    # real instances in this repo:
-    #   a="$x $y"                       -- list of path-holding variables
-    #   for f in "$a" "$b" "$c"         -- quoted variable refs in a loop header
-    #   for f in a/X.md b/Y.md          -- literal paths, any case
-    #   for f in "a/x.md" "b/y.md"      -- quoted literal paths
-    { grep -nE '^[[:space:]]*[a-z_]+="(\$[a-z_]+[[:space:]]+){1,}\$[a-z_]+"[[:space:]]*$' "$1" || true
-      grep -nE '^[[:space:]]*for [a-z_]+ in ("?\$\{?[a-z_]+\}?"?[[:space:]]+){1,}"?\$\{?[a-z_]+\}?"?;?[[:space:]]*do' "$1" || true
-      grep -nEi '^[[:space:]]*for [a-z_]+ in ("?[a-z0-9_.-]+/[a-z0-9_.-]+\.(md|sh|yml)"?[[:space:]]+){1,}"?[a-z0-9_.-]+/[a-z0-9_.-]+\.(md|sh|yml)"?;?[[:space:]]*do' "$1" || true
+    # NAMED FOR SUBJECT FILES, SO IT MATCHES SUBJECT FILES. An earlier revision
+    # matched any `for` over two-or-more quoted variables, regardless of what
+    # they held. Its three hits in this repo were: one real file population, one
+    # loop over extracted *git command strings*, and one over *HTML comment
+    # templates*. Two false positives out of three, in a section titled "every
+    # hand-listed population of subject FILES" — and the response at the time
+    # was to annotate around them, which this suite's own miss() message warns
+    # is how you get "a 'coverage:' comment that is a lie."
+    #
+    # The variable-list arms now require the variable NAMES to look like they
+    # hold paths (file/path/doc/skill/md/sh/yml/checklist/iface/refac/suite/
+    # template is deliberately excluded). That is a heuristic on naming rather
+    # than on values — bash cannot see values statically — so it is the honest
+    # ceiling, and it is stated rather than implied. Literal-path arms need no
+    # such guess: a `/` and a known extension are visible in the source text.
+    local pathish='(file|path|doc|docs|skill|skills|md|sh|yml|iface|refac|checklist|suite|entry|target|src|source)'
+    { # a="$x $y"  — list of path-named variables
+      grep -nEi "^[[:space:]]*[a-z_]*${pathish}[a-z_]*=\"(\\\$[a-z_]*${pathish}[a-z_]*[[:space:]]+){1,}\\\$[a-z_]*${pathish}[a-z_]*\"[[:space:]]*$" "$1" || true
+      # a="tdd/x.md tdd/y.md"  — list of literal paths (the literal twin of the
+      # incident's own shape, which the first revision missed entirely)
+      grep -nEi "^[[:space:]]*[a-z_]+=\"([a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)[[:space:]]+){1,}[a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)\"" "$1" || true
+      # for f in "$a" "$b"  — path-named variables in a loop header
+      grep -nEi "^[[:space:]]*for [a-z_]+ in (\"?\\\$\\{?[a-z_]*${pathish}[a-z_]*\\}?\"?[[:space:]]+){1,}\"?\\\$\\{?[a-z_]*${pathish}[a-z_]*\\}?\"?;?[[:space:]]*do" "$1" || true
+      # for f in a/X.md b/Y.md  — literal paths in a loop header, any case
+      grep -nEi "^[[:space:]]*for [a-z_]+ in (\"?[a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)\"?[[:space:]]+){1,}\"?[a-z0-9_.-]+/[a-z0-9_.-]+\\.(md|sh|yml)\"?;?[[:space:]]*do" "$1" || true
     } | sort -t: -k1,1n -u
 }
 
+
+# -----------------------------------------------------------------------------
 populations=0
 undeclared=0
+
+# PER POPULATION, NOT PER FILE. The first revision asked whether the token
+# `coverage:` appeared anywhere in the suite, so one declaration permanently
+# exempted the whole file: adding a second, entirely undeclared population to an
+# already-declared suite passed 15/0 — verified. The header states the rule per
+# population, so the check has to be per population. A declaration must sit
+# within DECL_WINDOW lines above the population it excuses, which is what ties
+# the two together instead of letting them merely coexist.
+DECL_WINDOW=6
 
 while IFS= read -r suite; do
     [ -n "$suite" ] || continue
     found="$(hand_listed "$suite")"
     [ -n "$found" ] || continue
-    populations=$((populations + 1))
-    if grep -q 'coverage:' "$suite"; then
-        ok "$(basename "$suite"): hand-listed population, and it declares its coverage"
-    else
-        undeclared=$((undeclared + 1))
-        bad "$(basename "$suite"): iterates a hand-listed population of subject files and never says so" \
-            "the set and the thing it stands for are written in two places and agree only because someone made them agree; derive the set, or add a one-line 'coverage:' note saying why enumeration is the ceiling here — $(printf '%s' "$found" | head -1)"
-    fi
+    while IFS= read -r hit; do
+        [ -n "$hit" ] || continue
+        populations=$((populations + 1))
+        lineno="${hit%%:*}"
+        start=$(( lineno > DECL_WINDOW ? lineno - DECL_WINDOW : 1 ))
+        if sed -n "${start},${lineno}p" "$suite" | grep -q 'coverage:'; then
+            ok "$(basename "$suite"):${lineno}: hand-listed population, declared"
+        else
+            undeclared=$((undeclared + 1))
+            bad "$(basename "$suite"):${lineno}: iterates a hand-listed population of subject files and never says so" \
+                "the set and the thing it stands for are written in two places and agree only because someone made them agree; derive the set, or add a one-line 'coverage:' note directly above it — ${hit#*:}"
+        fi
+    done <<EOF
+$found
+EOF
 done <<< "$(suites)"
 
-# NO FLOOR HERE, and that is a real difference from the table check above. A
-# repo can legitimately contain zero hand-listed populations — this one does,
-# now that #268's suite derives its set — so "found none" is the healthy state
-# rather than a detector regression, and flooring it would redden a clean repo.
-#
-# That leaves this detector able to rot silently, which the table check's floor
-# exists to prevent. It is a disclosed asymmetry, not an oversight: the honest
-# guard is the self-test below, which plants the shape and requires the detector
-# to find it. A floor asserts the repo still has the defect; a self-test asserts
-# the detector still sees it. The second is what is actually wanted.
-if [ "$populations" -eq 0 ]; then
-    ok "no hand-listed populations of subject files (detector self-tested below)"
-else
-    ok "checked $populations hand-listed population(s), $undeclared undeclared"
-fi
-
-# -----------------------------------------------------------------------------
 section "the population detector still detects (self-test)"
 
 # C4 FIX. Without this the section above is one broken regex from a permanent
@@ -306,17 +317,51 @@ miss() {  # $1 = label, $2 = body that MUST NOT be detected
 }
 
 # shellcheck disable=SC2016  # the probes are literal source text; expansion would defeat them
-plant "a list of path-holding variables"      'citers="$refac $skill"'
+plant "path-named variables in an assignment"   'skill_files="$iface_doc $skill_doc"'
 # shellcheck disable=SC2016
-plant "quoted variable refs in a loop header" 'for pair in "$iface" "$checklist"; do'
-plant "literal paths in a loop header"        'for f in tdd/SKILL.md tdd/tests.md; do'
-plant "quoted literal paths"                  'for f in "a/x.md" "b/y.md"; do'
-miss  "a single named subject"                'compound_skill="compound/SKILL.md"'
-miss  "a loop over non-file labels"           'for label in Discipline Candidates; do'
+plant "literal paths in an assignment"          'citers="tdd/refactoring.md tdd/SKILL.md"'
 # shellcheck disable=SC2016
-miss  "a loop over one variable"              'for f in "$only"; do'
+plant "path-named variables in a loop header"   'for f in "$iface_file" "$checklist_file"; do'
+plant "literal paths in a loop header"          'for f in tdd/SKILL.md tdd/tests.md; do'
+plant "quoted literal paths"                    'for f in "a/x.md" "b/y.md"; do'
+miss  "a single named subject"                  'compound_skill="compound/SKILL.md"'
+miss  "a loop over non-file labels"             'for label in Discipline Candidates; do'
+# shellcheck disable=SC2016
+miss  "a loop over one variable"                'for f in "$only_file"; do'
+# The two false positives an earlier revision produced in this repo. Both are
+# real loops in real suites over values that are not files; pinning them as
+# required non-matches is what keeps the section's title true.
+# shellcheck disable=SC2016
+miss  "a loop over extracted command strings"   'for extracted in "$bisect_start" "$bisect_run"; do'
+# shellcheck disable=SC2016
+miss  "a loop over comment templates"           'for template in "$pass_template" "$judge_template"; do'
+# shellcheck disable=SC2016
+miss  "ordinary string concatenation"           'msg="$greeting $name"'
 
 rm -f "$probe"
+
+# The escape check itself had no probe. Replacing it with `if true` left the
+# suite at 15/0, because every population in this tree is declared and the
+# failure branch is therefore unreachable — an assertion that cannot fail is not
+# an assertion. Plant both states.
+esc_probe="$(mktemp)"
+printf 'for f in tdd/a.md tdd/b.md; do :; done\n' > "$esc_probe"
+hit="$(hand_listed "$esc_probe" | head -1)"; ln="${hit%%:*}"
+st=$(( ln > DECL_WINDOW ? ln - DECL_WINDOW : 1 ))
+if sed -n "${st},${ln}p" "$esc_probe" | grep -q 'coverage:'; then
+    bad "escape check: an UNdeclared population read as declared" "the coverage: gate is not gating"
+else
+    ok "escape check: an undeclared population is not excused"
+fi
+printf '# coverage: enumerated — probe\nfor f in tdd/a.md tdd/b.md; do :; done\n' > "$esc_probe"
+hit="$(hand_listed "$esc_probe" | head -1)"; ln="${hit%%:*}"
+st=$(( ln > DECL_WINDOW ? ln - DECL_WINDOW : 1 ))
+if sed -n "${st},${ln}p" "$esc_probe" | grep -q 'coverage:'; then
+    ok "escape check: a declared population is excused"
+else
+    bad "escape check: a DECLARED population was not excused" "the window is too narrow; correct suites would redden"
+fi
+rm -f "$esc_probe"
 
 # -----------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
