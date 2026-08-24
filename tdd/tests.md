@@ -80,7 +80,7 @@ The thing that decides whether a run was correct has a name: the **oracle**. Eve
 
 The rule is structural, not attentional. **When a test name claims a *relationship* — below a ceiling, at least N, within the cap, rejects empty, before the deadline — the assertion must reference the other side of that relationship, imported from wherever it is defined. Otherwise narrow the name to what is actually asserted.**
 
-**One carve-out, and it is § *The Oracle* reasserting itself over this rule: when the value under test is itself derived from the bound** — `const DEFAULT_MAX_TOKENS = NON_STREAMING_CEILING - 1` — **importing the bound re-runs the implementation's own formula, and the assertion becomes true by construction.** That is redundant computation with the code standing in as its own reference: green through every ceiling change, including one that breaks the budget. Narrow the name instead. A relationship the code computes cannot be checked by a test that computes it the same way.
+**One carve-out, and it is § *The Oracle* reasserting itself over this rule: when the value under test is itself derived from the bound** — `const DEFAULT_MAX_TOKENS = NON_STREAMING_CEILING - 1` — **importing the bound gives you an assertion the definition already entails, and it becomes true by construction.** It is not recomputation — `toBeLessThan(CEILING)` computes nothing — which is why the § *The Oracle* discriminator ("did I re-run the formula?") does not catch it. The test is weaker than that: it asserts something that cannot be false while the definition stands, so it is green through every ceiling change including one that breaks the budget. **In the derived case the only honest option is (b) below — narrow the name.** Both (a) and (c) assert against the imported bound, and in this case neither can fail.
 
 ```typescript
 // BAD: the name claims a relationship to a bound; the body pins one literal
@@ -100,7 +100,9 @@ test("max_tokens defaults to 16000", () => {
   expect(client.maxTokens).toBe(16_000);
 });
 
-// GOOD (c): make both claims, separately — the pin and the bound each get a test
+// GOOD (c): make both claims, separately — the pin and the bound each get a test.
+//   Precondition: maxTokens is set independently of the ceiling. If it is *derived*
+//   from it, the second test is entailed by the definition — use (b) alone.
 test("max_tokens defaults to 16000", () => {
   expect(client.maxTokens).toBe(16_000);
 });
@@ -110,14 +112,21 @@ test("the default max_tokens is below the non-streaming ceiling", () => {
 });
 ```
 
-All three are honest. Choosing between them is a trade, not a ranking, and (a) costs something the phrase "keep the claim" hides: **it stops pinning the literal.** `toBeLessThan(CEILING)` passes for `100` as readily as for `16_000`, so a default that silently regresses stays green — and pinning the budget was the entire reason the test was written. (b) keeps the pin and gives up the claim; it is right when the bound has no importable definition. (c) gives up neither and costs one test, which makes it the default whenever the bound *is* importable — one logical assertion per test (§ *Good Tests*), one claim per name. What is never available is the bad version: a name asserting a constraint that no run can violate.
+All three are honest, and which one is right is decided by two questions, not by preference.
+
+1. **Is the value derived from the bound?** If yes, stop: **(b)**. (a) and (c) both assert against the imported bound, and the carve-out above says neither can fail.
+2. **Is the bound importable?** If no: **(b)**. If yes: **(c)**.
+
+That leaves **(a)** with no case of its own, and the omission is deliberate — it is the step on the way to (c), not a destination. What the comment on it calls "keep the claim" hides a real cost: **it stops pinning the literal.** `toBeLessThan(CEILING)` passes for `100` as readily as for `16_000`, so a default that silently regresses stays green — and pinning the budget was the entire reason the incident's test was written. (c) is (a) and (b) together for one extra line, which is why it wins whenever it is available.
+
+What is never available is the bad version: a name asserting a constraint that no run can violate.
 
 **The operational check, at RED.** A red bar is not enough. Change the value the name is about and confirm the test goes red **for the reason the name gives** — read the failure message and check it describes the relationship the name claims, not some incidental collision. Two failure modes this catches that a bare "did it go red?" does not:
 
 - **The test never ran.** Reachability comes before the oracle: a check switched off by a rename, a skipped block, or a filter that no longer matches reports green while asserting nothing. Confirm the mutated test executed and failed, rather than confirming the suite was not fully green.
 - **It reddened for the wrong reason.** A literal-pinning test reds when *any* edit touches the literal, which looks identical to reddening because a bound was crossed. If the failure message names only the literal, the name's claim is still unfalsifiable.
 
-**Scope.** Most test names make no relational claim — `"user can checkout with valid cart"` names an outcome, not a bound, and this rule has nothing to say about it. Apply it when the name asserts a comparative, a limit, or a rejection — the three shapes whose truth depends on something the body may never mention.
+**Scope.** Most test names make no relational claim — `"user can checkout with valid cart"` names an outcome, not a bound, and this rule has nothing to say about it. Apply it when the name asserts any of the relationships the rule above lists — a comparative, a limit, an ordering, a deadline, a rejection — or anything else whose truth depends on a value the body may never mention. When in doubt, ask whether the name would still be true if some *other* value changed; if it would not, the rule applies.
 
 ## Evident Data
 
