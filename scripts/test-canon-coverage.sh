@@ -3,100 +3,104 @@
 # frontmatter must name the same works, and every attribution the page renders
 # must be one the named skill actually makes.
 #
-# THE DRIFT CLASS. The canon section renders a shelf of books, and its copy in
-# `site/src/components/Shelf.astro` tells the reader "each SKILL.md names its
-# sources in frontmatter." Click a spine and the opened book names one skill
-# (`Into the skill — ts-audit/SKILL.md`) and quotes a `sources:` excerpt beneath
-# it. Every part of that is prose in `site/src/lib/data.ts` about a *different*
-# file's frontmatter, and nothing relates the two. A spine can be added, or the
-# skill backing a spine can lose its `sources:` block, and the page keeps
-# asserting provenance the repo cannot produce. The failure emits no signal: the
-# page builds, the spine renders, the book opens.
+# THE DRIFT CLASS. The canon section is a router pointing at provenance: it
+# shelves a set of works and tells the reader "each SKILL.md names its sources
+# in frontmatter." For as long as that set was hand-written, nothing related the
+# two, and they drifted in both directions in silence — a spine could be added
+# with nothing behind it, and a `sources:` entry could be added and never reach
+# the page. Neither failure emits a signal. The page builds, the spine renders,
+# the book opens.
 #
-# THE INCIDENT (issue #272, 2026-08-23). The shelf carried *Total TypeScript —
-# Matt Pocock* as one of eight spines and pointed it at `/ts-audit`. `/ts-audit`
-# declared no `sources:` block at all — its frontmatter held only `name` and
-# `description`. Every other spine traced to a real entry; that one traced to
-# nothing, and had done so for as long as the page existed.
+# THE TWO INCIDENTS.
+#   #272 (2026-08-23) — the shelf carried *Total TypeScript — Matt Pocock* and
+#     pointed it at `/ts-audit`, whose frontmatter held only `name` and
+#     `description`. Every other spine traced to a real entry; that one traced to
+#     nothing, and had done so for as long as the page existed.
+#   #273 (2026-08-24) — the same shelf held 8 of the 45 works the skills
+#     actually cite. 34 declared works never reached the page, and four works
+#     were declared under two author spellings each, so even a naive automated
+#     extraction would have double-counted them.
 #
-# THE PAIRING IS THE PROPERTY, NOT THE SHELF. This suite's first draft asked
-# whether *some* skill declared each shelved work, and that is strictly weaker
-# than what the page claims. Six of the eight works are declared by two to five
-# skills each, so deleting a work from the one skill `bookDetails` names left the
-# page asserting a `sources:` block that file no longer had — and the suite fully
-# green, because a sibling skill still declared it. Reproduced twice in review,
-# both times 11 passed / 0 failed. #272's own reproduction steps are the pairing
-# ("the opened book claims the source feeds /ts-audit; read /ts-audit's
-# frontmatter"), so the pairing is what has to be pinned.
+# THE FIX FOR #273 CHANGED WHAT THIS SUITE HAS TO WATCH. The canon is now
+# derived: `scripts/generate-canon.sh` reads the frontmatter and writes
+# `site/src/lib/canon.generated.ts`, and `Shelf.astro` renders that. So the
+# hand-written array this suite used to parse is gone, and with it the checks
+# that guarded it. That is not a loss of coverage — #272's property (a shelved
+# work must be declared by the skill the page attributes it to) is now checked on
+# EVERY citation edge rather than on the one skill a hand-written entry named,
+# which is strictly stronger. What replaces the old checks is the set of
+# properties a derivation can still get wrong.
 #
 # WHAT IT PINS, every side extracted from the real files rather than restated:
-#   1. Every spine in the `shelf` array of `site/src/lib/data.ts`.
-#   2. The skill each spine's `bookDetails` entry names in its `file:` field.
-#   3. Every quoted entry under a `sources:` key in that skill's frontmatter.
-#   4. Each shelved work matches a work THAT skill declares, on title, with the
-#      shelf author's surname present in the declared entry.
-#   5. No title is declared under two different author spellings anywhere in the
+#   1. Every quoted entry under a `sources:` key in every skill's frontmatter,
+#      bounded to the frontmatter and terminated at the first non-indented line.
+#   2. No title is declared under two different author spellings anywhere in the
 #      repo.
-#
-# WHY TITLE + SURNAME AND NOT STRING EQUALITY. The shelf and the frontmatter are
-# two independently hand-authored sides. Until #273 they spelled the same authors
-# four different ways — `/closeout` declared *Continuous Delivery* as "Jez Humble,
-# David Farley" where `/pre-merge` and the shelf both said "Jez Humble & David
-# Farley". Demanding equality would fail on a formatting difference and teach the
-# reader to loosen the check. The surname test is what keeps title-only matching
-# from accepting a different author's book that happens to share a title.
-#
-# THE VARIANTS ARE NOW A FAILURE, NOT A TOLERANCE (issue #273). #273 normalized
-# those four spellings at the source, and check 5 is what keeps them normalized.
-# It is the opposite move from the tolerance above, and both are load-bearing,
-# because they govern different joins. The tolerance governs SHELF-to-SKILL,
-# where two independently authored sides may legitimately differ in formatting.
-# The collision check governs SKILL-to-SKILL, where a second spelling is never
-# legitimate — it silently splits one work into two in any derivation over the
-# frontmatter, and a derivation over the frontmatter is the thing #273 builds.
-# #273 chose the detector over an alias table on purpose: a table is itself a
-# hand-maintained canon list, which is the defect under repair.
-#
-# WHY THE SHELF POPULATION IS DERIVED AND NOT FLOORED. A floor guards against
-# total blindness; it cannot notice the loss of one item, which is the
-# granularity this drift arrives at. `MIN_CANON_WORKS=5` against a shelf of eight
-# let three spines go unparsed, and a ninth spine written `full: '…'` — single
-# quotes, which no formatter in this repo forbids — passed as a shrunken shelf,
-# fully green, while the page rendered nine. So the array's own element count is
-# read independently of the field regexes and required to equal the number of
-# spines parsed. That is `partial-oracle-selfcheck-2026-08-22.md` Prevention #2
-# ("derive the coverage instead of restating it") applied to the one population
-# where restating it actually bit, and it closes the recurrence of
-# `mechanism-generality-lags-the-pattern-2026-08-23.md` that review caught here:
-# a detector keying on a language construct rather than on the property.
-#
-# THE SECOND HALF (issue #273). The paragraph above used to end here saying the
-# shelf was hand-maintained and that fixing it was somebody else's issue. It is
-# now `site/src/lib/canon.generated.ts`, produced by `scripts/generate-canon.sh`
-# from the same `sources:` frontmatter, and the "canon module is derived" section
-# below is what keeps the committed copy honest. It pins, each side read
-# independently of the generator:
-#
-#   6. The committed module is byte-for-byte what the generator produces from the
-#      frontmatter as it stands right now.
-#   7. The canon and the frontmatter name the same set of works, in both
+#   3. The committed canon module is byte-for-byte what the generator produces
+#      from the frontmatter as it stands right now.
+#   4. The canon and the frontmatter name the same set of works, in both
 #      directions — no declared work missing, no shelved work undeclared.
-#   8. Every entry is typed `book` or `paper`, and `paper` exactly when its own
+#   5. Every entry is typed `book` or `paper`, and `paper` exactly when its own
 #      author field is spelled as a paper citation.
-#   9. Every citation edge resolves to a skill that declares that work at that
-#      tier, AND every declaration in the frontmatter appears as an edge. The
-#      reverse direction is not redundant: dropping one citation from a work with
-#      other citers leaves the page looking correct and only the citation count
-#      — which #274 renders as spine height — silently wrong.
+#   6. Every citation edge resolves to a skill that declares that work at that
+#      tier, AND every declaration in the frontmatter appears as an edge.
+#   7. `data.ts` names a declared work only as a `lessons` key, and every
+#      `lessons` key is a work some skill declares.
+#   8. The BUILT page renders exactly the canon — no work missing, no spine with
+#      nothing behind it.
+#   9. Every `mappings` row's cited book is declared by every stage the row names.
 #
-# WHAT IT STILL DOES NOT PIN. `bookDetails[key].lesson` is hand-written prose,
-# and nothing here checks its content. That is deliberate and load-bearing: the
-# lessons are an OPTIONAL enrichment layer keyed by canonical work, so a work
-# with no lesson degrades to the derived spread rather than being blocked from
-# the page. A coverage check over the lessons would make curation mandatory and
-# put the maintenance burden back exactly where #273 removed it from.
+# WHY 6 IS CHECKED IN BOTH DIRECTIONS. The forward edge catches an invented
+# citation. The reverse catches a dropped one — and a dropped citation is the
+# quiet failure, because the work stays shelved by its other citers and nothing
+# looks broken. Only the citation count is understated, and #274 renders that
+# count as spine height.
 #
-# The self-tests at the bottom run every extractor and both matchers against
+# WHY 8 IS THE ONE THAT ACTUALLY HOLDS THE PROPERTY. Every other check reads
+# source files and reasons about what they would produce. Check 8 reads what was
+# produced. The difference is the gap between "the component imports the canon"
+# and "the reader can see all 45 works", and #273 is a bug report about the
+# second. It needs `site/dist/index.html`, so it SKIPS locally unless the site
+# has been built, and CI's `canon-render` job builds before invoking this suite
+# so it always runs there. The narrowing tripwire beside it (`grep` for
+# `.slice(`/`.filter(`) keys on a language construct, which
+# `mechanism-generality-lags-the-pattern-2026-08-23.md` is explicit is the weaker
+# kind of detector; it is a fast local hint, not the mechanism.
+#
+# ONE WORK, ONE SPELLING (check 2), AND WHY IT IS A FAILURE RATHER THAN A
+# TOLERANCE. Grouping is by the whole declared string, so a second spelling of
+# one author splits one work into two entries — the canon over-counts and each
+# half's citation count is wrong. #273 normalized the four live pairs at the
+# source and this check keeps them normalized. The alternative was an alias table
+# beside the extractor, rejected because a table is itself a hand-maintained
+# canon list, which is the defect under repair. The `mappings` matcher one
+# section down stays deliberately looser — it compares bare titles, because a
+# `mappings` row cites no author at all.
+#
+# WHY THE POPULATIONS ARE DERIVED AND NOT FLOORED. A floor guards against total
+# blindness; it cannot notice the loss of one item, which is the granularity this
+# drift arrives at. Against the old shelf, `MIN_CANON_WORKS=5` let three spines
+# go unparsed, and a spine written `full: '…'` — single quotes, which no
+# formatter in this repo forbids — passed as a shrunken shelf, fully green, while
+# the page rendered nine. So `canon_slots` reads the array's element count by
+# brace depth alone, knowing no field name, and is required to equal what
+# `canon_rows` parses. That is `partial-oracle-selfcheck-2026-08-22.md`
+# Prevention #2 ("derive the coverage instead of restating it") applied to the
+# population where restating it actually bit, and it closes the recurrence of
+# `mechanism-generality-lags-the-pattern-2026-08-23.md`: a detector keying on a
+# language construct rather than on the property. The floors that remain guard
+# only the blunt case where a reading returns nothing at all.
+#
+# WHAT IT DELIBERATELY DOES NOT PIN. `lessons` is hand-written prose and nothing
+# here checks its content or its coverage. That is load-bearing rather than an
+# oversight: the lessons are an OPTIONAL enrichment layer keyed by canonical
+# work, so a work with no lesson opens to its derived spread instead of being
+# kept off the page. A coverage check over the lessons would make curation
+# mandatory and put the maintenance burden back exactly where #273 removed it
+# from. What IS pinned about them is check 7 — a lesson keyed to a work nobody
+# declares is dead prose, which is #272's shape one layer in.
+#
+# The self-tests at the bottom run every extractor and every detector against
 # synthetic fixtures in both directions, because a detector that has stopped
 # detecting reports the same full green as a clean repo.
 
@@ -120,68 +124,6 @@ fatal() { printf '\nFATAL: %s\n' "$1" >&2; exit 2; }
 
 # --- Everything below is derived from a real file; nothing is restated --------
 
-# shelf_rows <data.ts> — one "<key>\t<Title — Author>" per spine. The key is
-# `${author}-${title}`, which is exactly how Shelf.astro builds each spine's
-# `data-key` and how `bookDetails` is keyed — so it is the join, not a guess.
-#
-# RECORD-BASED, NOT LINE-BASED. An earlier draft read one spine per line, which
-# made a semantically null reflow — Prettier's normal output for a 145-character
-# object literal — read as a shrunken shelf. Records are delimited by brace
-# depth, so a spine may be written on one line or across seven.
-shelf_rows() {
-    awk '
-        /^export const shelf/ { inshelf = 1; next }
-        inshelf && /^\];/     { inshelf = 0; next }
-        inshelf {
-            for (i = 1; i <= length($0); i++) {
-                c = substr($0, i, 1)
-                if (c == "{") { depth++; if (depth == 1) rec = ""; continue }
-                if (c == "}") {
-                    depth--
-                    if (depth == 0) {
-                        t = ""; a = ""; f = ""
-                        if (match(rec, /title: "[^"]*"/))  t = substr(rec, RSTART + 8, RLENGTH - 9)
-                        if (match(rec, /author: "[^"]*"/)) a = substr(rec, RSTART + 9, RLENGTH - 10)
-                        if (match(rec, /full: "[^"]*"/))   f = substr(rec, RSTART + 7, RLENGTH - 8)
-                        if (t != "" && a != "" && f != "") print a "-" t "\t" f
-                        rec = ""
-                    }
-                    continue
-                }
-                if (depth >= 1) rec = rec c
-            }
-            if (depth >= 1) rec = rec " "
-        }
-    ' "$1"
-}
-
-# shelf_slots <data.ts> — how many spine objects the array holds, counted by
-# brace depth alone. It knows NO field name, which is the entire point: it is
-# the one reading capable of disagreeing with shelf_rows above.
-#
-# THE INDEPENDENCE IS PINNED, NOT ASSERTED. A previous draft counted lines
-# beginning with `{`, and a fixture proved that independent of *quote style* —
-# not of the field regexes. Rewriting this to key on /title:/ && /author:/ &&
-# /full:/ collapsed the oracle onto the extractor and the suite stayed at 17
-# passed / 0 failed, whereupon a reflowed spine went silently unchecked. The
-# multi-line fixture below separates the two implementations: on a reflowed
-# spine no single line carries all three field names, so that collapse now
-# fails here instead of passing.
-shelf_slots() {
-    awk '
-        /^export const shelf/ { inshelf = 1; next }
-        inshelf && /^\];/     { inshelf = 0; next }
-        inshelf {
-            for (i = 1; i <= length($0); i++) {
-                c = substr($0, i, 1)
-                if (c == "{") { if (depth == 0) n++; depth++ }
-                else if (c == "}") depth--
-            }
-        }
-        END { print n + 0 }
-    ' "$1"
-}
-
 # mapping_rows <data.ts> — "<source title>\t<skill list>" per row of the
 # `mappings` array, which Practice.astro renders under "Each stage
 # operationalizes a named discipline from the literature". Same provenance claim
@@ -196,28 +138,6 @@ mapping_rows() {
             if (match($0, /source: "[^"]*"/)) s = substr($0, RSTART + 9, RLENGTH - 10)
             if (match($0, /skill: "[^"]*"/))  k = substr($0, RSTART + 8, RLENGTH - 9)
             if (s != "" && k != "") print s "\t" k
-        }
-    ' "$1"
-}
-
-# detail_file <data.ts> <key> — the SKILL.md that `bookDetails[key]` names as
-# the source of this spine. Empty when the key has no entry, or when its entry
-# carries no `file:` field; the caller distinguishes those two with
-# detail_has_entry so the failure message can point at the right line.
-#
-# The key rule does NOT `next`. An earlier draft did, which skipped the `file:`
-# of any entry written on a single line — `"Doe-Known Book": { file: "…" },` —
-# and the reflow fixture below caught it. Falling through means one line can be
-# both the key line and the field line, which is what a formatter that collapses
-# a short entry will produce.
-detail_file() {
-    awk -v want="$2" '
-        /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/ {
-            if (match($0, /"[^"]*"/)) cur = substr($0, RSTART + 1, RLENGTH - 2)
-        }
-        cur == want && match($0, /file: "[^"]*"/) {
-            print substr($0, RSTART + 7, RLENGTH - 8)
-            exit
         }
     ' "$1"
 }
@@ -455,19 +375,78 @@ declares_work_at_tier() {
     ' "$1"
 }
 
-# declares_work <skill.md> <"Title — Author"> — does that skill declare that
-# work? Title must match exactly; the shelf author's surname must appear in the
-# declared entry.
-declares_work() {
-    local title="${2%% — *}" surname="${2##* }" candidate
-    while IFS= read -r candidate; do
-        [ -n "$candidate" ] || continue
-        [ "${candidate%% — *}" = "$title" ] || continue
-        if [[ "$candidate" == *"$surname"* ]]; then return 0; fi
+# lesson_keys <data.ts> — every key of the `lessons` object.
+#
+# The keys are verbatim `sources:` strings, so a key naming a work no skill
+# declares is dead prose: it never renders, and nothing else in the page would
+# say so. That is issue #272's shape surviving into the enrichment layer.
+lesson_keys() {
+    awk '
+        /^export const lessons/ { inl = 1; next }
+        inl && /^\};/           { inl = 0; next }
+        inl && match($0, /^[[:space:]]*"[^"]+"[[:space:]]*:/) {
+            s = substr($0, RSTART, RLENGTH)
+            if (match(s, /"[^"]+"/)) print substr(s, RSTART + 1, RLENGTH - 2)
+        }
+    ' "$1"
+}
+
+# stray_work_mentions <data.ts> <root> — every declared work named in data.ts
+# OUTSIDE the `export const lessons` block, as "<work>\t<line>: <text>".
+#
+# THIS IS THE REGRESSION CHECK FOR #273. The canon used to be a hand-written
+# array in this very file, and re-introducing one is how the derivation gets
+# quietly bypassed — a second list would render beside the generated one and
+# nothing else here would notice. `lessons` is the single sanctioned place in
+# data.ts to name a work, and it is sanctioned precisely because the suite
+# asserts nothing about its completeness.
+#
+# SCOPED BY POSITION, NOT BY MEMBERSHIP. A first draft asked whether each work
+# named in data.ts was also a `lessons` key, and a fixture proved that vacuous:
+# the eight hand-written lessons are exactly the eight works the old shelf held,
+# so restoring that array verbatim named only works that were already keys, and
+# the check went green on the precise regression it exists to catch. Asking
+# WHERE the string appears rather than WHETHER it appears elsewhere has no such
+# hole — a second array is outside the block no matter which works it lists.
+stray_work_mentions() {
+    local data="$1" root="$2" work outside hit
+    outside="$(awk '
+        /^export const lessons/ { inl = 1 }
+        inl && /^\};/           { inl = 0; next }
+        !inl                    { print NR ": " $0 }
+    ' "$data")"
+    while IFS= read -r work; do
+        [ -n "$work" ] || continue
+        # `|| true`: no match is the passing case, and this runs under set -e.
+        # printf rather than a sed replacement, because `&` is the whole-match
+        # backreference there and four declared works carry one in the author.
+        hit="$(printf '%s\n' "$outside" | grep -F -m1 -- "$work" || true)"
+        [ -n "$hit" ] && printf '%s\t%s\n' "$work" "$hit" || true
     done <<EOF
-$(declared_works "$1")
+$(declared_works "$root"/*/SKILL.md | LC_ALL=C sort -u)
 EOF
-    return 1
+}
+
+# orphan_lessons <data.ts> <root> — every `lessons` key that no skill declares.
+orphan_lessons() {
+    comm -23 <(lesson_keys "$1" | LC_ALL=C sort -u) \
+             <(declared_works "$2"/*/SKILL.md | LC_ALL=C sort -u)
+}
+
+# rendered_keys <index.html> — the work each rendered spine carries in its
+# `data-key`, with the entity escapes the templating applies undone.
+#
+# THE ONLY READING THAT SEES THE PAGE. Everything else in this suite reads
+# source files and reasons about what they would produce. This one reads what
+# was actually produced, which is the difference between "the component imports
+# the canon" and "the reader can see all 45 works" — and #273 is a bug report
+# about the second.
+rendered_keys() {
+    grep -o 'data-key="[^"]*"' "$1" \
+        | sed -e 's/^data-key="//' -e 's/"$//' \
+              -e 's/&#38;/\&/g' -e 's/&amp;/\&/g' \
+              -e 's/&#39;/'"'"'/g' -e 's/&quot;/"/g' \
+              -e 's/&lt;/</g' -e 's/&gt;/>/g'
 }
 
 # declares_title <skill.md> <title> — does that skill declare a work with this
@@ -482,22 +461,6 @@ declares_title() {
 $(declared_works "$1")
 EOF
     return 1
-}
-
-# detail_has_entry <data.ts> <key> — does bookDetails hold this key at all?
-# Distinguished from detail_file returning empty, so the failure message can
-# tell "the spine opens to nothing" apart from "the entry has no file: field"
-# and point the fixer at the right line.
-detail_has_entry() {
-    awk -v want="$2" '
-        /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/ {
-            if (match($0, /"[^"]*"/) && substr($0, RSTART + 1, RLENGTH - 2) == want) {
-                found = 1
-                exit
-            }
-        }
-        END { exit(found ? 0 : 1) }
-    ' "$1"
 }
 
 # unmapped_rows <data.ts> <root> — every `mappings` row whose cited book is not
@@ -523,72 +486,26 @@ $(mapping_rows "$data")
 EOF
 }
 
-# unbacked_works <data.ts> <root> — every spine whose named skill does not back
-# it, as "<work>\t<why>". Empty output is the passing state.
-unbacked_works() {
-    local data="$1" root="$2" key work skillfile
-    while IFS="$(printf '\t')" read -r key work; do
-        [ -n "$work" ] || continue
-        skillfile="$(detail_file "$data" "$key")"
-        if [ -z "$skillfile" ]; then
-            if detail_has_entry "$data" "$key"; then
-                printf '%s\tits bookDetails entry (key "%s") has no file: field to attribute the sources: block to\n' "$work" "$key"
-            else
-                printf '%s\tbookDetails has no entry for key "%s", so the spine opens to nothing\n' "$work" "$key"
-            fi
-            continue
-        fi
-        if [ ! -f "$root/$skillfile" ]; then
-            printf '%s\tbookDetails names %s, which does not exist\n' "$work" "$skillfile"
-            continue
-        fi
-        declares_work "$root/$skillfile" "$work" \
-            || printf '%s\t%s does not declare it in its sources: frontmatter\n' "$work" "$skillfile"
-    done <<EOF
-$(shelf_rows "$data")
-EOF
-}
-
 # -----------------------------------------------------------------------------
-section "the shelf population is fully parsed"
+section "the declaration population is fully read"
 
-# A FLOOR, in the shape `test-oracle-table-coverage.sh` established, and a
-# DERIVED EQUALITY beside it. They catch different things. The floor catches the
-# array vanishing entirely — where slots and rows both read zero and agree. The
-# equality catches the array being partly unreadable, which the floor cannot see
-# and which is how this drift actually arrives.
-MIN_CANON_WORKS=5
+# A FLOOR, in the shape `test-oracle-table-coverage.sh` established. It catches
+# the frontmatter extractor going blind — an empty declaration set would pass
+# every comparison below vacuously and read as a page defect rather than a
+# broken reading. The derived equalities that catch a PARTLY unreadable
+# population live in the canon section further down, where the two independent
+# readings of the array are.
 MIN_DECLARED_WORKS=20
 
 [ -f "$data_ts" ] || fatal "$data_ts is missing; the canon section moved and this suite has not followed it."
 
-canon_slots="$(shelf_slots "$data_ts")"
-canon_count="$(shelf_rows "$data_ts" | grep -c . || true)"
 declared_count="$(declared_works "$repo_root"/*/SKILL.md | sort -u | grep -c . || true)"
-
-if [ "$canon_count" -lt "$MIN_CANON_WORKS" ]; then
-    fatal "read $canon_count spine(s) off the shelf, expected at least $MIN_CANON_WORKS.
-       The extractor is broken, not the page — a shelf that reads as empty passes
-       every check below vacuously. If the shelf genuinely shrank, lower
-       MIN_CANON_WORKS in this file as a deliberate edit."
-fi
-ok "read $canon_count spine(s) from site/src/lib/data.ts (floor: $MIN_CANON_WORKS)"
-
-if [ "$canon_slots" -ne "$canon_count" ]; then
-    fatal "the shelf array holds $canon_slots entries but only $canon_count parsed.
-       $((canon_slots - canon_count)) spine(s) are written in a spelling the extractor does not
-       recognize — it reads title:/author:/full: with double quotes. An unparsed
-       spine is invisible to every check below while the page renders it, which is
-       exactly the drift this suite exists to catch. Fix the extractor or the
-       spine; do not lower a floor to hide it."
-fi
-ok "all $canon_slots shelf entries parsed ($canon_slots slots = $canon_count rows)"
 
 if [ "$declared_count" -lt "$MIN_DECLARED_WORKS" ]; then
     fatal "read $declared_count declared work(s) from skill frontmatter, expected at least $MIN_DECLARED_WORKS.
        The extractor is broken, not the repo — an empty declaration set would fail
-       every shelf work at once and read as a page defect. If sources were
-       genuinely removed, lower MIN_DECLARED_WORKS in this file as a deliberate edit."
+       every check at once and read as a page defect. If sources were genuinely
+       removed, lower MIN_DECLARED_WORKS in this file as a deliberate edit."
 fi
 ok "read $declared_count distinct declared work(s) across all skills (floor: $MIN_DECLARED_WORKS)"
 
@@ -730,19 +647,92 @@ EOF
 [ -z "$dropped" ] && ok "every work/skill/tier declaration in the frontmatter is recorded as a citation"
 
 # -----------------------------------------------------------------------------
-section "every spine is declared by the skill the page names"
+section "the page renders the derived canon, not a hand-written list"
 
-unbacked="$(unbacked_works "$data_ts" "$repo_root")"
-while IFS="$(printf '\t')" read -r offender why; do
+shelf_astro="$repo_root/site/src/components/Shelf.astro"
+[ -f "$shelf_astro" ] || fatal "$shelf_astro is missing; the canon section moved and this suite has not followed it."
+
+strays="$(stray_work_mentions "$data_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r offender where; do
     [ -n "$offender" ] || continue
-    bad "the canon shelves \"$offender\" — $why" \
-        "the opened book attributes a sources: block to that file, so the section's own copy — \"each SKILL.md names its sources in frontmatter\" — asserts provenance the named skill cannot produce. Declare the work in the skill the page names, point the page at the skill that declares it, or take the spine off the shelf."
+    bad "site/src/lib/data.ts names \"$offender\" outside the lessons map, at $where" \
+        "the canon is derived into site/src/lib/canon.generated.ts; a second, hand-written list of works in data.ts is issue #273 re-opening. If this is a pull-quote, it belongs in \`lessons\` keyed by the verbatim sources: string."
 done <<EOF
-$unbacked
+$strays
+EOF
+[ -n "$strays" ] || ok "data.ts names a declared work only as a lessons key"
+
+orphans="$(orphan_lessons "$data_ts" "$repo_root")"
+while IFS= read -r key; do
+    [ -n "$key" ] || continue
+    bad "lessons carries a pull-quote for \"$key\", which no skill declares" \
+        "the key must be the verbatim sources: string of a declared work, or the quote never renders and nothing says so — #272's defect one layer in."
+done <<EOF
+$orphans
+EOF
+lesson_count="$(lesson_keys "$data_ts" | grep -c . || true)"
+[ -n "$orphans" ] || ok "all $lesson_count hand-written lesson(s) are keyed to a work some skill declares"
+
+# THE NARROWING CHECK, and an honest note about what it is worth. This keys on
+# a language construct, which `mechanism-generality-lags-the-pattern-2026-08-23.md`
+# is explicit is the weaker kind of detector — it catches `.slice(` and misses a
+# reader that narrows some other way. It is here as a fast local tripwire; the
+# check that actually holds the property is the rendered-output section below,
+# which CI always runs because it builds the site first.
+if grep -q 'from "../lib/canon.generated"' "$shelf_astro"; then
+    ok "Shelf.astro renders from the generated canon"
+else
+    bad "Shelf.astro does not import the generated canon" \
+        "the canon section is fed by site/src/lib/canon.generated.ts; a component reading anything else is rendering a list nothing derives."
+fi
+
+if narrowing="$(grep -nE '\b(canon|spines)\b[^;]*\.(slice|filter|splice|shift|pop)\(' "$shelf_astro")"; then
+    bad "Shelf.astro narrows the canon before rendering it" \
+        "$narrowing
+every declared work must reach the page — a curated subset is what issue #273 reported. Ordering and styling are free; dropping entries is not."
+else
+    ok "Shelf.astro renders the canon without slicing or filtering it"
+fi
+
+# -----------------------------------------------------------------------------
+section "the rendered canon section carries every declared work"
+
+built_page="$repo_root/site/dist/index.html"
+if [ ! -f "$built_page" ]; then
+    printf '  SKIP no built page at site/dist/index.html — run "npm run build" in site/ to include this check.\n'
+    printf '       CI always runs it: the canon-render job builds the site before invoking this suite.\n'
+else
+    MIN_RENDERED=20
+    rendered="$(rendered_keys "$built_page" | LC_ALL=C sort -u)"
+    rendered_count="$(printf '%s' "$rendered" | grep -c . || true)"
+    if [ "$rendered_count" -lt "$MIN_RENDERED" ]; then
+        fatal "read $rendered_count spine(s) out of the built page, expected at least $MIN_RENDERED.
+       The reader is broken, not the page — a page that reads as empty passes the
+       comparison below vacuously, which is the failure this whole suite exists
+       to make impossible."
+    fi
+
+    unrendered="$(comm -23 <(printf '%s\n' "$canon_set") <(printf '%s\n' "$rendered"))"
+    while IFS= read -r offender; do
+        [ -n "$offender" ] || continue
+        bad "\"$offender\" is in the canon and does not reach the rendered page" \
+            "issue #273 verbatim: adding a source to a skill must be the only action needed to make it appear on the page."
+    done <<EOF
+$unrendered
 EOF
 
-if [ -z "$unbacked" ]; then
-    ok "all $canon_count spine(s) are declared by the skill their bookDetails entry names"
+    unbacked_render="$(comm -13 <(printf '%s\n' "$canon_set") <(printf '%s\n' "$rendered"))"
+    while IFS= read -r offender; do
+        [ -n "$offender" ] || continue
+        bad "the page renders a spine for \"$offender\", which is not in the canon" \
+            "issue #272's direction: the shelf asserting a work the repo does not declare."
+    done <<EOF
+$unbacked_render
+EOF
+
+    if [ -z "$unrendered" ] && [ -z "$unbacked_render" ]; then
+        ok "all $rendered_count rendered spine(s) are exactly the $entry_count canon work(s)"
+    fi
 fi
 
 # -----------------------------------------------------------------------------
@@ -831,36 +821,6 @@ model: "Trailing Key Book — Impostor"
 
 # Gamma
 FIXTURE
-
-# fixture_shelf <path> <"Full — Author::skill/SKILL.md">... — a data.ts with a
-# shelf and a matching bookDetails, plus decoy `full:` strings outside the array.
-fixture_shelf() {
-    local out="$1" spec work skillfile title author
-    shift
-    {
-        printf 'export interface Book {\n\t/** Full "Title — Author" shown on hover. */\n\tfull: "Decoy Interface Comment — Nobody";\n}\n\n'
-        printf 'export const shelf: Book[] = [\n'
-        for spec in "$@"; do
-            work="${spec%%::*}"
-            title="${work%% — *}"
-            author="${work##* }"
-            printf '\t{ title: "%s", author: "%s", full: "%s", h: "1px", color: "#000", ink: "#fff" },\n' \
-                "$title" "$author" "$work"
-        done
-        printf '];\n\n'
-        printf 'export const bookDetails = {\n'
-        for spec in "$@"; do
-            work="${spec%%::*}"
-            skillfile="${spec##*::}"
-            title="${work%% — *}"
-            author="${work##* }"
-            printf '\t"%s-%s": {\n\t\tlesson: "l",\n\t\tfile: "%s",\n\t\tfm: "f",\n\t\texcerpt: "e",\n\t},\n' \
-                "$author" "$title" "$skillfile"
-        done
-        printf '};\n\n'
-        printf 'export const other = { full: "Decoy Outside Shelf — Nobody" };\n'
-    } > "$out"
-}
 
 # --- the frontmatter extractor, both bounds ---
 
@@ -1159,85 +1119,145 @@ fi
 
 rm -rf "$gen" "$genout"
 
-# --- the shelf extractors, against each other ---
-
-fixture_shelf "$fixtures/three.ts" \
-    "Known Book — Jane Doe::alpha/SKILL.md" \
-    "Second Book — Ada Byron::alpha/SKILL.md" \
-    "Gamma Book — Grace Hopper::gamma/SKILL.md"
-rows="$(shelf_rows "$fixtures/three.ts" | grep -c . || true)"
-slots="$(shelf_slots "$fixtures/three.ts")"
-if [ "$rows" -eq 3 ] && [ "$slots" -eq 3 ]; then
-    ok "shelf_rows and shelf_slots agree on a clean 3-spine shelf, ignoring full: strings outside the array"
-else
-    bad "the shelf extractors disagree on a clean fixture (slots=$slots rows=$rows)" \
-        "the decoys sit outside the array on purpose; both readings must see exactly 3"
-fi
-
-# The single-quote spine: unparseable by shelf_rows, still a slot. This is the
-# gap the old MIN_CANON_WORKS floor could not see.
-sed 's/full: "Gamma Book — Grace Hopper"/full: '"'"'Gamma Book — Grace Hopper'"'"'/' \
-    "$fixtures/three.ts" > "$fixtures/single-quoted.ts"
-if grep -q "full: 'Gamma Book" "$fixtures/single-quoted.ts"; then
-    rows="$(shelf_rows "$fixtures/single-quoted.ts" | grep -c . || true)"
-    slots="$(shelf_slots "$fixtures/single-quoted.ts")"
-    if [ "$slots" -eq 3 ] && [ "$rows" -eq 2 ]; then
-        ok "a spine the extractor cannot parse still counts as a slot, so the gap is visible"
-    else
-        bad "an unparseable spine did not produce a slots/rows gap (slots=$slots rows=$rows)" \
-            "without this gap a spine written in an unanticipated spelling is invisible while the page renders it"
-    fi
-else
-    bad "the single-quote fixture did not apply" "the self-test cannot report on a mutation that never landed"
-fi
-
-# THE MULTI-LINE FIXTURE. This is what pins shelf_slots' independence from the
-# field regexes. On a reflowed spine no single line carries title:, author: and
-# full: together, so an oracle rewritten to key on those names counts wrong here
-# — the collapse that previously left the suite at 17 passed / 0 failed while a
-# reflowed shelf went unchecked. It also pins the parser against a semantically
-# null `prettier --write`, which must not be a failure at all.
-cat > "$fixtures/reflowed.ts" <<'REFLOW'
-export const shelf: Book[] = [
-	{ title: "Known Book", author: "Doe", full: "Known Book — Jane Doe", h: "1px", color: "#000", ink: "#fff" },
+# --- the canon parse, on an entry the extractor cannot read ---
+#
+# Ported from the fixture that guarded the old hand-written shelf array, because
+# the gap it exposes is a property of the parser and not of the array it once
+# parsed: an entry written in a spelling `canon_rows` does not recognize is
+# invisible to every set comparison while the page renders it. Single quotes are
+# the cheap way to produce that, and no formatter in this repo forbids them.
+cat > "$fixtures/canon-clean.ts" <<'CANON'
+export const canon: CanonWork[] = [
 	{
-		title: "Second Book",
-		author: "Byron",
-		full: "Second Book — Ada Byron",
-		h: "1px",
-		color: "#000",
-		ink: "#fff",
+		full: "Known Book — Jane Doe",
+		title: "Known Book",
+		author: "Jane Doe",
+		type: "book",
+		citations: [
+			{ skill: "alpha", tier: "primary" },
+		],
 	},
 	{
-		title: "Gamma Book",
-		author: "Hopper",
 		full: "Gamma Book — Grace Hopper",
-		h: "1px",
-		color: "#000",
-		ink: "#fff",
+		title: "Gamma Book",
+		author: "Grace Hopper",
+		type: "book",
+		citations: [
+			{ skill: "gamma", tier: "primary" },
+		],
 	},
 ];
+CANON
+if [ "$(canon_rows "$fixtures/canon-clean.ts" | grep -c . || true)" -eq 2 ] \
+    && [ "$(canon_slots "$fixtures/canon-clean.ts")" -eq 2 ]; then
+    ok "canon_rows and canon_slots agree on a clean 2-entry canon, ignoring nested citation objects"
+else
+    bad "the canon extractors disagree on a clean fixture" \
+        "slots=$(canon_slots "$fixtures/canon-clean.ts") rows=$(canon_rows "$fixtures/canon-clean.ts" | grep -c . || true), want 2/2 — the nested citations sit at depth 2 and must not be counted as entries"
+fi
 
-export const bookDetails = {
-	"Doe-Known Book": { file: "alpha/SKILL.md" },
-	"Byron-Second Book": { file: "alpha/SKILL.md" },
-	"Hopper-Gamma Book": { file: "gamma/SKILL.md" },
+sed "s/full: \"Gamma Book — Grace Hopper\"/full: 'Gamma Book — Grace Hopper'/" \
+    "$fixtures/canon-clean.ts" > "$fixtures/canon-unparsed.ts"
+if grep -q "full: 'Gamma Book" "$fixtures/canon-unparsed.ts"; then
+    if [ "$(canon_slots "$fixtures/canon-unparsed.ts")" -eq 2 ] \
+        && [ "$(canon_rows "$fixtures/canon-unparsed.ts" | grep -c . || true)" -eq 1 ]; then
+        ok "an entry the canon extractor cannot parse still counts as a slot, so the gap is visible"
+    else
+        bad "an unparseable canon entry did not produce a slots/rows gap" \
+            "without the gap, an entry written in an unanticipated spelling is invisible to every set comparison while the page renders it"
+    fi
+else
+    bad "the single-quote canon fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+# --- the data.ts detectors, both directions ---
+
+cat > "$fixtures/clean-data.ts" <<'DATA'
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
 };
-REFLOW
-rows="$(shelf_rows "$fixtures/reflowed.ts" | grep -c . || true)"
-slots="$(shelf_slots "$fixtures/reflowed.ts")"
-if [ "$rows" -eq 3 ] && [ "$slots" -eq 3 ]; then
-    ok "both shelf readings see all 3 spines when 2 of them are reflowed across lines"
+
+export const repoUrl = "https://example.invalid";
+DATA
+if [ -z "$(stray_work_mentions "$fixtures/clean-data.ts" "$fixtures")" ] \
+    && [ -z "$(orphan_lessons "$fixtures/clean-data.ts" "$fixtures")" ]; then
+    ok "a data.ts naming a declared work only as a lessons key passes both directions"
 else
-    bad "a reflowed spine is misread (slots=$slots rows=$rows, want 3/3)" \
-        "a semantically null reformat must not read as a shrunken shelf, and an oracle that keys on field names cannot count a reflowed record"
+    bad "a clean data.ts failed a data.ts detector" \
+        "both of them cry wolf on the sanctioned shape, so the fixtures below prove nothing"
 fi
 
-if [ -z "$(unbacked_works "$fixtures/reflowed.ts" "$fixtures")" ]; then
-    ok "reflowed spines still join to their bookDetails entries"
+# THE REGRESSION: a hand-written works array creeps back in beside the derived
+# canon. This is #273 re-opening, and it is the reason data.ts is checked at all.
+cat > "$fixtures/rehanded-data.ts" <<'DATA'
+export const shelf = [
+	{ title: "Gamma Book", author: "Hopper", full: "Gamma Book — Grace Hopper" },
+];
+
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+DATA
+if [ -n "$(stray_work_mentions "$fixtures/rehanded-data.ts" "$fixtures")" ]; then
+    ok "a hand-written works array re-introduced into data.ts is flagged"
 else
-    bad "reflowed spines failed the join" "record-based parsing must survive a reformat end to end"
+    bad "a re-introduced hand-written works array passed" \
+        "a second list rendering beside the derived one is exactly the drift issue #273 closed, and nothing else in this suite would see it"
 fi
+
+# THE VACUOUS-MEMBERSHIP CASE, which is the one that actually bit. The hand
+# lessons are exactly the works the old shelf held, so restoring that shelf
+# verbatim lists ONLY works that are already lessons keys. A membership test goes
+# green here; a position test does not.
+cat > "$fixtures/rehanded-same-works.ts" <<'DATA'
+export const shelf = [
+	{ title: "Known Book", author: "Doe", full: "Known Book — Jane Doe" },
+];
+
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+DATA
+if [ -n "$(stray_work_mentions "$fixtures/rehanded-same-works.ts" "$fixtures")" ]; then
+    ok "a hand-written array listing only works that already have lessons is still flagged"
+else
+    bad "a re-introduced shelf holding only already-curated works passed" \
+        "this is the shape a straight revert of the pre-#273 shelf takes, and it is the one a membership test cannot see"
+fi
+
+cat > "$fixtures/orphan-lesson-data.ts" <<'DATA'
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+	"A Work Nobody Declares — Ghost": "A pull-quote for nothing.",
+};
+DATA
+orphaned="$(orphan_lessons "$fixtures/orphan-lesson-data.ts" "$fixtures" | grep -c . || true)"
+if [ "$orphaned" -eq 1 ]; then
+    ok "a lesson keyed to a work no skill declares is flagged"
+else
+    bad "the orphan-lesson check found $orphaned of 1 planted defect" \
+        "a lesson whose key matches nothing never renders, and no other check in this suite would notice"
+fi
+
+# --- the rendered-page reader ---
+
+cat > "$fixtures/page.html" <<'HTML'
+<button class="spine" data-key="Known Book &#38; Friends — Jane Doe"></button>
+<button class="spine" data-key="Gamma Book — Grace Hopper"></button>
+<a href="#" data-key-other="not a spine">x</a>
+HTML
+read_back="$(rendered_keys "$fixtures/page.html" | tr '\n' '|')"
+if [ "$read_back" = 'Known Book & Friends — Jane Doe|Gamma Book — Grace Hopper|' ]; then
+    ok "rendered_keys reads each spine's work and undoes the templating's entity escapes"
+else
+    bad "rendered_keys misread the built page" \
+        "got: $read_back — an ampersand in a title is escaped by the templating, and a reader that does not undo it reports every such work as unrendered"
+fi
+
+rm -f "$fixtures/canon-clean.ts" "$fixtures/canon-unparsed.ts" \
+      "$fixtures/clean-data.ts" "$fixtures/rehanded-data.ts" \
+      "$fixtures/rehanded-same-works.ts" \
+      "$fixtures/orphan-lesson-data.ts" "$fixtures/page.html"
 
 # --- the mappings direction ---
 
@@ -1266,81 +1286,6 @@ if [ "$mis" -eq 3 ]; then
 else
     bad "the mappings detector flagged $mis of 3 planted defects" \
         "each row is a provenance claim; a wrong stage, an undeclared book, and one bad stage in a multi-stage cell must each fail"
-fi
-
-# --- the matcher, in every direction ---
-
-fixture_shelf "$fixtures/backed.ts" "Known Book — Jane Doe::alpha/SKILL.md"
-if [ -z "$(unbacked_works "$fixtures/backed.ts" "$fixtures")" ]; then
-    ok "a spine whose named skill declares the work passes"
-else
-    bad "the detector flagged a spine that IS backed by the skill the page names" \
-        "it now cries wolf on a clean shelf, which is how a real check gets loosened"
-fi
-
-# THE PAIRING FIXTURE. alpha declares the work; the page names gamma. The old
-# any-skill check went green here, and this is #272's defect one level in.
-fixture_shelf "$fixtures/wrong-skill.ts" "Known Book — Jane Doe::gamma/SKILL.md"
-if [ -n "$(unbacked_works "$fixtures/wrong-skill.ts" "$fixtures")" ]; then
-    ok "a work declared by SOME skill but not the one the page names is flagged"
-else
-    bad "the detector accepted a declaration from a skill the page does not name" \
-        "the opened book attributes the sources: block to one specific file; a sibling skill's declaration does not make that attribution true"
-fi
-
-fixture_shelf "$fixtures/unbacked.ts" "Undeclared Book — Someone Else::alpha/SKILL.md"
-if [ -n "$(unbacked_works "$fixtures/unbacked.ts" "$fixtures")" ]; then
-    ok "a spine with no declaration anywhere is flagged"
-else
-    bad "the detector missed an undeclared shelf work" \
-        "this is exactly issue #272's defect; the check above would report green on it"
-fi
-
-fixture_shelf "$fixtures/wrong-author.ts" "Known Book — Other Person::alpha/SKILL.md"
-if [ -n "$(unbacked_works "$fixtures/wrong-author.ts" "$fixtures")" ]; then
-    ok "a title that matches under a different author is flagged, not accepted"
-else
-    bad "the detector matched on title alone" \
-        "two different books sharing a title would launder each other's provenance"
-fi
-
-fixture_shelf "$fixtures/wrong-title.ts" "Different Title — Jane Doe::alpha/SKILL.md"
-if [ -n "$(unbacked_works "$fixtures/wrong-title.ts" "$fixtures")" ]; then
-    ok "an author who IS declared, shelved under a different title, is flagged"
-else
-    bad "the detector matched on surname alone" \
-        "a declared author's OTHER book would ride in on their name; deleting the title comparison must not leave this suite green"
-fi
-
-fixture_shelf "$fixtures/short-author.ts" "Known Book — J. Doe::alpha/SKILL.md"
-if [ -z "$(unbacked_works "$fixtures/short-author.ts" "$fixtures")" ]; then
-    ok "an author spelled differently but sharing a surname still matches"
-else
-    bad "the detector rejected a surname-equal author variant" \
-        "the two sides spell multi-author works differently on purpose; see the header"
-fi
-
-# --- the join itself ---
-
-fixture_shelf "$fixtures/missing-detail.ts" "Known Book — Jane Doe::alpha/SKILL.md"
-sed 's/"Doe-Known Book"/"Nobody-Nothing"/' "$fixtures/missing-detail.ts" > "$fixtures/orphan.ts"
-if grep -q '"Nobody-Nothing"' "$fixtures/orphan.ts"; then
-    if [ -n "$(unbacked_works "$fixtures/orphan.ts" "$fixtures")" ]; then
-        ok "a spine with no bookDetails entry is flagged rather than skipped"
-    else
-        bad "a spine with no bookDetails entry passed silently" \
-            "an unjoinable spine must fail loudly; skipping it is how the population quietly shrinks"
-    fi
-else
-    bad "the orphan fixture did not apply" "the self-test cannot report on a mutation that never landed"
-fi
-
-fixture_shelf "$fixtures/ghost-file.ts" "Known Book — Jane Doe::nonexistent/SKILL.md"
-if [ -n "$(unbacked_works "$fixtures/ghost-file.ts" "$fixtures")" ]; then
-    ok "a bookDetails entry naming a file that does not exist is flagged"
-else
-    bad "the detector accepted a bookDetails file: path that does not resolve" \
-        "the opened book links to that path; a dead link cannot back a provenance claim"
 fi
 
 # -----------------------------------------------------------------------------

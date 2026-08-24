@@ -1,7 +1,51 @@
 ---
-import { shelf } from "../lib/data";
+import { canon, type CanonWork } from "../lib/canon.generated";
 
-const authorOf = (full: string) => full.split(" — ")[1] ?? "";
+// EVERY DECLARED WORK, NOT A CURATED SUBSET (issue #273). The array below is
+// generated from `sources:` frontmatter, so this component must render all of
+// it — slicing here would put the page back to hiding a curation decision the
+// reader cannot see, which is the defect the derivation exists to remove.
+// `scripts/test-canon-coverage.sh` fails if this file slices or filters it.
+
+/** Citation breadth, which is real signal the hand-written shelf could not carry. */
+const weightOf = (w: CanonWork) => w.citations.length;
+
+const maxWeight = Math.max(...canon.map(weightOf));
+const minWeight = Math.min(...canon.map(weightOf));
+
+// Heaviest first, then alphabetical so the tail is scannable. The generated data
+// is sorted by title and carries no presentation opinion; the ordering choice
+// lives here, which is where #274 will revisit it.
+const spines = [...canon].sort(
+	(a, b) => weightOf(b) - weightOf(a) || a.title.localeCompare(b.title),
+);
+
+/** 1 citation → 210px, the most-cited work → 360px, so height reads as weight. */
+function heightOf(w: CanonWork): string {
+	const span = maxWeight - minWeight;
+	const t = span === 0 ? 1 : (weightOf(w) - minWeight) / span;
+	return `${Math.round(210 + t * 150)}px`;
+}
+
+// A fixed palette, assigned by a stable hash of the declared string. Forty-five
+// spines cannot be hand-tinted, and a hash keeps a work's color from shifting
+// every time an unrelated skill adds a source.
+const PALETTE = [
+	{ color: "#7A3B2E", ink: "#F0E9D8" },
+	{ color: "#31536B", ink: "#F0E9D8" },
+	{ color: "#6B5B2E", ink: "#F0E9D8" },
+	{ color: "#3E5C46", ink: "#F0E9D8" },
+	{ color: "#54364F", ink: "#F0E9D8" },
+	{ color: "#2E4A52", ink: "#F0E9D8" },
+	{ color: "#8A6A32", ink: "#1C2822" },
+	{ color: "#2F4238", ink: "#F0E9D8" },
+];
+
+function paletteOf(full: string) {
+	let h = 0;
+	for (let i = 0; i < full.length; i++) h = (h * 31 + full.charCodeAt(i)) >>> 0;
+	return PALETTE[h % PALETTE.length];
+}
 ---
 
 <section id="canon" class="canon">
@@ -13,20 +57,17 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 
 		<div class="shelf" data-shelf>
 			{
-				shelf.map((b, i) => (
+				spines.map((w, i) => (
 					<button
 						type="button"
 						class="spine"
-						style={`--i:${i}; height:${b.h}; background:${b.color}; color:${b.ink};`}
-						title={b.full}
+						style={`--i:${Math.min(i, 24)}; height:${heightOf(w)}; background:${paletteOf(w.full).color}; color:${paletteOf(w.full).ink};`}
+						title={`${w.full} — cited by ${w.citations.length} skill${w.citations.length === 1 ? "" : "s"}`}
 						aria-pressed="false"
-						data-key={`${b.author}-${b.title}`}
-						data-title={b.title}
-						data-author={authorOf(b.full)}
+						data-key={w.full}
+						data-type={w.type}
 					>
-						<span class="label">
-							{b.title} — {b.author}
-						</span>
+						<span class="label">{w.title}</span>
 					</button>
 				))
 			}
@@ -36,8 +77,8 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		<div class="detail-slot" data-detail></div>
 
 		<p class="hint" data-hint>
-			Pull a book off the shelf — each SKILL.md names its sources in
-			frontmatter.
+			Pull a book off the shelf — all {canon.length} works the skills cite, taller
+			where more of them cite it. Each SKILL.md names its sources in frontmatter.
 		</p>
 	</div>
 </section>
@@ -69,11 +110,16 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		align-items: flex-end;
 		justify-content: center;
 		gap: 10px;
+		/* The row wraps into several boards' worth of spines at 45 works.
+		   Giving that its proper form — a bookcase rather than one long
+		   row — is issue #274; this keeps it legible until then. */
 		flex-wrap: wrap;
+		row-gap: 26px;
 	}
 
 	.spine {
 		width: 74px;
+		overflow: hidden;
 		border: none;
 		border-radius: 3px 3px 0 0;
 		display: flex;
@@ -99,6 +145,11 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		font-size: 14.5px;
 		letter-spacing: 0.04em;
 		white-space: nowrap;
+		/* Forty-five real titles include one 62 characters long. Clip it on the
+		   spine — the full string is in the tooltip and on the opened page. */
+		max-block-size: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	/* Scroll-reveal: hide only when JS can bring them back. */
@@ -201,6 +252,50 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		border-top: 1px solid #c9bc9e;
 		padding-top: 22px;
 	}
+	.detail-slot :global(.pprovenance) {
+		font-size: 13.5px;
+		letter-spacing: 0.02em;
+		color: #6e6448;
+		border-top: 1px solid #c9bc9e;
+		padding-top: 20px;
+	}
+	/* The lesson is optional, so its spacing cannot assume it is present. */
+	.detail-slot :global(.pprovenance + .plesson) {
+		border-top: none;
+		padding-top: 20px;
+	}
+	.detail-slot :global(.pcites) {
+		list-style: none;
+		margin: 0 0 26px;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 14px;
+	}
+	.detail-slot :global(.pcite) {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 7px;
+		font-size: 14px;
+	}
+	.detail-slot :global(.ptier) {
+		font-family: var(--mono);
+		font-size: 10px;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: #8a7b54;
+	}
+	.detail-slot :global(.ptier-primary) {
+		color: #7a5c1e;
+		font-weight: 600;
+	}
+	.detail-slot :global(.pfmlabel) {
+		font-size: 11px;
+		letter-spacing: 0.26em;
+		text-transform: uppercase;
+		color: #8a7b54;
+		margin-bottom: 12px;
+	}
 	.detail-slot :global(.pfm) {
 		font-family: var(--mono);
 		font-size: 12.5px;
@@ -212,13 +307,6 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		margin: 0 0 20px;
 		white-space: pre-wrap;
 		color: #4a432e;
-	}
-	.detail-slot :global(.pexcerpt) {
-		font-size: 14.5px;
-		line-height: 1.65;
-		color: #3e3a2c;
-		text-wrap: pretty;
-		margin-bottom: 22px;
 	}
 	.detail-slot :global(.plink) {
 		font-size: 13.5px;
@@ -274,7 +362,10 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 </style>
 
 <script>
-	import { bookDetails, repoUrl } from "../lib/data";
+	import { canon, type CanonWork } from "../lib/canon.generated";
+	import { lessons, repoUrl } from "../lib/data";
+
+	const byKey = new Map<string, CanonWork>(canon.map((w) => [w.full, w]));
 
 	const shelf = document.querySelector<HTMLElement>("[data-shelf]");
 	const slot = document.querySelector<HTMLElement>("[data-detail]");
@@ -282,6 +373,9 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 	const spines = Array.from(
 		shelf?.querySelectorAll<HTMLButtonElement>(".spine") ?? [],
 	);
+
+	const RESTING_HINT =
+		"Pull a book off the shelf — each SKILL.md names its sources in frontmatter.";
 
 	let selectedKey: string | null = null;
 
@@ -292,37 +386,72 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		return node;
 	}
 
+	/** "Cited by 9 skills — 1 primary, 8 secondary", read off the citations. */
+	function provenanceLine(work: CanonWork): string {
+		const primary = work.citations.filter((c) => c.tier === "primary").length;
+		const secondary = work.citations.length - primary;
+		const parts: string[] = [];
+		if (primary) parts.push(`${primary} primary`);
+		if (secondary) parts.push(`${secondary} secondary`);
+		const noun = work.citations.length === 1 ? "skill" : "skills";
+		return `Cited by ${work.citations.length} ${noun} — ${parts.join(", ")}`;
+	}
+
+	/**
+	 * The `sources:` entry as the citing skill declares it. Derived from the
+	 * canon rather than transcribed from the file — a hand-copied excerpt is what
+	 * issue #273 removed, and a transcription can go stale the moment the skill
+	 * is re-sourced.
+	 */
+	function sourcesSnippet(work: CanonWork, tier: string): string {
+		return `sources:\n  ${tier}:\n    - "${work.full}"`;
+	}
+
 	function renderDetail(spine: HTMLButtonElement) {
 		const key = spine.dataset.key ?? "";
-		const detail = bookDetails[key];
-		if (!slot || !detail) return;
-
-		const title = spine.dataset.title ?? "";
-		const author = spine.dataset.author ?? "";
+		const work = byKey.get(key);
+		if (!slot || !work) return;
 
 		const book = el("div", "book");
 		const spread = el("div", "spread");
 
 		const left = el("div", "page page-left");
 		left.append(
-			el("div", "plabel", "From the book"),
-			el("div", "ptitle", title),
-			el("div", "pauthor", author),
-			el("div", "plesson", detail.lesson),
+			el("div", "plabel", work.type === "paper" ? "From the paper" : "From the book"),
+			el("div", "ptitle", work.title),
+			el("div", "pauthor", work.author),
+			el("div", "pprovenance", provenanceLine(work)),
 		);
+		// Optional enrichment: most works have no hand-written lesson, and the
+		// spread has to read well without one.
+		const lesson = lessons[work.full];
+		if (lesson) left.append(el("div", "plesson", lesson));
 
 		const right = el("div", "page page-right");
 		const inner = el("div", "page-right-inner");
-		inner.append(el("div", "plabel", `Into the skill — ${detail.file}`));
-		inner.append(el("pre", "pfm", detail.fm));
-		inner.append(el("div", "pexcerpt", detail.excerpt));
-		const link = document.createElement("a");
-		link.className = "plink";
-		link.href = `${repoUrl}/blob/prod/${detail.file}`;
-		link.target = "_blank";
-		link.rel = "noopener";
-		link.textContent = "Read the full SKILL.md →";
-		inner.append(link);
+		inner.append(el("div", "plabel", "Into the skills"));
+
+		const list = el("ul", "pcites");
+		for (const cite of work.citations) {
+			const row = el("li", "pcite");
+			const link = document.createElement("a");
+			link.className = "plink";
+			link.href = `${repoUrl}/blob/prod/${cite.skill}/SKILL.md`;
+			link.target = "_blank";
+			link.rel = "noopener";
+			link.textContent = `/${cite.skill}`;
+			row.append(link, el("span", `ptier ptier-${cite.tier}`, cite.tier));
+			list.append(row);
+		}
+		inner.append(list);
+
+		const first = work.citations[0];
+		if (first) {
+			inner.append(
+				el("div", "pfmlabel", `As ${`/${first.skill}`} declares it`),
+				el("pre", "pfm", sourcesSnippet(work, first.tier)),
+			);
+		}
 		right.append(inner);
 
 		spread.append(left, right);
@@ -348,9 +477,7 @@ const authorOf = (full: string) => full.split(" — ")[1] ?? "";
 		selectedKey = null;
 		for (const s of spines) s.setAttribute("aria-pressed", "false");
 		slot?.replaceChildren();
-		if (hint)
-			hint.textContent =
-				"Pull a book off the shelf — each SKILL.md names its sources in frontmatter.";
+		if (hint) hint.textContent = RESTING_HINT;
 	}
 
 	for (const spine of spines) {
