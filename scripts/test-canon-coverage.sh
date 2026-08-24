@@ -34,14 +34,27 @@
 #   3. Every quoted entry under a `sources:` key in that skill's frontmatter.
 #   4. Each shelved work matches a work THAT skill declares, on title, with the
 #      shelf author's surname present in the declared entry.
+#   5. No title is declared under two different author spellings anywhere in the
+#      repo.
 #
-# WHY TITLE + SURNAME AND NOT STRING EQUALITY. The two sides spell authors
-# differently on purpose: the shelf shows "Continuous Delivery — Jez Humble &
-# David Farley", `/pre-merge` declares it that way, and `/closeout` declares the
-# same work as "Jez Humble, David Farley". Demanding equality would fail on a
-# formatting difference and teach the reader to loosen the check. The surname
-# test is what keeps title-only matching from accepting a different author's
-# book that happens to share a title.
+# WHY TITLE + SURNAME AND NOT STRING EQUALITY. The shelf and the frontmatter are
+# two independently hand-authored sides. Until #273 they spelled the same authors
+# four different ways — `/closeout` declared *Continuous Delivery* as "Jez Humble,
+# David Farley" where `/pre-merge` and the shelf both said "Jez Humble & David
+# Farley". Demanding equality would fail on a formatting difference and teach the
+# reader to loosen the check. The surname test is what keeps title-only matching
+# from accepting a different author's book that happens to share a title.
+#
+# THE VARIANTS ARE NOW A FAILURE, NOT A TOLERANCE (issue #273). #273 normalized
+# those four spellings at the source, and check 5 is what keeps them normalized.
+# It is the opposite move from the tolerance above, and both are load-bearing,
+# because they govern different joins. The tolerance governs SHELF-to-SKILL,
+# where two independently authored sides may legitimately differ in formatting.
+# The collision check governs SKILL-to-SKILL, where a second spelling is never
+# legitimate — it silently splits one work into two in any derivation over the
+# frontmatter, and a derivation over the frontmatter is the thing #273 builds.
+# #273 chose the detector over an alias table on purpose: a table is itself a
+# hand-maintained canon list, which is the defect under repair.
 #
 # WHY THE SHELF POPULATION IS DERIVED AND NOT FLOORED. A floor guards against
 # total blindness; it cannot notice the loss of one item, which is the
@@ -217,6 +230,40 @@ declared_works() {
     done
 }
 
+# alias_collisions <skill.md>... — every title declared under more than one
+# author spelling, as "<title>\t<variant> | <variant>". Empty output is the
+# passing state.
+#
+# WHY THIS IS A DEFECT AND NOT A STYLE NIT. Any derivation over the frontmatter
+# groups by work, and the only key available is the string. Two spellings of one
+# author split one work into two entries — the canon over-counts, the citation
+# count under-counts on both halves, and nothing renders wrong enough to notice.
+# #273 found four live pairs: *Thinking in Systems* (8 skills vs 1), *The Design
+# of Everyday Things* (3 vs 2), *The Pragmatic Programmer* (1 vs 1) and
+# *Continuous Delivery* (2 vs 1), with `/closeout` alone carrying three of the
+# four minority spellings.
+#
+# SPLIT ON THE FIRST SEPARATOR, VIA match() AND NOT length(). A title may
+# legitimately contain an em dash; an author spelling is whatever follows the
+# first " — ". RSTART/RLENGTH are self-consistent inside one awk regardless of
+# whether that awk counts bytes or characters, which arithmetic over length()
+# of a multi-byte separator is not.
+alias_collisions() {
+    declared_works "$@" | sort -u | awk '
+        match($0, / — /) {
+            title  = substr($0, 1, RSTART - 1)
+            author = substr($0, RSTART + RLENGTH)
+            if (title in seen) { seen[title] = seen[title] " | " author }
+            else               { seen[title] = author; order[++n] = title }
+            count[title]++
+        }
+        END {
+            for (i = 1; i <= n; i++)
+                if (count[order[i]] > 1) print order[i] "\t" seen[order[i]]
+        }
+    '
+}
+
 # declares_work <skill.md> <"Title — Author"> — does that skill declare that
 # work? Title must match exactly; the shelf author's surname must appear in the
 # declared entry.
@@ -353,6 +400,22 @@ if [ "$declared_count" -lt "$MIN_DECLARED_WORKS" ]; then
        genuinely removed, lower MIN_DECLARED_WORKS in this file as a deliberate edit."
 fi
 ok "read $declared_count distinct declared work(s) across all skills (floor: $MIN_DECLARED_WORKS)"
+
+# -----------------------------------------------------------------------------
+section "one work, one spelling"
+
+collisions="$(alias_collisions "$repo_root"/*/SKILL.md)"
+while IFS="$(printf '\t')" read -r offender variants; do
+    [ -n "$offender" ] || continue
+    bad "\"$offender\" is declared under more than one author spelling" \
+        "the variants are: $variants. Any derivation over the frontmatter keys on the whole string, so a second spelling splits one work into two entries and halves each one's citation count. Pick one spelling and use it in every skill that declares the work — an alias table would be a second hand-maintained canon list, which is the defect issue #273 exists to remove."
+done <<EOF
+$collisions
+EOF
+
+if [ -z "$collisions" ]; then
+    ok "all $declared_count declared work(s) use one author spelling per title"
+fi
 
 # -----------------------------------------------------------------------------
 section "every spine is declared by the skill the page names"
@@ -509,6 +572,77 @@ if declared_works "$fixtures/gamma/SKILL.md" | grep -q 'Trailing Key Book'; then
 else
     ok "a quoted frontmatter key after sources: is not treated as a declaration"
 fi
+
+# --- the alias-collision detector, both directions ---
+#
+# These fixtures live in their own subtree because the exact-set assertion above
+# reads "$fixtures"/*/SKILL.md and would break if this check added a skill to it.
+#
+# Per `../testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md`,
+# both a subject mutation and an oracle mutation are here: `two-spellings`
+# proves the detector still detects, and `one-spelling` + `near-title` prove it
+# has not degenerated into flagging everything — which is the failure mode that
+# would get this check deleted the first week it cried wolf.
+mkdir -p "$fixtures/alias/one" "$fixtures/alias/two" "$fixtures/alias/three"
+
+alias_fixture() {
+    cat > "$fixtures/alias/$1/SKILL.md" <<FIXTURE
+---
+name: $1
+description: "An alias fixture."
+sources:
+  primary:
+    - "$2"
+---
+
+# $1
+FIXTURE
+}
+
+# THE CLEAN CASE: the same work declared identically by two skills. This is what
+# 8 of the repo's skills do with *Thinking in Systems*, so a detector that
+# flagged it would be red on every clean tree.
+alias_fixture one "Shared Book — Jane Doe"
+alias_fixture two "Shared Book — Jane Doe"
+alias_fixture three "Different Book — Ada Byron"
+clean_collisions="$(alias_collisions "$fixtures"/alias/*/SKILL.md)"
+if [ -z "$clean_collisions" ]; then
+    ok "one work declared identically by two skills is not a collision"
+else
+    bad "the collision detector flagged a repo-normal duplicate declaration" \
+        "got: $clean_collisions — most works in this repo are declared by several skills, and every one of them would fail"
+fi
+
+# THE NEAR-TITLE TRAP: one title is a prefix of the other. A detector matching on
+# substrings rather than on the whole title-before-the-separator reports here.
+alias_fixture three "Shared Book Two — Jane Doe"
+near_collisions="$(alias_collisions "$fixtures"/alias/*/SKILL.md)"
+if [ -z "$near_collisions" ]; then
+    ok "a title that merely starts with another title is not a collision"
+else
+    bad "the collision detector matched on a title prefix" "got: $near_collisions"
+fi
+
+# THE PLANTED VARIANT: #273's defect exactly — one work, two author spellings.
+alias_fixture three "Shared Book — J. Doe"
+planted="$(alias_collisions "$fixtures"/alias/*/SKILL.md)"
+planted_count="$(printf '%s' "$planted" | grep -c . || true)"
+if [ "$planted_count" -eq 1 ] && [ "${planted%%	*}" = "Shared Book" ]; then
+    ok "one work declared under two author spellings is flagged, naming the work"
+else
+    bad "the collision detector missed a planted author-spelling variant" \
+        "expected exactly 1 row for \"Shared Book\", got $planted_count row(s): $planted"
+fi
+
+# The variants must reach the failure message; a row that names the work but not
+# the spellings cannot be acted on without re-running the extraction by hand.
+if [ "${planted#*	}" = "Jane Doe | J. Doe" ] || [ "${planted#*	}" = "J. Doe | Jane Doe" ]; then
+    ok "the collision row carries both spellings, not just the work"
+else
+    bad "the collision row did not carry both author spellings" "got: ${planted#*	}"
+fi
+
+rm -rf "$fixtures/alias"
 
 # --- the shelf extractors, against each other ---
 
