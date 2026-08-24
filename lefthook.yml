@@ -17,6 +17,11 @@ pre-commit:
     shellcheck:
       glob: "scripts/*.sh"
       run: shellcheck {staged_files}
+    # Cheap (<1s) and catches the one-file case at the moment it happens: a
+    # SKILL.md's sources: block changed and site/src/lib/canon.generated.ts was
+    # not regenerated. The full canon suite runs on pre-push and in CI.
+    canon-freshness:
+      run: bash scripts/generate-canon.sh --check
 
 pre-push:
   parallel: true
