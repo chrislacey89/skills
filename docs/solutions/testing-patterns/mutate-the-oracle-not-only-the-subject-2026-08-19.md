@@ -2,7 +2,7 @@
 date: 2026-08-19
 category: testing-patterns
 problem_type: a contract test that ran, passed, and verified nothing, because its mutation battery exercised the subject under test and never the fixture's oracle
-components: [triage-issue, scripts, lefthook, validate-skills]
+components: [triage-issue, tdd, pre-merge, scripts, lefthook, validate-skills]
 technologies: [bash, git-bisect, contract-tests, mutation-testing, ci]
 severity: high
 volatility: evergreen
@@ -50,8 +50,8 @@ The deeper condition is that **the oracle is part of the mechanism but does not 
 
 ## Rule Scope
 
-- **Applies when:** the test's outcome is decided by a predicate the fixture supplies to the system under test, rather than asserted directly on the system's output by the test body. The tell is an inversion of control — the test hands over a callback, script, comparator, or marker, and the system decides using it. Also applies whenever a test's pass condition is **non-zero / not-equal / non-empty**, because negative conditions are satisfied by every kind of failure, including the failure of the test's own setup.
-- **Inverts or does not apply when:** the test asserts directly on a value it computed itself with no intermediary (`assert_eq 3 "$(add 1 2)"`). There is no oracle to mutate, and adding a "mutate the oracle" step is ceremony. It also does not apply to tests whose only meaningful failure mode genuinely *is* a crash — a smoke test that asserts a binary starts.
+- **Applies when:** *either* the test's outcome is decided by a predicate the fixture supplies to the system under test, rather than asserted directly on the system's output by the test body; *or* the property being claimed has more than one failure direction that is **independently observable and independently breakable** — a two-ended relation (does the pointer resolve / does the target stay pointed-at), a round trip (encoder / decoder), a guard with an over-claim and an under-claim direction. The observable-and-breakable test is what keeps this arm from matching everything: almost any property can be *described* as having two directions, but `assert_eq 3 "$(add 1 2)"` has no second thing you can break on its own. The tell is an inversion of control — the test hands over a callback, script, comparator, or marker, and the system decides using it. Also applies whenever a test's pass condition is **non-zero / not-equal / non-empty**, because negative conditions are satisfied by every kind of failure, including the failure of the test's own setup.
+- **Inverts or does not apply when:** the test asserts directly on a value it computed itself with no intermediary **and** the property has a single failure direction (`assert_eq 3 "$(add 1 2)"`). Both halves are required — a direct assertion with no oracle can still carry two directions, which is what the second instance below is. With both, there is no oracle to mutate and no second direction to cover, so a "mutate the oracle" step is ceremony. It also does not apply to tests whose only meaningful failure mode genuinely *is* a crash — a smoke test that asserts a binary starts.
 - **Sibling docs:**
   - `partial-oracle-selfcheck-2026-08-22.md` — the child, and the failure one step past *this* entry's remedy. Its rule was followed there: the oracle was mutated, twice, and both mutations were caught. They landed on the four labels the oracle's self-check covered, out of nine. **A battery samples**, so against a guard whose own coverage is partial, sampling is what decides whether the hole is found — and the intuition that picks mutations is the same one that picked the self-check's entries, so the two samples are not independent. That entry adds the adversarial-selection rule this one's Prevention was missing.
   - `../architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md` — the parent family, and the entry this one refines. That entry's class is *a property asserted with no mechanism behind it*, and its remedy is to build the extract-and-compare test. This is the failure one step past that remedy: the mechanism exists, runs, and is green, and still establishes nothing. Its line *"a contract suite that has only ever been observed passing is itself an unverified claim"* is correct and was followed here — the suite was mutation-tested — and it was still not enough, because the battery is itself an artifact that can be incomplete.
@@ -107,6 +107,28 @@ assert_contains "$bisect_out" "$expected_bad is the first bad commit"
 
 What this instance adds is a **boundary test of that entry's Rule Scope**, which currently requires all three of: the defect is textual and multi-site, the sweep is enumerated by search, and the correction is written in the same medium as the defect. This instance satisfies none of them. It is a single-site defect in executable bash rather than restated prose, found by reasoning about an oracle rather than by a grep sweep. The mechanism still fired. That is evidence the root cause generalizes past the stated preconditions to *any* corrective change, which bears directly on that entry's own note that it is **"Level: Pattern … not yet Structure."** A fourth instance outside its declared scope is the kind of evidence that would promote it.
 
+## Second instance (2026-08-24) — a battery that exercised one end of a two-ended relation
+
+**This one falls outside the Rule Scope above and the root cause fired anyway**, which is why it is recorded here rather than as a fifth entry in this cluster.
+
+`scripts/test-widened-domain-tell.sh` guards every `§` cross-reference in `tdd/`: it discovers references by scanning and asserts each resolves to a heading that exists. PR #276 added `tdd/tests.md` § *A test name is a claim the assertion must be able to falsify* plus a pointer to it from `tdd/SKILL.md`'s `Checklist Per Cycle`, and mutation-tested the pointer before claiming it was covered:
+
+```
+baseline                                 22 passed, 0 failed
+rename the heading in tests.md           21 passed, 1 failed   <- caught
+delete the pointer clause in SKILL.md    21 passed, 0 failed   <- GREEN
+```
+
+Only the first mutation was run. The PR body then reported *"the pointer is machine-checked."* One mutation, one red, and a claim about the reference as a whole.
+
+**A reference has two ends and two independent failure directions.** *Resolution* — does the pointer still name a heading that exists — is what the mutation tested. *Reachability* — does anything still point at the heading — is what it did not, and with the pointer deleted the checklist row reads `[ ] Test name claims only what the assertion can falsify` with no method attached anywhere. That is the exhortation the change existed to avoid. `MIN_TO_RULE` floors inbound references to exactly one heading (the type-level rule from #268) and nothing floors the next one, which is `partial-oracle-selfcheck-2026-08-22.md`'s shape in the guard rather than in the suite.
+
+**Why it is a scope-boundary instance.** The Applies-when above requires a fixture-supplied oracle — an inversion of control where the test hands over a predicate and the system decides using it. There is none here: the suite extracts headings and compares them directly, the shape this entry's Inverts-when explicitly exempts. What recurred was not the oracle blind spot but the layer under it: **the battery's coverage bounds the claim, and the claim was made at the width of the artifact rather than the width of the battery.** That generalizes the same way the 2026-08-19 instance generalized `sweep-commits`, and it is the second such boundary test — evidence the root cause is about *batteries*, not about *oracles*.
+
+**And the corrective change carried the defect, for the third recorded time.** The PR was adding a rule that says a test name is a claim the assertion must be able to falsify. The PR-body claim was the name; the single mutation was the assertion; the name was wider. Same author, same PR, same hour — `../architecture-decisions/sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` again, now with an instance where the defect and the *rule against the defect* were written into one diff.
+
+**Found by:** a `/pre-merge` review sub-agent, which re-ran the battery and added the mutation the author had not. Not by the author re-reading it. The battery is chosen by the person holding the theory of what could go wrong (§ Root Cause), and that is as true of the second mutation as of the first.
+
 ## Prevention
 
 **Code-level.**
@@ -120,9 +142,17 @@ What this instance adds is a **boundary test of that entry's Rule Scope**, which
 
 > A mutation battery must contain at least one mutation of the **fixture** and at least one of the **oracle**, not only of the artifact under test. If every mutation in the battery fails the same way — all crashes, or all fatals — the battery has demonstrated one failure mode and left the others untested.
 
+**Amended 2026-08-24 — component coverage is not direction coverage.** The rule above enumerates *parts* (subject, fixture, oracle), and the second instance above had no fixture and no oracle to enumerate. Add the orthogonal half:
+
+> **Where the property has more than one independent failure direction, mutate each direction.** A reference has two ends: mutate the target *and* delete the pointer. A round trip has two halves: break the encoder *and* the decoder. A guard has two directions: feed it something it must reject *and* something it must accept. One red establishes one direction, and the claim you may write from it is that direction — not the artifact.
+
 The checkable trigger, stated so it can be applied to a single assertion without re-deriving the diagnosis:
 
 > **"If this assertion passed, what else could have made it pass?"**
+
+And its mirror, for the battery rather than the assertion — the question the second instance above needed and nobody asked:
+
+> **"What am I about to claim from this red, and is that the claim the mutation tested?"**
 
 If the answer includes anything other than "the behavior I am claiming," the assertion is not yet pinned. This is deliberately shaped as a question you can ask of one line, because the parent entry's Shelf Life records that its own consolidation would fail if written as more prose.
 
@@ -157,6 +187,7 @@ If the answer includes anything other than "the behavior I am claiming," the ass
 - PR #255 / issue #236 — the change that produced this entry
 - Issue #243 — the incident behind `CLAUDE.md` rule (b), which required the suite this entry is about
 - `../architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md`, `../architecture-decisions/self-review-blind-to-composition-2026-08-13.md`, and `../architecture-decisions/sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` — see Rule Scope
+- PR #276 / issue #185 — the second instance (2026-08-24); **issue #277** is the mechanism it needs, a reachability floor in `scripts/test-widened-domain-tell.sh` beside the existing `MIN_TO_RULE`
 - PR #246 / issue #245 — landed on `prod` while this PR was open; its `sweep-commits` entry is why the safety-net observation above is framed as a scope-boundary instance of a known pattern rather than as a new finding
 
 ## Shelf Life
@@ -164,3 +195,9 @@ If the answer includes anything other than "the behavior I am claiming," the ass
 Evergreen — no expiration condition. The specific instance is git-bisect-shaped, but the rule is about the relationship between a test, its oracle, and its mutation battery, and does not depend on any tool. Retire it only if it is absorbed into the consolidated entry the parent doc calls for.
 
 **Sibling (2026-08-23).** [validate-the-instrument-not-only-the-subject-2026-08-23.md](validate-the-instrument-not-only-the-subject-2026-08-23.md) carries this one level out: that entry mutates the *oracle inside a committed suite*; this one is about the reviewer's own uncommitted harness, which no suite here can reach.
+
+**Second instance (2026-08-24).** Recorded in-place under `/compound` Phase 4's *same problem → update the existing file* branch, not under its prose-only rule — that rule governs whether an entry ships a **mechanism**, and says nothing about file-vs-in-place. The judgment the branch needs is that this is the same root cause as the 2026-08-19 instance (a battery narrower than the claim drawn from it) rather than a distinct one; § Second instance argues that at length, and the widened Rule Scope is the result. A reader who thinks the boundary makes it *distinct* rather than *the same pattern generalized* should split it out — that is the arguable call here, and it is deliberately left visible.
+
+Two prior entries in this category name a guard that under-covers what it claims — `partial-oracle-selfcheck-2026-08-22.md` and `mechanism-generality-lags-the-pattern-2026-08-23.md`. (`validate-the-instrument-not-only-the-subject-2026-08-23.md` is a different shape: an instrument that *fails* while reporting normally, not one that under-covers.)
+
+**Which of Phase 4's five came closest: a stronger test** — a reachability floor in `scripts/test-widened-domain-tell.sh` beside the existing `MIN_TO_RULE`, roughly ten lines, sketched in **#277**. What blocked it is *not* difficulty, and the scope/difficulty exit is closed on purpose: it is buildable in this codebase and someone should build it. It was filed rather than written into PR #276 because that PR touches the suite's *subject* and not the suite, and a floor added in the same diff as the reference it floors is a guard authored by the party it guards. That is a defensible reason and a weak one — this instance ships a mechanism-in-waiting, not a mechanism, and if #277 is still open when a third instance arrives, the deferral was wrong.

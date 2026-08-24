@@ -164,12 +164,15 @@ Mocking a type you don't own — a platform API (workerd crypto, edge-runtime gl
 
 ```
 [ ] Test describes behavior, not implementation
+[ ] Test name claims no constraint the assertion cannot falsify
 [ ] Test uses public interface only
 [ ] Test would survive internal refactor
 [ ] Expected values come from an independent source, not the code's own formula
 [ ] Code is minimal for this test
 [ ] No speculative features added
 ```
+
+The first two rows are two different name failures, deliberately adjacent. *Describes behavior, not implementation* is the WHAT-vs-HOW axis: a name describing the implementation. *Claims no constraint the assertion cannot falsify* is the name-vs-assertion axis, and it fires only on names that assert a **relationship** — a bound, an ordering, a rejection, a deadline. `"user can checkout with valid cart"` names an outcome and is out of scope for it. A name can pass either row and fail the other. That second row's method is not restated here — see [tests.md](tests.md) § *A test name is a claim the assertion must be able to falsify*.
 
 ## Handoff
 
