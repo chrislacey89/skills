@@ -355,6 +355,22 @@ dropped_citations() {
     comm -23 <(declared_edges "$2") <(canon_citation_rows "$1" | LC_ALL=C sort -u)
 }
 
+# hero_book_count <index.html> — the number of books the hero eyebrow
+# advertises, or empty when the line is not found.
+#
+# WHY THE HERO IS PINNED AND THE REST OF THE COPY IS NOT. This one line is the
+# page's advertisement for the canon section — the button beneath it links to
+# `#canon`. It read "Eight books" through the whole of #273's implementation:
+# correct while the shelf was a hand-picked eight, wrong from the moment the
+# canon became derived, and shipped to production. That is the checklist's lone
+# instance fix — the hand-maintained-canon-count pattern lived in two places and
+# only one was repaired. Deriving it makes the two agree; this check is what
+# makes them *stay* agreed, because "it is derived now" is a claim about the
+# current source and not a mechanism.
+hero_book_count() {
+    grep -o '[0-9][0-9]* books' "$1" 2>/dev/null | head -1 | sed 's/ books$//' || true
+}
+
 # declares_work_at_tier <skill.md> <"Title — Author"> <tier> — does that skill
 # declare that exact string under that exact `sources:` sub-key? Exact, not
 # surname-tolerant: both sides are now the same string read from the same file,
@@ -749,6 +765,17 @@ EOF
 
     if [ -z "$unrendered" ] && [ -z "$unbacked_render" ]; then
         ok "all $rendered_count rendered spine(s) are exactly the $entry_count canon work(s)"
+    fi
+
+    hero_count="$(hero_book_count "$built_page")"
+    if [ -z "$hero_count" ]; then
+        bad "the hero eyebrow no longer advertises a book count" \
+            "the reader looks for a digit followed by \" books\". Two things land here: the line was removed, or the count was spelled out as a word — which is how it read before #273 (\"Eight books\"), so a revert to hand-written copy reports here rather than as a mismatch. Either derive it from the canon, or update hero_book_count if the copy deliberately changed shape."
+    elif [ "$hero_count" -ne "$entry_count" ]; then
+        bad "the hero advertises $hero_count books and the canon holds $entry_count" \
+            "the hero eyebrow is the page's advertisement for the canon section and its button links straight to it. A hand-written number here is the same drift the shelf itself had — derive it from the canon rather than restating it."
+    else
+        ok "the hero eyebrow advertises the same $entry_count books the canon holds"
     fi
 fi
 
@@ -1277,6 +1304,30 @@ fi
 # match-less page aborted the script with an empty stderr, so 34 of 46 checks —
 # including the reader's own two self-tests, three lines above — never ran, and
 # the output was indistinguishable from a clean early exit.
+# THE HERO-COUNT READER, both directions. The live check above can only ever
+# run against a page whose hero is correct, so nothing there would notice the
+# reader silently returning the wrong number — or nothing at all.
+cat > "$fixtures/hero.html" <<'HTML'
+<div class="eyebrow">Thirty skills · 45 books · One pipeline</div>
+<p>Some later prose mentioning 8 books, which must not win.</p>
+HTML
+if [ "$(hero_book_count "$fixtures/hero.html")" = "45" ]; then
+    ok "hero_book_count reads the eyebrow's count and not a later mention"
+else
+    bad "hero_book_count misread the hero eyebrow" \
+        "got: $(hero_book_count "$fixtures/hero.html") — a reader that returns the wrong number makes the comparison above pass or fail for the wrong reason"
+fi
+
+cat > "$fixtures/hero-none.html" <<'HTML'
+<div class="eyebrow">Thirty skills · One pipeline</div>
+HTML
+if [ -z "$(hero_book_count "$fixtures/hero-none.html")" ]; then
+    ok "hero_book_count returns empty, rather than aborting, when no count is present"
+else
+    bad "hero_book_count invented a count from a page that has none" \
+        "got: $(hero_book_count "$fixtures/hero-none.html")"
+fi
+
 cat > "$fixtures/spineless.html" <<'HTML'
 <section id="canon"><div class="shelf"></div></section>
 HTML
@@ -1295,7 +1346,7 @@ rm -f "$fixtures/canon-clean.ts" "$fixtures/canon-unparsed.ts" \
       "$fixtures/clean-data.ts" "$fixtures/rehanded-data.ts" \
       "$fixtures/rehanded-same-works.ts" \
       "$fixtures/orphan-lesson-data.ts" "$fixtures/page.html" \
-      "$fixtures/spineless.html"
+      "$fixtures/spineless.html" "$fixtures/hero.html" "$fixtures/hero-none.html"
 
 # --- the mappings direction ---
 
