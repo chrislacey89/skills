@@ -333,7 +333,7 @@ paper_markers() {
 #
 # It was not hypothetical. Review found a live instance: *Peer Review on
 # Open-Source Software Projects — Peter C. Rigby*, a research paper, typed
-# `book`, shipping, with the spread labelling it "From the book" — and this check
+# `book`, shipping, with the spread labeling it "From the book" — and this check
 # green, because the author field carries no tell and both sides read the same
 # field the same way. Correctness now comes from EXPECTED_PAPERS below, which is
 # written by hand and therefore capable of disagreeing.
@@ -409,8 +409,17 @@ dropped_citations() {
 # only one was repaired. Deriving it makes the two agree; this check is what
 # makes them *stay* agreed, because "it is derived now" is a claim about the
 # current source and not a mechanism.
+# ANCHORED TO THE EYEBROW, NOT TO THE FIRST MATCH IN THE FILE. An unanchored
+# `grep | head -1` reads document order, and the built page puts <head> — title,
+# `meta name="description"`, `og:description` — about 2400 bytes ahead of the
+# eyebrow. Nothing there says "N books" today, but the meta description is the
+# natural place for someone to write it next, and an upstream match would win
+# silently: the check would then grade the wrong number and report ok while the
+# eyebrow was wrong. Verified against a fixture with a competing earlier count.
 hero_book_count() {
-    grep -o '[0-9][0-9]* books' "$1" 2>/dev/null | head -1 | sed 's/ books$//' || true
+    grep -o 'class="eyebrow"[^<]*' "$1" 2>/dev/null \
+        | grep -o '[0-9][0-9]* books' \
+        | head -1 | sed 's/ books$//' || true
 }
 
 # declares_work_at_tier <skill.md> <"Title — Author"> <tier> — does that skill
@@ -691,9 +700,24 @@ fi
 # recomputed from the subject's own input cannot; a list somebody wrote down can.
 #
 # So this list is the point of human judgment about what each work IS, checked
-# against what the derivation SAYS it is. When a new paper is added this goes red
-# until a person confirms the classification — which is the check working, not
-# maintenance burden leaking back in.
+# against what the derivation SAYS it is.
+#
+# WHAT IT DOES NOT DO, stated plainly because the first draft of this comment
+# claimed otherwise. This is a REGRESSION PIN over a known set, not a gate on new
+# entries. It catches a listed paper being retyped, a marker being removed, and a
+# book acquiring a spurious tell. It does NOT catch a newly added paper that
+# carries no citation tell: that work is absent from both sides of the
+# comparison, so it types `book` and passes. Reproduced on this branch —
+# add `- "Some New Paper With No Tell — Solo Author"` to any skill and the suite
+# stays at full green with the work typed `book`.
+#
+# That gap is accepted rather than closed, and the reason is #273'"'"'s whole thesis:
+# adding a source to a skill must be the ONLY action needed to put the work on
+# the page. The mechanism that would close it — an expected-type row for every
+# one of the 45 works — reintroduces a second required edit per source, which is
+# the maintenance this change exists to remove. The residual cost is bounded and
+# visible: a paper renders as a bound volume until someone notices. Tracked as a
+# follow-up rather than papered over.
 EXPECTED_PAPERS="Encouraging Divergent Thinking in LLMs through Multi-Agent Debate — Liang et al. (EMNLP 2024)
 Improving Factuality and Reasoning in Language Models through Multiagent Debate — Du et al. (2023)
 Peer Review on Open-Source Software Projects — Peter C. Rigby"
@@ -707,8 +731,20 @@ done <<EOF
 $unrenderable
 EOF
 
+# A floor, in the shape every other population in this file already has. With
+# both sides empty the two comm calls report nothing and the check passes
+# vacuously — the one state a set comparison cannot distinguish from agreement.
+MIN_PAPERS=1
+
 actual_papers="$(papers_typed "$canon_ts")"
 expected_papers="$(printf '%s\n' "$EXPECTED_PAPERS" | LC_ALL=C sort)"
+
+if [ "$(printf '%s' "$expected_papers" | grep -c . || true)" -lt "$MIN_PAPERS" ]; then
+    fatal "EXPECTED_PAPERS names $(printf '%s' "$expected_papers" | grep -c . || true) work(s), expected at least $MIN_PAPERS.
+       An empty expected list makes the comparison below agree with an empty
+       derived set and report ok, which is the vacuous pass this floor exists for.
+       If the repo genuinely cites no papers, lower MIN_PAPERS as a deliberate edit."
+fi
 
 wrongly_book="$(comm -23 <(printf '%s\n' "$expected_papers") <(printf '%s\n' "$actual_papers"))"
 while IFS= read -r offender; do
@@ -1522,6 +1558,19 @@ else
         "got: $(hero_book_count "$fixtures/hero.html") — a reader that returns the wrong number makes the comparison above pass or fail for the wrong reason"
 fi
 
+# THE UPSTREAM-MATCH TRAP. The built page's <head> sits ~2400 bytes ahead of the
+# eyebrow, so an unanchored reader grades whatever <head> happens to say.
+cat > "$fixtures/hero-early.html" <<'HTML'
+<meta name="description" content="a pack of 8 books, catalogued">
+<div class="eyebrow">Thirty skills · 45 books · One pipeline</div>
+HTML
+if [ "$(hero_book_count "$fixtures/hero-early.html")" = "45" ]; then
+    ok "hero_book_count reads the eyebrow even when an earlier element names a different count"
+else
+    bad "hero_book_count read a count from outside the eyebrow" \
+        "got: $(hero_book_count "$fixtures/hero-early.html"), want 45 — document order put the meta description first, so an unanchored read grades the wrong number and reports ok while the eyebrow is wrong"
+fi
+
 cat > "$fixtures/hero-none.html" <<'HTML'
 <div class="eyebrow">Thirty skills · One pipeline</div>
 HTML
@@ -1550,7 +1599,7 @@ rm -f "$fixtures/canon-clean.ts" "$fixtures/canon-unparsed.ts" \
       "$fixtures/clean-data.ts" "$fixtures/rehanded-data.ts" \
       "$fixtures/rehanded-same-works.ts" \
       "$fixtures/orphan-lesson-data.ts" "$fixtures/page.html" \
-      "$fixtures/spineless.html" "$fixtures/hero.html" "$fixtures/hero-none.html"
+      "$fixtures/spineless.html" "$fixtures/hero.html" "$fixtures/hero-none.html" "$fixtures/hero-early.html"
 
 # --- the mappings direction ---
 

@@ -109,7 +109,7 @@ citations() {
 # nothing else. Review found the gap with a live instance: `/walk-commits`
 # declares "Peer Review on Open-Source Software Projects — Peter C. Rigby", a
 # research paper by a single author with no venue or year in the string. There
-# is no truthful tell to read, so the rule typed it `book` and the page labelled
+# is no truthful tell to read, so the rule typed it `book` and the page labeled
 # a paper "From the book".
 #
 # This is the frontmatter affordance the first draft of this comment named as
