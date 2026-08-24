@@ -419,9 +419,15 @@ stray_work_mentions() {
         [ -n "$work" ] || continue
         # `|| true`: no match is the passing case, and this runs under set -e.
         # printf rather than a sed replacement, because `&` is the whole-match
-        # backreference there and four declared works carry one in the author.
+        # backreference there and eight declared works carry one in the author.
+        #
+        # if/fi rather than `A && B || C`: ShellCheck 0.9.0 — the version
+        # `.shellcheck-version` pins CI to, which is NOT the version a modern
+        # `brew install` gives you — reports SC2015 on that form and exits 1.
         hit="$(printf '%s\n' "$outside" | grep -F -m1 -- "$work" || true)"
-        [ -n "$hit" ] && printf '%s\t%s\n' "$work" "$hit" || true
+        if [ -n "$hit" ]; then
+            printf '%s\t%s\n' "$work" "$hit"
+        fi
     done <<EOF
 $(declared_works "$root"/*/SKILL.md | LC_ALL=C sort -u)
 EOF
@@ -441,8 +447,19 @@ orphan_lessons() {
 # was actually produced, which is the difference between "the component imports
 # the canon" and "the reader can see all 45 works" — and #273 is a bug report
 # about the second.
+# `|| true` INSIDE the pipeline, not at the call site. `grep` exits 1 when it
+# matches nothing, and under `set -euo pipefail` that aborts the assignment its
+# caller is making — the whole script dies with an empty stderr and no failing
+# check, which is indistinguishable in the output from a clean early exit.
+# Verified before this guard: a selector that cannot match ran 12 of 46 checks,
+# exited 1, and wrote 0 bytes to stderr. The `MIN_RENDERED` fatal below
+# documents itself as catching "a page that reads as empty" and was unreachable
+# in exactly that case, as were the two self-tests written for this reader.
+# Third instance of this class in this file; the other two were caught during
+# implementation. See `validate-the-instrument-not-only-the-subject-2026-08-23.md`
+# — an unvalidated read that fails in a format indistinguishable from silence.
 rendered_keys() {
-    grep -o 'data-key="[^"]*"' "$1" \
+    { grep -o 'data-key="[^"]*"' "$1" || true; } \
         | sed -e 's/^data-key="//' -e 's/"$//' \
               -e 's/&#38;/\&/g' -e 's/&amp;/\&/g' \
               -e 's/&#39;/'"'"'/g' -e 's/&quot;/"/g' \
@@ -1254,10 +1271,31 @@ else
         "got: $read_back — an ampersand in a title is escaped by the templating, and a reader that does not undo it reports every such work as unrendered"
 fi
 
+# THE BLIND-READER FIXTURE. A page with no spines at all must reach the
+# MIN_RENDERED fatal and say so, not kill the suite on the assignment. This is
+# the mutation that exposed the missing guard: before it, `rendered_keys` on a
+# match-less page aborted the script with an empty stderr, so 34 of 46 checks —
+# including the reader's own two self-tests, three lines above — never ran, and
+# the output was indistinguishable from a clean early exit.
+cat > "$fixtures/spineless.html" <<'HTML'
+<section id="canon"><div class="shelf"></div></section>
+HTML
+if blind="$(rendered_keys "$fixtures/spineless.html")"; then
+    if [ -z "$blind" ]; then
+        ok "a page with no spines reads as empty rather than killing the suite"
+    else
+        bad "rendered_keys invented $(printf '%s' "$blind" | grep -c .) key(s) from a page with none" "got: $blind"
+    fi
+else
+    bad "rendered_keys aborted on a page with no spines" \
+        "under set -euo pipefail this kills the whole script with an empty stderr, so the MIN_RENDERED fatal that exists to report an empty page is unreachable and every check after it silently does not run"
+fi
+
 rm -f "$fixtures/canon-clean.ts" "$fixtures/canon-unparsed.ts" \
       "$fixtures/clean-data.ts" "$fixtures/rehanded-data.ts" \
       "$fixtures/rehanded-same-works.ts" \
-      "$fixtures/orphan-lesson-data.ts" "$fixtures/page.html"
+      "$fixtures/orphan-lesson-data.ts" "$fixtures/page.html" \
+      "$fixtures/spineless.html"
 
 # --- the mappings direction ---
 
