@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# test-canon-coverage.sh — every book the landing page shelves must be declared
-# by the very skill the page says declares it.
+# test-canon-coverage.sh — the landing page's canon and the skills' `sources:`
+# frontmatter must name the same works, and every attribution the page renders
+# must be one the named skill actually makes.
 #
 # THE DRIFT CLASS. The canon section renders a shelf of books, and its copy in
 # `site/src/components/Shelf.astro` tells the reader "each SKILL.md names its
@@ -69,14 +70,31 @@
 # `mechanism-generality-lags-the-pattern-2026-08-23.md` that review caught here:
 # a detector keying on a language construct rather than on the property.
 #
-# WHAT IT DELIBERATELY DOES NOT PIN. `bookDetails[key].fm` and `.excerpt` are
-# hand-copied prose about the named file, and nothing here checks their content:
-# an `fm:` naming books that exist nowhere in the repo passes this suite. That is
-# issue #273's subject — the shelf is hand-maintained and drifts from frontmatter
-# — and it is a deferral, not an oversight. Say so here rather than let the
-# opening paragraph read as if the whole rendered attribution is now covered:
-# what IS pinned is the `file:` path and the work-to-declaration pairing, which
-# is the claim #272 reported.
+# THE SECOND HALF (issue #273). The paragraph above used to end here saying the
+# shelf was hand-maintained and that fixing it was somebody else's issue. It is
+# now `site/src/lib/canon.generated.ts`, produced by `scripts/generate-canon.sh`
+# from the same `sources:` frontmatter, and the "canon module is derived" section
+# below is what keeps the committed copy honest. It pins, each side read
+# independently of the generator:
+#
+#   6. The committed module is byte-for-byte what the generator produces from the
+#      frontmatter as it stands right now.
+#   7. The canon and the frontmatter name the same set of works, in both
+#      directions — no declared work missing, no shelved work undeclared.
+#   8. Every entry is typed `book` or `paper`, and `paper` exactly when its own
+#      author field is spelled as a paper citation.
+#   9. Every citation edge resolves to a skill that declares that work at that
+#      tier, AND every declaration in the frontmatter appears as an edge. The
+#      reverse direction is not redundant: dropping one citation from a work with
+#      other citers leaves the page looking correct and only the citation count
+#      — which #274 renders as spine height — silently wrong.
+#
+# WHAT IT STILL DOES NOT PIN. `bookDetails[key].lesson` is hand-written prose,
+# and nothing here checks its content. That is deliberate and load-bearing: the
+# lessons are an OPTIONAL enrichment layer keyed by canonical work, so a work
+# with no lesson degrades to the derived spread rather than being blocked from
+# the page. A coverage check over the lessons would make curation mandatory and
+# put the maintenance burden back exactly where #273 removed it from.
 #
 # The self-tests at the bottom run every extractor and both matchers against
 # synthetic fixtures in both directions, because a detector that has stopped
@@ -86,6 +104,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 data_ts="$repo_root/site/src/lib/data.ts"
+canon_ts="$repo_root/site/src/lib/canon.generated.ts"
 
 pass=0
 fail=0
@@ -264,6 +283,178 @@ alias_collisions() {
     '
 }
 
+# canon_rows <canon.generated.ts> — one "<full>\t<title>\t<author>\t<type>" per
+# entry of the generated canon, delimited by brace depth so a reflow cannot
+# shrink the population the way it once shrank the shelf's.
+canon_rows() {
+    awk '
+        /^export const canon/ { incanon = 1; next }
+        incanon && /^\];/     { incanon = 0; next }
+        incanon {
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (c == "{") { depth++; if (depth == 1) rec = ""; continue }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        f = ""; t = ""; a = ""; y = ""
+                        if (match(rec, /full: "[^"]*"/))   f = substr(rec, RSTART + 7,  RLENGTH - 8)
+                        if (match(rec, /title: "[^"]*"/))  t = substr(rec, RSTART + 8,  RLENGTH - 9)
+                        if (match(rec, /author: "[^"]*"/)) a = substr(rec, RSTART + 9,  RLENGTH - 10)
+                        if (match(rec, /type: "[^"]*"/))   y = substr(rec, RSTART + 7,  RLENGTH - 8)
+                        if (f != "" && y != "") print f "\t" t "\t" a "\t" y
+                        rec = ""
+                    }
+                    continue
+                }
+                if (depth >= 1) rec = rec c
+            }
+            if (depth >= 1) rec = rec " "
+        }
+    ' "$1"
+}
+
+# canon_slots <canon.generated.ts> — how many TOP-LEVEL records the array holds,
+# counted by brace depth and knowing no field name. Nested citation objects sit
+# at depth 2 and are not counted, which is what makes this reading capable of
+# disagreeing with canon_rows above.
+canon_slots() {
+    awk '
+        /^export const canon/ { incanon = 1; next }
+        incanon && /^\];/     { incanon = 0; next }
+        incanon {
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (c == "{") { if (depth == 0) n++; depth++ }
+                else if (c == "}") depth--
+            }
+        }
+        END { print n + 0 }
+    ' "$1"
+}
+
+# canon_citation_rows <canon.generated.ts> — "<full>\t<skill>\t<tier>" per
+# declared citation.
+#
+# LINE-BASED, AND THAT IS SAFE HERE ONLY BECAUSE OF THE FRESHNESS CHECK. Keying
+# on a language construct rather than on the property is the recurrence
+# `mechanism-generality-lags-the-pattern-2026-08-23.md` warns about, and it is
+# why the two readings above are record-based. This one is exempt for a reason
+# that has to hold: the file is generated, and the section below diffs it
+# byte-for-byte against a fresh run of the generator. A reflow that would break
+# this parser cannot reach the tree without turning that check red first. If the
+# freshness check is ever weakened, this parser has to be rewritten with it.
+canon_citation_rows() {
+    awk '
+        /^export const canon/ { incanon = 1; next }
+        incanon && /^\];/     { incanon = 0; next }
+        !incanon              { next }
+        match($0, /full: "[^"]*"/) { cur = substr($0, RSTART + 7, RLENGTH - 8); next }
+        cur != "" && match($0, /skill: "[^"]*"/) {
+            s = substr($0, RSTART + 8, RLENGTH - 9)
+            if (match($0, /tier: "[^"]*"/)) {
+                print cur "\t" s "\t" substr($0, RSTART + 7, RLENGTH - 8)
+            }
+        }
+    ' "$1"
+}
+
+# mistyped_entries <canon.generated.ts> — every entry whose `type` disagrees
+# with what its own author field says, as "<full>\t<why>". Empty output passes.
+#
+# THE PROPERTY, NOT THE RULE. The classification rule lives in the generator;
+# re-implementing it here would give two copies of one opinion and no oracle.
+# What this asserts is the property the rule exists to produce: `paper` iff the
+# author is spelled as a paper citation — `et al.`, or a trailing parenthesized
+# four-digit year — and nothing else is.
+mistyped_entries() {
+    local full author type tell
+    while IFS="$(printf '\t')" read -r full _title author type; do
+        [ -n "$full" ] || continue
+        tell=0
+        case "$author" in *"et al."*) tell=1 ;; esac
+        if printf '%s' "$author" | grep -Eq '\([^)]*[0-9]{4}\)$'; then tell=1; fi
+        case "$type" in
+            book)
+                [ "$tell" -eq 0 ] || printf '%s\tit is typed book, but its author "%s" carries "et al." or a trailing year in parentheses\n' "$full" "$author"
+                ;;
+            paper)
+                [ "$tell" -eq 1 ] || printf '%s\tit is typed paper, but its author "%s" has neither "et al." nor a trailing year in parentheses, so nothing in the frontmatter says it is a paper\n' "$full" "$author"
+                ;;
+            *)
+                printf '%s\tit carries type "%s"; the only types the page can render are book and paper\n' "$full" "$type"
+                ;;
+        esac
+    done <<EOF
+$(canon_rows "$1")
+EOF
+}
+
+# unresolved_citations <canon.generated.ts> <root> — every citation edge that
+# does not resolve to a skill declaring that exact work at that exact tier.
+unresolved_citations() {
+    local canon="$1" root="$2" full skill tier
+    while IFS="$(printf '\t')" read -r full skill tier; do
+        [ -n "$full" ] || continue
+        if [ ! -f "$root/$skill/SKILL.md" ]; then
+            printf '%s\tthe canon says it is cited by /%s, which is not a skill in this repo\n' "$full" "$skill"
+            continue
+        fi
+        declares_work_at_tier "$root/$skill/SKILL.md" "$full" "$tier" \
+            || printf '%s\tthe canon says /%s cites it as %s, and that file'"'"'s frontmatter does not\n' "$full" "$skill" "$tier"
+    done <<EOF
+$(canon_citation_rows "$canon")
+EOF
+}
+
+# declared_edges <root> — "<full>\t<skill>\t<tier>" for every declaration in the
+# frontmatter, which is the citation set read from the other side.
+declared_edges() {
+    local skill_md name
+    for skill_md in "$1"/*/SKILL.md; do
+        [ -f "$skill_md" ] || continue
+        name="$(basename "$(dirname "$skill_md")")"
+        awk -v skill="$name" '
+            /^---[[:space:]]*$/       { fm++; next }
+            fm != 1                   { next }
+            /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; next }
+            ins && /^[^[:space:]]/    { ins = 0 }
+            !ins                      { next }
+            /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   next }
+            /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; next }
+            match($0, /"[^"]+"/) { print substr($0, RSTART + 1, RLENGTH - 2) "\t" skill "\t" cur }
+        ' "$skill_md"
+    done | LC_ALL=C sort -u
+}
+
+# dropped_citations <canon.generated.ts> <root> — declarations the frontmatter
+# makes that the canon does not record. The work stays shelved by its other
+# citers, so nothing looks broken; only the citation count is understated, and
+# #274 renders that count as spine height.
+dropped_citations() {
+    comm -23 <(declared_edges "$2") <(canon_citation_rows "$1" | LC_ALL=C sort -u)
+}
+
+# declares_work_at_tier <skill.md> <"Title — Author"> <tier> — does that skill
+# declare that exact string under that exact `sources:` sub-key? Exact, not
+# surname-tolerant: both sides are now the same string read from the same file,
+# so any difference is drift rather than formatting.
+declares_work_at_tier() {
+    awk -v want="$2" -v tier="$3" '
+        /^---[[:space:]]*$/       { fm++; next }
+        fm != 1                   { next }
+        /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; next }
+        ins && /^[^[:space:]]/    { ins = 0 }
+        !ins                      { next }
+        /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   next }
+        /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; next }
+        match($0, /"[^"]+"/) {
+            if (substr($0, RSTART + 1, RLENGTH - 2) == want && cur == tier) { found = 1; exit }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$1"
+}
+
 # declares_work <skill.md> <"Title — Author"> — does that skill declare that
 # work? Title must match exactly; the shelf author's surname must appear in the
 # declared entry.
@@ -416,6 +607,127 @@ EOF
 if [ -z "$collisions" ]; then
     ok "all $declared_count declared work(s) use one author spelling per title"
 fi
+
+# -----------------------------------------------------------------------------
+section "the canon module is derived from the frontmatter, not written by hand"
+
+# ISSUE #273. The shelf used to be a hand-written array, so a source added to a
+# skill never reached the page and a spine on the page needed nothing behind it.
+# `scripts/generate-canon.sh` derives the whole canon from `sources:` frontmatter
+# and this section is what keeps the committed output honest. The freshness check
+# is byte-exact; everything after it re-reads both sides with THIS file's own
+# extractors, because a diff against the generator proves only that the file
+# matches the generator — not that the generator is right.
+
+MIN_CANON_ENTRIES=20
+
+[ -f "$canon_ts" ] || fatal "$canon_ts is missing.
+       The canon is generated; run \`bash scripts/generate-canon.sh\` and commit it."
+
+entry_slots="$(canon_slots "$canon_ts")"
+entry_count="$(canon_rows "$canon_ts" | grep -c . || true)"
+
+if [ "$entry_count" -lt "$MIN_CANON_ENTRIES" ]; then
+    fatal "read $entry_count canon entr(ies), expected at least $MIN_CANON_ENTRIES.
+       The extractor is broken, not the page — a canon that reads as empty passes
+       every set comparison below vacuously."
+fi
+if [ "$entry_slots" -ne "$entry_count" ]; then
+    fatal "the canon array holds $entry_slots records but only $entry_count parsed.
+       $((entry_slots - entry_count)) entr(ies) are written in a spelling the extractor does not
+       recognize, which makes them invisible to every check below while the page
+       renders them. Fix the extractor or the generator; do not lower a floor."
+fi
+ok "all $entry_slots canon entr(ies) parsed ($entry_slots slots = $entry_count rows)"
+
+# --- 1. freshness: the committed module is what the generator produces now ---
+
+if generator_diff="$(bash "$repo_root/scripts/generate-canon.sh" --check 2>&1)"; then
+    ok "site/src/lib/canon.generated.ts is what scripts/generate-canon.sh produces from the current frontmatter"
+else
+    bad "site/src/lib/canon.generated.ts is stale" \
+        "a skill's sources: block changed and the canon was not regenerated, so the page is back to asserting a set the repo does not produce. Run \`bash scripts/generate-canon.sh\` and commit the result. Generator output:
+$generator_diff"
+fi
+
+# --- 2. population: the same set, read independently of the generator ---
+
+declared_set="$(declared_works "$repo_root"/*/SKILL.md | LC_ALL=C sort -u)"
+canon_set="$(canon_rows "$canon_ts" | cut -f1 | LC_ALL=C sort -u)"
+
+missing_from_canon="$(comm -23 <(printf '%s\n' "$declared_set") <(printf '%s\n' "$canon_set"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "\"$offender\" is declared by a skill but is absent from the canon" \
+        "this is issue #273's headline direction — 34 declared works never reached the page. Adding a source to a skill must be the only action needed to shelve it."
+done <<EOF
+$missing_from_canon
+EOF
+
+extra_in_canon="$(comm -13 <(printf '%s\n' "$declared_set") <(printf '%s\n' "$canon_set"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "the canon carries \"$offender\", which no skill declares" \
+        "this is issue #272's direction — the shelf asserting provenance the repo cannot produce."
+done <<EOF
+$extra_in_canon
+EOF
+
+if [ -z "$missing_from_canon" ] && [ -z "$extra_in_canon" ]; then
+    ok "the canon and the frontmatter name the same $entry_count work(s), in both directions"
+fi
+
+# --- 3. types: the property, re-derived rather than the rule re-implemented ---
+
+# #274 renders papers as a different object, so a wrong type is a visible defect
+# rather than a metadata nit. The rule lives in the generator; what is asserted
+# here is the PROPERTY it exists to produce — an author carrying `et al.` or a
+# trailing parenthesized year is a paper citation, and nothing else is.
+mistyped="$(mistyped_entries "$canon_ts")"
+while IFS="$(printf '\t')" read -r offender why; do
+    [ -n "$offender" ] || continue
+    bad "the canon types \"$offender\" wrongly — $why" \
+        "#274 renders papers as a different object than books, so a wrong type is a visible defect rather than a metadata nit."
+done <<EOF
+$mistyped
+EOF
+
+paper_count="$(canon_rows "$canon_ts" | cut -f4 | grep -c '^paper$' || true)"
+[ -n "$mistyped" ] || ok "every canon entry is typed book or paper, and the $paper_count paper(s) are exactly those the frontmatter cites as papers"
+
+# --- 4. citations: every edge resolves, in both directions ---
+
+MIN_CITATIONS=60
+citation_rows="$(canon_citation_rows "$canon_ts")"
+citation_count="$(printf '%s' "$citation_rows" | grep -c . || true)"
+if [ "$citation_count" -lt "$MIN_CITATIONS" ]; then
+    fatal "read $citation_count citation edge(s), expected at least $MIN_CITATIONS.
+       The extractor is broken — an unread citation set passes the checks below
+       vacuously, and the citation count is what #274 renders as spine height."
+fi
+
+unresolved="$(unresolved_citations "$canon_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r offender why; do
+    [ -n "$offender" ] || continue
+    bad "the canon cites \"$offender\" unsoundly — $why" \
+        "the opened book links to that skill and labels the citation with that tier; both sides are read from the same file, so this is drift rather than a formatting difference."
+done <<EOF
+$unresolved
+EOF
+[ -z "$unresolved" ] && ok "all $citation_count citation edge(s) resolve to a skill that declares the work at that tier"
+
+# The reverse edge. Without it the generator could drop a citation and stay
+# green: the work would still be shelved by its other citers, and only its
+# citation count — the signal #274 renders — would quietly be wrong.
+dropped="$(dropped_citations "$canon_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r full skill tier; do
+    [ -n "$full" ] || continue
+    bad "/$skill declares \"$full\" as $tier and the canon does not record that citation" \
+        "the work may still be shelved by another citer, so nothing looks broken — but its citation count is understated, and #274 renders that count."
+done <<EOF
+$dropped
+EOF
+[ -z "$dropped" ] && ok "every work/skill/tier declaration in the frontmatter is recorded as a citation"
 
 # -----------------------------------------------------------------------------
 section "every spine is declared by the skill the page names"
@@ -643,6 +955,209 @@ else
 fi
 
 rm -rf "$fixtures/alias"
+
+# --- the generator, against fixtures ---
+#
+# The section above proves the committed module matches the generator. These
+# fixtures prove the generator matches the frontmatter, which is the half a
+# byte-exact diff can never establish.
+gen="$fixtures/gen"
+mkdir -p "$gen/booky" "$gen/papery" "$gen/yearless" "$gen/parenthetical"
+
+gen_fixture() {
+    local name="$1" tier="$2"
+    shift 2
+    mkdir -p "$gen/$name"
+    {
+        printf -- '---\nname: %s\ndescription: "A generator fixture."\nsources:\n  %s:\n' "$name" "$tier"
+        printf -- '    - "%s"\n' "$@"
+        printf -- '---\n\n# %s\n' "$name"
+    } > "$gen/$name/SKILL.md"
+}
+
+gen_fixture booky         primary   "Plain Book — Jane Doe" "Shared Work — Ada Byron"
+gen_fixture papery        secondary "A Debate Paper — Liang et al. (EMNLP 2024)" "Shared Work — Ada Byron"
+gen_fixture yearless      primary   "Single-Author Paper — Doe (ICSE 2025)"
+gen_fixture parenthetical primary   "A Book With A Subtitle (Second Edition) — Jane Doe"
+
+genout="$fixtures/gen-canon.ts"
+if bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null; then
+    ok "the generator runs against a fixture tree"
+else
+    bad "the generator failed on a fixture tree" "nothing below can report on a generator that did not run"
+fi
+
+gen_set="$(canon_rows "$genout" | cut -f1 | LC_ALL=C sort | tr '\n' '|')"
+want_set='A Book With A Subtitle (Second Edition) — Jane Doe|A Debate Paper — Liang et al. (EMNLP 2024)|Plain Book — Jane Doe|Shared Work — Ada Byron|Single-Author Paper — Doe (ICSE 2025)|'
+if [ "$gen_set" = "$want_set" ]; then
+    ok "the generator emits one entry per distinct declared work, collapsing a work two skills share"
+else
+    bad "the generator emitted an unexpected set" "got: $gen_set"
+fi
+
+gen_type() { canon_rows "$genout" | awk -F"$(printf '\t')" -v w="$1" '$1 == w { print $4 }'; }
+
+if [ "$(gen_type 'A Debate Paper — Liang et al. (EMNLP 2024)')" = "paper" ]; then
+    ok "an author carrying \`et al.\` is typed paper"
+else
+    bad "an \`et al.\` citation was not typed paper" "#274 renders papers as a different object than books"
+fi
+
+if [ "$(gen_type 'Single-Author Paper — Doe (ICSE 2025)')" = "paper" ]; then
+    ok "a single author with a trailing venue-and-year is typed paper"
+else
+    bad "a trailing parenthesized year was not typed paper" "the rule is \`et al.\` OR a trailing year, not \`et al.\` alone"
+fi
+
+if [ "$(gen_type 'Plain Book — Jane Doe')" = "book" ]; then
+    ok "a plain author is typed book"
+else
+    bad "a plain author was typed paper" "a rule that types everything as a paper is as wrong as one that types nothing"
+fi
+
+# THE TRAP: parentheses without a year. A rule keying on "(...)" alone reports
+# here, and edition markers are the likeliest way a book acquires them.
+if [ "$(gen_type 'A Book With A Subtitle (Second Edition) — Jane Doe')" = "book" ]; then
+    ok "parentheses in the title, with no year in the author, stay a book"
+else
+    bad "a parenthesized edition marker was typed paper" "the tell is a year in the AUTHOR field, not a bracket anywhere in the string"
+fi
+
+gen_tier() {
+    canon_citation_rows "$genout" | awk -F"$(printf '\t')" -v w="$1" -v s="$2" '$1 == w && $2 == s { print $3 }'
+}
+if [ "$(gen_tier 'Shared Work — Ada Byron' booky)" = "primary" ] \
+    && [ "$(gen_tier 'Shared Work — Ada Byron' papery)" = "secondary" ]; then
+    ok "one work cited by two skills records each skill's own tier"
+else
+    bad "the generator lost a citation tier" \
+        "got booky=$(gen_tier 'Shared Work — Ada Byron' booky) papery=$(gen_tier 'Shared Work — Ada Byron' papery); tier is what the opened book labels each citing skill with"
+fi
+
+# ISSUE #273'S LITERAL REPRODUCTION STEP: add a source to a skill, do not
+# regenerate, and the check must go red.
+if bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" --check > /dev/null 2>&1; then
+    ok "--check passes on a canon that was just generated"
+else
+    bad "--check failed on a freshly generated canon" "it now cries wolf on every clean tree, which is how a real check gets deleted"
+fi
+
+gen_fixture latecomer primary "A Work Added After Generation — Grace Hopper"
+if bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" --check > /dev/null 2>&1; then
+    bad "--check passed after a skill gained a source without regeneration" \
+        "this is issue #273's reproduction step verbatim; a green here means the page can silently omit a declared work again"
+else
+    ok "--check goes red when a skill gains a source and the canon is not regenerated"
+fi
+
+# The body-block bound, on the generator this time — the frontmatter extractor
+# in this file has its own fixture, and they are two implementations of one rule.
+mkdir -p "$gen/prosey"
+cat > "$gen/prosey/SKILL.md" <<'FIXTURE'
+---
+name: prosey
+description: "A fixture whose sources: block is prose."
+---
+
+# Prosey
+
+Skills declare provenance like this:
+
+sources:
+  primary:
+    - "Body Only Book — Nobody"
+FIXTURE
+bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null
+if canon_rows "$genout" | cut -f1 | grep -q 'Body Only Book'; then
+    bad "the generator shelved a sources: block quoted in a SKILL.md body" \
+        "prose that merely shows a sources: block must not put a work on the page"
+else
+    ok "the generator does not shelve a sources: block quoted in a SKILL.md body"
+fi
+
+# --- the canon detectors, against a mutated canon ---
+#
+# The three checks in the live section above only ever run against a clean tree,
+# which is the shape `partial-oracle-selfcheck-2026-08-22.md` warns about: a
+# detector that has silently stopped detecting reports the same full green. Each
+# one is mutated here in the direction it exists to catch, with a grep guard on
+# the mutation itself, because a self-test cannot report on a change that never
+# landed.
+
+if [ -n "$(mistyped_entries "$genout")" ] \
+    || [ -n "$(unresolved_citations "$genout" "$gen")" ] \
+    || [ -n "$(dropped_citations "$genout" "$gen")" ]; then
+    bad "a freshly generated fixture canon failed one of the three canon detectors" \
+        "each of them cries wolf on a clean canon, so the mutations below prove nothing"
+else
+    ok "a freshly generated fixture canon passes all three canon detectors"
+fi
+
+sed 's/type: "paper"/type: "book"/' "$genout" > "$fixtures/mistyped.ts"
+if grep -q 'type: "book"' "$fixtures/mistyped.ts" && ! grep -q 'type: "paper"' "$fixtures/mistyped.ts"; then
+    typed_bad="$(mistyped_entries "$fixtures/mistyped.ts" | grep -c . || true)"
+    if [ "$typed_bad" -eq 2 ]; then
+        ok "a paper retyped as a book is flagged"
+    else
+        bad "retyping both papers as books produced $typed_bad finding(s), want 2" \
+            "#274 renders papers as a different object; a type nobody checks is a type that drifts"
+    fi
+else
+    bad "the mistype fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+sed 's/type: "paper"/type: "offprint"/' "$genout" > "$fixtures/unknown-type.ts"
+if grep -q 'type: "offprint"' "$fixtures/unknown-type.ts"; then
+    if [ -n "$(mistyped_entries "$fixtures/unknown-type.ts")" ]; then
+        ok "a type outside book|paper is flagged rather than passed through"
+    else
+        bad "an unrenderable type passed the type check" \
+            "the page has two objects; a third value silently renders as neither"
+    fi
+else
+    bad "the unknown-type fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+sed 's/{ skill: "booky", tier: "primary" }/{ skill: "booky", tier: "secondary" }/' "$genout" > "$fixtures/wrong-tier.ts"
+if ! diff -q "$genout" "$fixtures/wrong-tier.ts" > /dev/null; then
+    if [ -n "$(unresolved_citations "$fixtures/wrong-tier.ts" "$gen")" ]; then
+        ok "a citation recorded at a tier the skill does not declare is flagged"
+    else
+        bad "a wrong citation tier passed" "the opened book labels each citing skill primary or secondary; an unchecked label is decoration"
+    fi
+else
+    bad "the wrong-tier fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+sed 's/{ skill: "booky",/{ skill: "no-such-skill",/' "$genout" > "$fixtures/ghost-citer.ts"
+if grep -q 'no-such-skill' "$fixtures/ghost-citer.ts"; then
+    if [ -n "$(unresolved_citations "$fixtures/ghost-citer.ts" "$gen")" ]; then
+        ok "a citation naming a skill that does not exist is flagged"
+    else
+        bad "a citation to a nonexistent skill passed" "the opened book links to that path; a dead link cannot back a provenance claim"
+    fi
+else
+    bad "the ghost-citer fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+# THE QUIET ONE. Dropping a citation from a work that has another citer leaves
+# the work shelved and every forward edge sound — only the count is wrong.
+grep -v '{ skill: "papery", tier: "secondary" },' "$genout" > "$fixtures/dropped-edge.ts"
+if [ "$(grep -c . "$fixtures/dropped-edge.ts")" -lt "$(grep -c . "$genout")" ]; then
+    if [ -n "$(unresolved_citations "$fixtures/dropped-edge.ts" "$gen")" ]; then
+        bad "the forward-edge check reported on a DROPPED citation" \
+            "it cannot — every remaining edge still resolves. If it fires here the two directions are not independent and the reverse check is untested"
+    elif [ -n "$(dropped_citations "$fixtures/dropped-edge.ts" "$gen")" ]; then
+        ok "a citation dropped from the canon is flagged by the reverse check, and only by it"
+    else
+        bad "a dropped citation passed both directions" \
+            "the work stays shelved by its other citer, so nothing looks broken — and the citation count #274 renders is silently wrong"
+    fi
+else
+    bad "the dropped-edge fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+rm -rf "$gen" "$genout"
 
 # --- the shelf extractors, against each other ---
 
