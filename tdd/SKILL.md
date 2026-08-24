@@ -164,7 +164,7 @@ Mocking a type you don't own — a platform API (workerd crypto, edge-runtime gl
 
 ```
 [ ] Test describes behavior, not implementation
-[ ] Test name claims no relationship the assertion cannot falsify
+[ ] Test name claims only what the assertion can falsify
 [ ] Test uses public interface only
 [ ] Test would survive internal refactor
 [ ] Expected values come from an independent source, not the code's own formula
