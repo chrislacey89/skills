@@ -4,6 +4,10 @@ description: Audit TypeScript and React code against expert-level best practices
 sources:
   primary:
     - "Total TypeScript — Matt Pocock"
+  secondary:
+    - "Testing Fundamentals — Kent C. Dodds"
+    - "Advanced Vitest Patterns — Epic Web Dev"
+    - "Mocking Techniques in Vitest — Epic Web Dev"
 ---
 
 # TypeScript Audit
