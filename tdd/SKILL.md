@@ -11,6 +11,7 @@ sources:
     - "Extreme Programming Explained — Kent Beck"
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
     - "Introduction to Software Testing — Ammann & Offutt"
+    - "Domain Modeling Made Functional — Scott Wlaschin"
 ---
 
 # Test-Driven Development
@@ -74,7 +75,7 @@ Before writing any code:
 - [ ] Confirm with user which behaviors to test (prioritize)
 - [ ] Identify opportunities for [deep modules](deep-modules.md) (small interface, deep implementation)
 - [ ] Classify code under test using the [code classification quadrant](code-classification.md): domain model → unit test, controller → integration test, trivial → skip, overcomplicated → refactor first
-- [ ] Design interfaces for [testability](interface-design.md)
+- [ ] Design interfaces for [testability](interface-design.md), including which preconditions belong in the *type* rather than in a runtime check — [interface-design.md](interface-design.md) § *Make an illegal input unconstructable, not merely detectable*
 - [ ] List the behaviors to test (not implementation steps)
 - [ ] Partition the input domain into characteristics and blocks (see below)
 - [ ] Get user approval on the plan
@@ -130,7 +131,7 @@ After all tests pass, look for [refactor candidates](refactoring.md):
 - [ ] Run tests after each refactor step
 - [ ] **[TypeScript projects, when implementing a library-provided callback]** If the refactor produced a local wrapper type for the callback's return (e.g. `AdjacentStepOverrides` for a Mastra `prepareStep` return), anchor the return to the library's declared shape using `satisfies LibraryReturnType` on the object expression, or return a fresh object literal, or derive the local type via `ReturnType<typeof libraryCallback>` / `Parameters<…>`. Do **not** return a typed local variable. TypeScript's excess-property check does not run on returns of typed values, so any field not declared by the library's signature is silently dropped at runtime — build passes, tests pass, the library never sees the field. This is the failure mode `/research` Phase 1.25 and `/pre-merge` Dim 8 backstop, but `satisfies` at refactor time closes the gap at compile time. Cite: ts-essentials Rule 31, "Use `satisfies` for type validation without losing inference precision."
 
-**Never refactor while RED.** Get to GREEN first.
+**Never refactor while RED.** Get to GREEN first. One exception, and it is a narrow one: a type-first migration deliberately breaks the *build*, which is not a red bar — see [refactoring.md](refactoring.md) § *A broken build is not a red bar*.
 
 ### 5. Harden with Assertions
 

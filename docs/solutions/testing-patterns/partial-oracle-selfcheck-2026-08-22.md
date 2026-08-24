@@ -65,6 +65,7 @@ The general shape: **a guard whose own coverage is a hand-maintained subset of t
   - `mutate-the-oracle-not-only-the-subject-2026-08-19.md` — the direct parent, and the entry this one refines. Its rule (*mutate the oracle, not only the subject*) was **followed** in #267: the oracle was mutated twice and both mutations were caught. They landed on covered labels. This entry is the failure one step past that remedy — a battery samples, and against a partially-covered guard, sampling is what decides whether the hole is found.
   - `../architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md` — the grandparent family. Its class is *a property asserted with nothing constructing it*; here the property was asserted in a comment over a loop that constructed four-ninths of it.
   - `../architecture-decisions/sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` — the mechanism written for *this* entry reproduced this entry's own defect on its first draft. See Solution.
+  - `mechanism-generality-lags-the-pattern-2026-08-23.md` — **the second recording of this entry's pattern**, in a different syntax, three days later. `scripts/test-oracle-table-coverage.sh` did not fire on it: the pattern recurred as a hand-listed set of *files* rather than a partial `case` table. That entry is the extension this one's Shelf Life predicted would be needed.
 
 ## Solution
 
