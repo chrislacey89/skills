@@ -72,8 +72,6 @@ function paletteOf(full: string) {
 				))
 			}
 		</div>
-		<div class="board"></div>
-
 		<div class="detail-slot" data-detail></div>
 
 		<p class="hint" data-hint>
@@ -105,16 +103,36 @@ function paletteOf(full: string) {
 		margin: 0;
 	}
 
+	/* AT 45 WORKS THE ROW WRAPS, AND A WRAPPED ROW NEEDS A BOARD PER ROW.
+	   The section used to be one flex row above one `.board` div, which is
+	   correct at eight spines and reads as a bug at 45 — three rows of books
+	   floating over nothing. A grid with fixed row pitch lets the board be a
+	   repeating background instead of an element, so it lands under every row.
+	   Giving the section its proper form is issue #274; this is the minimum
+	   repair for a defect this change introduces, not that redesign. */
 	.shelf {
-		display: flex;
-		align-items: flex-end;
+		--spine-max: 360px;
+		--board-h: 14px;
+		--row-gap: 26px;
+		--row-h: calc(var(--spine-max) + var(--board-h) + var(--row-gap));
+
+		display: grid;
+		grid-template-columns: repeat(auto-fit, 74px);
+		grid-auto-rows: var(--row-h);
 		justify-content: center;
-		gap: 10px;
-		/* The row wraps into several boards' worth of spines at 45 works.
-		   Giving that its proper form — a bookcase rather than one long
-		   row — is issue #274; this keeps it legible until then. */
-		flex-wrap: wrap;
-		row-gap: 26px;
+		column-gap: 10px;
+		background-image: repeating-linear-gradient(
+			180deg,
+			transparent 0 var(--spine-max),
+			#5c4a2e var(--spine-max),
+			#3e3120 calc(var(--spine-max) + var(--board-h)),
+			transparent calc(var(--spine-max) + var(--board-h)) var(--row-h)
+		);
+	}
+	.shelf > .spine {
+		align-self: end;
+		/* Sit the spine on top of the board band, not at the row's foot. */
+		margin-bottom: calc(var(--board-h) + var(--row-gap));
 	}
 
 	.spine {
@@ -167,15 +185,6 @@ function paletteOf(full: string) {
 			inset -6px 0 10px rgba(0, 0, 0, 0.28),
 			inset 2px 0 0 rgba(255, 255, 255, 0.12),
 			0 0 0 2px var(--gold);
-	}
-
-	.board {
-		height: 14px;
-		max-width: 780px;
-		margin: 0 auto;
-		background: linear-gradient(180deg, #5c4a2e, #3e3120);
-		border-radius: 2px;
-		box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
 	}
 
 	.hint {
@@ -337,26 +346,22 @@ function paletteOf(full: string) {
 		}
 	}
 
-	/* Keep the shelf a single scrollable row on narrow screens instead of
-	   wrapping eight spines into a broken pile above the board. */
+	/* One scrollable row on narrow screens, rather than 45 spines wrapping into
+	   a column two books wide. The board rides along as the background of the
+	   scrolled track. */
 	@media (max-width: 680px) {
 		.shelf {
-			flex-wrap: nowrap;
-			justify-content: flex-start;
+			grid-auto-flow: column;
+			grid-auto-columns: 62px;
+			grid-template-columns: none;
+			grid-auto-rows: var(--row-h);
+			justify-content: start;
 			overflow-x: auto;
-			padding: 4px 4px 8px;
 			-webkit-overflow-scrolling: touch;
 			scrollbar-width: thin;
 		}
-		.spine {
-			flex: 0 0 auto;
-			width: 62px;
-		}
 		.spine .label {
 			font-size: 13px;
-		}
-		.board {
-			max-width: none;
 		}
 	}
 </style>
