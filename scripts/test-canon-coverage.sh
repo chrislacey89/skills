@@ -37,11 +37,11 @@
 #
 # WHY TITLE + SURNAME AND NOT STRING EQUALITY. The two sides spell authors
 # differently on purpose: the shelf shows "Continuous Delivery — Jez Humble &
-# David Farley" while `/pre-merge` and `/research` between them declare both
-# "Jez Humble & David Farley" and "Jez Humble, David Farley". Demanding equality
-# would fail on a formatting difference and teach the reader to loosen the check.
-# The surname test is what keeps title-only matching from accepting a different
-# author's book that happens to share a title.
+# David Farley", `/pre-merge` declares it that way, and `/closeout` declares the
+# same work as "Jez Humble, David Farley". Demanding equality would fail on a
+# formatting difference and teach the reader to loosen the check. The surname
+# test is what keeps title-only matching from accepting a different author's
+# book that happens to share a title.
 #
 # WHY THE SHELF POPULATION IS DERIVED AND NOT FLOORED. A floor guards against
 # total blindness; it cannot notice the loss of one item, which is the
@@ -56,7 +56,16 @@
 # `mechanism-generality-lags-the-pattern-2026-08-23.md` that review caught here:
 # a detector keying on a language construct rather than on the property.
 #
-# The self-tests at the bottom run every extractor and the matcher against
+# WHAT IT DELIBERATELY DOES NOT PIN. `bookDetails[key].fm` and `.excerpt` are
+# hand-copied prose about the named file, and nothing here checks their content:
+# an `fm:` naming books that exist nowhere in the repo passes this suite. That is
+# issue #273's subject — the shelf is hand-maintained and drifts from frontmatter
+# — and it is a deferral, not an oversight. Say so here rather than let the
+# opening paragraph read as if the whole rendered attribution is now covered:
+# what IS pinned is the `file:` path and the work-to-declaration pairing, which
+# is the claim #272 reported.
+#
+# The self-tests at the bottom run every extractor and both matchers against
 # synthetic fixtures in both directions, because a detector that has stopped
 # detecting reports the same full green as a clean repo.
 
@@ -82,40 +91,97 @@ fatal() { printf '\nFATAL: %s\n' "$1" >&2; exit 2; }
 # shelf_rows <data.ts> — one "<key>\t<Title — Author>" per spine. The key is
 # `${author}-${title}`, which is exactly how Shelf.astro builds each spine's
 # `data-key` and how `bookDetails` is keyed — so it is the join, not a guess.
+#
+# RECORD-BASED, NOT LINE-BASED. An earlier draft read one spine per line, which
+# made a semantically null reflow — Prettier's normal output for a 145-character
+# object literal — read as a shrunken shelf. Records are delimited by brace
+# depth, so a spine may be written on one line or across seven.
 shelf_rows() {
     awk '
         /^export const shelf/ { inshelf = 1; next }
-        inshelf && /^\];/     { inshelf = 0 }
-        inshelf && /title:/ && /author:/ && /full:/ {
-            t = ""; a = ""; f = ""
-            if (match($0, /title: "[^"]*"/))  t = substr($0, RSTART + 8, RLENGTH - 9)
-            if (match($0, /author: "[^"]*"/)) a = substr($0, RSTART + 9, RLENGTH - 10)
-            if (match($0, /full: "[^"]*"/))   f = substr($0, RSTART + 7, RLENGTH - 8)
-            if (t != "" && a != "" && f != "") print a "-" t "\t" f
+        inshelf && /^\];/     { inshelf = 0; next }
+        inshelf {
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (c == "{") { depth++; if (depth == 1) rec = ""; continue }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        t = ""; a = ""; f = ""
+                        if (match(rec, /title: "[^"]*"/))  t = substr(rec, RSTART + 8, RLENGTH - 9)
+                        if (match(rec, /author: "[^"]*"/)) a = substr(rec, RSTART + 9, RLENGTH - 10)
+                        if (match(rec, /full: "[^"]*"/))   f = substr(rec, RSTART + 7, RLENGTH - 8)
+                        if (t != "" && a != "" && f != "") print a "-" t "\t" f
+                        rec = ""
+                    }
+                    continue
+                }
+                if (depth >= 1) rec = rec c
+            }
+            if (depth >= 1) rec = rec " "
         }
     ' "$1"
 }
 
-# shelf_slots <data.ts> — how many spine objects the array actually holds,
-# counted by object-open brace and therefore INDEPENDENT of the field regexes
-# above. The gap between this and shelf_rows is the whole point: it is the one
-# reading capable of disagreeing with the extractor.
+# shelf_slots <data.ts> — how many spine objects the array holds, counted by
+# brace depth alone. It knows NO field name, which is the entire point: it is
+# the one reading capable of disagreeing with shelf_rows above.
+#
+# THE INDEPENDENCE IS PINNED, NOT ASSERTED. A previous draft counted lines
+# beginning with `{`, and a fixture proved that independent of *quote style* —
+# not of the field regexes. Rewriting this to key on /title:/ && /author:/ &&
+# /full:/ collapsed the oracle onto the extractor and the suite stayed at 17
+# passed / 0 failed, whereupon a reflowed spine went silently unchecked. The
+# multi-line fixture below separates the two implementations: on a reflowed
+# spine no single line carries all three field names, so that collapse now
+# fails here instead of passing.
 shelf_slots() {
     awk '
         /^export const shelf/ { inshelf = 1; next }
-        inshelf && /^\];/     { inshelf = 0 }
-        inshelf && /^[[:space:]]*\{/ { n++ }
+        inshelf && /^\];/     { inshelf = 0; next }
+        inshelf {
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (c == "{") { if (depth == 0) n++; depth++ }
+                else if (c == "}") depth--
+            }
+        }
         END { print n + 0 }
     ' "$1"
 }
 
+# mapping_rows <data.ts> — "<source title>\t<skill list>" per row of the
+# `mappings` array, which Practice.astro renders under "Each stage
+# operationalizes a named discipline from the literature". Same provenance claim
+# as the shelf, five lines down in the same file, and unpinned until review
+# pointed a row at a book nothing declares and got a full green.
+mapping_rows() {
+    awk '
+        /^export const mappings/ { inmap = 1; next }
+        inmap && /^\];/          { inmap = 0; next }
+        inmap && /source:/ && /skill:/ {
+            s = ""; k = ""
+            if (match($0, /source: "[^"]*"/)) s = substr($0, RSTART + 9, RLENGTH - 10)
+            if (match($0, /skill: "[^"]*"/))  k = substr($0, RSTART + 8, RLENGTH - 9)
+            if (s != "" && k != "") print s "\t" k
+        }
+    ' "$1"
+}
+
 # detail_file <data.ts> <key> — the SKILL.md that `bookDetails[key]` names as
-# the source of this spine. Empty when the key has no entry.
+# the source of this spine. Empty when the key has no entry, or when its entry
+# carries no `file:` field; the caller distinguishes those two with
+# detail_has_entry so the failure message can point at the right line.
+#
+# The key rule does NOT `next`. An earlier draft did, which skipped the `file:`
+# of any entry written on a single line — `"Doe-Known Book": { file: "…" },` —
+# and the reflow fixture below caught it. Falling through means one line can be
+# both the key line and the field line, which is what a formatter that collapses
+# a short entry will produce.
 detail_file() {
     awk -v want="$2" '
         /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/ {
             if (match($0, /"[^"]*"/)) cur = substr($0, RSTART + 1, RLENGTH - 2)
-            next
         }
         cur == want && match($0, /file: "[^"]*"/) {
             print substr($0, RSTART + 7, RLENGTH - 8)
@@ -166,6 +232,59 @@ EOF
     return 1
 }
 
+# declares_title <skill.md> <title> — does that skill declare a work with this
+# exact title? The `mappings` array cites a bare title, with no author to check
+# a surname against, so this is the weaker of the two matchers by necessity.
+declares_title() {
+    local candidate
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] || continue
+        [ "${candidate%% — *}" = "$2" ] && return 0
+    done <<EOF
+$(declared_works "$1")
+EOF
+    return 1
+}
+
+# detail_has_entry <data.ts> <key> — does bookDetails hold this key at all?
+# Distinguished from detail_file returning empty, so the failure message can
+# tell "the spine opens to nothing" apart from "the entry has no file: field"
+# and point the fixer at the right line.
+detail_has_entry() {
+    awk -v want="$2" '
+        /^[[:space:]]*"[^"]*"[[:space:]]*:[[:space:]]*\{/ {
+            if (match($0, /"[^"]*"/) && substr($0, RSTART + 1, RLENGTH - 2) == want) {
+                found = 1
+                exit
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$1"
+}
+
+# unmapped_rows <data.ts> <root> — every `mappings` row whose cited book is not
+# declared by every skill the row names. Empty output is the passing state.
+unmapped_rows() {
+    local data="$1" root="$2" source skills skill dir
+    while IFS="$(printf '\t')" read -r source skills; do
+        [ -n "$source" ] || continue
+        # The skill cell may name more than one stage ("/pre-merge · /closeout").
+        # The row claims the principle drives each of them, so each must declare it.
+        for skill in ${skills//·/ }; do
+            dir="${skill#/}"
+            [ -n "$dir" ] || continue
+            if [ ! -f "$root/$dir/SKILL.md" ]; then
+                printf '%s\t%s names /%s, which is not a skill in this repo\n' "$source" "$source" "$dir"
+                continue
+            fi
+            declares_title "$root/$dir/SKILL.md" "$source" \
+                || printf '%s\t/%s does not declare it in its sources: frontmatter\n' "$source" "$dir"
+        done
+    done <<EOF
+$(mapping_rows "$data")
+EOF
+}
+
 # unbacked_works <data.ts> <root> — every spine whose named skill does not back
 # it, as "<work>\t<why>". Empty output is the passing state.
 unbacked_works() {
@@ -174,7 +293,11 @@ unbacked_works() {
         [ -n "$work" ] || continue
         skillfile="$(detail_file "$data" "$key")"
         if [ -z "$skillfile" ]; then
-            printf '%s\tbookDetails has no entry for key "%s", so the spine opens to nothing\n' "$work" "$key"
+            if detail_has_entry "$data" "$key"; then
+                printf '%s\tits bookDetails entry (key "%s") has no file: field to attribute the sources: block to\n' "$work" "$key"
+            else
+                printf '%s\tbookDetails has no entry for key "%s", so the spine opens to nothing\n' "$work" "$key"
+            fi
             continue
         fi
         if [ ! -f "$root/$skillfile" ]; then
@@ -245,6 +368,32 @@ EOF
 
 if [ -z "$unbacked" ]; then
     ok "all $canon_count spine(s) are declared by the skill their bookDetails entry names"
+fi
+
+# -----------------------------------------------------------------------------
+section "every mapped principle is declared by the stage it names"
+
+MIN_MAPPING_ROWS=4
+mapping_count="$(mapping_rows "$data_ts" | grep -c . || true)"
+if [ "$mapping_count" -lt "$MIN_MAPPING_ROWS" ]; then
+    fatal "read $mapping_count mappings row(s), expected at least $MIN_MAPPING_ROWS.
+       The extractor is broken, not the page — an unread mappings array passes the
+       check below vacuously, which is how this array went unpinned in the first
+       place. If rows were genuinely removed, lower MIN_MAPPING_ROWS here as a
+       deliberate edit."
+fi
+
+unmapped="$(unmapped_rows "$data_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r offender why; do
+    [ -n "$offender" ] || continue
+    bad "the practice table cites \"$offender\" — $why" \
+        "Practice.astro renders this row under \"Each stage operationalizes a named discipline from the literature\", which is the shelf's claim in a second array. Declare the work in the stage the row names, or cite the stage that declares it."
+done <<EOF
+$unmapped
+EOF
+
+if [ -z "$unmapped" ]; then
+    ok "all $mapping_count mappings row(s) are declared by every stage they name (floor: $MIN_MAPPING_ROWS)"
 fi
 
 # -----------------------------------------------------------------------------
@@ -391,6 +540,83 @@ if grep -q "full: 'Gamma Book" "$fixtures/single-quoted.ts"; then
     fi
 else
     bad "the single-quote fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+# THE MULTI-LINE FIXTURE. This is what pins shelf_slots' independence from the
+# field regexes. On a reflowed spine no single line carries title:, author: and
+# full: together, so an oracle rewritten to key on those names counts wrong here
+# — the collapse that previously left the suite at 17 passed / 0 failed while a
+# reflowed shelf went unchecked. It also pins the parser against a semantically
+# null `prettier --write`, which must not be a failure at all.
+cat > "$fixtures/reflowed.ts" <<'REFLOW'
+export const shelf: Book[] = [
+	{ title: "Known Book", author: "Doe", full: "Known Book — Jane Doe", h: "1px", color: "#000", ink: "#fff" },
+	{
+		title: "Second Book",
+		author: "Byron",
+		full: "Second Book — Ada Byron",
+		h: "1px",
+		color: "#000",
+		ink: "#fff",
+	},
+	{
+		title: "Gamma Book",
+		author: "Hopper",
+		full: "Gamma Book — Grace Hopper",
+		h: "1px",
+		color: "#000",
+		ink: "#fff",
+	},
+];
+
+export const bookDetails = {
+	"Doe-Known Book": { file: "alpha/SKILL.md" },
+	"Byron-Second Book": { file: "alpha/SKILL.md" },
+	"Hopper-Gamma Book": { file: "gamma/SKILL.md" },
+};
+REFLOW
+rows="$(shelf_rows "$fixtures/reflowed.ts" | grep -c . || true)"
+slots="$(shelf_slots "$fixtures/reflowed.ts")"
+if [ "$rows" -eq 3 ] && [ "$slots" -eq 3 ]; then
+    ok "both shelf readings see all 3 spines when 2 of them are reflowed across lines"
+else
+    bad "a reflowed spine is misread (slots=$slots rows=$rows, want 3/3)" \
+        "a semantically null reformat must not read as a shrunken shelf, and an oracle that keys on field names cannot count a reflowed record"
+fi
+
+if [ -z "$(unbacked_works "$fixtures/reflowed.ts" "$fixtures")" ]; then
+    ok "reflowed spines still join to their bookDetails entries"
+else
+    bad "reflowed spines failed the join" "record-based parsing must survive a reformat end to end"
+fi
+
+# --- the mappings direction ---
+
+cat > "$fixtures/mapped.ts" <<'MAPPED'
+export const mappings: Mapping[] = [
+	{ principle: "p", source: "Known Book", skill: "/alpha", what: "w" },
+	{ principle: "p", source: "Gamma Book", skill: "/gamma", what: "w" },
+];
+MAPPED
+if [ -z "$(unmapped_rows "$fixtures/mapped.ts" "$fixtures")" ]; then
+    ok "a mappings row whose named stage declares the cited book passes"
+else
+    bad "the detector flagged a truthful mappings row" "it now cries wolf on a clean practice table"
+fi
+
+cat > "$fixtures/mismapped.ts" <<'MISMAPPED'
+export const mappings: Mapping[] = [
+	{ principle: "p", source: "Known Book", skill: "/gamma", what: "w" },
+	{ principle: "p", source: "A Book Nobody Declares", skill: "/alpha", what: "w" },
+	{ principle: "p", source: "Known Book", skill: "/alpha · /beta", what: "w" },
+];
+MISMAPPED
+mis="$(unmapped_rows "$fixtures/mismapped.ts" "$fixtures" | grep -c . || true)"
+if [ "$mis" -eq 3 ]; then
+    ok "a mappings row citing the wrong stage, an undeclared book, or a multi-stage cell with one bad stage is flagged"
+else
+    bad "the mappings detector flagged $mis of 3 planted defects" \
+        "each row is a provenance claim; a wrong stage, an undeclared book, and one bad stage in a multi-stage cell must each fail"
 fi
 
 # --- the matcher, in every direction ---

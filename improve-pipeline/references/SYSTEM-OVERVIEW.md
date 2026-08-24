@@ -411,7 +411,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 │   └── SKILL.md
 ├── request-refactor-plan/SKILL.md  # Refactor RFC with tiny commits that can re-enter execution through /execute
 ├── ubiquitous-language/SKILL.md    # Domain glossary support that can sharpen shaping, QA, and refactor conversations
-├── ts-audit/                       # Audit TypeScript code against Total TypeScript library references
+├── ts-audit/                       # Audit TypeScript code against 9 bundled TypeScript library references
 │   ├── SKILL.md
 │   └── evals/
 ├── walk-commits/SKILL.md           # Interactive commit-by-commit comprehension walkthrough before merge (optional, recommended by /pre-merge)

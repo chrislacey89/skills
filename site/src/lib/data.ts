@@ -97,7 +97,7 @@ export const bookDetails: Record<string, BookDetail> = {
 	"Pocock-Total TypeScript": {
 		lesson: "Type-level discipline: inference first, narrowing over assertions.",
 		file: "ts-audit/SKILL.md",
-		fm: 'sources:\n  primary:\n    - "Total TypeScript — Matt Pocock"',
+		fm: 'sources:\n  primary:\n    - "Total TypeScript — Matt Pocock"\n  secondary:\n    - "Testing Fundamentals — Kent C. Dodds"\n    - "Advanced Vitest Patterns — Epic Web Dev"\n    - "Mocking Techniques in Vitest — Epic Web Dev"',
 		excerpt: "Covers type safety, generics, narrowing, branded types, discriminated unions, React patterns, type transformations, and testing — each finding grounded in a specific library reference.",
 	},
 };
