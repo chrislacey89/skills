@@ -75,7 +75,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [triage-issue](triage-issue/) | Deep bug diagnosis + root cause + TDD fix plan (invoked from `/qa` per issue) |
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
-| [ts-audit](ts-audit/) | Audit TypeScript code against Total TypeScript best practices |
+| [ts-audit](ts-audit/) | Audit TypeScript code against 9 bundled TypeScript library references |
 
 ### Tooling & Setup
 
