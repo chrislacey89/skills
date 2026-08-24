@@ -250,7 +250,7 @@ export const canon: CanonWork[] = [
 		full: "Peer Review on Open-Source Software Projects — Peter C. Rigby",
 		title: "Peer Review on Open-Source Software Projects",
 		author: "Peter C. Rigby",
-		type: "book",
+		type: "paper",
 		citations: [
 			{ skill: "walk-commits", tier: "secondary" },
 		],

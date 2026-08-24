@@ -7,6 +7,8 @@ sources:
   secondary:
     - "Best Kept Secrets of Peer Code Review — Jason Cohen"
     - "Peer Review on Open-Source Software Projects — Peter C. Rigby"
+  papers:
+    - "Peer Review on Open-Source Software Projects — Peter C. Rigby"
 ---
 
 # Walk Commits

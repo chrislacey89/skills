@@ -40,8 +40,11 @@
 #      from the frontmatter as it stands right now.
 #   4. The canon and the frontmatter name the same set of works, in both
 #      directions — no declared work missing, no shelved work undeclared.
-#   5. Every entry is typed `book` or `paper`, and `paper` exactly when its own
-#      author field is spelled as a paper citation.
+#   5. Every entry is typed `book` or `paper`, and the set typed `paper` equals
+#      EXPECTED_PAPERS — a list written by hand in this file, because an oracle
+#      recomputed from the subject's own input cannot disagree with it. The
+#      earlier version did recompute it, and shipped a paper typed `book`.
+#   5b. Every `papers:` marker names a work the same skill declares under a tier.
 #   6. Every citation edge resolves to a skill that declares that work at that
 #      tier, AND every declaration in the frontmatter appears as an edge.
 #   7. `data.ts` names a declared work only as a `lessons` key, and every
@@ -160,9 +163,20 @@ declared_works() {
         awk '
             /^---[[:space:]]*$/       { fm++; next }
             fm != 1                   { next }
-            /^sources:[[:space:]]*$/  { ins = 1; next }
+            /^sources:[[:space:]]*$/  { ins = 1; inp = 0; next }
             ins && /^[^[:space:]]/    { ins = 0 }
-            ins && match($0, /"[^"]+"/) {
+            !ins                      { next }
+            # `papers:` is a type marker, not a declaration. Its entries name a
+            # work already listed under a tier, so harvesting them here would be
+            # harmless only by luck — `sort -u` collapses the duplicate. A marker
+            # naming an undeclared work would enter the population as a phantom.
+            # The dedicated check below is what reports that, with a message that
+            # says what actually went wrong.
+            /^[[:space:]]+papers:[[:space:]]*$/  { inp = 1; next }
+            /^[[:space:]]+primary:[[:space:]]*$/    { inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/  { inp = 0; next }
+            inp                       { next }
+            match($0, /"[^"]+"/) {
                 print substr($0, RSTART + 1, RLENGTH - 2)
             }
         ' "$skill"
@@ -279,31 +293,57 @@ canon_citation_rows() {
     ' "$1"
 }
 
-# mistyped_entries <canon.generated.ts> — every entry whose `type` disagrees
-# with what its own author field says, as "<full>\t<why>". Empty output passes.
+# papers_typed <canon.generated.ts> — the works the canon types `paper`, sorted.
+# A function rather than an inline pipeline so the self-tests can exercise it;
+# `partial-oracle-selfcheck-2026-08-22.md` is about exactly the check that only
+# ever runs against a clean tree.
+papers_typed() {
+    canon_rows "$1" | awk -F"$(printf '\t')" '$4 == "paper" { print $1 }' | LC_ALL=C sort
+}
+
+# paper_markers <skill.md>... — every work declared under a `papers:` sub-key.
+# Read independently of `scripts/generate-canon.sh`'s reader of the same key.
+paper_markers() {
+    local skill
+    for skill in "$@"; do
+        [ -f "$skill" ] || continue
+        awk -v skill="$skill" '
+            /^---[[:space:]]*$/       { fm++; next }
+            fm != 1                   { next }
+            /^sources:[[:space:]]*$/  { ins = 1; inp = 0; next }
+            ins && /^[^[:space:]]/    { ins = 0 }
+            !ins                      { next }
+            /^[[:space:]]+papers:[[:space:]]*$/     { inp = 1; next }
+            /^[[:space:]]+primary:[[:space:]]*$/    { inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/  { inp = 0; next }
+            inp && match($0, /"[^"]+"/) { print substr($0, RSTART + 1, RLENGTH - 2) "\t" skill }
+        ' "$skill"
+    done
+}
+
+# unrenderable_types <canon.generated.ts> — every entry whose `type` is not one
+# of the two the page can render, as "<full>\t<why>". Empty output passes.
 #
-# THE PROPERTY, NOT THE RULE. The classification rule lives in the generator;
-# re-implementing it here would give two copies of one opinion and no oracle.
-# What this asserts is the property the rule exists to produce: `paper` iff the
-# author is spelled as a paper citation — `et al.`, or a trailing parenthesized
-# four-digit year — and nothing else is.
-mistyped_entries() {
-    local full author type tell
-    while IFS="$(printf '\t')" read -r full _title author type; do
+# THIS NO LONGER JUDGES WHETHER A TYPE IS CORRECT, AND THAT IS THE FIX. The
+# previous version re-implemented the generator's classification rule — `paper`
+# iff the author carries `et al.` or a trailing year — over the generator's own
+# input, and called the result "the property, not the rule". It was the rule.
+# Two readings of one predicate cannot disagree, so it passed by construction and
+# a consistently wrong classification stayed green.
+#
+# It was not hypothetical. Review found a live instance: *Peer Review on
+# Open-Source Software Projects — Peter C. Rigby*, a research paper, typed
+# `book`, shipping, with the spread labelling it "From the book" — and this check
+# green, because the author field carries no tell and both sides read the same
+# field the same way. Correctness now comes from EXPECTED_PAPERS below, which is
+# written by hand and therefore capable of disagreeing.
+unrenderable_types() {
+    local full type
+    while IFS="$(printf '\t')" read -r full _title _author type; do
         [ -n "$full" ] || continue
-        tell=0
-        case "$author" in *"et al."*) tell=1 ;; esac
-        if printf '%s' "$author" | grep -Eq '\([^)]*[0-9]{4}\)$'; then tell=1; fi
         case "$type" in
-            book)
-                [ "$tell" -eq 0 ] || printf '%s\tit is typed book, but its author "%s" carries "et al." or a trailing year in parentheses\n' "$full" "$author"
-                ;;
-            paper)
-                [ "$tell" -eq 1 ] || printf '%s\tit is typed paper, but its author "%s" has neither "et al." nor a trailing year in parentheses, so nothing in the frontmatter says it is a paper\n' "$full" "$author"
-                ;;
-            *)
-                printf '%s\tit carries type "%s"; the only types the page can render are book and paper\n' "$full" "$type"
-                ;;
+            book|paper) ;;
+            *) printf '%s\tit carries type "%s"; the only types the page can render are book and paper\n' "$full" "$type" ;;
         esac
     done <<EOF
 $(canon_rows "$1")
@@ -337,11 +377,13 @@ declared_edges() {
         awk -v skill="$name" '
             /^---[[:space:]]*$/       { fm++; next }
             fm != 1                   { next }
-            /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; next }
+            /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; inp = 0; next }
             ins && /^[^[:space:]]/    { ins = 0 }
             !ins                      { next }
-            /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   next }
-            /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; next }
+            /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; inp = 0; next }
+            /^[[:space:]]+papers:[[:space:]]*$/    { inp = 1; next }
+            inp                       { next }
             match($0, /"[^"]+"/) { print substr($0, RSTART + 1, RLENGTH - 2) "\t" skill "\t" cur }
         ' "$skill_md"
     done | LC_ALL=C sort -u
@@ -379,11 +421,17 @@ declares_work_at_tier() {
     awk -v want="$2" -v tier="$3" '
         /^---[[:space:]]*$/       { fm++; next }
         fm != 1                   { next }
-        /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; next }
+        /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; inp = 0; next }
         ins && /^[^[:space:]]/    { ins = 0 }
         !ins                      { next }
-        /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   next }
-        /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; next }
+        /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   inp = 0; next }
+        /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; inp = 0; next }
+        # `papers:` is a type marker, not a tier. Skipping it is what makes the
+        # dangling-marker check able to fire at all: without this the marker
+        # matches itself, every marker looks tier-declared, and a marker naming
+        # a work nothing cites passes. Caught by that check'"'"'s own fixture.
+        /^[[:space:]]+papers:[[:space:]]*$/    { inp = 1; next }
+        inp                       { next }
         match($0, /"[^"]+"/) {
             if (substr($0, RSTART + 1, RLENGTH - 2) == want && cur == tier) { found = 1; exit }
         }
@@ -633,17 +681,77 @@ fi
 # rather than a metadata nit. The rule lives in the generator; what is asserted
 # here is the PROPERTY it exists to produce — an author carrying `et al.` or a
 # trailing parenthesized year is a paper citation, and nothing else is.
-mistyped="$(mistyped_entries "$canon_ts")"
+# THE EXPECTED-PAPER ORACLE, WRITTEN BY HAND ON PURPOSE.
+#
+# Everywhere else in this change a hand-maintained list was the wrong answer: an
+# alias table, a table of paper titles inside the generator. The reasoning that
+# rejected those does not apply to a TEST ORACLE, and getting that backwards is
+# what produced the defect this replaces. `mutate-the-oracle-not-only-the-subject-2026-08-19.md`
+# requires the oracle to be capable of disagreeing with the subject. A predicate
+# recomputed from the subject's own input cannot; a list somebody wrote down can.
+#
+# So this list is the point of human judgment about what each work IS, checked
+# against what the derivation SAYS it is. When a new paper is added this goes red
+# until a person confirms the classification — which is the check working, not
+# maintenance burden leaking back in.
+EXPECTED_PAPERS="Encouraging Divergent Thinking in LLMs through Multi-Agent Debate — Liang et al. (EMNLP 2024)
+Improving Factuality and Reasoning in Language Models through Multiagent Debate — Du et al. (2023)
+Peer Review on Open-Source Software Projects — Peter C. Rigby"
+
+unrenderable="$(unrenderable_types "$canon_ts")"
 while IFS="$(printf '\t')" read -r offender why; do
     [ -n "$offender" ] || continue
     bad "the canon types \"$offender\" wrongly — $why" \
-        "#274 renders papers as a different object than books, so a wrong type is a visible defect rather than a metadata nit."
+        "the page renders two objects; a third value silently renders as neither."
 done <<EOF
-$mistyped
+$unrenderable
 EOF
 
-paper_count="$(canon_rows "$canon_ts" | cut -f4 | grep -c '^paper$' || true)"
-[ -n "$mistyped" ] || ok "every canon entry is typed book or paper, and the $paper_count paper(s) are exactly those the frontmatter cites as papers"
+actual_papers="$(papers_typed "$canon_ts")"
+expected_papers="$(printf '%s\n' "$EXPECTED_PAPERS" | LC_ALL=C sort)"
+
+wrongly_book="$(comm -23 <(printf '%s\n' "$expected_papers") <(printf '%s\n' "$actual_papers"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "\"$offender\" is a paper and the canon types it book" \
+        "the opened spread labels it \"From the book\" and #274 will render it as a bound volume. If its author field carries no citation tell — no \`et al.\`, no trailing year — declare it under a \`papers:\` key in the \`sources:\` block of a skill that cites it."
+done <<EOF
+$wrongly_book
+EOF
+
+wrongly_paper="$(comm -13 <(printf '%s\n' "$expected_papers") <(printf '%s\n' "$actual_papers"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "the canon types \"$offender\" as a paper and this suite does not expect one" \
+        "either its author field acquired a citation tell it should not have, a \`papers:\` marker points at it by mistake, or it genuinely is a paper — in which case add it to EXPECTED_PAPERS in this file, deliberately, having checked."
+done <<EOF
+$wrongly_paper
+EOF
+
+paper_count="$(printf '%s' "$actual_papers" | grep -c . || true)"
+if [ -z "$unrenderable" ] && [ -z "$wrongly_book" ] && [ -z "$wrongly_paper" ]; then
+    ok "every canon entry is typed book or paper, and the $paper_count paper(s) are exactly the ones this suite expects"
+fi
+
+# Every `papers:` marker must name a work its own skill actually declares under a
+# tier. Without this a marker is a second, unpoliced way to name a work: it would
+# type something nothing cites, or point at a typo and silently do nothing.
+dangling_markers=0
+while IFS="$(printf '\t')" read -r work skill_md; do
+    [ -n "$work" ] || continue
+    if ! declares_work_at_tier "$skill_md" "$work" primary \
+        && ! declares_work_at_tier "$skill_md" "$work" secondary; then
+        bad "${skill_md#"$repo_root"/} marks \"$work\" as a paper and does not declare it under a tier" \
+            "a papers: entry is a type marker on a work the skill cites, not a way to cite one. Add it under primary: or secondary:, or fix the spelling — the two strings must match exactly."
+        dangling_markers=$((dangling_markers + 1))
+    fi
+done <<EOF
+$(paper_markers "$repo_root"/*/SKILL.md)
+EOF
+marker_count="$(paper_markers "$repo_root"/*/SKILL.md | grep -c . || true)"
+if [ "$dangling_markers" -eq 0 ]; then
+    ok "all $marker_count papers: marker(s) name a work the same skill declares under a tier"
+fi
 
 # --- 4. citations: every edge resolves, in both directions ---
 
@@ -1038,6 +1146,80 @@ else
         "got booky=$(gen_tier 'Shared Work — Ada Byron' booky) papery=$(gen_tier 'Shared Work — Ada Byron' papery); tier is what the opened book labels each citing skill with"
 fi
 
+# --- the papers: affordance ---
+#
+# The tell rule cannot see a single-author paper cited without a year, which is
+# how `/walk-commits` declares Rigby. These fixtures pin the escape hatch and the
+# two ways it could go wrong: typing nothing, or quietly inventing a citation.
+mkdir -p "$gen/tellless"
+cat > "$gen/tellless/SKILL.md" <<'FIXTURE'
+---
+name: tellless
+description: "A paper whose author field carries no citation tell."
+sources:
+  secondary:
+    - "A Paper With No Tell — Solo Author"
+  papers:
+    - "A Paper With No Tell — Solo Author"
+---
+
+# Tellless
+FIXTURE
+bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null
+
+if [ "$(gen_type 'A Paper With No Tell — Solo Author')" = "paper" ]; then
+    ok "a papers: marker types a work whose author field carries no citation tell"
+else
+    bad "the papers: marker did not type the work" \
+        "got: $(gen_type 'A Paper With No Tell — Solo Author') — without this affordance a single-author paper cited without a year cannot be typed at all, which is the live defect review found"
+fi
+
+# THE DUPLICATE-EDGE TRAP. `papers:` names a work already listed under a tier, so
+# a reader that harvests it as a declaration gives that work two identical
+# citations and overstates the count #274 renders as spine height. This happened:
+# before the guard, Rigby carried two walk-commits edges and the repo total read
+# 99 instead of 98.
+tellless_edges="$(canon_citation_rows "$genout" | awk -F"$(printf '\t')" '$1 == "A Paper With No Tell — Solo Author" { n++ } END { print n + 0 }')"
+if [ "$tellless_edges" -eq 1 ]; then
+    ok "a papers: marker adds a type, not a second citation edge"
+else
+    bad "a papers: marker produced $tellless_edges citation edge(s), want 1" \
+        "the marker names a work the skill already cites; counting it twice inflates the citation count silently"
+fi
+
+# The suite's own reader of the same key, checked against the generator's.
+markers="$(paper_markers "$gen"/*/SKILL.md | cut -f1)"
+if [ "$markers" = "A Paper With No Tell — Solo Author" ]; then
+    ok "paper_markers reads the papers: key independently of the generator"
+else
+    bad "paper_markers returned an unexpected set" "got: $markers"
+fi
+
+# A marker naming a work the skill does not declare under a tier. Left unchecked
+# this is a second, unpoliced way to name a work — it would type something
+# nothing cites, or point at a typo and silently do nothing.
+mkdir -p "$gen/dangling"
+cat > "$gen/dangling/SKILL.md" <<'FIXTURE'
+---
+name: dangling
+description: "A papers: marker with no matching tier declaration."
+sources:
+  secondary:
+    - "A Real Citation — Jane Doe"
+  papers:
+    - "A Work This Skill Does Not Cite — Ghost"
+---
+
+# Dangling
+FIXTURE
+if declares_work_at_tier "$gen/dangling/SKILL.md" "A Work This Skill Does Not Cite — Ghost" secondary; then
+    bad "the dangling-marker fixture is not dangling" "it cannot report on a defect it does not contain"
+else
+    ok "a papers: marker naming a work the skill does not declare is detectable as dangling"
+fi
+rm -rf "$gen/tellless" "$gen/dangling"
+bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null
+
 # ISSUE #273'S LITERAL REPRODUCTION STEP: add a source to a skill, do not
 # regenerate, and the check must go red.
 if bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" --check > /dev/null 2>&1; then
@@ -1088,7 +1270,7 @@ fi
 # the mutation itself, because a self-test cannot report on a change that never
 # landed.
 
-if [ -n "$(mistyped_entries "$genout")" ] \
+if [ -n "$(unrenderable_types "$genout")" ] \
     || [ -n "$(unresolved_citations "$genout" "$gen")" ] \
     || [ -n "$(dropped_citations "$genout" "$gen")" ]; then
     bad "a freshly generated fixture canon failed one of the three canon detectors" \
@@ -1099,20 +1281,42 @@ fi
 
 sed 's/type: "paper"/type: "book"/' "$genout" > "$fixtures/mistyped.ts"
 if grep -q 'type: "book"' "$fixtures/mistyped.ts" && ! grep -q 'type: "paper"' "$fixtures/mistyped.ts"; then
-    typed_bad="$(mistyped_entries "$fixtures/mistyped.ts" | grep -c . || true)"
-    if [ "$typed_bad" -eq 2 ]; then
-        ok "a paper retyped as a book is flagged"
+    # The live check compares `papers_typed` against a hand-written expected
+    # list. Retyping every paper as a book empties the derived side, so the
+    # comparison reports one row per expected paper. This is the mutation the
+    # OLD version of this check could not catch, because it recomputed the
+    # generator's own predicate and so agreed with it by construction.
+    fixture_expected="A Debate Paper — Liang et al. (EMNLP 2024)
+Single-Author Paper — Doe (ICSE 2025)"
+    lost="$(comm -23 <(printf '%s\n' "$fixture_expected" | LC_ALL=C sort) \
+                     <(papers_typed "$fixtures/mistyped.ts") | grep -c . || true)"
+    if [ "$lost" -eq 2 ]; then
+        ok "a paper retyped as a book is caught by the hand-written expected-paper oracle"
     else
-        bad "retyping both papers as books produced $typed_bad finding(s), want 2" \
-            "#274 renders papers as a different object; a type nobody checks is a type that drifts"
+        bad "retyping both papers as books produced $lost finding(s), want 2" \
+            "an oracle that cannot disagree with the derivation is not an oracle; this is the defect that shipped a paper typed book"
     fi
 else
     bad "the mistype fixture did not apply" "the self-test cannot report on a mutation that never landed"
 fi
 
+# The reverse direction: a work the oracle does NOT expect, typed paper.
+if [ "$(papers_typed "$genout" | grep -c . || true)" -eq 2 ]; then
+    surplus="$(comm -13 <(printf '%s\n' "Single-Author Paper — Doe (ICSE 2025)") \
+                        <(papers_typed "$genout") | grep -c . || true)"
+    if [ "$surplus" -eq 1 ]; then
+        ok "a paper the expected list does not name is reported, not absorbed"
+    else
+        bad "the surplus-paper direction found $surplus of 1" \
+            "an oracle that only checks one direction accepts any number of extra papers"
+    fi
+else
+    bad "the generator fixture no longer types exactly 2 papers" "the surplus check above is comparing against the wrong baseline"
+fi
+
 sed 's/type: "paper"/type: "offprint"/' "$genout" > "$fixtures/unknown-type.ts"
 if grep -q 'type: "offprint"' "$fixtures/unknown-type.ts"; then
-    if [ -n "$(mistyped_entries "$fixtures/unknown-type.ts")" ]; then
+    if [ -n "$(unrenderable_types "$fixtures/unknown-type.ts")" ]; then
         ok "a type outside book|paper is flagged rather than passed through"
     else
         bad "an unrenderable type passed the type check" \

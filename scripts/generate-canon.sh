@@ -80,11 +80,19 @@ citations() {
         awk -v skill="$name" '
             /^---[[:space:]]*$/       { fm++; next }
             fm != 1                   { next }
-            /^sources:[[:space:]]*$/  { ins = 1; tier = ""; next }
+            /^sources:[[:space:]]*$/  { ins = 1; tier = ""; inp = 0; next }
             ins && /^[^[:space:]]/    { ins = 0 }
             !ins                      { next }
-            /^[[:space:]]+primary:[[:space:]]*$/   { tier = "primary";   next }
-            /^[[:space:]]+secondary:[[:space:]]*$/ { tier = "secondary"; next }
+            /^[[:space:]]+primary:[[:space:]]*$/   { tier = "primary";   inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/ { tier = "secondary"; inp = 0; next }
+            # `papers:` is a type marker, not a tier. Its entries name a work
+            # already declared under a tier, so emitting them here would give
+            # that work a duplicate citation edge and overstate its citation
+            # count — the number #274 renders as spine height. Verified: before
+            # this guard, Rigby carried two identical walk-commits edges and the
+            # repo total read 99 instead of 98.
+            /^[[:space:]]+papers:[[:space:]]*$/    { inp = 1; next }
+            inp                       { next }
             match($0, /"[^"]+"/) {
                 printf "%s\t%s\t%s\n", substr($0, RSTART + 1, RLENGTH - 2), skill,
                        (tier == "" ? "primary" : tier)
@@ -93,23 +101,73 @@ citations() {
     done
 }
 
+# declared_papers <root> — every work a skill declares under a `papers:` sub-key
+# of its `sources:` block.
+#
+# WHY THIS EXISTS. The type rule below reads the author field's own citation
+# convention, which covers a paper cited the way papers are normally cited and
+# nothing else. Review found the gap with a live instance: `/walk-commits`
+# declares "Peer Review on Open-Source Software Projects — Peter C. Rigby", a
+# research paper by a single author with no venue or year in the string. There
+# is no truthful tell to read, so the rule typed it `book` and the page labelled
+# a paper "From the book".
+#
+# This is the frontmatter affordance the first draft of this comment named as
+# the escape hatch, built because the escape turned out to be needed. The skill
+# that cites a work is the thing that knows what the work is, so the declaration
+# lives there rather than in a table beside the extractor.
+# `scripts/test-canon-coverage.sh` requires every `papers:` entry to also be
+# declared under a tier, so a marker cannot point at a work nothing cites.
+declared_papers() {
+    local skill_md
+    for skill_md in "$1"/*/SKILL.md; do
+        [ -f "$skill_md" ] || continue
+        awk '
+            /^---[[:space:]]*$/       { fm++; next }
+            fm != 1                   { next }
+            /^sources:[[:space:]]*$/  { ins = 1; inp = 0; next }
+            ins && /^[^[:space:]]/    { ins = 0 }
+            !ins                      { next }
+            /^[[:space:]]+papers:[[:space:]]*$/              { inp = 1; next }
+            /^[[:space:]]+primary:[[:space:]]*$/             { inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/           { inp = 0; next }
+            inp && match($0, /"[^"]+"/) { print substr($0, RSTART + 1, RLENGTH - 2) }
+        ' "$skill_md"
+    done | LC_ALL=C sort -u
+}
+
 # render <root> — the whole module on stdout.
 #
-# THE TYPE RULE. Two of the declared works are conference papers rather than
-# books, and #274 renders those as a different object. The type is derived from
-# the author field's own citation convention rather than from a list: an author
-# carrying `et al.` or ending in a parenthesized four-digit year is a paper
-# citation, and no book in this repo is spelled either way. A list would drift;
-# a rule fails visibly. If a book ever legitimately carries a year in parens,
-# the fix is a frontmatter affordance, not an exceptions table.
+# THE TYPE RULE, AND THE ONE THING IT CANNOT SEE. #274 renders papers as a
+# different object than books, so a wrong type is a visible defect. It is
+# derived from the author field's own citation convention rather than from a
+# list of titles: an author carrying `et al.` or ending in a parenthesized
+# four-digit year is a paper citation, and no book in this repo is spelled
+# either way. A list of titles would drift; a rule fails visibly.
+#
+# But a single-author paper cited without a year carries no tell, and the rule
+# cannot be taught to see one without inventing a venue. Those are declared by
+# the citing skill under `papers:`. The two inputs are OR-ed: a tell OR a
+# declaration types a work `paper`.
+# ONE TAGGED STREAM, NOT TWO awk INPUTS. The obvious spelling is
+# `awk 'FNR==NR{...}' <(declared_papers) <(citations)`, and it is wrong here in a
+# way that is silent: when the first file is EMPTY — which it is until some skill
+# declares a `papers:` entry — awk never reads a record from it, so `FNR == NR`
+# is true for every record of the SECOND file and the entire citation stream is
+# swallowed as paper declarations. Caught by the type count dropping to zero on
+# the first run. Tagging the rows has no such edge.
 render() {
-    citations "$1" | LC_ALL=C sort -t"$(printf '\t')" -k1,1 -k2,2 | awk '
+    {
+        declared_papers "$1"                                          | awk 'NF { print "P\t" $0 }'
+        citations "$1" | LC_ALL=C sort -t"$(printf '\t')" -k1,1 -k2,2 | awk 'NF { print "C\t" $0 }'
+    } | awk '
         function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
         BEGIN { FS = "\t" }
+        $1 == "P" { declared_paper[$2] = 1; next }
         {
-            full = $1
+            full = $2
             if (!(full in seen)) { seen[full] = 1; order[++n] = full }
-            cites[full] = cites[full] sprintf("\t\t\t{ skill: \"%s\", tier: \"%s\" },\n", esc($2), esc($3))
+            cites[full] = cites[full] sprintf("\t\t\t{ skill: \"%s\", tier: \"%s\" },\n", esc($3), esc($4))
         }
         END {
             print  "// GENERATED FILE — DO NOT EDIT BY HAND."
@@ -151,7 +209,9 @@ render() {
                 } else {
                     title = full; author = ""
                 }
-                type = (author ~ /et al\./ || author ~ /\([^)]*[0-9][0-9][0-9][0-9]\)$/) ? "paper" : "book"
+                type = (author ~ /et al\./ \
+                        || author ~ /\([^)]*[0-9][0-9][0-9][0-9]\)$/ \
+                        || (full in declared_paper)) ? "paper" : "book"
                 printf "\t{\n"
                 printf "\t\tfull: \"%s\",\n", esc(full)
                 printf "\t\ttitle: \"%s\",\n", esc(title)
