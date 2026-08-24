@@ -74,6 +74,40 @@ The thing that decides whether a run was correct has a name: the **oracle**. Eve
 
 **When no independent literal exists** — the output is opaque, or the arithmetic is too involved to state by inspection — do not fall back to recomputing the formula. Reach for triangulation (§ Evident Data) when the output is numeric and the generalization is what you're pinning down; reach for a consistency check or a multi-input identity when it isn't. Recomputation is not the last resort. It is the one option that is never available.
 
+## A test name is a claim the assertion must be able to falsify
+
+§ *The Oracle* is about where the expected value comes from. This is the same distinction one level up: the name is the **test requirement**, the assertion is the **oracle**, and nothing in the suite makes them agree. A name that claims more than the body checks is a specification that passes forever — and test names are read as specifications, so the overstatement is what gets quoted into docs.
+
+The rule is structural, not attentional. **When a test name claims a *relationship* — below a ceiling, at least N, within the cap, rejects empty, before the deadline — the assertion must reference the other side of that relationship, imported from wherever it is defined. Otherwise narrow the name to what is actually asserted.**
+
+```typescript
+// BAD: the name claims a relationship to a bound; the body pins one literal
+test("max_tokens defaults below the non-streaming ceiling", () => {
+  expect(client.maxTokens).toBe(16_000);
+});
+
+// GOOD (a): keep the claim, import the bound — the two reconcile themselves
+import { NON_STREAMING_CEILING } from "@vendor/client/limits";
+
+test("max_tokens defaults below the non-streaming ceiling", () => {
+  expect(client.maxTokens).toBeLessThan(NON_STREAMING_CEILING);
+});
+
+// GOOD (b): keep the literal, narrow the name to what it proves
+test("max_tokens defaults to 16000", () => {
+  expect(client.maxTokens).toBe(16_000);
+});
+```
+
+Both good versions are honest; they differ in what they buy. (a) survives the ceiling moving — a client upgrade, a different model, a stricter platform limit — because there is only one place the bound is written. (b) buys nothing but stops lying, and is the right choice when the bound genuinely has no importable definition. What is not available is the bad version: a name asserting a constraint that no run can violate.
+
+**The operational check, at RED.** A red bar is not enough. Change the value the name is about and confirm the test goes red **for the reason the name gives** — read the failure message and check it describes the relationship the name claims, not some incidental collision. Two failure modes this catches that a bare "did it go red?" does not:
+
+- **The test never ran.** Reachability comes before the oracle: a check switched off by a rename, a skipped block, or a filter that no longer matches reports green while asserting nothing. Confirm the mutated test executed and failed, rather than confirming the suite was not fully green.
+- **It reddened for the wrong reason.** A literal-pinning test reds when *any* edit touches the literal, which looks identical to reddening because a bound was crossed. If the failure message names only the literal, the name's claim is still unfalsifiable.
+
+**Scope.** Most test names make no relational claim — `"user can checkout with valid cart"` names an outcome, not a bound, and this rule has nothing to say about it. Apply it when the name contains a comparative or a limit word.
+
 ## Evident Data
 
 Test values should make the relationship between input and expected output **obvious in the test body**. The reader should see the arithmetic, not reverse-engineer it from magic numbers.
