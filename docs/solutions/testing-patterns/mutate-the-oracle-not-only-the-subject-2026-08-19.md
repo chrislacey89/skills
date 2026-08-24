@@ -162,3 +162,5 @@ If the answer includes anything other than "the behavior I am claiming," the ass
 ## Shelf Life
 
 Evergreen — no expiration condition. The specific instance is git-bisect-shaped, but the rule is about the relationship between a test, its oracle, and its mutation battery, and does not depend on any tool. Retire it only if it is absorbed into the consolidated entry the parent doc calls for.
+
+**Sibling (2026-08-23).** [validate-the-instrument-not-only-the-subject-2026-08-23.md](validate-the-instrument-not-only-the-subject-2026-08-23.md) carries this one level out: that entry mutates the *oracle inside a committed suite*; this one is about the reviewer's own uncommitted harness, which no suite here can reach.
