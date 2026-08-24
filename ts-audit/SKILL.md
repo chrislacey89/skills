@@ -1,6 +1,9 @@
 ---
 name: ts-audit
 description: Audit TypeScript and React code against expert-level best practices from 9 Total TypeScript library references. Use when the user wants to review, audit, check, or improve TypeScript code quality — including requests like "audit this file", "review my types", "check my TypeScript", "what's wrong with this code", "improve my TS", "type review", or any request to evaluate TypeScript code against modern patterns. Also use when the user mentions type safety, generics review, or React TypeScript patterns. Covers type safety, generics, narrowing, branded types, discriminated unions, React TypeScript patterns, type transformations, testing patterns, and mocking techniques.
+sources:
+  primary:
+    - "Total TypeScript — Matt Pocock"
 ---
 
 # TypeScript Audit

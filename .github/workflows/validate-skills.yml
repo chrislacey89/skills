@@ -130,5 +130,8 @@ jobs:
       - name: Run widened-domain tell contract suite
         run: bash scripts/test-widened-domain-tell.sh
 
+      - name: Run canon-coverage contract suite
+        run: bash scripts/test-canon-coverage.sh
+
       - name: Run shellcheck version-parity contract suite
         run: bash scripts/test-shellcheck-version-parity.sh

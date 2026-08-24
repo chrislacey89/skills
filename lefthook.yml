@@ -45,6 +45,8 @@ pre-push:
       run: bash scripts/test-oracle-table-coverage.sh
     widened-domain-tell-tests:
       run: bash scripts/test-widened-domain-tell.sh
+    canon-coverage-tests:
+      run: bash scripts/test-canon-coverage.sh
     shellcheck-version-parity-tests:
       run: bash scripts/test-shellcheck-version-parity.sh
     shellcheck-all:
