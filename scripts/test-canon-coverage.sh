@@ -433,28 +433,22 @@ dropped_citations() {
     comm -23 <(declared_edges "$2") <(canon_citation_rows "$1" | LC_ALL=C sort -u)
 }
 
-# hero_book_count <index.html> — the number of books the hero eyebrow
-# advertises, or empty when the line is not found.
+# WHY THE HERO'S COUNTS ARE PINNED AND THE REST OF THE COPY IS NOT. That one
+# line is the page's advertisement for the canon section — the button beneath it
+# links to `#canon`. It read "Eight books" through the whole of #273's
+# implementation: correct while the shelf was a hand-picked eight, wrong from the
+# moment the canon became derived, and shipped to production. That is the
+# checklist's lone instance fix — the hand-maintained-canon-count pattern lived in
+# two places and only one was repaired. Deriving it makes the two agree; the
+# checks below are what make them *stay* agreed, because "it is derived now" is a
+# claim about the current source and not a mechanism.
 #
-# WHY THE HERO IS PINNED AND THE REST OF THE COPY IS NOT. This one line is the
-# page's advertisement for the canon section — the button beneath it links to
-# `#canon`. It read "Eight books" through the whole of #273's implementation:
-# correct while the shelf was a hand-picked eight, wrong from the moment the
-# canon became derived, and shipped to production. That is the checklist's lone
-# instance fix — the hand-maintained-canon-count pattern lived in two places and
-# only one was repaired. Deriving it makes the two agree; this check is what
-# makes them *stay* agreed, because "it is derived now" is a claim about the
-# current source and not a mechanism.
-# ANCHORED TO THE EYEBROW, NOT TO THE FIRST MATCH IN THE FILE. An unanchored
-# `grep | head -1` reads document order, and the built page puts <head> — title,
-# `meta name="description"`, `og:description` — about 2400 bytes ahead of the
-# eyebrow. Nothing there says "N books" today, but the meta description is the
-# natural place for someone to write it next, and an upstream match would win
-# silently: the check would then grade the wrong number and report ok while the
-# eyebrow was wrong. Verified against a fixture with a competing earlier count.
-# That anchoring now lives in `hero_count` above, which this delegates to; the
-# name is kept because the self-tests below exercise the books case by it.
-hero_book_count() { hero_count "$1" books; }
+# The reader is `hero_count`, defined further down with the other readers of the
+# built page. A `hero_book_count() { hero_count "$1" books; }` wrapper stood here
+# until review: a pass-through whose whole justification was that three self-tests
+# named it, which left this file calling two differently-named functions to read
+# two nouns off one element, and two cross-references pointing the wrong way down
+# the file.
 
 # declares_work_at_tier <skill.md> <"Title — Author"> <tier> — does that skill
 # declare that exact string under that exact `sources:` sub-key? Exact, not
@@ -618,20 +612,77 @@ spine_records() {
 # explaining why the component accumulates per-type extents in a loop rather than
 # with `canon.filter(...)`, which turned this red for naming the thing it avoids.
 # A detector that punishes the explanation teaches the next author to delete the
-# explanation. Only whole-line `//` and ` * ` comments are dropped; a narrowing
-# call with a trailing comment is still code and is still reported.
+# explanation. Only whole-line `//` comments and block-comment continuation lines
+# are dropped; a narrowing call with a trailing comment is still code and is
+# still reported.
+#
+# THE `*` BRANCH REQUIRES A DELIMITER AFTER THE STAR. Stripping every line whose
+# first non-blank character is `*` also blanks `*rows() { return
+# canon.filter(Boolean) }` — a generator method, valid JavaScript, and exactly
+# the narrowing this exists to catch. A block-comment continuation is always `*`
+# followed by whitespace, `/`, or nothing at all; a generator is `*` followed by
+# an identifier. Matching the delimiter is what separates them, and it is the
+# reconciliation `mechanism-generality-lags-the-pattern-2026-08-23.md` asks for:
+# when the prose says one thing and the matcher does another, widen the matcher
+# rather than trimming the claim.
 narrowing_calls() {
-    sed -e 's|^[[:space:]]*//.*$||' -e 's|^[[:space:]]*\*.*$||' "$1" \
+    sed -e 's|^[[:space:]]*//.*$||' -e 's|^[[:space:]]*\*[[:space:]/]*$||' \
+        -e 's|^[[:space:]]*\*[[:space:]/].*$||' "$1" \
         | grep -nE '\b(canon|spines)\b[^;]*\.(slice|filter|splice|shift|pop)\('
+}
+
+# offprint_scan <records> — the first (paper, book) pair the page renders where
+# the paper is at least as tall as the book, as "<paper>\t<px>\t<book>\t<px>".
+# Empty output is the passing state.
+#
+# A PAIRWISE SCAN, NOT TWO EXTREMES. This began as `extreme()`, a min/max reader
+# called twice — tallest paper, shortest book — and the direction lived in a flag
+# at each call site. Inverting the two flags compared every paper against the
+# TALLEST book instead of the shortest, which is a strictly weaker assertion that
+# still printed the property as satisfied; a page with a paper at bound-volume
+# height passed clean. Pinning the reader's semantics with a fixture did not fix
+# it, because a self-test on a function cannot reach the arguments its callers
+# pass. Removing the parameter did: there is no direction left to get backwards,
+# and the code now says the same sentence the claim does.
+#
+# ONE DEFINITION, CALLED BY BOTH THE LIVE CHECK AND ITS SELF-TEST. The first
+# draft of the fix inlined this awk in the live check and gave the self-test its
+# own copy, so mutating the real scan left the self-test green — the same
+# two-readings-of-one-rule defect this file warns about in `shelf_order`.
+offprint_scan() {
+    printf '%s\n' "$1" | awk -F"$(printf '\t')" '
+        $2 == "paper" { pw[++np] = $1; ph[np] = $3 + 0 }
+        $2 == "book"  { bw[++nb] = $1; bh[nb] = $3 + 0 }
+        END {
+            for (i = 1; i <= np; i++)
+                for (j = 1; j <= nb; j++)
+                    if (ph[i] >= bh[j]) { printf "%s\t%d\t%s\t%d\n", pw[i], ph[i], bw[j], bh[j]; exit }
+        }'
 }
 
 # hero_count <index.html> <noun> — the number the hero eyebrow advertises for
 # that noun, or empty when the eyebrow does not name one.
 #
-# ANCHORED TO THE EYEBROW, for the reason `hero_book_count` below records: the
-# <head> sits ~2400 bytes ahead of it and an unanchored read grades whatever the
-# meta description happens to say. Generalized to a noun because #274 made the
-# eyebrow advertise two populations — the page may not call a paper a book.
+# ANCHORED TO `data-canon-counts`, NOT TO A CLASS FOUR ELEMENTS SHARE. The
+# original anchor was `class="eyebrow"`, on the reasoning that the <head> sits
+# ~2400 bytes ahead of the hero and an unanchored read grades whatever the meta
+# description says. True, and insufficient: the built page carries four
+# `.eyebrow` elements — the hero's, plus the section headers for the canon, the
+# practice table, and the collection — so the anchor really meant "the first
+# eyebrow that mentions the noun". That was the hero only by accident of document
+# order, and the header most likely to gain a count is the canon section's, which
+# is the heading of the thing this suite grades. `Hero.astro` now marks its own
+# eyebrow and this reads the marker.
+#
+# AND IT STRIPS THROUGH THE TAG BEFORE SCANNING. The capture runs to the next
+# `<`, which includes the element's remaining ATTRIBUTES — so a number in an
+# attribute value beat the number in the text. Verified against
+# `<div class="eyebrow" data-x="a1 books">7 books</div>`, which returned 1.
+# Harmless today (Astro's only added attribute has no space in its value) and
+# waiting for the day the element gains one that does.
+#
+# Generalized to a noun because #274 made the eyebrow advertise two populations —
+# the page may not call a paper a book.
 # DIGITS OR NOTHING, BY CONSTRUCTION. The first spelling was `grep -o "[0-9]* $2"
 # | sed "s/ $2\$//"`, where the strip is a second, independent statement of the
 # noun — so a reader whose two halves disagreed returned "42 books", the live
@@ -641,7 +692,8 @@ narrowing_calls() {
 # from silence. Matching the number and the noun as one token and printing only
 # the number makes a malformed return impossible rather than merely detected.
 hero_count() {
-    grep -o 'class="eyebrow"[^<]*' "$1" 2>/dev/null \
+    grep -o 'data-canon-counts[^<]*' "$1" 2>/dev/null \
+        | sed -e 's|^[^>]*>||' \
         | awk -v noun="$2" '
             {
                 rest = $0
@@ -1034,13 +1086,13 @@ EOF
     # asked the canon section to stop doing one layer further in. So the check is
     # now per type, and the sum is asserted too: two numbers that are each wrong
     # by the same amount in opposite directions would otherwise pass both.
-    hero_count="$(hero_book_count "$built_page")"
+    hero_books="$(hero_count "$built_page" books)"
     hero_papers="$(hero_count "$built_page" papers)"
-    if [ -z "$hero_count" ]; then
+    if [ -z "$hero_books" ]; then
         bad "the hero eyebrow no longer advertises a book count" \
             "the reader looks for a digit followed by \" books\". Two things land here: the line was removed, or the count was spelled out as a word — which is how it read before #273 (\"Eight books\"), so a revert to hand-written copy reports here rather than as a mismatch. Either derive it from the canon, or update hero_count if the copy deliberately changed shape."
-    elif [ "$hero_count" -ne "$book_count" ]; then
-        bad "the hero advertises $hero_count books and the canon holds $book_count book(s)" \
+    elif [ "$hero_books" -ne "$book_count" ]; then
+        bad "the hero advertises $hero_books books and the canon holds $book_count book(s)" \
             "the hero eyebrow is the page's advertisement for the canon section and its button links straight to it. A hand-written number here is the same drift the shelf itself had — derive it from the canon rather than restating it. Note this grades books, not works: the canon holds $entry_count works, $paper_count of them papers."
     elif [ "$paper_count" -gt 0 ] && [ -z "$hero_papers" ]; then
         bad "the canon holds $paper_count paper(s) and the hero eyebrow counts only books" \
@@ -1048,8 +1100,8 @@ EOF
     elif [ "$paper_count" -gt 0 ] && [ "$hero_papers" -ne "$paper_count" ]; then
         bad "the hero advertises $hero_papers papers and the canon holds $paper_count" \
             "derive it from the canon's own type field rather than restating it."
-    elif [ "$paper_count" -gt 0 ] && [ "$((hero_count + hero_papers))" -ne "$entry_count" ]; then
-        bad "the hero's $hero_count books + $hero_papers papers do not add up to the canon's $entry_count works" \
+    elif [ "$paper_count" -gt 0 ] && [ "$((hero_books + hero_papers))" -ne "$entry_count" ]; then
+        bad "the hero's $hero_books books + $hero_papers papers do not add up to the canon's $entry_count works" \
             "each number matched its own population, so the type split itself is wrong — the canon types some work neither book nor paper, or the reader is grading two numbers off one clause."
     else
         ok "the hero eyebrow advertises the canon's own split: $book_count book(s), $paper_count paper(s)"
@@ -1063,12 +1115,30 @@ EOF
     # still traces to a declaration, and the coverage checks stay green.
     records="$(spine_records "$built_page")"
     record_count="$(printf '%s' "$records" | grep -c . || true)"
-    if [ "$record_count" -ne "$rendered_count" ]; then
-        fatal "read $record_count spine record(s) but $rendered_count spine key(s) out of the same page.
+
+    # COMPARED AGAINST AN UNDEDUPLICATED COUNT, AND THE TWO DIRECTIONS MEAN
+    # DIFFERENT THINGS. `$rendered_count` above is a `sort -u` set, so comparing
+    # against it conflated two unrelated events: a reader dropping elements, and
+    # a PAGE rendering one work twice. The first draft did exactly that and read
+    # the second as the first — duplicating a single <button class="spine"> made
+    # the suite exit with "spine_records is broken, not the page … it is dropping
+    # elements", every clause of which was false, and took the order and offprint
+    # checks down with it. A duplicate is a plausible page defect (an ordering
+    # bug, an alias-collapse regression, a stray map) and nothing else here
+    # catches one, because `unbacked_render` also compares against the set.
+    raw_key_count="$(rendered_keys "$built_page" | grep -c . || true)"
+    if [ "$record_count" -lt "$raw_key_count" ]; then
+        fatal "read $record_count spine record(s) but $raw_key_count spine key(s) out of the same page.
        spine_records is broken, not the page — it reads the height and type off the
-       same <button> that carries the key, so the two readings disagreeing means it
-       is dropping elements, and a short list passes the order comparison below on
-       a prefix."
+       same <button> that carries the key, so reading FEWER records than keys means
+       it is dropping elements, and a short list passes the order comparison below
+       on a prefix."
+    fi
+    if [ "$raw_key_count" -gt "$rendered_count" ]; then
+        dupes=$((raw_key_count - rendered_count))
+        bad "the page renders $raw_key_count spine(s) for $rendered_count distinct work(s) — $dupes duplicate(s)" \
+            "$(rendered_keys "$built_page" | LC_ALL=C sort | uniq -d | sed 's/^/       repeated: /')
+one work, one spine. A duplicate passes every set comparison in this section vacuously — both directions above compare deduplicated sets — so this is the only check that sees it."
     fi
 
     # ORDER. The bookcase is sorted by core lineage, then breadth (see
@@ -1095,46 +1165,33 @@ issue #274: citation count alone measures breadth of reuse, not centrality, and 
     # and height is the one part of that form that reaches the HTML as a value
     # rather than as a CSS rule, so it is what this grades.
     if [ "$paper_count" -gt 0 ]; then
-        # extreme <type> <keep-max?> — the tallest paper / the shortest book, as
-        # "<px> <full>". Two calls rather than one, so each side is a plain
-        # min-or-max over one population and neither can silently grade the other.
-        extreme() {
-            printf '%s\n' "$records" | awk -F"$(printf '\t')" -v want="$1" -v max="$2" '
-                BEGIN { hi = (max + 0 != 0) }
-                $2 != want { next }
-                { h = $3 + 0 }
-                !seen || (hi && h > m) || (!hi && h < m) { m = h; w = $1; seen = 1 }
-                END { print (seen ? m : 0) " " w }
-            '
-        }
-        tallest_paper="$(extreme paper 1)"; tp_h="${tallest_paper%% *}"; tp_w="${tallest_paper#* }"
-        shortest_book="$(extreme book 0)";  sb_h="${shortest_book%% *}";  sb_w="${shortest_book#* }"
+        # NO DIRECTION FLAG TO INVERT. The first fix for this check pinned
+        # `extreme`'s min/max semantics with a fixture — and left the two CALL
+        # SITES carrying the flags, where inverting them still compared every
+        # paper against the tallest book instead of the shortest and still
+        # reported the property as satisfied. A self-test on the function cannot
+        # reach an argument the function is called with.
+        #
+        # So the comparison no longer extracts two extremes. It asks the property
+        # directly, over both populations: is there any (paper, book) pair where
+        # the paper is at least as tall as the book? There is no parameter left to
+        # get backwards, and the assertion is now the same sentence as the claim.
+        offprint_violation="$(offprint_scan "$records")"
         rendered_papers="$(printf '%s\n' "$records" | awk -F"$(printf '\t')" '$2 == "paper"' | grep -c . || true)"
-        if [ "$rendered_papers" -ne "$paper_count" ]; then
+        rendered_books="$(printf '%s\n' "$records" | awk -F"$(printf '\t')" '$2 == "book"' | grep -c . || true)"
+        if [ "$rendered_papers" -ne "$paper_count" ] || [ "$rendered_books" -ne "$book_count" ]; then
             # The PAGE defect comes first: the markup lost the type, so the
-            # heights below have nothing to be graded per type. Reported rather
-            # than fatal, because the rest of the suite still has things to say.
-            bad "the page marks $rendered_papers spine(s) as papers and the canon types $paper_count" \
+            # heights have nothing to be graded per type. Reported rather than
+            # fatal, because the rest of the suite still has things to say.
+            bad "the page marks $rendered_papers spine(s) as papers and $rendered_books as books; the canon types $paper_count and $book_count" \
                 "the type has to survive into the markup for the section to render the two differently. If data-type stopped being emitted, the offprints are being drawn as books."
-        elif [ "$tp_h" -eq 0 ] || { [ "$book_count" -gt 0 ] && [ "$sb_h" -eq 0 ]; }; then
-            # THE READER'S OWN ZERO IS NOT A PASS. `extreme` returns 0 for a
-            # population it found nothing in, and the comparison below reads a
-            # zero book height as "there are no books to be shorter than" — so an
-            # `extreme` that silently matched nothing would report ok on a page
-            # where every offprint was drawn as a bound volume. The branch above
-            # has already established the markup carries both types, so a
-            # population the height reader cannot see is the instrument, not the
-            # page.
-            fatal "the canon holds $book_count book(s) and $paper_count paper(s), and the height reader
-       came back with ${sb_h}px and ${tp_h}px. extreme() is broken, not the page — its
-       zero passes the offprint comparison below vacuously."
         elif [ "$book_count" -eq 0 ]; then
             ok "every work in the canon is a paper, so there is no book to be shorter than"
-        elif [ "$tp_h" -ge "$sb_h" ]; then
-            bad "a paper renders at least as tall as a book: \"$tp_w\" at ${tp_h}px vs \"$sb_w\" at ${sb_h}px" \
+        elif [ -n "$offprint_violation" ]; then
+            bad "a paper renders at least as tall as a book: $(printf '%s' "$offprint_violation" | awk -F"$(printf '\t')" '{ printf "\"%s\" at %spx vs \"%s\" at %spx", $1, $2, $3, $4 }')" \
                 "issue #274 asks for the papers to sit on the same board as slim flat offprints rather than as bound volumes. Both heights are derived per type in Shelf.astro; a paper reaching book height means the two scales have merged back into one and the page is shelving a conference paper as a book."
         else
-            ok "all $paper_count paper(s) render as offprints, shorter than every one of the $book_count book(s) (${tp_h}px vs ${sb_h}px)"
+            ok "all $paper_count paper(s) render as offprints, shorter than every one of the $book_count book(s)"
         fi
     fi
 fi
@@ -1764,37 +1821,37 @@ fi
 # run against a page whose hero is correct, so nothing there would notice the
 # reader silently returning the wrong number — or nothing at all.
 cat > "$fixtures/hero.html" <<'HTML'
-<div class="eyebrow">Thirty skills · 45 books · One pipeline</div>
+<div class="eyebrow" data-canon-counts>Thirty skills · 45 books · One pipeline</div>
 <p>Some later prose mentioning 8 books, which must not win.</p>
 HTML
-if [ "$(hero_book_count "$fixtures/hero.html")" = "45" ]; then
-    ok "hero_book_count reads the eyebrow's count and not a later mention"
+if [ "$(hero_count "$fixtures/hero.html" books)" = "45" ]; then
+    ok "hero_count reads the eyebrow's count and not a later mention"
 else
-    bad "hero_book_count misread the hero eyebrow" \
-        "got: $(hero_book_count "$fixtures/hero.html") — a reader that returns the wrong number makes the comparison above pass or fail for the wrong reason"
+    bad "hero_count misread the hero eyebrow" \
+        "got: $(hero_count "$fixtures/hero.html" books) — a reader that returns the wrong number makes the comparison above pass or fail for the wrong reason"
 fi
 
 # THE UPSTREAM-MATCH TRAP. The built page's <head> sits ~2400 bytes ahead of the
 # eyebrow, so an unanchored reader grades whatever <head> happens to say.
 cat > "$fixtures/hero-early.html" <<'HTML'
 <meta name="description" content="a pack of 8 books, catalogued">
-<div class="eyebrow">Thirty skills · 45 books · One pipeline</div>
+<div class="eyebrow" data-canon-counts>Thirty skills · 45 books · One pipeline</div>
 HTML
-if [ "$(hero_book_count "$fixtures/hero-early.html")" = "45" ]; then
-    ok "hero_book_count reads the eyebrow even when an earlier element names a different count"
+if [ "$(hero_count "$fixtures/hero-early.html" books)" = "45" ]; then
+    ok "hero_count reads the eyebrow even when an earlier element names a different count"
 else
-    bad "hero_book_count read a count from outside the eyebrow" \
-        "got: $(hero_book_count "$fixtures/hero-early.html"), want 45 — document order put the meta description first, so an unanchored read grades the wrong number and reports ok while the eyebrow is wrong"
+    bad "hero_count read a count from outside the eyebrow" \
+        "got: $(hero_count "$fixtures/hero-early.html" books), want 45 — document order put the meta description first, so an unanchored read grades the wrong number and reports ok while the eyebrow is wrong"
 fi
 
 cat > "$fixtures/hero-none.html" <<'HTML'
-<div class="eyebrow">Thirty skills · One pipeline</div>
+<div class="eyebrow" data-canon-counts>Thirty skills · One pipeline</div>
 HTML
-if [ -z "$(hero_book_count "$fixtures/hero-none.html")" ]; then
-    ok "hero_book_count returns empty, rather than aborting, when no count is present"
+if [ -z "$(hero_count "$fixtures/hero-none.html" books)" ]; then
+    ok "hero_count returns empty, rather than aborting, when no count is present"
 else
-    bad "hero_book_count invented a count from a page that has none" \
-        "got: $(hero_book_count "$fixtures/hero-none.html")"
+    bad "hero_count invented a count from a page that has none" \
+        "got: $(hero_count "$fixtures/hero-none.html" books)"
 fi
 
 # THE SECOND NOUN (issue #274). The eyebrow now advertises two populations, and
@@ -1804,7 +1861,7 @@ fi
 # papers count a value the books count does not have.
 cat > "$fixtures/hero-two.html" <<'HTML'
 <meta name="description" content="a pack of 8 books and 9 papers">
-<div class="eyebrow">Thirty skills · 42 books · 3 papers · One pipeline</div>
+<div class="eyebrow" data-canon-counts>Thirty skills · 42 books · 3 papers · One pipeline</div>
 HTML
 hero_two_books="$(hero_count "$fixtures/hero-two.html" books)"
 hero_two_papers="$(hero_count "$fixtures/hero-two.html" papers)"
@@ -1910,6 +1967,83 @@ if narrowed_hit="$(narrowing_calls "$fixtures/narrowed.astro")"; then
 else
     bad "narrowing_calls missed a literal canon.slice() in the component" \
         "issue #273's defect is a curated subset reaching the page. #274 taught this reader to skip comment lines so it would stop firing on prose; a reader that now skips the code too is worse than the false positive it replaced."
+fi
+
+# THE STAR THAT IS NOT A COMMENT. Blanking every line whose first non-blank
+# character is `*` also blanks a generator method, which is code and is exactly
+# the narrowing this detector is for. Both shapes in one fixture, because the
+# rule that separates them — a block-comment continuation always has whitespace,
+# `/`, or nothing after the star — is only meaningful as a contrast.
+cat > "$fixtures/star.astro" <<'ASTRO'
+---
+/**
+ * A block comment continuation mentioning canon.filter(...) must be skipped.
+ */
+	*rows() { return canon.filter(Boolean); }
+---
+ASTRO
+if star_hit="$(narrowing_calls "$fixtures/star.astro")"; then
+    case "$star_hit" in
+        *"canon.filter(Boolean)"*)
+            case "$star_hit" in
+                *"block comment continuation"*)
+                    bad "narrowing_calls reported a block-comment continuation line" "got: $star_hit" ;;
+                *)
+                    ok "narrowing_calls skips block-comment continuations and still catches a generator method" ;;
+            esac ;;
+        *) bad "narrowing_calls reported something other than the generator method" "got: $star_hit" ;;
+    esac
+else
+    bad "narrowing_calls swallowed a generator method as if it were a comment" \
+        "\`*rows() { return canon.filter(Boolean); }\` is valid JavaScript and is a narrowing call. A \`^[[:space:]]*\\*\` strip blanks it along with the block comments it was aimed at, so the detector goes quiet on the one construct that starts with the same character as its exclusion."
+fi
+
+# THE OFFPRINT COMPARISON, BOTH DIRECTIONS. The live check can only ever run
+# against a page whose offprints are correct, so nothing there would notice the
+# pairwise scan going blind. The two fixtures differ in one height.
+#
+# THE VIOLATING ONE HIDES ITS DEFECT BEHIND A COMPLIANT PAPER, which is the case
+# an extremes-based comparison got wrong: "Tall Paper" clears the shortest book
+# while "Short Paper" does not, so a scan that stops at the first paper, or that
+# grades only one end of either population, reports clean.
+clean_records="$(printf 'Short Paper\tpaper\t122\nTall Paper\tpaper\t168\nShort Book\tbook\t214\nTall Book\tbook\t356\n')"
+bad_records="$(printf 'Short Paper\tpaper\t122\nTall Paper\tpaper\t300\nShort Book\tbook\t214\nTall Book\tbook\t356\n')"
+
+if [ -z "$(offprint_scan "$clean_records")" ]; then
+    ok "the offprint scan stays silent when every paper is shorter than every book"
+else
+    bad "the offprint scan reported a violation on a compliant fixture" \
+        "got: $(offprint_scan "$clean_records") — a scan that fires on correct input makes the live check's silence meaningless."
+fi
+
+scan_hit="$(offprint_scan "$bad_records")"
+case "$scan_hit" in
+    "Tall Paper	300	Short Book	214")
+        ok "the offprint scan finds a paper taller than a book even when a second paper is compliant" ;;
+    "")
+        bad "the offprint scan missed a paper rendered at bound-volume height" \
+            "the fixture has \"Tall Paper\" at 300px against \"Short Book\" at 214px. This is the exact defect the live check exists to catch, and a scan that compares only one end of either population reports it clean." ;;
+    *)
+        bad "the offprint scan named the wrong pair" "got: $scan_hit, want Tall Paper/300 vs Short Book/214" ;;
+esac
+
+# THE DUPLICATE-SPINE DIRECTION. The record count is compared against an
+# UNDEDUPLICATED key count, because the deduplicated one conflated a reader
+# dropping elements with a page rendering one work twice — and the first draft
+# read the second as the first, aborting with "spine_records is broken, not the
+# page" on a page that was the thing at fault.
+cat > "$fixtures/dupe.html" <<'HTML'
+<button type="button" class="spine" style="height:214px;" data-key="One Work — A" data-type="book"><span class="label">One Work</span></button>
+<button type="button" class="spine" style="height:214px;" data-key="One Work — A" data-type="book"><span class="label">One Work</span></button>
+HTML
+dupe_raw="$(rendered_keys "$fixtures/dupe.html" | grep -c . || true)"
+dupe_uniq="$(rendered_keys "$fixtures/dupe.html" | LC_ALL=C sort -u | grep -c . || true)"
+dupe_records="$(spine_records "$fixtures/dupe.html" | grep -c . || true)"
+if [ "$dupe_raw" = "2" ] && [ "$dupe_uniq" = "1" ] && [ "$dupe_records" = "2" ]; then
+    ok "a duplicated spine reads as 2 records and 2 keys against 1 distinct work, so it lands on the duplicate check rather than the reader-is-broken fatal"
+else
+    bad "the duplicate fixture did not read as expected" \
+        "got raw=$dupe_raw uniq=$dupe_uniq records=$dupe_records, want 2/1/2 — if records and raw keys disagree here, the fatal fires and blames spine_records for a page defect."
 fi
 
 cat > "$fixtures/spineless.html" <<'HTML'

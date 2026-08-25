@@ -58,9 +58,10 @@ const BANDS = {
 
 // Per-type weight extents, accumulated in a loop rather than with
 // `canon.filter(...)`: the contract suite's narrowing tripwire greps this file
-// for `canon` followed by a narrowing call, and it is right to — a reader
-// skimming for "does this component drop entries" should not have to tell an
-// extent from a filter.
+// for `canon` followed by a narrowing call, and it cannot tell an extent from a
+// subset. `Hero.astro` computes its type counts with `canon.filter(...)` and is
+// not scanned — the property the tripwire defends is "every declared work
+// reaches the shelf", which is about this component and no other.
 const extents: Record<CanonWork["type"], { lo: number; hi: number }> = {
 	book: { lo: Infinity, hi: 0 },
 	paper: { lo: Infinity, hi: 0 },
@@ -193,7 +194,7 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 	   and handed the form to this issue.
 
 	   Each spine now paints the plank under itself, bleeding half a gutter to
-	   either side so neighbouring segments meet with no seam, and the grid rows
+	   either side so neighboring segments meet with no seam, and the grid rows
 	   size to their content. The last row's plank stops at the last book, which
 	   is the honest picture: the case is not full. */
 	.shelf {
@@ -238,13 +239,13 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 			box-shadow 0.25s ease;
 		font: inherit;
 	}
-	/* The plank. `overflow: hidden` on .spine clips its own children, so this
-	   sits on a wrapper-free pseudo-element anchored below the spine's box. */
+	/* The plank, drawn below the spine's box rather than inside it. Nothing on
+	   `.spine` may clip its children or this disappears — see the note there. */
 	.spine::after {
 		content: "";
 		position: absolute;
 		/* Bleed out to the column's edges — half the empty space on each side —
-		   so neighbouring segments meet exactly and read as one plank. Anchoring
+		   so neighboring segments meet exactly and read as one plank. Anchoring
 		   to the gutter instead would size the segment to the spine, which is
 		   right for a 74px book and leaves a 28px hole under a 46px offprint. */
 		inset-inline: calc((var(--col-w) - var(--spine-w)) / -2);
