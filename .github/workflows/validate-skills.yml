@@ -141,6 +141,9 @@ jobs:
       - name: Run shellcheck version-parity contract suite
         run: bash scripts/test-shellcheck-version-parity.sh
 
+      - name: Run absent-local-gate tell contract suite
+        run: bash scripts/test-absent-local-gate-tells.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

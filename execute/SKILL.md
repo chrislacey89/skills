@@ -45,7 +45,7 @@ Resolve the provisioning mode from `.claude/settings.json` `worktree.provisionin
   - a host environment variable is present — `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`. This is the cheapest, primary discriminator: the pipeline's only detection mechanism is Bash, and these vars are visible in the agent's shell. (Do **not** detect via a `.conductor` directory in the cwd — Conductor keeps it under `$CONDUCTOR_ROOT_PATH`, not the workspace.)
   - the current working tree is not the repo's primary working tree — `git rev-parse --show-toplevel` differs from the first path in `git worktree list --porcelain`.
 
-When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. Continue to the issue-shape gate.
+When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so most of the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. **Its git-hooks item is the exception and still applies.** Hosts provision *tracked* files plus dependencies; git hooks live in `.git/hooks`, which is per-worktree and untracked, so a host-provisioned workspace characteristically has none. Check that item even when standing down. Continue to the issue-shape gate.
 
 This stand-down is deliberately *asymmetric* with `/closeout`'s teardown check. Inflow only needs to answer *"am I already isolated?"* — generic detection (toplevel ≠ primary) and the env-var hint each settle that. The outflow question — *"who owns teardown?"* — is stricter and cannot rely on the generic heuristic alone, because a pipeline-made worktree also satisfies toplevel ≠ primary; `/closeout` keys off the explicit setting or host env var only.
 
@@ -96,6 +96,7 @@ install = "pnpm install"
 - [ ] Dependencies installed — install command (`pnpm install`, `npm ci`, etc.) ran without error in the worktree
 - [ ] Session is inside the worktree — `pwd` reports the worktree path because you entered it via `EnterWorktree { path }` (not the project root). In the AFK/headless fallback only, this item instead means the `cd <absolute-worktree-path> &&` prefix is being applied to every Bash call
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
+- [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] TDD marker absent — `.claude/.tdd-active` and `.claude/.tdd-skipped` do not exist in the worktree (fresh slate; Step 3 creates them)
 
 **Issue-shape detection gate.** If the task is a GitHub issue, verify it is a slice (implementation-ready), not an undecomposed PRD. Run `gh issue view <n> --comments` and check for a comment matching `^Decomposed into: #\d+`.
@@ -490,6 +491,9 @@ Hand it to the reviewer instead, as a `## Review Notes` block in the PR body. Gi
 | `pnpm run typecheck` | 0 | 2 |
 | `pnpm run test` | 0 | 2 |
 | `curl -s -o /dev/null -w '%{http_code}' localhost:3000/reports` → `200` | 0 | 2.5 |
+| `shellcheck --version` → `0.9.0` (matches `.shellcheck-version`); `shellcheck scripts/*.sh` | 0 | 2 |
+
+**Name the version whenever the repo pins the tool, and say whether local gates ran.** A bare "lint clean" is a claim about *whichever* binary happened to be on `PATH`, and linters disagree across releases in both directions — so the reviewer cannot tell whether it describes the merge gate or a different instrument. Two lines close it: give the version beside any pinned tool's row, and state once whether the repo's own pre-commit/pre-push hooks were active for this branch. A branch whose hooks never ran is not disqualified; it is *differently evidenced*, and the reviewer needs to know which they are reading.
 
 **Verification skipped, and why**
 - Tier 2.7 — not applicable: test runtime and deploy runtime are both Node 22.

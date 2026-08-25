@@ -52,6 +52,8 @@ pre-push:
       run: bash scripts/test-widened-domain-tell.sh
     canon-coverage-tests:
       run: bash scripts/test-canon-coverage.sh
+    absent-local-gate-tell-tests:
+      run: bash scripts/test-absent-local-gate-tells.sh
     shellcheck-version-parity-tests:
       run: bash scripts/test-shellcheck-version-parity.sh
     shellcheck-all:
