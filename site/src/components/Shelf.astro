@@ -7,24 +7,76 @@ import { canon, type CanonWork } from "../lib/canon.generated";
 // reader cannot see, which is the defect the derivation exists to remove.
 // `scripts/test-canon-coverage.sh` fails if this file slices or filters it.
 
-/** Citation breadth, which is real signal the hand-written shelf could not carry. */
+/** Breadth of reuse: how many skills name this work at all. */
 const weightOf = (w: CanonWork) => w.citations.length;
 
-const maxWeight = Math.max(...canon.map(weightOf));
-const minWeight = Math.min(...canon.map(weightOf));
+/**
+ * Core lineage: how many skills name it as a work they are *built on*.
+ * CLAUDE.md defines the two tiers — `primary` is "core lineage — the skill is
+ * fundamentally built on this work", `secondary` is a supporting influence.
+ */
+const lineageOf = (w: CanonWork) =>
+	w.citations.reduce((n, c) => n + (c.tier === "primary" ? 1 : 0), 0);
 
-// Heaviest first, then alphabetical so the tail is scannable. The generated data
-// is sorted by title and carries no presentation opinion; the ordering choice
-// lives here, which is where #274 will revisit it.
+// TWO SIGNALS, TWO CHANNELS (issue #274). Height already carried breadth, and
+// #274 named the trade that left open: breadth is not centrality, and a bookcase
+// ranked by breadth alone buried the four books the pipeline is most
+// recognizably built on — *TDD By Example* sat 37th of 45, *Shape Up* 19th,
+// *Refactoring* 18th, *Domain-Driven Design* 17th, while works no skill calls
+// core lineage led the top board. So the ORDER is core lineage and the HEIGHT
+// stays breadth: two different claims, each read off the frontmatter, neither
+// standing in for the other.
+//
+// The other option #274 weighed was a hand-ordered top board. It was rejected
+// for the reason the whole batch exists: a hand-ordered list of flagships is a
+// second hand-maintained canon, and it would drift out of step with the skills
+// exactly the way the eight-spine shelf did.
+//
+// CODE-UNIT COMPARISON, NOT `localeCompare`. The tie-break has to be
+// reproducible off the machine that built the page: whether ICU treats the
+// hyphen in "Domain-Driven Design" as ignorable decides three spines' order, and
+// `scripts/test-canon-coverage.sh` asserts this exact sequence against a shell
+// `LC_ALL=C sort`. Comparing code units is what makes the two agree by
+// construction rather than by luck of the runtime's collation data.
 const spines = [...canon].sort(
-	(a, b) => weightOf(b) - weightOf(a) || a.title.localeCompare(b.title),
+	(a, b) =>
+		lineageOf(b) - lineageOf(a) ||
+		weightOf(b) - weightOf(a) ||
+		(a.full < b.full ? -1 : a.full > b.full ? 1 : 0),
 );
 
-/** 1 citation → 210px, the most-cited work → 360px, so height reads as weight. */
-function heightOf(w: CanonWork): string {
-	const span = maxWeight - minWeight;
-	const t = span === 0 ? 1 : (weightOf(w) - minWeight) / span;
-	return `${Math.round(210 + t * 150)}px`;
+// A HEIGHT BAND PER OBJECT TYPE. #274: "Books and papers are different objects.
+// Whatever form the section takes should be able to render both without
+// pretending the papers are books." A bound volume and a stapled offprint do not
+// share a height, so they do not share a scale — the paper band sits entirely
+// below the book band, and each type's weight is read against its own peers so
+// breadth still shows *within* a type.
+const BANDS = {
+	book: { min: 214, max: 356 },
+	paper: { min: 122, max: 168 },
+} as const;
+
+// Per-type weight extents, accumulated in a loop rather than with
+// `canon.filter(...)`: the contract suite's narrowing tripwire greps this file
+// for `canon` followed by a narrowing call, and it is right to — a reader
+// skimming for "does this component drop entries" should not have to tell an
+// extent from a filter.
+const extents: Record<CanonWork["type"], { lo: number; hi: number }> = {
+	book: { lo: Infinity, hi: 0 },
+	paper: { lo: Infinity, hi: 0 },
+};
+for (const w of canon) {
+	const e = extents[w.type];
+	e.lo = Math.min(e.lo, weightOf(w));
+	e.hi = Math.max(e.hi, weightOf(w));
+}
+
+function heightOf(w: CanonWork): number {
+	const { lo, hi } = extents[w.type];
+	const band = BANDS[w.type];
+	const span = hi - lo;
+	const t = span <= 0 ? 1 : (weightOf(w) - lo) / span;
+	return Math.round(band.min + t * (band.max - band.min));
 }
 
 // A fixed palette, assigned by a stable hash of the declared string. Forty-five
@@ -46,6 +98,33 @@ function paletteOf(full: string) {
 	for (let i = 0; i < full.length; i++) h = (h * 31 + full.charCodeAt(i)) >>> 0;
 	return PALETTE[h % PALETTE.length];
 }
+
+/**
+ * The inline style for one spine. Height is per work, so it is emitted here;
+ * the offprint's surface is one rule for all papers, so it is not.
+ *
+ * A PAPER GETS NO INLINE COLOR ON PURPOSE. An inline `background` would win over
+ * the stylesheet, so the offprint could not be given its own manila stock and
+ * stapled edge without repeating them per element. Leaving the paper's surface
+ * to CSS is also what keeps the two definitions of "different object" from
+ * splitting: the height reaches the HTML where the contract suite can grade it,
+ * and everything else is one selector a reader can find in one place.
+ */
+function styleOf(w: CanonWork, i: number): string {
+	const base = `--i:${Math.min(i, 24)}; height:${heightOf(w)}px;`;
+	if (w.type === "paper") return base;
+	const { color, ink } = paletteOf(w.full);
+	return `${base} background:${color}; color:${ink};`;
+}
+
+/**
+ * What the edge of the object actually shows. A bound spine carries its title;
+ * an offprint's stapled edge does not, and the two papers here have 65- and
+ * 78-character titles that no 168px edge can hold. So a paper shows its citation
+ * — "Liang et al. (EMNLP 2024)" — which is how a paper is referred to anyway.
+ * The full string is on the tooltip and on the opened spread either way.
+ */
+const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 ---
 
 <section id="canon" class="canon">
@@ -61,13 +140,13 @@ function paletteOf(full: string) {
 					<button
 						type="button"
 						class="spine"
-						style={`--i:${Math.min(i, 24)}; height:${heightOf(w)}; background:${paletteOf(w.full).color}; color:${paletteOf(w.full).ink};`}
+						style={styleOf(w, i)}
 						title={`${w.full} — cited by ${w.citations.length} skill${w.citations.length === 1 ? "" : "s"}`}
 						aria-pressed="false"
 						data-key={w.full}
 						data-type={w.type}
 					>
-						<span class="label">{w.title}</span>
+						<span class="label">{edgeLabel(w)}</span>
 					</button>
 				))
 			}
@@ -75,8 +154,9 @@ function paletteOf(full: string) {
 		<div class="detail-slot" data-detail></div>
 
 		<p class="hint" data-hint>
-			Pull a book off the shelf — all {canon.length} works the skills cite, taller
-			where more of them cite it. Each SKILL.md names its sources in frontmatter.
+			Pull a book off the shelf — all {canon.length} works the skills cite,
+			ordered by how many are built on them and taller where more of them cite
+			it. Each SKILL.md names its sources in frontmatter.
 		</p>
 	</div>
 </section>
@@ -103,47 +183,52 @@ function paletteOf(full: string) {
 		margin: 0;
 	}
 
-	/* AT 45 WORKS THE ROW WRAPS, AND A WRAPPED ROW NEEDS A BOARD PER ROW.
-	   The section used to be one flex row above one `.board` div, which is
-	   correct at eight spines and reads as a bug at 45 — three rows of books
-	   floating over nothing. A grid with fixed row pitch lets the board be a
-	   repeating background instead of an element, so it lands under every row.
-	   Giving the section its proper form is issue #274; this is the minimum
-	   repair for a defect this change introduces, not that redesign. */
+	/* THE BOARD IS DRAWN PER SPINE, WHICH IS WHAT LETS A ROW BE ITS OWN HEIGHT.
+	   #273 wrapped the row and painted the board as a repeating background at a
+	   fixed pitch, which is the only way to hit every implicit row when they are
+	   all the same height — and it forced every row to reserve the height of the
+	   tallest spine in the whole canon. Rows two through four topped out at 229px
+	   inside a 400px band, so the section carried ~430px of void and read as four
+	   shelves floating in the dark. Its own comment called that a minimum repair
+	   and handed the form to this issue.
+
+	   Each spine now paints the plank under itself, bleeding half a gutter to
+	   either side so neighbouring segments meet with no seam, and the grid rows
+	   size to their content. The last row's plank stops at the last book, which
+	   is the honest picture: the case is not full. */
 	.shelf {
-		--spine-max: 360px;
-		--board-h: 14px;
-		--row-gap: 26px;
-		--row-h: calc(var(--spine-max) + var(--board-h) + var(--row-gap));
+		--board-h: 13px;
+		--col-w: 84px;
+		--gutter: 10px;
 
 		display: grid;
-		grid-template-columns: repeat(auto-fit, 74px);
-		grid-auto-rows: var(--row-h);
+		grid-template-columns: repeat(auto-fit, var(--col-w));
+		grid-auto-rows: auto;
+		align-items: end;
+		justify-items: center;
 		justify-content: center;
-		column-gap: 10px;
-		background-image: repeating-linear-gradient(
-			180deg,
-			transparent 0 var(--spine-max),
-			#5c4a2e var(--spine-max),
-			#3e3120 calc(var(--spine-max) + var(--board-h)),
-			transparent calc(var(--spine-max) + var(--board-h)) var(--row-h)
-		);
-	}
-	.shelf > .spine {
-		align-self: end;
-		/* Sit the spine on top of the board band, not at the row's foot. */
-		margin-bottom: calc(var(--board-h) + var(--row-gap));
+		row-gap: 34px;
 	}
 
 	.spine {
-		width: 74px;
-		overflow: hidden;
+		position: relative;
+		/* Declared as a variable because the plank below has to span the whole
+		   COLUMN, not the object standing on it — and an offprint is much
+		   narrower than a book. Reading the width off a custom property is what
+		   lets one rule size both. */
+		--spine-w: calc(var(--col-w) - var(--gutter));
+		width: var(--spine-w);
+		margin-bottom: var(--board-h);
+		/* NO `overflow: hidden` HERE. It used to do the label's clipping, and it
+		   also clipped the plank below — a pseudo-element at `top: 100%` is still
+		   a child. The label now owns its own overflow (see `.label`), which is
+		   where the constraint belongs anyway. */
 		border: none;
 		border-radius: 3px 3px 0 0;
 		display: flex;
 		align-items: flex-end;
 		justify-content: center;
-		padding: 16px 0;
+		padding: 14px 4px;
 		cursor: pointer;
 		box-shadow:
 			inset -6px 0 10px rgba(0, 0, 0, 0.28),
@@ -153,8 +238,32 @@ function paletteOf(full: string) {
 			box-shadow 0.25s ease;
 		font: inherit;
 	}
+	/* The plank. `overflow: hidden` on .spine clips its own children, so this
+	   sits on a wrapper-free pseudo-element anchored below the spine's box. */
+	.spine::after {
+		content: "";
+		position: absolute;
+		/* Bleed out to the column's edges — half the empty space on each side —
+		   so neighbouring segments meet exactly and read as one plank. Anchoring
+		   to the gutter instead would size the segment to the spine, which is
+		   right for a 74px book and leaves a 28px hole under a 46px offprint. */
+		inset-inline: calc((var(--col-w) - var(--spine-w)) / -2);
+		top: 100%;
+		height: var(--board-h);
+		background: linear-gradient(180deg, #5c4a2e 0%, #3e3120 100%);
+		box-shadow: 0 3px 7px rgba(0, 0, 0, 0.42);
+		/* Same easing as the spine, so the two stay in lockstep for the whole
+		   pull rather than only at the ends of it. */
+		transition: transform 0.25s ease;
+	}
 	.spine:hover {
 		transform: translateY(-10px);
+	}
+	/* The plank does not move with the book that was pulled off it: the spine's
+	   transform carries the pseudo-element along, and this puts it back. */
+	.spine:hover::after,
+	.spine[aria-pressed="true"]::after {
+		transform: translateY(10px);
 	}
 	.spine .label {
 		writing-mode: vertical-rl;
@@ -162,12 +271,58 @@ function paletteOf(full: string) {
 		font-family: var(--display);
 		font-size: 14.5px;
 		letter-spacing: 0.04em;
-		white-space: nowrap;
-		/* Forty-five real titles include one 62 characters long. Clip it on the
-		   spine — the full string is in the tooltip and on the opened page. */
+		line-height: 1.22;
+		text-align: center;
+		/* WRAP RATHER THAN CLIP. `white-space: nowrap` put the longest titles —
+		   "Growing Object-Oriented Software, Guided by Tests" at 48 characters —
+		   off the top of the spine mid-word, with no ellipsis, because
+		   `text-overflow` does not apply to a vertical overflow. Two vertical
+		   lines hold every title in the canon and read like a real spine.
+
+		   IN `vertical-rl` THE AXES SWAP: the INLINE axis runs down the spine and
+		   the BLOCK axis runs across it. So `max-inline-size` is what caps the
+		   title's run and makes it wrap, and `max-block-size` is what keeps the
+		   wrapped lines inside the spine's width. Both, or the wrap depends on
+		   the flex container's incidental sizing. */
+		max-inline-size: 100%;
 		max-block-size: 100%;
 		overflow: hidden;
-		text-overflow: ellipsis;
+	}
+
+	/* ── The offprint ──────────────────────────────────────────────
+	   Issue #274: books and papers are different objects, and the section has to
+	   render both without pretending the papers are books. A conference paper is
+	   not a bound volume — it is a slim stapled offprint, so it is narrower, on
+	   plain manila stock rather than dyed cloth, square-cornered, flat instead of
+	   rounded under a cloth shadow, and stapled twice down its edge. Its height
+	   comes from its own band (see BANDS above), which puts every offprint below
+	   every book on the board. */
+	.spine[data-type="paper"] {
+		--spine-w: 46px;
+		border-radius: 0;
+		background: linear-gradient(94deg, #cdc3a6 0%, #bdb193 100%);
+		color: #3a3524;
+		padding: 12px 3px;
+		box-shadow:
+			inset -2px 0 5px rgba(0, 0, 0, 0.16),
+			inset 0 0 0 1px rgba(58, 53, 36, 0.28);
+	}
+	/* Two staples down the bound edge. */
+	.spine[data-type="paper"]::before {
+		content: "";
+		position: absolute;
+		left: 6px;
+		top: 22%;
+		bottom: 22%;
+		width: 2px;
+		background:
+			linear-gradient(#6d6650 0 9px, transparent 9px) top / 2px 100% no-repeat,
+			linear-gradient(#6d6650 0 9px, transparent 9px) bottom / 2px 9px no-repeat;
+	}
+	.spine[data-type="paper"] .label {
+		font-family: var(--mono);
+		font-size: 10.5px;
+		letter-spacing: 0.01em;
 	}
 
 	/* Scroll-reveal: hide only when JS can bring them back. */
@@ -351,14 +506,17 @@ function paletteOf(full: string) {
 	   scrolled track. */
 	@media (max-width: 680px) {
 		.shelf {
+			--col-w: 70px;
 			grid-auto-flow: column;
-			grid-auto-columns: 62px;
+			grid-auto-columns: var(--col-w);
 			grid-template-columns: none;
-			grid-auto-rows: var(--row-h);
 			justify-content: start;
 			overflow-x: auto;
 			-webkit-overflow-scrolling: touch;
 			scrollbar-width: thin;
+			/* One row, so the planks form a single continuous board that scrolls
+			   with the books standing on it. */
+			padding-bottom: var(--board-h);
 		}
 		.spine .label {
 			font-size: 13px;

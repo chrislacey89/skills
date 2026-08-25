@@ -293,6 +293,42 @@ canon_citation_rows() {
     ' "$1"
 }
 
+# shelf_order <canon.generated.ts> — the spine order the canon section is
+# required to render, one `full` string per line, top-left to bottom-right:
+# works some skill calls CORE LINEAGE first, then breadth of citation, then the
+# declared string.
+#
+# WHY THIS IS THE ORDERING (issue #274). The shelf's height already carries
+# citation count, and #274 named the trade that leaves open: raw count measures
+# breadth of reuse across the pipeline, not centrality to it, and a bookcase
+# sorted by count alone buries the books the pipeline is most recognizably built
+# on — *TDD By Example* sat 37th of 45, *Shape Up* 19th, *Refactoring* 18th,
+# *Domain-Driven Design* 17th. The signal that fixes it is already in the
+# frontmatter and was going unread: CLAUDE.md defines `primary` as "core lineage
+# — the skill is fundamentally built on this work" against `secondary`'s
+# "supporting influence". Ranking on the primary count lifts all four flagships
+# (37→14, 19→4, 18→10, 17→9) and costs nothing to maintain, where the other
+# option #274 weighed — a hand-ordered top board — would be a second
+# hand-maintained canon list, which is the defect #273 exists to remove.
+#
+# READ OFF THE GENERATED FILE, NEVER OFF Shelf.astro. Re-deriving the
+# component's comparator from the component would be two readings of one rule:
+# they cannot disagree, so the check would pass by construction while a
+# consistently wrong order shipped. That is the failure
+# `docs/solutions/testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md`
+# records, and the same one `unrenderable_types` above was rewritten to escape.
+#
+# BYTE ORDER ON `full`, MATCHING THE COMPONENT'S COMPARATOR. `localeCompare`
+# would put this reader at the mercy of the build machine's ICU collation —
+# whether `-` in "Domain-Driven Design" is ignorable decides three spines'
+# order — so `Shelf.astro` compares code units and so does this.
+shelf_order() {
+    canon_citation_rows "$1" | awk -F"$(printf '\t')" '
+        { total[$1]++; if ($3 == "primary") prim[$1]++ }
+        END { for (f in total) printf "%d\t%d\t%s\n", prim[f] + 0, total[f], f }
+    ' | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k2,2nr -k3,3 | cut -f3-
+}
+
 # papers_typed <canon.generated.ts> — the works the canon types `paper`, sorted.
 # A function rather than an inline pipeline so the self-tests can exercise it;
 # `partial-oracle-selfcheck-2026-08-22.md` is about exactly the check that only
@@ -416,11 +452,9 @@ dropped_citations() {
 # natural place for someone to write it next, and an upstream match would win
 # silently: the check would then grade the wrong number and report ok while the
 # eyebrow was wrong. Verified against a fixture with a competing earlier count.
-hero_book_count() {
-    grep -o 'class="eyebrow"[^<]*' "$1" 2>/dev/null \
-        | grep -o '[0-9][0-9]* books' \
-        | head -1 | sed 's/ books$//' || true
-}
+# That anchoring now lives in `hero_count` above, which this delegates to; the
+# name is kept because the self-tests below exercise the books case by it.
+hero_book_count() { hero_count "$1" books; }
 
 # declares_work_at_tier <skill.md> <"Title — Author"> <tier> — does that skill
 # declare that exact string under that exact `sources:` sub-key? Exact, not
@@ -534,9 +568,91 @@ orphan_lessons() {
 rendered_keys() {
     { grep -o 'data-key="[^"]*"' "$1" || true; } \
         | sed -e 's/^data-key="//' -e 's/"$//' \
-              -e 's/&#38;/\&/g' -e 's/&amp;/\&/g' \
-              -e 's/&#39;/'"'"'/g' -e 's/&quot;/"/g' \
-              -e 's/&lt;/</g' -e 's/&gt;/>/g'
+        | unescape
+}
+
+# unescape — undo the templating's entity escapes on stdin. Split out of
+# `rendered_keys` so `spine_records` below cannot drift from it: "The Pragmatic
+# Programmer — Andrew Hunt & David Thomas" reaches the page as `&#38;`, and a
+# second reader that forgets one entity reports a live work as missing.
+unescape() {
+    sed -e 's/&#38;/\&/g' -e 's/&amp;/\&/g' \
+        -e 's/&#39;/'"'"'/g' -e 's/&quot;/"/g' \
+        -e 's/&lt;/</g' -e 's/&gt;/>/g'
+}
+
+# spine_records <index.html> — "<full>\t<type>\t<height-px>" per rendered spine,
+# in DOCUMENT ORDER.
+#
+# THREE PROPERTIES OF ONE ELEMENT, READ IN ONE PASS, because issue #274 grades
+# them against each other: the sequence must be the order core lineage dictates,
+# and a paper must render as a visibly different object than a book — which on
+# this page means a shorter one, since the spine's height is the only part of its
+# form that reaches the HTML as a value a shell can read.
+#
+# HEIGHT IS AN INLINE STYLE AND THAT IS WHY THIS WORKS. The board, the cloth
+# shadow, and the offprint's stapled edge are all in a <style> block, so a
+# checker that wanted them would be reduced to grepping CSS for a selector —
+# the weak, language-construct kind of detector this file already flags in the
+# narrowing check. The height is computed per work in the component's frontmatter
+# and emitted per element, so it can be compared against the canon instead.
+spine_records() {
+    { grep -o '<button[^>]*class="spine"[^>]*>' "$1" || true; } \
+        | awk '
+            {
+                h = ""; k = ""; t = ""
+                if (match($0, /height:[0-9]+px/))   h = substr($0, RSTART + 7,  RLENGTH - 9)
+                if (match($0, /data-key="[^"]*"/))  k = substr($0, RSTART + 10, RLENGTH - 11)
+                if (match($0, /data-type="[^"]*"/)) t = substr($0, RSTART + 11, RLENGTH - 12)
+                if (k != "") print k "\t" t "\t" h
+            }' \
+        | unescape
+}
+
+# narrowing_calls <Shelf.astro> — every line that narrows the canon before
+# rendering it, as `grep -n` output. Empty output is the passing state, and the
+# non-zero exit that comes with it is what the caller branches on.
+#
+# COMMENT LINES ARE STRIPPED FIRST. The tripwire greps source text, so it cannot
+# tell a narrowing call from prose *about* one — and #274 wrote a comment
+# explaining why the component accumulates per-type extents in a loop rather than
+# with `canon.filter(...)`, which turned this red for naming the thing it avoids.
+# A detector that punishes the explanation teaches the next author to delete the
+# explanation. Only whole-line `//` and ` * ` comments are dropped; a narrowing
+# call with a trailing comment is still code and is still reported.
+narrowing_calls() {
+    sed -e 's|^[[:space:]]*//.*$||' -e 's|^[[:space:]]*\*.*$||' "$1" \
+        | grep -nE '\b(canon|spines)\b[^;]*\.(slice|filter|splice|shift|pop)\('
+}
+
+# hero_count <index.html> <noun> — the number the hero eyebrow advertises for
+# that noun, or empty when the eyebrow does not name one.
+#
+# ANCHORED TO THE EYEBROW, for the reason `hero_book_count` below records: the
+# <head> sits ~2400 bytes ahead of it and an unanchored read grades whatever the
+# meta description happens to say. Generalized to a noun because #274 made the
+# eyebrow advertise two populations — the page may not call a paper a book.
+# DIGITS OR NOTHING, BY CONSTRUCTION. The first spelling was `grep -o "[0-9]* $2"
+# | sed "s/ $2\$//"`, where the strip is a second, independent statement of the
+# noun — so a reader whose two halves disagreed returned "42 books", the live
+# check's `-ne` died with `[: 42 books: integer expected`, and the suite exited
+# before reaching the self-tests that name the reader. That is this file's own
+# recurring failure: an unvalidated read that fails in a format indistinguishable
+# from silence. Matching the number and the noun as one token and printing only
+# the number makes a malformed return impossible rather than merely detected.
+hero_count() {
+    grep -o 'class="eyebrow"[^<]*' "$1" 2>/dev/null \
+        | awk -v noun="$2" '
+            {
+                rest = $0
+                while (match(rest, /[0-9]+ [A-Za-z]+/)) {
+                    tok  = substr(rest, RSTART, RLENGTH)
+                    rest = substr(rest, RSTART + RLENGTH)
+                    split(tok, part, " ")
+                    if (part[2] == noun) { print part[1]; exit }
+                }
+            }' \
+        | head -1 || true
 }
 
 # declares_title <skill.md> <title> — does that skill declare a work with this
@@ -765,6 +881,7 @@ $wrongly_paper
 EOF
 
 paper_count="$(printf '%s' "$actual_papers" | grep -c . || true)"
+book_count=$((entry_count - paper_count))
 if [ -z "$unrenderable" ] && [ -z "$wrongly_book" ] && [ -z "$wrongly_paper" ]; then
     ok "every canon entry is typed book or paper, and the $paper_count paper(s) are exactly the ones this suite expects"
 fi
@@ -863,7 +980,7 @@ else
         "the canon section is fed by site/src/lib/canon.generated.ts; a component reading anything else is rendering a list nothing derives."
 fi
 
-if narrowing="$(grep -nE '\b(canon|spines)\b[^;]*\.(slice|filter|splice|shift|pop)\(' "$shelf_astro")"; then
+if narrowing="$(narrowing_calls "$shelf_astro")"; then
     bad "Shelf.astro narrows the canon before rendering it" \
         "$narrowing
 every declared work must reach the page — a curated subset is what issue #273 reported. Ordering and styling are free; dropping entries is not."
@@ -911,15 +1028,114 @@ EOF
         ok "all $rendered_count rendered spine(s) are exactly the $entry_count canon work(s)"
     fi
 
+    # THE EYEBROW COUNTS BOOKS AND PAPERS SEPARATELY (issue #274). It advertised
+    # "45 books" while three of the forty-five were conference papers, which is
+    # the page calling a paper a book in its own headline — the exact thing #274
+    # asked the canon section to stop doing one layer further in. So the check is
+    # now per type, and the sum is asserted too: two numbers that are each wrong
+    # by the same amount in opposite directions would otherwise pass both.
     hero_count="$(hero_book_count "$built_page")"
+    hero_papers="$(hero_count "$built_page" papers)"
     if [ -z "$hero_count" ]; then
         bad "the hero eyebrow no longer advertises a book count" \
-            "the reader looks for a digit followed by \" books\". Two things land here: the line was removed, or the count was spelled out as a word — which is how it read before #273 (\"Eight books\"), so a revert to hand-written copy reports here rather than as a mismatch. Either derive it from the canon, or update hero_book_count if the copy deliberately changed shape."
-    elif [ "$hero_count" -ne "$entry_count" ]; then
-        bad "the hero advertises $hero_count books and the canon holds $entry_count" \
-            "the hero eyebrow is the page's advertisement for the canon section and its button links straight to it. A hand-written number here is the same drift the shelf itself had — derive it from the canon rather than restating it."
+            "the reader looks for a digit followed by \" books\". Two things land here: the line was removed, or the count was spelled out as a word — which is how it read before #273 (\"Eight books\"), so a revert to hand-written copy reports here rather than as a mismatch. Either derive it from the canon, or update hero_count if the copy deliberately changed shape."
+    elif [ "$hero_count" -ne "$book_count" ]; then
+        bad "the hero advertises $hero_count books and the canon holds $book_count book(s)" \
+            "the hero eyebrow is the page's advertisement for the canon section and its button links straight to it. A hand-written number here is the same drift the shelf itself had — derive it from the canon rather than restating it. Note this grades books, not works: the canon holds $entry_count works, $paper_count of them papers."
+    elif [ "$paper_count" -gt 0 ] && [ -z "$hero_papers" ]; then
+        bad "the canon holds $paper_count paper(s) and the hero eyebrow counts only books" \
+            "issue #274: books and papers are different objects, and the eyebrow is where the page first says how many of each it has. Folding the papers into the book count is the headline asserting three books this repo does not cite."
+    elif [ "$paper_count" -gt 0 ] && [ "$hero_papers" -ne "$paper_count" ]; then
+        bad "the hero advertises $hero_papers papers and the canon holds $paper_count" \
+            "derive it from the canon's own type field rather than restating it."
+    elif [ "$paper_count" -gt 0 ] && [ "$((hero_count + hero_papers))" -ne "$entry_count" ]; then
+        bad "the hero's $hero_count books + $hero_papers papers do not add up to the canon's $entry_count works" \
+            "each number matched its own population, so the type split itself is wrong — the canon types some work neither book nor paper, or the reader is grading two numbers off one clause."
     else
-        ok "the hero eyebrow advertises the same $entry_count books the canon holds"
+        ok "the hero eyebrow advertises the canon's own split: $book_count book(s), $paper_count paper(s)"
+    fi
+
+    # -------------------------------------------------------------------------
+    # ISSUE #274, THE TWO PROPERTIES THAT ARE NOT COVERAGE. Everything above
+    # this point grades the canon section's *population* — the set of works it
+    # renders. #274 is about the two things the section then does with that set,
+    # and both are silent when they break: the page still builds, every spine
+    # still traces to a declaration, and the coverage checks stay green.
+    records="$(spine_records "$built_page")"
+    record_count="$(printf '%s' "$records" | grep -c . || true)"
+    if [ "$record_count" -ne "$rendered_count" ]; then
+        fatal "read $record_count spine record(s) but $rendered_count spine key(s) out of the same page.
+       spine_records is broken, not the page — it reads the height and type off the
+       same <button> that carries the key, so the two readings disagreeing means it
+       is dropping elements, and a short list passes the order comparison below on
+       a prefix."
+    fi
+
+    # ORDER. The bookcase is sorted by core lineage, then breadth (see
+    # `shelf_order` above for why, and for why the oracle is derived from the
+    # canon rather than re-read out of the component).
+    want_order="$(shelf_order "$canon_ts")"
+    got_order="$(printf '%s\n' "$records" | cut -f1)"
+    if [ "$want_order" = "$got_order" ]; then
+        ok "the bookcase renders in core-lineage order: primary citations, then total, then title"
+    else
+        # `|| true` on the whole pipeline: diff exits 1 on a difference, which is
+        # the case this branch exists for, and `set -o pipefail` would abort the
+        # suite mid-report rather than print the failure it just found.
+        first_wrong="$(diff <(printf '%s\n' "$want_order") <(printf '%s\n' "$got_order") | head -8 || true)"
+        bad "the rendered spine order is not the order core lineage dictates" \
+            "$first_wrong
+issue #274: citation count alone measures breadth of reuse, not centrality, and sorting by it buried the four books the pipeline is most recognizably built on. The order must be primary-citation count desc, then total desc, then the declared string."
+    fi
+
+    # PAPERS ARE A DIFFERENT OBJECT. #274 verbatim: "Books and papers are
+    # different objects. Whatever form the section takes should be able to render
+    # both without pretending the papers are books." On a board of vertical
+    # spines the honest form is an offprint — slim, flat, and visibly shorter —
+    # and height is the one part of that form that reaches the HTML as a value
+    # rather than as a CSS rule, so it is what this grades.
+    if [ "$paper_count" -gt 0 ]; then
+        # extreme <type> <keep-max?> — the tallest paper / the shortest book, as
+        # "<px> <full>". Two calls rather than one, so each side is a plain
+        # min-or-max over one population and neither can silently grade the other.
+        extreme() {
+            printf '%s\n' "$records" | awk -F"$(printf '\t')" -v want="$1" -v max="$2" '
+                BEGIN { hi = (max + 0 != 0) }
+                $2 != want { next }
+                { h = $3 + 0 }
+                !seen || (hi && h > m) || (!hi && h < m) { m = h; w = $1; seen = 1 }
+                END { print (seen ? m : 0) " " w }
+            '
+        }
+        tallest_paper="$(extreme paper 1)"; tp_h="${tallest_paper%% *}"; tp_w="${tallest_paper#* }"
+        shortest_book="$(extreme book 0)";  sb_h="${shortest_book%% *}";  sb_w="${shortest_book#* }"
+        rendered_papers="$(printf '%s\n' "$records" | awk -F"$(printf '\t')" '$2 == "paper"' | grep -c . || true)"
+        if [ "$rendered_papers" -ne "$paper_count" ]; then
+            # The PAGE defect comes first: the markup lost the type, so the
+            # heights below have nothing to be graded per type. Reported rather
+            # than fatal, because the rest of the suite still has things to say.
+            bad "the page marks $rendered_papers spine(s) as papers and the canon types $paper_count" \
+                "the type has to survive into the markup for the section to render the two differently. If data-type stopped being emitted, the offprints are being drawn as books."
+        elif [ "$tp_h" -eq 0 ] || { [ "$book_count" -gt 0 ] && [ "$sb_h" -eq 0 ]; }; then
+            # THE READER'S OWN ZERO IS NOT A PASS. `extreme` returns 0 for a
+            # population it found nothing in, and the comparison below reads a
+            # zero book height as "there are no books to be shorter than" — so an
+            # `extreme` that silently matched nothing would report ok on a page
+            # where every offprint was drawn as a bound volume. The branch above
+            # has already established the markup carries both types, so a
+            # population the height reader cannot see is the instrument, not the
+            # page.
+            fatal "the canon holds $book_count book(s) and $paper_count paper(s), and the height reader
+       came back with ${sb_h}px and ${tp_h}px. extreme() is broken, not the page — its
+       zero passes the offprint comparison below vacuously."
+        elif [ "$book_count" -eq 0 ]; then
+            ok "every work in the canon is a paper, so there is no book to be shorter than"
+        elif [ "$tp_h" -ge "$sb_h" ]; then
+            bad "a paper renders at least as tall as a book: \"$tp_w\" at ${tp_h}px vs \"$sb_w\" at ${sb_h}px" \
+                "issue #274 asks for the papers to sit on the same board as slim flat offprints rather than as bound volumes. Both heights are derived per type in Shelf.astro; a paper reaching book height means the two scales have merged back into one and the page is shelving a conference paper as a book."
+        else
+            ok "all $paper_count paper(s) render as offprints, shorter than every one of the $book_count book(s) (${tp_h}px vs ${sb_h}px)"
+        fi
     fi
 fi
 
@@ -1579,6 +1795,121 @@ if [ -z "$(hero_book_count "$fixtures/hero-none.html")" ]; then
 else
     bad "hero_book_count invented a count from a page that has none" \
         "got: $(hero_book_count "$fixtures/hero-none.html")"
+fi
+
+# THE SECOND NOUN (issue #274). The eyebrow now advertises two populations, and
+# the live check grades them against each other — so a reader that returns the
+# book count for "papers", or the same number for both, would make the sum check
+# agree with itself. The fixture puts the two counts in one clause and gives the
+# papers count a value the books count does not have.
+cat > "$fixtures/hero-two.html" <<'HTML'
+<meta name="description" content="a pack of 8 books and 9 papers">
+<div class="eyebrow">Thirty skills · 42 books · 3 papers · One pipeline</div>
+HTML
+hero_two_books="$(hero_count "$fixtures/hero-two.html" books)"
+hero_two_papers="$(hero_count "$fixtures/hero-two.html" papers)"
+if [ "$hero_two_books" = "42" ] && [ "$hero_two_papers" = "3" ]; then
+    ok "hero_count reads each noun's own number out of a two-count eyebrow"
+else
+    bad "hero_count misread a two-count eyebrow" \
+        "got books=$hero_two_books papers=$hero_two_papers, want 42 and 3 — a reader that grades one noun with the other's number, or that reaches past the eyebrow into the meta description, makes the books/papers/sum comparison pass on numbers it never actually read"
+fi
+
+if [ -z "$(hero_count "$fixtures/hero.html" papers)" ]; then
+    ok "hero_count returns empty for a noun the eyebrow does not advertise"
+else
+    bad "hero_count invented a paper count from a books-only eyebrow" \
+        "got: $(hero_count "$fixtures/hero.html" papers) — the live check reads empty as 'the page dropped the papers clause', so a reader that invents a number hides exactly that regression"
+fi
+
+# THE SPINE READER, all three fields at once. `rendered_keys` above proves only
+# that the key survives; the order and offprint checks also need the type and the
+# height off the SAME element, and a reader that pairs a key with the wrong row's
+# height would grade a real page against a shuffled one.
+cat > "$fixtures/spines.html" <<'HTML'
+<button type="button" class="spine" style="--i:0; height:356px; background:#54364F; color:#F0E9D8;" title="t" aria-pressed="false" data-key="The Pragmatic Programmer &#38; Friends" data-type="book" data-astro-cid-x>
+<span class="label">The Pragmatic Programmer</span></button>
+<button type="button" class="spine" style="--i:1; height:122px;" title="t" aria-pressed="false" data-key="Du et al. (2023)" data-type="paper" data-astro-cid-x>
+<span class="label">Du et al.</span></button>
+HTML
+want_records="$(printf 'The Pragmatic Programmer & Friends\tbook\t356\nDu et al. (2023)\tpaper\t122\n')"
+got_records="$(spine_records "$fixtures/spines.html")"
+if [ "$got_records" = "$(printf '%s' "$want_records")" ]; then
+    ok "spine_records reads key, type and height off each spine, in document order, unescaped"
+else
+    bad "spine_records misread the spine markup" \
+        "got:
+$got_records
+want:
+$want_records
+a paper carries no inline background, so its style attribute is shorter than a book's — a reader keyed on the attribute's shape rather than on the fields drops one of the two"
+fi
+
+# THE ORDER ORACLE. It has to be capable of DISAGREEING with the page, which
+# means proving it ranks on the primary count rather than on the count the
+# component's height already encodes. The fixture inverts the two signals: the
+# work with fewer citations is the one more skills are built on.
+cat > "$fixtures/order.ts" <<'TS'
+export const canon: CanonWork[] = [
+	{
+		full: "Broadly Cited — B",
+		title: "Broadly Cited",
+		author: "B",
+		type: "book",
+		citations: [
+			{ skill: "a", tier: "secondary" },
+			{ skill: "b", tier: "secondary" },
+			{ skill: "c", tier: "secondary" },
+		],
+	},
+	{
+		full: "Core Lineage — A",
+		title: "Core Lineage",
+		author: "A",
+		type: "book",
+		citations: [
+			{ skill: "a", tier: "primary" },
+			{ skill: "b", tier: "primary" },
+		],
+	},
+];
+TS
+want_fixture_order="$(printf 'Core Lineage — A\nBroadly Cited — B\n')"
+got_fixture_order="$(shelf_order "$fixtures/order.ts")"
+if [ "$got_fixture_order" = "$(printf '%s' "$want_fixture_order")" ]; then
+    ok "shelf_order ranks core lineage above raw citation count, and is not the height rule re-read"
+else
+    bad "shelf_order did not rank on the primary count" \
+        "got:
+$got_fixture_order
+want:
+$want_fixture_order
+the fixture's more-cited work has no primary citation at all. A reader that ranks on the total would put it first — and would then agree with a page sorted the old way, which is the failure mode this whole oracle exists to avoid."
+fi
+
+# THE NARROWING TRIPWIRE, both directions. #274 loosened it to ignore whole-line
+# comments; the direction that matters is that it still catches the code.
+cat > "$fixtures/narrowed.astro" <<'ASTRO'
+---
+import { canon } from "../lib/canon.generated";
+// A comment about canon.filter(...) must not trip this.
+const spines = canon.slice(0, 12);
+---
+ASTRO
+if narrowed_hit="$(narrowing_calls "$fixtures/narrowed.astro")"; then
+    case "$narrowed_hit" in
+        *"canon.slice(0, 12)"*)
+            case "$narrowed_hit" in
+                *"A comment about"*)
+                    bad "narrowing_calls reported a comment as a narrowing call" "got: $narrowed_hit" ;;
+                *)
+                    ok "narrowing_calls catches a real narrowing call and ignores prose about one" ;;
+            esac ;;
+        *) bad "narrowing_calls reported something other than the narrowing call" "got: $narrowed_hit" ;;
+    esac
+else
+    bad "narrowing_calls missed a literal canon.slice() in the component" \
+        "issue #273's defect is a curated subset reaching the page. #274 taught this reader to skip comment lines so it would stop firing on prose; a reader that now skips the code too is worse than the false positive it replaced."
 fi
 
 cat > "$fixtures/spineless.html" <<'HTML'

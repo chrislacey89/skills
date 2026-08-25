@@ -9,10 +9,24 @@ import { canon } from "../lib/canon.generated";
 // drift #273 closed, surviving in the copy that points at it.
 // `scripts/test-canon-coverage.sh` compares this against the canon in the
 // BUILT page, so the derivation cannot be undone without a check going red.
+//
+// AND IT COUNTS THE TWO OBJECT TYPES SEPARATELY (issue #274). Deriving the
+// number fixed only half of it: the line went on saying "45 books" while three
+// of the forty-five were conference papers, so the page's own headline called a
+// paper a book — the thing #274 asked the section below to stop doing. The
+// papers clause is conditional because a canon with no papers should not
+// advertise "0 papers"; the contract suite grades each count against its own
+// population and their sum against the whole canon.
+const books = canon.filter((w) => w.type === "book").length;
+const papers = canon.length - books;
 ---
 
 <header class="hero wrap">
-	<div class="eyebrow">Thirty skills · {canon.length} books · One pipeline</div>
+	{/* ONE SOURCE LINE, DELIBERATELY. The suite's reader is `grep -o
+	    'class="eyebrow"[^<]*'`, which is line-based; breaking this element across
+	    lines puts a newline between the class and the counts and the reader comes
+	    back empty, which reports as "the eyebrow no longer advertises a count". */}
+	<div class="eyebrow">Thirty skills · {books} books{papers > 0 ? ` · ${papers} papers` : ""} · One pipeline</div>
 	<h1>Fifty years of software wisdom, <em>finally executable.</em></h1>
 	<p class="sub">
 		Install a delivery pipeline your coding agent actually follows — shape,
