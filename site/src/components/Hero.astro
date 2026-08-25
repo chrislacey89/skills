@@ -1,9 +1,18 @@
 ---
 import { repoUrl, installCommand, fullInstallCommand } from "../lib/data";
+import { canon } from "../lib/canon.generated";
+
+// The book count is derived, not written. It read "Eight books" until #273 —
+// correct when the shelf was a hand-picked eight, and quietly wrong from the
+// moment the canon started coming from `sources:` frontmatter. This is the one
+// line on the page that advertises the section, so a stale number here is the
+// drift #273 closed, surviving in the copy that points at it.
+// `scripts/test-canon-coverage.sh` compares this against the canon in the
+// BUILT page, so the derivation cannot be undone without a check going red.
 ---
 
 <header class="hero wrap">
-	<div class="eyebrow">Thirty skills · Eight books · One pipeline</div>
+	<div class="eyebrow">Thirty skills · {canon.length} books · One pipeline</div>
 	<h1>Fifty years of software wisdom, <em>finally executable.</em></h1>
 	<p class="sub">
 		Install a delivery pipeline your coding agent actually follows — shape,

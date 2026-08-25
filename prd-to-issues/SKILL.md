@@ -3,7 +3,7 @@ name: prd-to-issues
 description: "Primary pipeline decomposition step after /write-a-prd. Use when a shaped PRD is ready to become implementation-ready slices with boundary maps and dependency order. Not for unresolved scope, appetite, or solution direction."
 sources:
   primary:
-    - "The Pragmatic Programmer — Hunt & Thomas"
+    - "The Pragmatic Programmer — Andrew Hunt & David Thomas"
   secondary:
     - "Designing Web APIs — Jin, Sahni, Shevat"
     - "Software Estimation — Steve McConnell"

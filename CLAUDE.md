@@ -128,6 +128,8 @@ sources:
     - "Book Title — Author"
   secondary:
     - "Book Title — Author"
+  papers:
+    - "Paper Title — Author"      # optional type marker; see docs/skill-anatomy.md
 ---
 ```
 
@@ -142,6 +144,7 @@ When modifying a skill:
 - `sources` is an optional repo-local field, but expected for skills making substantive methodological claims
 - `primary` means core lineage — the skill is fundamentally built on this work
 - `secondary` means a supporting influence — a specific technique or check drawn from this work
+- `papers` is an optional type marker, not a third tier — every entry must also appear under `primary` or `secondary`, and `scripts/test-canon-coverage.sh` fails if it does not. Use it only for a work that is a paper rather than a book *and* whose author field carries no citation convention to read (no `et al.`, no trailing `(Venue Year)`); papers cited the normal way are typed without it. It exists because the landing page's canon section is derived from these blocks and renders papers as a different object than books
 - Do not put provenance into `description`; keep it optimized for triggering
 - Only claim a source if the skill body clearly operationalizes it
 - Prefer short source lists over comprehensive ones

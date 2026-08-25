@@ -3,7 +3,7 @@ name: handoff
 description: "Side-route skill for compacting the current session into a transient handoff doc when no pipeline compression artifact fits — mid-skill, exploratory, side-route, or non-pipeline work. Not for routine inter-skill handoffs; use the calling skill's closing summary + **Next session:** line instead."
 sources:
   primary:
-    - "The Design of Everyday Things — Donald A. Norman"
+    - "The Design of Everyday Things — Don Norman"
   secondary:
     - "Smart Brevity — Jim VandeHei, Mike Allen, Roy Schwartz"
     - "On Writing Well — William Zinsser"

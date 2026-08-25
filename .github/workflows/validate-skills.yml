@@ -132,6 +132,36 @@ jobs:
 
       - name: Run canon-coverage contract suite
         run: bash scripts/test-canon-coverage.sh
+        # NOTE: this run SKIPS the rendered-page check — site/dist does not exist
+        # here. The canon-render job below builds the site first so that check
+        # runs on every PR. Both invocations are deliberate: this one is fast and
+        # covers everything readable from source, that one is slow and is the only
+        # reading that sees the page a visitor gets.
 
       - name: Run shellcheck version-parity contract suite
         run: bash scripts/test-shellcheck-version-parity.sh
+
+      - name: Run absent-local-gate tell contract suite
+        run: bash scripts/test-absent-local-gate-tells.sh
+
+  # The canon section is generated from `sources:` frontmatter (issue #273). Every
+  # other check reads source files and reasons about what they would produce; this
+  # one builds the site and reads what was produced, which is the difference
+  # between "the component imports the canon" and "the reader can see all of it".
+  canon-render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+        working-directory: site
+
+      - run: npm run build
+        working-directory: site
+
+      - name: Run canon-coverage contract suite against the built page
+        run: bash scripts/test-canon-coverage.sh

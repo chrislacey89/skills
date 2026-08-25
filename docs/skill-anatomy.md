@@ -26,8 +26,18 @@ sources:
     - "Book Title — Author"
   secondary:
     - "Book Title — Author"
+  papers:
+    - "Paper Title — Author"
 ---
 ```
+
+`papers:` is optional and rarely needed. It is a *type marker*, not a third tier:
+each entry must also appear under `primary:` or `secondary:`, and a check fails
+if it does not. Use it only when a work is a paper rather than a book **and its
+author field carries no citation convention to read** — no `et al.`, no trailing
+`(Venue Year)`. Papers cited the normal way are detected without it. The landing
+page renders papers as a different object than books, so the marker is what stops
+a paper being shelved as a bound volume.
 
 ## Frontmatter rules
 
