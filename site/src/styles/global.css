@@ -97,14 +97,22 @@ a:hover {
 		opacity: 1;
 	}
 }
+/* `translate`, NOT `transform`. This runs with `animation-fill-mode: both`, and
+   an animation's value beats a plain declaration for as long as the fill holds —
+   so animating `transform` here left every spine pinned at `transform: none`
+   after the reveal, and the shelf's "pull the book off" lift (`.spine:hover` and
+   `.spine[aria-pressed="true"]`, both `translateY(-10px)`) silently did nothing.
+   `translate` is its own property and composes with `transform`, so the reveal
+   can hold its end state without owning the hover. Only `Shelf.astro` uses this
+   keyframe. */
 @keyframes spineRise {
 	from {
 		opacity: 0;
-		transform: translateY(46px);
+		translate: 0 46px;
 	}
 	to {
 		opacity: 1;
-		transform: none;
+		translate: 0 0;
 	}
 }
 
