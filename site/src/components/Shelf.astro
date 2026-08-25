@@ -307,7 +307,10 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 			inset -2px 0 5px rgba(0, 0, 0, 0.16),
 			inset 0 0 0 1px rgba(58, 53, 36, 0.28);
 	}
-	/* Two staples down the bound edge. */
+	/* Two staples down the bound edge: a 2px-wide box spanning the middle of the
+	   edge, showing only its top and bottom borders. Borders rather than gradient
+	   stops because there are exactly two marks and no field — percentage insets
+	   keep them proportional across the offprint's height band. */
 	.spine[data-type="paper"]::before {
 		content: "";
 		position: absolute;
@@ -315,9 +318,8 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 		top: 22%;
 		bottom: 22%;
 		width: 2px;
-		background:
-			linear-gradient(#6d6650 0 9px, transparent 9px) top / 2px 100% no-repeat,
-			linear-gradient(#6d6650 0 9px, transparent 9px) bottom / 2px 9px no-repeat;
+		border-top: 9px solid #6d6650;
+		border-bottom: 9px solid #6d6650;
 	}
 	.spine[data-type="paper"] .label {
 		font-family: var(--mono);
