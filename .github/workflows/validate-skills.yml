@@ -127,6 +127,9 @@ jobs:
       - name: Run oracle-table coverage suite
         run: bash scripts/test-oracle-table-coverage.sh
 
+      - name: Run duplicate-guard-program contract suite
+        run: bash scripts/test-duplicate-guard-programs.sh
+
       - name: Run widened-domain tell contract suite
         run: bash scripts/test-widened-domain-tell.sh
 
