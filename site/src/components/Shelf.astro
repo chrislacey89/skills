@@ -415,11 +415,20 @@ const papers = canon.length - books;
 		box-shadow:
 			0 6px 14px rgba(0, 0, 0, 0.4),
 			0 0 0 1px rgba(58, 53, 36, 0.5);
+		/* A BOUND EDGE THE ARTWORK DOES NOT REACH. Once every work had a cover
+		   image, the offprint's manila stock and staples were painted over by the
+		   art and the only cue left was the trim height. The strip reserves the
+		   bound edge as paper: the first page starts to the right of it, and the
+		   staples land on stock rather than on the artwork, so the cue reads
+		   whatever the paper's cover happens to be. */
+		box-sizing: border-box;
+		padding-left: 11px;
+		background: linear-gradient(160deg, #cdc3a6 0%, #b6aa8c 100%);
 	}
 	.volume[data-type="paper"] .face {
 		background: linear-gradient(160deg, #cdc3a6 0%, #b6aa8c 100%);
 		color: #3a3524;
-		padding: 12px 9px 10px 15px;
+		padding: 12px 9px 10px 6px;
 	}
 	.volume[data-type="paper"] .ftitle {
 		font-family: var(--mono);
@@ -439,12 +448,12 @@ const papers = canon.length - books;
 		content: "";
 		position: absolute;
 		z-index: 1;
-		left: 6px;
+		left: 4px;
 		top: 20%;
 		bottom: 20%;
-		width: 2px;
-		border-top: 8px solid #6d6650;
-		border-bottom: 8px solid #6d6650;
+		width: 3px;
+		border-top: 9px solid #6d6650;
+		border-bottom: 9px solid #6d6650;
 	}
 
 	/* The plank, drawn below the volume's box rather than inside it. */
