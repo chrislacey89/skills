@@ -49,6 +49,7 @@ export const canon: CanonWork[] = [
 		type: "paper",
 		citations: [
 			{ skill: "re-pitch", tier: "primary" },
+			{ skill: "tdd", tier: "secondary" },
 		],
 	},
 	{

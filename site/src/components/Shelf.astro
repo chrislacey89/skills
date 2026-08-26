@@ -1,5 +1,7 @@
 ---
+import fs from "node:fs";
 import { canon, type CanonWork } from "../lib/canon.generated";
+import { flagships } from "../lib/data";
 
 // EVERY DECLARED WORK, NOT A CURATED SUBSET (issue #273). The array below is
 // generated from `sources:` frontmatter, so this component must render all of
@@ -18,42 +20,58 @@ const weightOf = (w: CanonWork) => w.citations.length;
 const lineageOf = (w: CanonWork) =>
 	w.citations.reduce((n, c) => n + (c.tier === "primary" ? 1 : 0), 0);
 
-// TWO SIGNALS, TWO CHANNELS (issue #274). Height already carried breadth, and
-// #274 named the trade that left open: breadth is not centrality, and a bookcase
-// ranked by breadth alone buried the four books the pipeline is most
-// recognizably built on — *TDD By Example* sat 37th of 45, *Shape Up* 19th,
-// *Refactoring* 18th, *Domain-Driven Design* 17th, while works no skill calls
-// core lineage led the top board. So the ORDER is core lineage and the HEIGHT
-// stays breadth: two different claims, each read off the frontmatter, neither
-// standing in for the other.
+// THE TOP BOARD IS NAMED; THE REST OF THE CASE IS DERIVED. `flagships` is a
+// short hand-written order (see the note beside it in `data.ts` for why it is
+// safe where #273's hand-written canon was not) and it decides the front of the
+// shelf only. Everything it does not name falls in behind it in the order #274
+// derived: core lineage first, then breadth, then the declared string.
 //
-// The other option #274 weighed was a hand-ordered top board. It was rejected
-// for the reason the whole batch exists: a hand-ordered list of flagships is a
-// second hand-maintained canon, and it would drift out of step with the skills
-// exactly the way the eight-spine shelf did.
+// WHY THE DERIVED ORDER ALONE WAS NOT ENOUGH. It ranks by how many skills are
+// *built on* a work, which is a true statement about the pipeline and the wrong
+// first impression for a shelf of software engineering practice: it led with
+// *Thinking in Systems* and *The Design of Everyday Things* — the two books here
+// that are not about software — and left *Clean Architecture* 28th of 45,
+// *Continuous Delivery* 19th and *TDD By Example* 14th. An engineer scanning the
+// top row should see the books they already own.
+//
+// HEIGHT IS UNTOUCHED BY THIS. Naming the order does not restate the breadth
+// signal, so a flagship cited once is still the shortest book on the board —
+// *Clean Architecture* stands at the front of the case and is visibly slighter
+// than its neighbors, which is the honest reading of one primary citation.
 //
 // CODE-UNIT COMPARISON, NOT `localeCompare`. The tie-break has to be
 // reproducible off the machine that built the page: whether ICU treats the
-// hyphen in "Domain-Driven Design" as ignorable decides three spines' order, and
-// `scripts/test-canon-coverage.sh` asserts this exact sequence against a shell
-// `LC_ALL=C sort`. Comparing code units is what makes the two agree by
+// hyphen in "Domain-Driven Design" as ignorable decides three volumes' order,
+// and `scripts/test-canon-coverage.sh` asserts this exact sequence against a
+// shell `LC_ALL=C sort`. Comparing code units is what makes the two agree by
 // construction rather than by luck of the runtime's collation data.
-const spines = [...canon].sort(
+const flagshipRank = new Map(flagships.map((full, i) => [full, i]));
+const rankOf = (w: CanonWork) => flagshipRank.get(w.full) ?? Infinity;
+
+const volumes = [...canon].sort(
 	(a, b) =>
+		rankOf(a) - rankOf(b) ||
 		lineageOf(b) - lineageOf(a) ||
 		weightOf(b) - weightOf(a) ||
 		(a.full < b.full ? -1 : a.full > b.full ? 1 : 0),
 );
 
+// FACE-OUT, NOT EDGE-ON. The section used to be a rack of vertical spines, which
+// is what a shelf looks like when the books are *stored*; a bookcase you are
+// invited to browse turns them to face you. Turning them out is also what lets a
+// work carry its own cover, so the reader recognizes the book before reading a
+// word — the whole point of shelving a canon rather than listing it.
+//
 // A HEIGHT BAND PER OBJECT TYPE. #274: "Books and papers are different objects.
 // Whatever form the section takes should be able to render both without
 // pretending the papers are books." A bound volume and a stapled offprint do not
-// share a height, so they do not share a scale — the paper band sits entirely
+// share a trim size, so they do not share a scale — the paper band sits entirely
 // below the book band, and each type's weight is read against its own peers so
-// breadth still shows *within* a type.
-const BANDS = {
-	book: { min: 214, max: 356 },
-	paper: { min: 122, max: 168 },
+// breadth still shows *within* a type. The width follows from the height, so the
+// only number a work needs is one: books at 2:3, offprints squatter at ~1:1.28.
+const TRIM = {
+	book: { min: 140, max: 176, ratio: 0.68 },
+	paper: { min: 96, max: 116, ratio: 0.8 },
 } as const;
 
 // Per-type weight extents, accumulated in a loop rather than with
@@ -74,24 +92,64 @@ for (const w of canon) {
 
 function heightOf(w: CanonWork): number {
 	const { lo, hi } = extents[w.type];
-	const band = BANDS[w.type];
+	const trim = TRIM[w.type];
 	const span = hi - lo;
 	const t = span <= 0 ? 1 : (weightOf(w) - lo) / span;
-	return Math.round(band.min + t * (band.max - band.min));
+	return Math.round(trim.min + t * (trim.max - trim.min));
 }
 
-// A fixed palette, assigned by a stable hash of the declared string. Forty-five
-// spines cannot be hand-tinted, and a hash keeps a work's color from shifting
-// every time an unrelated skill adds a source.
+const widthOf = (w: CanonWork) => Math.round(heightOf(w) * TRIM[w.type].ratio);
+
+/**
+ * COVER ART IS OPTIONAL AND ITS FILENAME IS DERIVED, NOT MAPPED. A cover file
+ * is a hand-made asset and there is no generator for one, so the page cannot
+ * require it: a work with no art gets the printed cover below, and a newly
+ * declared source therefore reaches the shelf the moment its `sources:` line
+ * lands, art or no art. That is the same property #273 bought — nothing about
+ * curation may keep a declared work off the page.
+ *
+ * The lookup is `site/public/canon/<slugified title>.<ext>`, read off disk at
+ * build time. A slug computed from the title is deliberately not a lookup table:
+ * a table beside the canon is a second hand-maintained list, which is the defect
+ * #273 removed. Drop `domain-driven-design.jpg` in that directory and the
+ * *Domain-Driven Design* cover appears with no code change.
+ */
+const slugify = (s: string) =>
+	s
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+
+const artDir = new URL("../../public/canon/", import.meta.url);
+const artFiles = fs.existsSync(artDir) ? fs.readdirSync(artDir) : [];
+const artByStem = new Map<string, string>();
+for (const file of artFiles) {
+	const dot = file.lastIndexOf(".");
+	if (dot > 0) artByStem.set(file.slice(0, dot), file);
+}
+// THROUGH `BASE_URL`, LIKE EVERY OTHER STATIC ASSET ON THIS PAGE. The site is
+// served from a project-pages subpath (`/skills`), so a root-absolute
+// `/canon/x.jpg` resolves fine on `localhost:4321` and 404s in production —
+// the failure mode is a wall of broken covers on the deployed page only.
+// `Layout.astro` trims the same trailing slash for the favicon and the OG image.
+const assetBase = import.meta.env.BASE_URL.replace(/\/$/, "");
+const artFor = (w: CanonWork) => {
+	const file = artByStem.get(slugify(w.title));
+	return file ? `${assetBase}/canon/${file}` : null;
+};
+
+// A fixed palette for the printed covers, assigned by a stable hash of the
+// declared string. Forty-five covers cannot be hand-tinted, and a hash keeps a
+// work's color from shifting every time an unrelated skill adds a source.
 const PALETTE = [
-	{ color: "#7A3B2E", ink: "#F0E9D8" },
-	{ color: "#31536B", ink: "#F0E9D8" },
-	{ color: "#6B5B2E", ink: "#F0E9D8" },
-	{ color: "#3E5C46", ink: "#F0E9D8" },
-	{ color: "#54364F", ink: "#F0E9D8" },
-	{ color: "#2E4A52", ink: "#F0E9D8" },
-	{ color: "#8A6A32", ink: "#1C2822" },
-	{ color: "#2F4238", ink: "#F0E9D8" },
+	{ cloth: "#7A3B2E", ink: "#F0E9D8" },
+	{ cloth: "#31536B", ink: "#F0E9D8" },
+	{ cloth: "#6B5B2E", ink: "#F0E9D8" },
+	{ cloth: "#3E5C46", ink: "#F0E9D8" },
+	{ cloth: "#54364F", ink: "#F0E9D8" },
+	{ cloth: "#2E4A52", ink: "#F0E9D8" },
+	{ cloth: "#8A6A32", ink: "#1C2822" },
+	{ cloth: "#2F4238", ink: "#F0E9D8" },
 ];
 
 function paletteOf(full: string) {
@@ -101,66 +159,94 @@ function paletteOf(full: string) {
 }
 
 /**
- * The inline style for one spine. Height is per work, so it is emitted here;
- * the offprint's surface is one rule for all papers, so it is not.
+ * The inline style for one volume. Trim size is per work, so it is emitted here;
+ * the offprint's stock and the cloth's weave are one rule each for the whole
+ * type, so they are not.
  *
- * A PAPER GETS NO INLINE COLOR ON PURPOSE. An inline `background` would win over
- * the stylesheet, so the offprint could not be given its own manila stock and
- * stapled edge without repeating them per element. Leaving the paper's surface
- * to CSS is also what keeps the two definitions of "different object" from
- * splitting: the height reaches the HTML where the contract suite can grade it,
- * and everything else is one selector a reader can find in one place.
+ * `height` IS EMITTED AS A LITERAL, not only as the `--h` custom property that
+ * the plank reads. The contract suite grades the two height bands off the built
+ * HTML — it is the one part of "a paper is a different object than a book" that
+ * reaches the markup as a value a shell can compare — and `--h:176px` does not
+ * contain the string `height:`.
  */
 function styleOf(w: CanonWork, i: number): string {
-	const base = `--i:${Math.min(i, 24)}; height:${heightOf(w)}px;`;
+	const h = heightOf(w);
+	const base = `--i:${Math.min(i, 24)}; height:${h}px; --h:${h}px; --vol-w:${widthOf(w)}px;`;
 	if (w.type === "paper") return base;
-	const { color, ink } = paletteOf(w.full);
-	return `${base} background:${color}; color:${ink};`;
+	const { cloth, ink } = paletteOf(w.full);
+	return `${base} --cloth:${cloth}; --ink:${ink};`;
 }
 
 /**
- * What the edge of the object actually shows. A bound spine carries its title;
- * an offprint's stapled edge does not, and the two papers here have 65- and
- * 78-character titles that no 168px edge can hold. So a paper shows its citation
- * — "Liang et al. (EMNLP 2024)" — which is how a paper is referred to anyway.
- * The full string is on the tooltip and on the opened spread either way.
+ * What the printed cover shows where a real cover would show its own type. A
+ * paper gets its citation — "Liang et al. (EMNLP 2024)" — which is how a paper
+ * is referred to anyway, and which fits an offprint's face where a 78-character
+ * title does not.
  */
-const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
+const faceTitle = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
+
+// The lede's two counts, tallied in the same pass as the extents rather than
+// with `canon.filter(...)` — see the note on `extents` above for why this file
+// avoids that call. `Hero.astro` derives the same split for its eyebrow, and
+// `scripts/test-canon-coverage.sh` grades that one against the canon.
+let books = 0;
+for (const w of canon) if (w.type === "book") books++;
+const papers = canon.length - books;
 ---
 
 <section id="canon" class="canon">
 	<div class="wrap">
 		<div class="head">
 			<div class="eyebrow">The canon</div>
-			<h2>The shelf behind the skills</h2>
+			<h2>The whole shelf, not a selection</h2>
+			<p class="lede">
+				Every work cited in <code>sources:</code> frontmatter across the pack —
+				{books} books and {papers} papers. The ones an engineer knows on sight
+				come first; the rest follow by how many skills are built on them, and
+				every volume stands taller where more of them cite it. Pull any one off
+				the shelf to see which skills draw on it.
+			</p>
 		</div>
 
-		<div class="shelf" data-shelf>
+		<div class="bookcase" data-bookcase>
 			{
-				spines.map((w, i) => (
-					<button
-						type="button"
-						class="spine"
-						style={styleOf(w, i)}
-						title={`${w.full} — cited by ${w.citations.length} skill${w.citations.length === 1 ? "" : "s"}`}
-						aria-pressed="false"
-						data-key={w.full}
-						data-type={w.type}
-					>
-						<span class="label">{edgeLabel(w)}</span>
-					</button>
-				))
+				volumes.map((w, i) => {
+					const art = artFor(w);
+					return (
+						<button
+							type="button"
+							class="volume"
+							style={styleOf(w, i)}
+							title={`${w.full} — cited by ${w.citations.length} skill${w.citations.length === 1 ? "" : "s"}`}
+							aria-haspopup="dialog"
+							aria-pressed="false"
+							data-key={w.full}
+							data-type={w.type}
+						>
+							{art ? (
+								<img class="art" src={art} alt="" loading="lazy" decoding="async" />
+							) : (
+								<span class="face">
+									<span class="ftitle">{faceTitle(w)}</span>
+									<span class="fauthor">{w.author}</span>
+								</span>
+							)}
+						</button>
+					);
+				})
 			}
 		</div>
-		<div class="detail-slot" data-detail></div>
 
 		<p class="hint" data-hint>
-			Pull a book off the shelf — all {canon.length} works the skills cite,
-			ordered by how many are built on them and taller where more of them cite
-			it. Each SKILL.md names its sources in frontmatter.
+			Each SKILL.md names its sources in frontmatter; this case is built from
+			those lines, so it is never a shorter list than the pack actually cites.
 		</p>
 	</div>
 </section>
+
+<div class="veil" data-veil hidden>
+	<div class="book" role="dialog" aria-modal="true" aria-label="Canon work" data-book></div>
+</div>
 
 <style>
 	.canon {
@@ -172,7 +258,7 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 	}
 	.head {
 		text-align: center;
-		margin-bottom: 56px;
+		margin-bottom: 52px;
 	}
 	.head .eyebrow {
 		margin-bottom: 14px;
@@ -181,26 +267,35 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 		font-family: var(--display);
 		font-weight: 500;
 		font-size: 44px;
-		margin: 0;
+		margin: 0 0 14px;
+	}
+	.lede {
+		color: var(--sage);
+		font-size: 16px;
+		max-width: 640px;
+		margin: 0 auto;
+		text-wrap: pretty;
+	}
+	.lede code {
+		font-family: var(--mono);
+		font-size: 14px;
+		color: var(--gold);
 	}
 
-	/* THE BOARD IS DRAWN PER SPINE, WHICH IS WHAT LETS A ROW BE ITS OWN HEIGHT.
+	/* THE BOARD IS DRAWN PER VOLUME, WHICH IS WHAT LETS A ROW BE ITS OWN HEIGHT.
 	   #273 wrapped the row and painted the board as a repeating background at a
 	   fixed pitch, which is the only way to hit every implicit row when they are
 	   all the same height — and it forced every row to reserve the height of the
-	   tallest spine in the whole canon. Rows two through four topped out at 229px
-	   inside a 400px band, so the section carried ~430px of void and read as four
-	   shelves floating in the dark. Its own comment called that a minimum repair
-	   and handed the form to this issue.
+	   tallest object in the whole canon, leaving ~430px of void under four
+	   shelves floating in the dark.
 
-	   Each spine now paints the plank under itself, bleeding half a gutter to
+	   Each volume now paints the plank under itself, bleeding half a gutter to
 	   either side so neighboring segments meet with no seam, and the grid rows
 	   size to their content. The last row's plank stops at the last book, which
 	   is the honest picture: the case is not full. */
-	.shelf {
+	.bookcase {
 		--board-h: 13px;
-		--col-w: 84px;
-		--gutter: 10px;
+		--col-w: 132px;
 
 		display: grid;
 		grid-template-columns: repeat(auto-fit, var(--col-w));
@@ -208,141 +303,231 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 		align-items: end;
 		justify-items: center;
 		justify-content: center;
-		row-gap: 34px;
+		row-gap: 30px;
 	}
 
-	.spine {
+	.volume {
 		position: relative;
-		/* Declared as a variable because the plank below has to span the whole
-		   COLUMN, not the object standing on it — and an offprint is much
-		   narrower than a book. Reading the width off a custom property is what
-		   lets one rule size both. */
-		--spine-w: calc(var(--col-w) - var(--gutter));
-		width: var(--spine-w);
+		width: var(--vol-w);
 		margin-bottom: var(--board-h);
-		/* NO `overflow: hidden` HERE. It used to do the label's clipping, and it
-		   also clipped the plank below — a pseudo-element at `top: 100%` is still
-		   a child. The label now owns its own overflow (see `.label`), which is
-		   where the constraint belongs anyway. */
+		padding: 0;
 		border: none;
-		border-radius: 3px 3px 0 0;
-		display: flex;
-		align-items: flex-end;
-		justify-content: center;
-		padding: 14px 4px;
+		border-radius: 1px 3px 3px 1px;
 		cursor: pointer;
-		box-shadow:
-			inset -6px 0 10px rgba(0, 0, 0, 0.28),
-			inset 2px 0 0 rgba(255, 255, 255, 0.12);
-		transition:
-			transform 0.25s ease,
-			box-shadow 0.25s ease;
 		font: inherit;
-	}
-	/* The plank, drawn below the spine's box rather than inside it. Nothing on
-	   `.spine` may clip its children or this disappears — see the note there. */
-	.spine::after {
-		content: "";
-		position: absolute;
-		/* Bleed out to the column's edges — half the empty space on each side —
-		   so neighboring segments meet exactly and read as one plank. Anchoring
-		   to the gutter instead would size the segment to the spine, which is
-		   right for a 74px book and leaves a 28px hole under a 46px offprint. */
-		inset-inline: calc((var(--col-w) - var(--spine-w)) / -2);
-		top: 100%;
-		height: var(--board-h);
-		background: linear-gradient(180deg, #5c4a2e 0%, #3e3120 100%);
-		box-shadow: 0 3px 7px rgba(0, 0, 0, 0.42);
-		/* Same easing as the spine, so the two stay in lockstep for the whole
-		   pull rather than only at the ends of it. */
-		transition: transform 0.25s ease;
-	}
-	.spine:hover {
-		transform: translateY(-10px);
-	}
-	/* The plank does not move with the book that was pulled off it: the spine's
-	   transform carries the pseudo-element along, and this puts it back. */
-	.spine:hover::after,
-	.spine[aria-pressed="true"]::after {
-		transform: translateY(10px);
-	}
-	.spine .label {
-		writing-mode: vertical-rl;
-		transform: rotate(180deg);
-		font-family: var(--display);
-		font-size: 14.5px;
-		letter-spacing: 0.04em;
-		line-height: 1.22;
-		text-align: center;
-		/* WRAP RATHER THAN CLIP. `white-space: nowrap` put the longest titles —
-		   "Growing Object-Oriented Software, Guided by Tests" at 48 characters —
-		   off the top of the spine mid-word, with no ellipsis, because
-		   `text-overflow` does not apply to a vertical overflow. Two vertical
-		   lines hold every title in the canon and read like a real spine.
-
-		   IN `vertical-rl` THE AXES SWAP: the INLINE axis runs down the spine and
-		   the BLOCK axis runs across it. So `max-inline-size` is what caps the
-		   title's run and makes it wrap, and `max-block-size` is what keeps the
-		   wrapped lines inside the spine's width. Both, or the wrap depends on
-		   the flex container's incidental sizing. */
-		max-inline-size: 100%;
-		max-block-size: 100%;
+		display: flex;
 		overflow: hidden;
+		/* Dimmed at rest so the wall reads as one object and the one you are
+		   pointing at reads as picked up. */
+		filter: brightness(0.74) saturate(0.85);
+		box-shadow:
+			0 10px 20px rgba(0, 0, 0, 0.45),
+			0 0 0 1px rgba(0, 0, 0, 0.35);
+		transform-origin: 50% 100%;
+		transition:
+			transform 0.26s cubic-bezier(0.2, 0.8, 0.3, 1),
+			filter 0.26s ease,
+			box-shadow 0.26s ease;
+	}
+	/* NO `overflow: hidden` MAY REACH THE PLANK. The board below is a
+	   pseudo-element at `top: 100%` and is still a child, so the clipping that
+	   keeps a cover inside its own trim lives on `.volume` — which does clip it.
+	   The plank is therefore drawn by a *wrapper-free* second pseudo-element on
+	   the grid item itself via `::after` on `.volume`, and `overflow` is scoped
+	   to the cover layers (`.art`, `.face`) rather than the button. */
+	.volume {
+		overflow: visible;
+	}
+	.art,
+	.face {
+		width: 100%;
+		height: 100%;
+		overflow: hidden;
+		border-radius: inherit;
+	}
+	.art {
+		object-fit: cover;
+		display: block;
+	}
+
+	/* The printed cover: what a work looks like when no scan of its jacket is on
+	   disk. Cloth, a blind-stamped rule, the title set in the page's display
+	   face, and a darker strip down the bound edge so a face-out book still reads
+	   as a three-dimensional object rather than a colored rectangle. */
+	.face {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 12px 10px 10px 14px;
+		box-sizing: border-box;
+		text-align: left;
+		background:
+			linear-gradient(
+				90deg,
+				rgba(0, 0, 0, 0.34) 0 5px,
+				rgba(255, 255, 255, 0.09) 5px 7px,
+				transparent 7px
+			),
+			linear-gradient(160deg, var(--cloth) 0%, rgba(0, 0, 0, 0.35) 190%);
+		color: var(--ink);
+	}
+	/* BOTH LINES ARE CLAMPED, because a cover is a fixed object and the titles
+	   are not: "Growing Object-Oriented Software, Guided by Tests" is 48
+	   characters against a 116px trim, and unclamped it ran straight through the
+	   author rule and out of the jacket. `line-clamp` truncates at a line
+	   boundary with an ellipsis, so a long title reads as a title continuing
+	   rather than as a layout bug, and `min-height: 0` is what lets a flex child
+	   shrink below its content in the first place. */
+	.ftitle,
+	.fauthor {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		min-height: 0;
+		hyphens: auto;
+		/* `hyphens` only fires where the browser has hyphenation data for the
+		   document's language; `overflow-wrap` is the unconditional backstop, and
+		   without it "Documentation" — one word wider than the narrowest trim —
+		   printed straight off the edge of the jacket.
+		   `break-word`, NOT `anywhere`: both break a word that cannot fit a line
+		   on its own, but `anywhere` also offers those break points to intrinsic
+		   sizing, which had the flex box choose a narrower line and strand a
+		   single letter ("Requirement" / "s") on covers where the whole word
+		   would have fit. */
+		overflow-wrap: break-word;
+	}
+	.ftitle {
+		font-family: var(--display);
+		font-size: 12px;
+		line-height: 1.2;
+		letter-spacing: 0.01em;
+		-webkit-line-clamp: 6;
+		line-clamp: 6;
+	}
+	.fauthor {
+		flex: none;
+		font-size: 8px;
+		line-height: 1.35;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		opacity: 0.72;
+		border-top: 1px solid currentColor;
+		padding-top: 6px;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 	}
 
 	/* ── The offprint ──────────────────────────────────────────────
 	   Issue #274: books and papers are different objects, and the section has to
 	   render both without pretending the papers are books. A conference paper is
-	   not a bound volume — it is a slim stapled offprint, so it is narrower, on
+	   not a bound volume — it is a slim stapled offprint, so it is squatter, on
 	   plain manila stock rather than dyed cloth, square-cornered, flat instead of
-	   rounded under a cloth shadow, and stapled twice down its edge. Its height
-	   comes from its own band (see BANDS above), which puts every offprint below
-	   every book on the board. */
-	.spine[data-type="paper"] {
-		--spine-w: 46px;
+	   rounded under a cloth shadow, and stapled twice down its edge. Its trim
+	   size comes from its own band (see TRIM above), which puts every offprint
+	   below every book on the board. */
+	.volume[data-type="paper"] {
 		border-radius: 0;
-		background: linear-gradient(94deg, #cdc3a6 0%, #bdb193 100%);
-		color: #3a3524;
-		padding: 12px 3px;
 		box-shadow:
-			inset -2px 0 5px rgba(0, 0, 0, 0.16),
-			inset 0 0 0 1px rgba(58, 53, 36, 0.28);
+			0 6px 14px rgba(0, 0, 0, 0.4),
+			0 0 0 1px rgba(58, 53, 36, 0.5);
+		/* A BOUND EDGE THE ARTWORK DOES NOT REACH. Once every work had a cover
+		   image, the offprint's manila stock and staples were painted over by the
+		   art and the only cue left was the trim height. The strip reserves the
+		   bound edge as paper: the first page starts to the right of it, and the
+		   staples land on stock rather than on the artwork, so the cue reads
+		   whatever the paper's cover happens to be. */
+		box-sizing: border-box;
+		padding-left: 11px;
+		background: linear-gradient(160deg, #cdc3a6 0%, #b6aa8c 100%);
+	}
+	.volume[data-type="paper"] .face {
+		background: linear-gradient(160deg, #cdc3a6 0%, #b6aa8c 100%);
+		color: #3a3524;
+		padding: 12px 9px 10px 6px;
+	}
+	.volume[data-type="paper"] .ftitle {
+		font-family: var(--mono);
+		font-size: 9.5px;
+		line-height: 1.32;
+		-webkit-line-clamp: 5;
+		line-clamp: 5;
+	}
+	.volume[data-type="paper"] .fauthor {
+		display: none;
 	}
 	/* Two staples down the bound edge: a 2px-wide box spanning the middle of the
 	   edge, showing only its top and bottom borders. Borders rather than gradient
 	   stops because there are exactly two marks and no field — percentage insets
-	   keep them proportional across the offprint's height band. */
-	.spine[data-type="paper"]::before {
+	   keep them proportional across the offprint's trim band. */
+	.volume[data-type="paper"]::before {
 		content: "";
 		position: absolute;
-		left: 6px;
-		top: 22%;
-		bottom: 22%;
-		width: 2px;
+		z-index: 1;
+		left: 4px;
+		top: 20%;
+		bottom: 20%;
+		width: 3px;
 		border-top: 9px solid #6d6650;
 		border-bottom: 9px solid #6d6650;
 	}
-	.spine[data-type="paper"] .label {
-		font-family: var(--mono);
-		font-size: 10.5px;
-		letter-spacing: 0.01em;
+
+	/* The plank, drawn below the volume's box rather than inside it. */
+	.volume::after {
+		content: "";
+		position: absolute;
+		/* Bleed out to the column's edges — half the empty space on each side —
+		   so neighboring segments meet exactly and read as one plank. Anchoring
+		   to a fixed gutter instead would size the segment to the object, which
+		   is right for a wide book and leaves a hole under a slim offprint. */
+		inset-inline: calc((var(--col-w) - var(--vol-w)) / -2);
+		top: 100%;
+		height: var(--board-h);
+		background: linear-gradient(180deg, #5c4a2e 0%, #4a3b24 55%, #33291a 100%);
+		box-shadow:
+			0 12px 26px rgba(0, 0, 0, 0.5),
+			inset 0 1px 0 rgba(255, 255, 255, 0.09);
+		/* Same easing as the volume, so the two stay in lockstep for the whole
+		   pull rather than only at the ends of it. */
+		transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.3, 1);
+	}
+	.volume:hover,
+	.volume:focus-visible {
+		transform: translateY(-12px) scale(1.04);
+		filter: none;
+		box-shadow:
+			0 22px 34px rgba(0, 0, 0, 0.6),
+			0 0 0 1px rgba(0, 0, 0, 0.4);
+		outline: none;
+	}
+	.volume:focus-visible {
+		box-shadow:
+			0 22px 34px rgba(0, 0, 0, 0.6),
+			0 0 0 2px var(--gold);
+	}
+	/* The plank does not move with the book that was pulled off it: the volume's
+	   transform carries the pseudo-element along, and this puts it back. */
+	.volume:hover::after,
+	.volume:focus-visible::after {
+		transform: translateY(12px) scale(0.962);
+	}
+	.volume[aria-pressed="true"] {
+		transform: translateY(-12px) scale(1.03);
+		filter: none;
+		box-shadow:
+			0 22px 34px rgba(0, 0, 0, 0.6),
+			0 0 0 2px var(--gold);
+	}
+	.volume[aria-pressed="true"]::after {
+		transform: translateY(12px) scale(0.97);
 	}
 
 	/* Scroll-reveal: hide only when JS can bring them back. */
-	:global(.has-js) .shelf .spine {
+	:global(.has-js) .bookcase .volume {
 		opacity: 0;
 	}
-	:global(.has-js) .shelf[data-revealed] .spine {
-		animation: spineRise 0.6s cubic-bezier(0.22, 1, 0.36, 1)
-			calc(var(--i) * 0.09s) both;
-	}
-
-	.spine[aria-pressed="true"] {
-		transform: translateY(-10px);
-		box-shadow:
-			inset -6px 0 10px rgba(0, 0, 0, 0.28),
-			inset 2px 0 0 rgba(255, 255, 255, 0.12),
-			0 0 0 2px var(--gold);
+	:global(.has-js) .bookcase[data-revealed] .volume {
+		animation: coverRise 0.5s ease calc(var(--i) * 0.035s) both;
 	}
 
 	.hint {
@@ -350,120 +535,223 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 		color: var(--muted);
 		font-size: 14.5px;
 		font-style: italic;
-		margin: 36px auto 0;
+		margin: 40px auto 0;
 		max-width: 560px;
 	}
 
-	/* ── Open book ─────────────────────────────────────────────── */
-	.detail-slot :global(.book) {
-		max-width: 920px;
-		margin: 44px auto 0;
-		perspective: 1600px;
-		animation: bookArrive 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+	/* ── The opened book ───────────────────────────────────────────
+	   The spread used to open *under* the case, which pushed six rows of covers
+	   down the page every time one was picked up. Lifting it into an overlay
+	   keeps the wall still and puts the page you are reading at the center of the
+	   screen, which is what picking a book up actually does. */
+	.veil {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		background: rgba(12, 18, 15, 0.78);
+		backdrop-filter: blur(3px);
+		display: flex;
+		align-items: flex-start;
+		justify-content: center;
+		padding: 40px 24px;
+		overflow-y: auto;
+		animation: veilIn 0.28s ease both;
 	}
-	.detail-slot :global(.spread) {
+	.veil[hidden] {
+		display: none;
+	}
+	.book {
+		width: 100%;
+		max-width: 880px;
+		margin: auto;
+		flex: 0 0 auto;
+		perspective: 1800px;
+		animation: bookLift 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+	.book :global(.spread) {
+		position: relative;
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		border-radius: 4px 10px 10px 4px;
-		box-shadow: 0 24px 50px rgba(0, 0, 0, 0.5);
-		position: relative;
+		box-shadow: 0 34px 70px rgba(0, 0, 0, 0.6);
 		transform-style: preserve-3d;
 	}
-	.detail-slot :global(.page) {
-		color: #2a2a22;
-		padding: 42px 38px 46px;
+	.book :global(.pclose) {
+		position: absolute;
+		z-index: 2;
+		top: 12px;
+		right: 14px;
+		font: inherit;
+		font-size: 11px;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
+		color: #8a7b54;
+		cursor: pointer;
+		padding: 6px 9px;
+		background: rgba(242, 235, 218, 0.9);
+		border: 1px solid #d3c6a2;
+		border-radius: 3px;
 	}
-	.detail-slot :global(.page-left) {
+	.book :global(.pclose:hover) {
+		color: #a4552f;
+		border-color: #a4552f;
+	}
+	.book :global(.page) {
+		color: #2a2a22;
+		padding: 34px 32px 36px;
+	}
+	.book :global(.page-left) {
 		background: linear-gradient(100deg, #ede4ce 88%, #ddd2b6 100%);
 		border-radius: 4px 0 0 4px;
 		border-right: 1px solid #c9bc9e;
 		box-shadow: inset -18px 0 24px -14px rgba(0, 0, 0, 0.28);
 	}
-	.detail-slot :global(.page-right) {
+	.book :global(.page-right) {
 		background: linear-gradient(260deg, #f2ebda 88%, #e2d8be 100%);
 		border-radius: 0 10px 10px 0;
 		box-shadow: inset 18px 0 24px -14px rgba(0, 0, 0, 0.22);
 		transform-origin: left center;
-		animation: pageOpen 0.85s cubic-bezier(0.25, 0.9, 0.3, 1) 0.2s both;
+		animation: pageOpen 0.8s cubic-bezier(0.25, 0.9, 0.3, 1) 0.12s both;
 		backface-visibility: hidden;
 	}
-	.detail-slot :global(.page-right-inner) {
-		animation: inkFade 0.5s ease 0.75s both;
+	.book :global(.page-right-inner) {
+		animation: inkFade 0.45s ease 0.66s both;
 	}
-	.detail-slot :global(.plabel) {
+	.book :global(.pcover) {
+		display: flex;
+		justify-content: center;
+		margin-bottom: 22px;
+	}
+	.book :global(.pcover) {
+		align-items: flex-end;
+	}
+	.book :global(.pcover img),
+	.book :global(.pcover .facsimile) {
+		width: 138px;
+		height: 202px;
+		object-fit: cover;
+		box-shadow:
+			0 14px 28px rgba(0, 0, 0, 0.3),
+			0 0 0 1px rgba(0, 0, 0, 0.14);
+	}
+	/* The printed cover again, at reading size, for a work with no jacket on
+	   disk. Same two lines as the shelf face so the object the reader just
+	   clicked is the object that opened. */
+	.book :global(.facsimile) {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		box-sizing: border-box;
+		padding: 20px 18px;
+		background: linear-gradient(160deg, #e7dcbf 0%, #d8cba6 100%);
+		border: 1px solid rgba(122, 92, 30, 0.3);
+	}
+	.book :global(.facsimile .ft) {
+		font-family: var(--display);
+		font-size: 19px;
+		line-height: 1.18;
+		color: #3e3a2c;
+		text-wrap: pretty;
+	}
+	.book :global(.facsimile .fa) {
+		font-size: 9px;
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+		color: #8a7b54;
+	}
+	.book :global(.facsimile[data-type="paper"]) {
+		/* Same trim ratio the case gives an offprint (~1:1.28), and bottom-aligned
+		   with the book slot by `.pcover`, so the page shows what the shelf did:
+		   a shorter, squatter object. */
+		width: 123px;
+		height: 158px;
+		background: linear-gradient(160deg, #cdc3a6 0%, #b6aa8c 100%);
+		border: 1px solid rgba(58, 53, 36, 0.4);
+	}
+	.book :global(.facsimile[data-type="paper"] .ft) {
+		font-family: var(--mono);
+		font-size: 13px;
+		line-height: 1.35;
+	}
+	.book :global(.plabel) {
 		font-size: 11px;
 		letter-spacing: 0.26em;
 		text-transform: uppercase;
 		color: #8a7b54;
+		margin-bottom: 20px;
+	}
+	.book :global(.ptitle) {
+		font-family: var(--display);
+		font-size: 27px;
+		line-height: 1.13;
+		margin-bottom: 5px;
+		text-wrap: pretty;
+	}
+	.book :global(.pauthor) {
+		font-family: var(--display);
+		font-style: italic;
+		font-size: 15.5px;
+		color: #6e6448;
 		margin-bottom: 22px;
 	}
-	.detail-slot :global(.ptitle) {
-		font-family: var(--display);
-		font-size: 30px;
-		line-height: 1.12;
-		margin-bottom: 6px;
-	}
-	.detail-slot :global(.pauthor) {
-		font-family: var(--display);
-		font-style: italic;
-		font-size: 16px;
-		color: #6e6448;
-		margin-bottom: 26px;
-	}
-	.detail-slot :global(.plesson) {
-		font-family: var(--display);
-		font-style: italic;
-		font-size: 20px;
-		line-height: 1.45;
-		color: #3e3a2c;
-		border-top: 1px solid #c9bc9e;
-		padding-top: 22px;
-	}
-	.detail-slot :global(.pprovenance) {
+	.book :global(.pprovenance) {
 		font-size: 13.5px;
 		letter-spacing: 0.02em;
 		color: #6e6448;
 		border-top: 1px solid #c9bc9e;
-		padding-top: 20px;
+		padding-top: 18px;
 	}
-	/* The lesson is optional, so its spacing cannot assume it is present. */
-	.detail-slot :global(.pprovenance + .plesson) {
-		border-top: none;
-		padding-top: 20px;
+	.book :global(.plesson) {
+		font-family: var(--display);
+		font-style: italic;
+		font-size: 19px;
+		line-height: 1.44;
+		color: #3e3a2c;
+		padding-top: 18px;
 	}
-	.detail-slot :global(.pcites) {
+	.book :global(.pcites) {
 		list-style: none;
-		margin: 0 0 26px;
+		margin: 0 0 24px;
 		padding: 0;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 8px 14px;
+		gap: 8px;
 	}
-	.detail-slot :global(.pcite) {
+	.book :global(.plink) {
+		font-family: var(--mono);
+		font-size: 13px;
+		color: #7a5c1e;
+		background: #e7dcbf;
+		border: 1px solid #d3c6a2;
+		border-radius: 3px;
+		padding: 6px 11px;
 		display: inline-flex;
 		align-items: baseline;
 		gap: 7px;
-		font-size: 14px;
 	}
-	.detail-slot :global(.ptier) {
-		font-family: var(--mono);
-		font-size: 10px;
+	.book :global(.plink:hover) {
+		border-color: #a4552f;
+		color: #a4552f;
+		text-decoration: none;
+	}
+	.book :global(.ptier) {
+		font-size: 9.5px;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
 		color: #8a7b54;
 	}
-	.detail-slot :global(.ptier-primary) {
+	.book :global(.ptier-primary) {
 		color: #7a5c1e;
 		font-weight: 600;
 	}
-	.detail-slot :global(.pfmlabel) {
+	.book :global(.pfmlabel) {
 		font-size: 11px;
 		letter-spacing: 0.26em;
 		text-transform: uppercase;
 		color: #8a7b54;
 		margin-bottom: 12px;
 	}
-	.detail-slot :global(.pfm) {
+	.book :global(.pfm) {
 		font-family: var(--mono);
 		font-size: 12.5px;
 		line-height: 1.6;
@@ -471,58 +759,28 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 		border: 1px solid #d3c6a2;
 		border-radius: 4px;
 		padding: 14px 16px;
-		margin: 0 0 20px;
+		margin: 0;
 		white-space: pre-wrap;
 		color: #4a432e;
 	}
-	.detail-slot :global(.plink) {
-		font-size: 13.5px;
-		font-weight: 600;
-		color: #7a5c1e;
-		border-bottom: 1px solid #c9bc9e;
-		padding-bottom: 2px;
-	}
-	.detail-slot :global(.plink:hover) {
-		color: #a4552f;
-		text-decoration: none;
-	}
 
 	@media (max-width: 720px) {
-		.detail-slot :global(.spread) {
+		.head h2 {
+			font-size: 34px;
+		}
+		.book :global(.spread) {
 			grid-template-columns: 1fr;
 		}
-		.detail-slot :global(.page-left) {
+		.book :global(.page-left) {
 			border-radius: 4px 4px 0 0;
 			border-right: none;
 			border-bottom: 1px solid #c9bc9e;
 			box-shadow: none;
 		}
-		.detail-slot :global(.page-right) {
+		.book :global(.page-right) {
 			border-radius: 0 0 10px 10px;
 			box-shadow: none;
-			animation: inkFade 0.5s ease both;
-		}
-	}
-
-	/* One scrollable row on narrow screens, rather than 45 spines wrapping into
-	   a column two books wide. The board rides along as the background of the
-	   scrolled track. */
-	@media (max-width: 680px) {
-		.shelf {
-			--col-w: 70px;
-			grid-auto-flow: column;
-			grid-auto-columns: var(--col-w);
-			grid-template-columns: none;
-			justify-content: start;
-			overflow-x: auto;
-			-webkit-overflow-scrolling: touch;
-			scrollbar-width: thin;
-			/* One row, so the planks form a single continuous board that scrolls
-			   with the books standing on it. */
-			padding-bottom: var(--board-h);
-		}
-		.spine .label {
-			font-size: 13px;
+			animation: inkFade 0.45s ease both;
 		}
 	}
 </style>
@@ -533,17 +791,14 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 
 	const byKey = new Map<string, CanonWork>(canon.map((w) => [w.full, w]));
 
-	const shelf = document.querySelector<HTMLElement>("[data-shelf]");
-	const slot = document.querySelector<HTMLElement>("[data-detail]");
-	const hint = document.querySelector<HTMLElement>("[data-hint]");
-	const spines = Array.from(
-		shelf?.querySelectorAll<HTMLButtonElement>(".spine") ?? [],
+	const bookcase = document.querySelector<HTMLElement>("[data-bookcase]");
+	const veil = document.querySelector<HTMLElement>("[data-veil]");
+	const slot = document.querySelector<HTMLElement>("[data-book]");
+	const volumes = Array.from(
+		bookcase?.querySelectorAll<HTMLButtonElement>(".volume") ?? [],
 	);
 
-	const RESTING_HINT =
-		"Pull a book off the shelf — each SKILL.md names its sources in frontmatter.";
-
-	let selectedKey: string | null = null;
+	let opener: HTMLButtonElement | null = null;
 
 	function el(tag: string, cls: string, text?: string) {
 		const node = document.createElement(tag);
@@ -573,17 +828,47 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 		return `sources:\n  ${tier}:\n    - "${work.full}"`;
 	}
 
-	function renderDetail(spine: HTMLButtonElement) {
-		const key = spine.dataset.key ?? "";
-		const work = byKey.get(key);
-		if (!slot || !work) return;
+	/**
+	 * The cover, reused from the shelf. An `<img>` is cloned rather than
+	 * re-derived so the modal cannot disagree with the case about which works
+	 * have jacket art.
+	 */
+	function coverNode(volume: HTMLButtonElement, work: CanonWork) {
+		const art = volume.querySelector("img.art");
+		if (art) {
+			const copy = art.cloneNode(true) as HTMLImageElement;
+			copy.removeAttribute("loading");
+			return copy;
+		}
+		const facsimile = el("div", "facsimile");
+		// The spread has to keep #274's distinction the case makes: an offprint
+		// that opens as a bound volume is the page calling a paper a book one
+		// layer in from where the shelf stopped doing it.
+		facsimile.dataset.type = work.type;
+		facsimile.append(
+			el("div", "ft", work.type === "paper" ? work.author : work.title),
+			el("div", "fa", "No cover art"),
+		);
+		return facsimile;
+	}
 
-		const book = el("div", "book");
+	function renderSpread(volume: HTMLButtonElement, work: CanonWork) {
+		if (!slot) return;
+
 		const spread = el("div", "spread");
 
+		const close = document.createElement("button");
+		close.type = "button";
+		close.className = "pclose";
+		close.textContent = "Close ✕";
+		close.addEventListener("click", closeBook);
+
 		const left = el("div", "page page-left");
+		const cover = el("div", "pcover");
+		cover.append(coverNode(volume, work));
 		left.append(
-			el("div", "plabel", work.type === "paper" ? "From the paper" : "From the book"),
+			el("div", "plabel", work.type === "paper" ? "From the papers" : "From the shelf"),
+			cover,
 			el("div", "ptitle", work.title),
 			el("div", "pauthor", work.author),
 			el("div", "pprovenance", provenanceLine(work)),
@@ -599,14 +884,17 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 
 		const list = el("ul", "pcites");
 		for (const cite of work.citations) {
-			const row = el("li", "pcite");
+			const row = document.createElement("li");
 			const link = document.createElement("a");
 			link.className = "plink";
 			link.href = `${repoUrl}/blob/prod/${cite.skill}/SKILL.md`;
 			link.target = "_blank";
 			link.rel = "noopener";
-			link.textContent = `/${cite.skill}`;
-			row.append(link, el("span", `ptier ptier-${cite.tier}`, cite.tier));
+			link.append(
+				document.createTextNode(`/${cite.skill}`),
+				el("span", `ptier ptier-${cite.tier}`, cite.tier),
+			);
+			row.append(link);
 			list.append(row);
 		}
 		inner.append(list);
@@ -614,56 +902,66 @@ const edgeLabel = (w: CanonWork) => (w.type === "paper" ? w.author : w.title);
 		const first = work.citations[0];
 		if (first) {
 			inner.append(
-				el("div", "pfmlabel", `As ${`/${first.skill}`} declares it`),
+				el("div", "pfmlabel", `As /${first.skill} declares it`),
 				el("pre", "pfm", sourcesSnippet(work, first.tier)),
 			);
 		}
 		right.append(inner);
 
-		spread.append(left, right);
-		book.append(spread);
-
-		slot.replaceChildren(book);
+		spread.append(close, left, right);
+		slot.replaceChildren(spread);
+		slot.setAttribute("aria-label", work.full);
+		close.focus();
 	}
 
-	function select(spine: HTMLButtonElement) {
-		const key = spine.dataset.key ?? "";
-		if (key === selectedKey) {
-			close();
-			return;
-		}
-		selectedKey = key;
-		for (const s of spines)
-			s.setAttribute("aria-pressed", String(s === spine));
-		renderDetail(spine);
-		if (hint) hint.textContent = "Click the spine again to close the book.";
+	function openBook(volume: HTMLButtonElement) {
+		const work = byKey.get(volume.dataset.key ?? "");
+		if (!work || !veil) return;
+		opener = volume;
+		for (const v of volumes) v.setAttribute("aria-pressed", String(v === volume));
+		veil.hidden = false;
+		document.body.style.overflow = "hidden";
+		renderSpread(volume, work);
 	}
 
-	function close() {
-		selectedKey = null;
-		for (const s of spines) s.setAttribute("aria-pressed", "false");
+	function closeBook() {
+		if (!veil || veil.hidden) return;
+		veil.hidden = true;
 		slot?.replaceChildren();
-		if (hint) hint.textContent = RESTING_HINT;
+		document.body.style.overflow = "";
+		for (const v of volumes) v.setAttribute("aria-pressed", "false");
+		opener?.focus();
+		opener = null;
 	}
 
-	for (const spine of spines) {
-		spine.addEventListener("click", () => select(spine));
+	for (const volume of volumes) {
+		volume.addEventListener("click", () => openBook(volume));
 	}
 
-	// Reveal spines on first scroll into view, then auto-open the flagship.
-	if (shelf) {
+	// Clicking the veil closes; clicking the spread inside it does not.
+	veil?.addEventListener("click", (event) => {
+		if (event.target === veil) closeBook();
+	});
+	document.addEventListener("keydown", (event) => {
+		if (event.key === "Escape") closeBook();
+	});
+
+	// Reveal the wall on first scroll into view. No book opens itself: an
+	// overlay that appears without being asked for is a popup, and the reader
+	// came here to look at the case.
+	if (bookcase) {
 		const io = new IntersectionObserver(
 			(entries) => {
 				if (entries.some((e) => e.isIntersecting)) {
 					io.disconnect();
-					shelf.setAttribute("data-revealed", "");
-					window.setTimeout(() => {
-						if (!selectedKey && spines[0]) select(spines[0]);
-					}, 1400);
+					bookcase.setAttribute("data-revealed", "");
 				}
 			},
-			{ threshold: 0.35 },
+			{ threshold: 0.15 },
 		);
-		io.observe(shelf);
+		io.observe(bookcase);
+		// A case taller than the viewport may never cross the threshold on a
+		// short screen; nothing about the reveal may be able to hide the canon.
+		window.setTimeout(() => bookcase.setAttribute("data-revealed", ""), 2500);
 	}
 </script>

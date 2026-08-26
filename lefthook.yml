@@ -28,6 +28,10 @@ pre-push:
   commands:
     sync-script-tests:
       run: bash scripts/test-sync-references.sh
+
+    bundled-pointer-resolution:
+      run: bash scripts/test-bundled-pointer-resolution.sh
+
     verify-install-script-tests:
       run: bash scripts/test-verify-install.sh
     review-currency-marker-tests:
