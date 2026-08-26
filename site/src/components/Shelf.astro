@@ -1,6 +1,7 @@
 ---
 import fs from "node:fs";
 import { canon, type CanonWork } from "../lib/canon.generated";
+import { flagships } from "../lib/data";
 
 // EVERY DECLARED WORK, NOT A CURATED SUBSET (issue #273). The array below is
 // generated from `sources:` frontmatter, so this component must render all of
@@ -19,14 +20,24 @@ const weightOf = (w: CanonWork) => w.citations.length;
 const lineageOf = (w: CanonWork) =>
 	w.citations.reduce((n, c) => n + (c.tier === "primary" ? 1 : 0), 0);
 
-// TWO SIGNALS, TWO CHANNELS (issue #274). Height already carried breadth, and
-// #274 named the trade that left open: breadth is not centrality, and a bookcase
-// ranked by breadth alone buried the four books the pipeline is most
-// recognizably built on — *TDD By Example* sat 37th of 45, *Shape Up* 19th,
-// *Refactoring* 18th, *Domain-Driven Design* 17th, while works no skill calls
-// core lineage led the top board. So the ORDER is core lineage and the HEIGHT
-// stays breadth: two different claims, each read off the frontmatter, neither
-// standing in for the other.
+// THE TOP BOARD IS NAMED; THE REST OF THE CASE IS DERIVED. `flagships` is a
+// short hand-written order (see the note beside it in `data.ts` for why it is
+// safe where #273's hand-written canon was not) and it decides the front of the
+// shelf only. Everything it does not name falls in behind it in the order #274
+// derived: core lineage first, then breadth, then the declared string.
+//
+// WHY THE DERIVED ORDER ALONE WAS NOT ENOUGH. It ranks by how many skills are
+// *built on* a work, which is a true statement about the pipeline and the wrong
+// first impression for a shelf of software engineering practice: it led with
+// *Thinking in Systems* and *The Design of Everyday Things* — the two books here
+// that are not about software — and left *Clean Architecture* 28th of 45,
+// *Continuous Delivery* 19th and *TDD By Example* 14th. An engineer scanning the
+// top row should see the books they already own.
+//
+// HEIGHT IS UNTOUCHED BY THIS. Naming the order does not restate the breadth
+// signal, so a flagship cited once is still the shortest book on the board —
+// *Clean Architecture* stands at the front of the case and is visibly slighter
+// than its neighbors, which is the honest reading of one primary citation.
 //
 // CODE-UNIT COMPARISON, NOT `localeCompare`. The tie-break has to be
 // reproducible off the machine that built the page: whether ICU treats the
@@ -34,8 +45,12 @@ const lineageOf = (w: CanonWork) =>
 // and `scripts/test-canon-coverage.sh` asserts this exact sequence against a
 // shell `LC_ALL=C sort`. Comparing code units is what makes the two agree by
 // construction rather than by luck of the runtime's collation data.
+const flagshipRank = new Map(flagships.map((full, i) => [full, i]));
+const rankOf = (w: CanonWork) => flagshipRank.get(w.full) ?? Infinity;
+
 const volumes = [...canon].sort(
 	(a, b) =>
+		rankOf(a) - rankOf(b) ||
 		lineageOf(b) - lineageOf(a) ||
 		weightOf(b) - weightOf(a) ||
 		(a.full < b.full ? -1 : a.full > b.full ? 1 : 0),
@@ -186,9 +201,10 @@ const papers = canon.length - books;
 			<h2>The whole shelf, not a selection</h2>
 			<p class="lede">
 				Every work cited in <code>sources:</code> frontmatter across the pack —
-				{books} books and {papers} papers, ordered by how many skills are built on
-				them and taller where more of them cite it. Pull any one off the shelf to
-				see which skills draw on it.
+				{books} books and {papers} papers. The ones an engineer knows on sight
+				come first; the rest follow by how many skills are built on them, and
+				every volume stands taller where more of them cite it. Pull any one off
+				the shelf to see which skills draw on it.
 			</p>
 		</div>
 

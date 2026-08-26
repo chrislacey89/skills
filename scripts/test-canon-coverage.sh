@@ -293,10 +293,35 @@ canon_citation_rows() {
     ' "$1"
 }
 
-# shelf_order <canon.generated.ts> — the spine order the canon section is
-# required to render, one `full` string per line, top-left to bottom-right:
-# works some skill calls CORE LINEAGE first, then breadth of citation, then the
-# declared string.
+# flagship_order <data.ts> — the hand-written top board, in file order, one
+# `full` string per line. Empty output is a legitimate state: delete the array
+# and the shelf falls back to the derived order alone.
+#
+# READ OUT OF `data.ts`, WHICH IS THE POINT. The component and this suite must
+# take the same list from the same file, or the "named order" half of the
+# ordering claim is checked against itself. Bounded to the array so the lessons
+# map and the mappings rows one screen away cannot leak into it.
+flagship_order() {
+    awk '
+        /^export const flagships/ { inf = 1; next }
+        inf && /^\];/            { inf = 0; next }
+        !inf                     { next }
+        match($0, /"[^"]+"/)     { print substr($0, RSTART + 1, RLENGTH - 2) }
+    ' "$1"
+}
+
+# shelf_order <canon.generated.ts> <data.ts> — the volume order the canon
+# section is required to render, one `full` string per line, top-left to
+# bottom-right: the named flagships in their listed order, then everything else
+# by CORE LINEAGE, then breadth of citation, then the declared string.
+#
+# THE TOP BOARD IS NAMED AND THE TAIL IS DERIVED, and this reader has to hold
+# both halves. The derived order answers "what is the pipeline built on"; it is
+# the wrong first impression for a shelf of software engineering practice, which
+# is why a short hand-written list now decides the front of the case. What the
+# list may not do is subtract: the coverage checks above still require all 45
+# works on the page, so a name dropped from the array demotes a book rather than
+# deleting one.
 #
 # WHY THIS IS THE ORDERING (issue #274). The shelf's height already carries
 # citation count, and #274 named the trade that leaves open: raw count measures
@@ -323,10 +348,16 @@ canon_citation_rows() {
 # whether `-` in "Domain-Driven Design" is ignorable decides three spines'
 # order — so `Shelf.astro` compares code units and so does this.
 shelf_order() {
-    canon_citation_rows "$1" | awk -F"$(printf '\t')" '
+    local flags derived
+    flags="$(flagship_order "$2")"
+    derived="$(canon_citation_rows "$1" | awk -F"$(printf '\t')" '
         { total[$1]++; if ($3 == "primary") prim[$1]++ }
         END { for (f in total) printf "%d\t%d\t%s\n", prim[f] + 0, total[f], f }
-    ' | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k2,2nr -k3,3 | cut -f3-
+    ' | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k2,2nr -k3,3 | cut -f3-)"
+    # The flagships first, in FILE order — not sorted, because the array's
+    # sequence is the claim — then the derived order with those works removed.
+    printf '%s\n' "$flags" | grep -v '^$' || true
+    printf '%s\n' "$derived" | grep -vxF -f <(printf '%s\n' "$flags"; echo '__none__') || true
 }
 
 # papers_typed <canon.generated.ts> — the works the canon types `paper`, sorted.
@@ -493,7 +524,18 @@ lesson_keys() {
 }
 
 # stray_work_mentions <data.ts> <root> — every declared work named in data.ts
-# OUTSIDE the `export const lessons` block, as "<work>\t<line>: <text>".
+# OUTSIDE the `export const lessons` and `export const flagships` blocks, as
+# "<work>\t<line>: <text>".
+#
+# TWO SANCTIONED BLOCKS, AND THE SECOND ONE EARNED IT. `flagships` is a
+# hand-written list of works in a file whose whole point is that it no longer
+# holds one, so the exemption needs a reason narrower than "we added it". The
+# reason is what the two lists can do: #273's array DEFINED the population, so a
+# work missing from it was a work the reader never saw; `flagships` only
+# PERMUTES one, and the coverage checks below — both set directions, plus the
+# built page — still require all 45 works on the shelf. A name dropped from the
+# array demotes a book; it cannot delete one. The dedicated check further down
+# closes the other half, that every name in it is a work some skill declares.
 #
 # THIS IS THE REGRESSION CHECK FOR #273. The canon used to be a hand-written
 # array in this very file, and re-introducing one is how the derivation gets
@@ -512,9 +554,11 @@ lesson_keys() {
 stray_work_mentions() {
     local data="$1" root="$2" work outside hit
     outside="$(awk '
-        /^export const lessons/ { inl = 1 }
-        inl && /^\};/           { inl = 0; next }
-        !inl                    { print NR ": " $0 }
+        /^export const lessons/    { inl = 1 }
+        inl && /^\};/              { inl = 0; next }
+        /^export const flagships/  { inf = 1 }
+        inf && /^\];/              { inf = 0; next }
+        !inl && !inf               { print NR ": " $0 }
     ' "$data")"
     while IFS= read -r work; do
         [ -n "$work" ] || continue
@@ -1028,6 +1072,33 @@ EOF
 lesson_count="$(lesson_keys "$data_ts" | grep -c . || true)"
 [ -n "$orphans" ] || ok "all $lesson_count hand-written lesson(s) are keyed to a work some skill declares"
 
+# THE TOP BOARD, BOTH WAYS IT CAN ROT. `flagships` is exempt from the
+# stray-mention scan above because it only permutes the shelf, and that exemption
+# is only as safe as these two checks. A name matching no declared work is dead
+# prose that silently orders nothing — #272's shape in the ordering layer — and a
+# name listed twice is a rank the component resolves by taking the first, so the
+# array says one order and the page renders another.
+flagship_list="$(flagship_order "$data_ts")"
+flagship_count="$(printf '%s\n' "$flagship_list" | grep -c . || true)"
+flagship_orphans="$(comm -23 <(printf '%s\n' "$flagship_list" | grep -v '^$' | LC_ALL=C sort -u) \
+                             <(declared_works "$repo_root"/*/SKILL.md | LC_ALL=C sort -u))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "the flagship order names \"$offender\", which no skill declares" \
+        "the entry must be the verbatim sources: string of a declared work, or it orders nothing and the shelf silently ignores it."
+done <<EOF
+$flagship_orphans
+EOF
+flagship_dupes="$(printf '%s\n' "$flagship_list" | grep -v '^$' | LC_ALL=C sort | uniq -d)"
+if [ -n "$flagship_dupes" ]; then
+    bad "the flagship order lists a work twice" \
+        "$(printf '%s' "$flagship_dupes" | sed 's/^/       repeated: /')
+the component ranks on first occurrence, so the second one is inert and the array no longer describes the page."
+fi
+if [ -z "$flagship_orphans" ] && [ -z "$flagship_dupes" ]; then
+    ok "all $flagship_count flagship(s) name a distinct declared work"
+fi
+
 # THE NARROWING CHECK, and an honest note about what it is worth. This keys on
 # a language construct, which `mechanism-generality-lags-the-pattern-2026-08-23.md`
 # is explicit is the weaker kind of detector — it catches `.slice(` and misses a
@@ -1153,18 +1224,18 @@ one work, one volume. A duplicate passes every set comparison in this section va
     # ORDER. The bookcase is sorted by core lineage, then breadth (see
     # `shelf_order` above for why, and for why the oracle is derived from the
     # canon rather than re-read out of the component).
-    want_order="$(shelf_order "$canon_ts")"
+    want_order="$(shelf_order "$canon_ts" "$data_ts")"
     got_order="$(printf '%s\n' "$records" | cut -f1)"
     if [ "$want_order" = "$got_order" ]; then
-        ok "the bookcase renders in core-lineage order: primary citations, then total, then title"
+        ok "the bookcase renders the $(flagship_order "$data_ts" | grep -c . || true) named flagship(s) first, then core-lineage order"
     else
         # `|| true` on the whole pipeline: diff exits 1 on a difference, which is
         # the case this branch exists for, and `set -o pipefail` would abort the
         # suite mid-report rather than print the failure it just found.
         first_wrong="$(diff <(printf '%s\n' "$want_order") <(printf '%s\n' "$got_order") | head -8 || true)"
-        bad "the rendered volume order is not the order core lineage dictates" \
+        bad "the rendered volume order is not the order the flagship list and core lineage dictate" \
             "$first_wrong
-issue #274: citation count alone measures breadth of reuse, not centrality, and sorting by it buried the four books the pipeline is most recognizably built on. The order must be primary-citation count desc, then total desc, then the declared string."
+the required order is: every work named in data.ts's \`flagships\` array, in the order the array lists them, then everything else by primary-citation count desc, then total desc, then the declared string. Issue #274 is why the tail is ranked on primary count rather than raw citations; the named head is why an engineer's first row is the books they already own."
     fi
 
     # PAPERS ARE A DIFFERENT OBJECT. #274 verbatim: "Books and papers are
@@ -1793,6 +1864,65 @@ else
         "this is the shape a straight revert of the pre-#273 shelf takes, and it is the one a membership test cannot see"
 fi
 
+# THE TOP BOARD'S EXEMPTION, BOTH DIRECTIONS. `flagships` was added to the
+# stray-mention scan's allowed blocks, and an exemption is the classic way to
+# blind a detector: widen the hole and the regression it was watching for walks
+# through it. The first fixture proves the sanctioned shape passes; the second
+# plants #273's array in a file that ALSO has a legitimate flagships block, which
+# is the shape the hole would hide.
+cat > "$fixtures/flagship-data.ts" <<'DATA'
+export const flagships: string[] = [
+	"Known Book — Jane Doe",
+];
+
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+DATA
+if [ -z "$(stray_work_mentions "$fixtures/flagship-data.ts" "$fixtures")" ]; then
+    ok "a flagships array naming a declared work is a sanctioned mention, not a stray one"
+else
+    bad "the sanctioned flagships block was reported as a stray work mention" \
+        "the ordering list is allowed to name works; it permutes the shelf and cannot subtract from it"
+fi
+
+cat > "$fixtures/flagship-plus-shelf.ts" <<'DATA'
+export const flagships: string[] = [
+	"Known Book — Jane Doe",
+];
+
+export const shelf = [
+	{ title: "Gamma Book", author: "Hopper", full: "Gamma Book — Grace Hopper" },
+];
+DATA
+if [ -n "$(stray_work_mentions "$fixtures/flagship-plus-shelf.ts" "$fixtures")" ]; then
+    ok "the flagships exemption does not hide a hand-written works array beside it"
+else
+    bad "a re-introduced works array passed once a flagships block was present" \
+        "the exemption is scoped to the flagships block by position; if it leaked to the rest of the file, #273's regression check is dead and reports nothing"
+fi
+
+# THE READER'S OWN BOUND. `flagship_order` must return the array in FILE order —
+# the sequence is the claim — and must stop at the array, or the lessons keys one
+# line down enter the order as phantom flagships.
+cat > "$fixtures/flagship-order.ts" <<'DATA'
+export const flagships: string[] = [
+	"Zeta Book — Ada Byron",
+	"Alpha Book — Jane Doe",
+];
+
+export const lessons: Lessons = {
+	"Leaked Book — Grace Hopper": "Must not be read as a flagship.",
+};
+DATA
+got_flagships="$(flagship_order "$fixtures/flagship-order.ts" | tr '\n' '|')"
+if [ "$got_flagships" = "Zeta Book — Ada Byron|Alpha Book — Jane Doe|" ]; then
+    ok "flagship_order reads the array in file order and stops at its closing bracket"
+else
+    bad "flagship_order misread the ordering array" \
+        "got: $got_flagships, want: Zeta Book — Ada Byron|Alpha Book — Jane Doe| — sorted output means the file order was lost, and a third entry means the lessons map leaked in"
+fi
+
 cat > "$fixtures/orphan-lesson-data.ts" <<'DATA'
 export const lessons: Lessons = {
 	"Known Book — Jane Doe": "A pull-quote.",
@@ -2079,7 +2209,9 @@ fi
 rm -f "$fixtures/canon-clean.ts" "$fixtures/canon-unparsed.ts" \
       "$fixtures/clean-data.ts" "$fixtures/rehanded-data.ts" \
       "$fixtures/rehanded-same-works.ts" \
-      "$fixtures/orphan-lesson-data.ts" "$fixtures/page.html" \
+      "$fixtures/orphan-lesson-data.ts" "$fixtures/flagship-data.ts" \
+      "$fixtures/flagship-plus-shelf.ts" "$fixtures/flagship-order.ts" \
+      "$fixtures/page.html" \
       "$fixtures/empty-case.html" "$fixtures/volumes.html" "$fixtures/hero.html" "$fixtures/hero-none.html" "$fixtures/hero-early.html"
 
 # --- the mappings direction ---

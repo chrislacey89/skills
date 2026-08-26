@@ -50,6 +50,42 @@ export const lessons: Lessons = {
 		"Type-level discipline: inference first, narrowing over assertions.",
 };
 
+/**
+ * The works an engineer recognizes on sight, in the order the bookcase shows
+ * them. Everything not named here keeps the derived order behind them.
+ *
+ * WHY A HAND-WRITTEN LIST EXISTS AT ALL, given that #273 removed one. The
+ * derived order ranks by how many skills are *built on* a work, which is a real
+ * signal and the wrong one for the first thing a visiting engineer sees: it put
+ * *Thinking in Systems* and *The Design of Everyday Things* on the top board and
+ * left *Clean Architecture* 28th, *Continuous Delivery* 19th and *TDD By
+ * Example* 14th. The page is a shelf of software engineering practice, and it
+ * was leading with the two books on it that are not about software.
+ *
+ * WHAT MAKES THIS SAFE WHERE #273's LIST WAS NOT. That list was the canon — it
+ * decided which works existed, so a work missing from it was a work the reader
+ * never saw. This one only permutes: the canon is still every declared source,
+ * every one of them still renders, and deleting this array leaves the shelf
+ * complete and merely differently sorted. It is the same bargain as `lessons`
+ * above — optional curation that cannot subtract — and the contract suite holds
+ * both halves: a name here that matches no declared work fails, and the built
+ * page is still required to carry all 45 works.
+ *
+ * Keys are the verbatim `sources:` string, which is `CanonWork.full`.
+ */
+export const flagships: string[] = [
+	"The Pragmatic Programmer — Andrew Hunt & David Thomas",
+	"Refactoring — Martin Fowler",
+	"Domain-Driven Design — Eric Evans",
+	"TDD By Example — Kent Beck",
+	"Clean Architecture — Robert C. Martin",
+	"A Philosophy of Software Design — John Ousterhout",
+	"Continuous Delivery — Jez Humble & David Farley",
+	"Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce",
+	"Extreme Programming Explained — Kent Beck",
+	"Release It! — Michael Nygard",
+];
+
 export const mappings: Mapping[] = [
 	{ principle: "“Design it twice.”", source: "A Philosophy of Software Design", skill: "/design-an-interface", what: "Generates radically different designs before committing." },
 	{ principle: "Appetite before solution", source: "Shape Up", skill: "/write-a-prd", what: "Sets a time budget, names rabbit holes, declares no-gos." },
