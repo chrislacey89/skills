@@ -77,25 +77,26 @@ Re-explain the part that failed. The parts that landed stay landed.
 
 ### 3. Write to the rules
 
-Rules carry two strengths, following COGRAM's split between hard prohibition, hard restriction, and soft style guidance (pp. 29–30). Publishing a flat list of rules overstates how binding it is; naming the strength per rule is what lets Step 4 check them.
+Rules carry two strengths, following COGRAM's split between hard prohibition, hard restriction, and soft style guidance (pp. 29–30). A flat list overstates how binding it is; naming the strength per rule is what lets Step 5 check them.
 
 **Hard — these hold in every re-pitch:**
 
-- One claim or one instruction per sentence.
-- At most 20 words per sentence for a procedure, 25 for a description.
+- One claim per sentence, with its causal link stated rather than implied. "The hook blocks the write because the classification gate never ran" is one claim, and it stays one sentence. Two claims joined by "and" are two sentences.
 - Active voice, with the actor named. Write "the hook blocks the write," not "the write is blocked."
 - One meaning per word within a single answer. A word that meant "the PR branch" in paragraph one still means that in paragraph three.
 - At most three words in a noun cluster. Break "slice issue boundary map contract" into a phrase with a preposition in it.
-- Present tense for facts, imperative for actions.
 
 **Soft — prefer these, and yield when meaning needs the words:**
 
+- Around 20 words per sentence for a procedure, 25 for a description. Read the number as a symptom rather than the rule: a sentence past it is usually carrying a second claim, and the repair is to find that claim, not to cut words until the count fits. A 30-word sentence carrying one claim and its reason is doing its job.
 - At most six sentences per paragraph.
 - Say it straight: "this breaks the build," not "this may potentially cause issues with the build."
 - Prefer the shorter word where both are exact.
-- Order steps the way they happen in time.
+- Order steps the way they happen in time, and use the imperative when the re-pitch contains a procedure.
 
-These caps come from ASD-STE100's writing rules and are the checkable subset this skill enforces. The standard itself is a licensed specification with an approved-word list this skill does not reproduce — see <https://asd-ste100.org> for the source of record. What is written above is the whole rule set `/re-pitch` claims; there is no larger hidden list an agent should try to recall.
+**Choppy is not the same as clear, and the caps are why.** They come from ASD-STE100, whose sentence limits were written for maintenance procedures — discrete physical actions, one per step, where a cap and a claim count amount to the same thing. An explanation is not a sequence of actions. It is a chain of claims with causal links between them, and those links live in exactly the subordinate clauses a hard word cap deletes. Enforced literally, the cap yields a wall of short declaratives that the reader has to reassemble into an argument: measurably compliant, and harder to read than the sentence it replaced. That is the survey's own evaluation caveat arriving in practice — benefit depends on "the precise problem domain, the background of the users, and—perhaps most importantly—the quality of the design of the language and its supporting tools" (p. 26), and a procedural cap imported into an explanatory domain fails the first of the three.
+
+The standard itself is a licensed specification with an approved-word list this skill does not reproduce — see <https://asd-ste100.org> for the source of record. What is written above is the whole rule set `/re-pitch` claims; there is no larger hidden list an agent should try to recall.
 
 ### 4. Source the vocabulary from the project, then gloss it
 
@@ -116,7 +117,9 @@ Keeping the project's term and adding the gloss is the move. Swapping the term f
 
 This is the step that separates this skill from advice. Run all four checks against the draft:
 
-1. **Sentence length.** Find the longest sentence and count its words. Over the cap, split it. Repeat until the longest sentence is inside the cap.
+1. **Claims per sentence, then rhythm.** Find every sentence carrying more than one claim and split it at the seam. Sentence length is the search heuristic — start with the longest — but the fix is removing the second claim, not cutting words to reach a number. A long sentence carrying one claim passes.
+
+   Then read the draft aloud. A run of short declaratives with nothing joining them fails this check too: the connectives went missing, and the reader now has to rebuild the argument the links were carrying. Restore them.
 2. **Gloss coverage.** List every domain term in the draft. Confirm each one carries a definition at its first appearance. The list is exhaustive — check every term, not the first few.
 3. **Voice.** Find every passive construction. Rewrite each with the actor in subject position, or confirm the actor is genuinely unknown.
 4. **Diagnosis fit.** Re-read Step 1's dominant cause. Confirm the draft repairs *that* cause. A draft that is merely shorter, when the diagnosis was "unknown term," has not been repaired.
@@ -139,6 +142,7 @@ Add nothing else: no new scope, no summary paragraph restating what was just sai
 | "I'll add more restrictions so it comes out simpler." | Restrictions layered on ordinary English sit at the Simplicity floor regardless of count — Basic English's 850-word cap and E-Prime's single banned verb both land at S1. The diagnosis and the gloss are where the gain is. |
 | "I'll ask which part they didn't understand." | That spends a second round trip after one already failed, usually to learn what the transcript shows. Infer it. Ask only when two causes are equally likely and pull opposite ways. |
 | "I'll re-explain the whole thing from the beginning to be safe." | Re-anchor in one or two sentences, then repair the part that failed. Re-running the parts that landed buries the repair. |
+| "Every sentence is under 20 words, so the draft passes." | The count is a symptom detector for a sentence carrying two claims, not the property being checked. Splitting a one-claim sentence to satisfy a number deletes the connective that made it one thought, and a wall of short declaratives is harder to read than what it replaced. |
 | "I read the rules, so the draft follows them." | Unchecked rules are advisory rules, and advisory rules are why Caterpillar Fundamental English was discontinued. Run Step 5 against the actual draft. |
 | "The original answer was wrong, so I'll re-pitch it more clearly." | Correct it. A clearer wrong answer is a better-understood wrong answer. |
 
@@ -146,7 +150,8 @@ Add nothing else: no new scope, no summary paragraph restating what was just sai
 
 - The draft went out without Step 5 running against it.
 - A domain term appears with no definition at its first use.
-- A sentence runs past the cap.
+- A sentence carries two claims joined by "and".
+- The draft reads as a wall of short declaratives with no connectives — the word count was optimized for, and the causal links were what it cost.
 - The re-pitch opens with the explanation instead of the anchor.
 - The project's term was replaced by a plainer synonym.
 - A closing paragraph summarizes the re-pitch that precedes it.
@@ -160,7 +165,7 @@ A run of `/re-pitch` is complete when:
 
 - Step 1 named one dominant cause, and the draft repairs that cause
 - the answer opens with one or two sentences of anchor
-- every sentence is inside the word cap for its type
+- every sentence carries one claim with its causal link intact, confirmed by reading the draft aloud rather than by word count alone
 - every domain term carries a gloss at first use, checked exhaustively
 - every passive construction was rewritten or its actor is genuinely unknown
 - the project's terms survived intact, with no synonym substitutions
