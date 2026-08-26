@@ -886,7 +886,8 @@ fi
 # the maintenance this change exists to remove. The residual cost is bounded and
 # visible: a paper renders as a bound volume until someone notices. Tracked as a
 # follow-up rather than papered over.
-EXPECTED_PAPERS="Encouraging Divergent Thinking in LLMs through Multi-Agent Debate — Liang et al. (EMNLP 2024)
+EXPECTED_PAPERS="A Survey and Classification of Controlled Natural Languages — Tobias Kuhn (Computational Linguistics 2014)
+Encouraging Divergent Thinking in LLMs through Multi-Agent Debate — Liang et al. (EMNLP 2024)
 Improving Factuality and Reasoning in Language Models through Multiagent Debate — Du et al. (2023)
 Peer Review on Open-Source Software Projects — Peter C. Rigby"
 

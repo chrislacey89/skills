@@ -43,6 +43,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn (Computational Linguistics 2014)",
+		title: "A Survey and Classification of Controlled Natural Languages",
+		author: "Tobias Kuhn (Computational Linguistics 2014)",
+		type: "paper",
+		citations: [
+			{ skill: "re-pitch", tier: "primary" },
+		],
+	},
+	{
 		full: "Advanced Vitest Patterns — Epic Web Dev",
 		title: "Advanced Vitest Patterns",
 		author: "Epic Web Dev",
@@ -127,6 +136,7 @@ export const canon: CanonWork[] = [
 		author: "Eric Evans",
 		type: "book",
 		citations: [
+			{ skill: "re-pitch", tier: "secondary" },
 			{ skill: "triage-issue", tier: "secondary" },
 			{ skill: "ubiquitous-language", tier: "primary" },
 		],
@@ -244,6 +254,7 @@ export const canon: CanonWork[] = [
 		type: "book",
 		citations: [
 			{ skill: "handoff", tier: "secondary" },
+			{ skill: "re-pitch", tier: "secondary" },
 		],
 	},
 	{
@@ -400,6 +411,7 @@ export const canon: CanonWork[] = [
 		type: "book",
 		citations: [
 			{ skill: "prd-to-issues", tier: "secondary" },
+			{ skill: "re-pitch", tier: "secondary" },
 		],
 	},
 	{

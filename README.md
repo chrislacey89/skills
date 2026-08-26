@@ -104,6 +104,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [help](help/) | Read repo state and recommend the next pipeline step |
 | [correct-course](correct-course/) | Diagnose stale artifacts and walk the cleanup before backtracking |
 | [handoff](handoff/) | Compact the current session into a transient handoff doc when no pipeline artifact fits |
+| [re-pitch](re-pitch/) | Re-state an explanation that did not land — diagnose the confusion, rewrite in controlled technical English, gloss every domain term on first use |
 
 ## Repo guide
 
