@@ -59,7 +59,8 @@ in order:
    CI job. This file reaches `/tdd` and `/pre-merge` that way.
 2. **Reference the canonical statement by name or section** rather than restate
    part of it. Reference by partial enumeration is the dangerous middle — it
-   reads as a pointer and behaves as a copy.
+   reads as a pointer and behaves as a copy. The phrase and the finding are
+   `docs/solutions/architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md`'s.
 
 ## Why a written warning does not close this
 
@@ -68,7 +69,7 @@ triggering incident happened, and were read during the task. The defect shipped
 twice anyway, the second time in the commit written to fix the first.
 
 Kuhn's survey records the same result outside software. Caterpillar Fundamental
-English restricted ~1,000 words across more than 20,000 publications, taught
+English restricted under 1,000 words across more than 20,000 publications, taught
 through a 30-lesson course. It was discontinued in 1982 because its guidelines
 "were not enforceable in the English documents produced" (p. 15) — the rules
 were sound, but they were prose rather than a checkable grammar, so nobody
