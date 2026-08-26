@@ -293,10 +293,35 @@ canon_citation_rows() {
     ' "$1"
 }
 
-# shelf_order <canon.generated.ts> — the spine order the canon section is
-# required to render, one `full` string per line, top-left to bottom-right:
-# works some skill calls CORE LINEAGE first, then breadth of citation, then the
-# declared string.
+# flagship_order <data.ts> — the hand-written top board, in file order, one
+# `full` string per line. Empty output is a legitimate state: delete the array
+# and the shelf falls back to the derived order alone.
+#
+# READ OUT OF `data.ts`, WHICH IS THE POINT. The component and this suite must
+# take the same list from the same file, or the "named order" half of the
+# ordering claim is checked against itself. Bounded to the array so the lessons
+# map and the mappings rows one screen away cannot leak into it.
+flagship_order() {
+    awk '
+        /^export const flagships/ { inf = 1; next }
+        inf && /^\];/            { inf = 0; next }
+        !inf                     { next }
+        match($0, /"[^"]+"/)     { print substr($0, RSTART + 1, RLENGTH - 2) }
+    ' "$1"
+}
+
+# shelf_order <canon.generated.ts> <data.ts> — the volume order the canon
+# section is required to render, one `full` string per line, top-left to
+# bottom-right: the named flagships in their listed order, then everything else
+# by CORE LINEAGE, then breadth of citation, then the declared string.
+#
+# THE TOP BOARD IS NAMED AND THE TAIL IS DERIVED, and this reader has to hold
+# both halves. The derived order answers "what is the pipeline built on"; it is
+# the wrong first impression for a shelf of software engineering practice, which
+# is why a short hand-written list now decides the front of the case. What the
+# list may not do is subtract: the coverage checks above still require all 45
+# works on the page, so a name dropped from the array demotes a book rather than
+# deleting one.
 #
 # WHY THIS IS THE ORDERING (issue #274). The shelf's height already carries
 # citation count, and #274 named the trade that leaves open: raw count measures
@@ -323,10 +348,16 @@ canon_citation_rows() {
 # whether `-` in "Domain-Driven Design" is ignorable decides three spines'
 # order — so `Shelf.astro` compares code units and so does this.
 shelf_order() {
-    canon_citation_rows "$1" | awk -F"$(printf '\t')" '
+    local flags derived
+    flags="$(flagship_order "$2")"
+    derived="$(canon_citation_rows "$1" | awk -F"$(printf '\t')" '
         { total[$1]++; if ($3 == "primary") prim[$1]++ }
         END { for (f in total) printf "%d\t%d\t%s\n", prim[f] + 0, total[f], f }
-    ' | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k2,2nr -k3,3 | cut -f3-
+    ' | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k2,2nr -k3,3 | cut -f3-)"
+    # The flagships first, in FILE order — not sorted, because the array's
+    # sequence is the claim — then the derived order with those works removed.
+    printf '%s\n' "$flags" | grep -v '^$' || true
+    printf '%s\n' "$derived" | grep -vxF -f <(printf '%s\n' "$flags"; echo '__none__') || true
 }
 
 # papers_typed <canon.generated.ts> — the works the canon types `paper`, sorted.
@@ -493,7 +524,18 @@ lesson_keys() {
 }
 
 # stray_work_mentions <data.ts> <root> — every declared work named in data.ts
-# OUTSIDE the `export const lessons` block, as "<work>\t<line>: <text>".
+# OUTSIDE the `export const lessons` and `export const flagships` blocks, as
+# "<work>\t<line>: <text>".
+#
+# TWO SANCTIONED BLOCKS, AND THE SECOND ONE EARNED IT. `flagships` is a
+# hand-written list of works in a file whose whole point is that it no longer
+# holds one, so the exemption needs a reason narrower than "we added it". The
+# reason is what the two lists can do: #273's array DEFINED the population, so a
+# work missing from it was a work the reader never saw; `flagships` only
+# PERMUTES one, and the coverage checks below — both set directions, plus the
+# built page — still require all 45 works on the shelf. A name dropped from the
+# array demotes a book; it cannot delete one. The dedicated check further down
+# closes the other half, that every name in it is a work some skill declares.
 #
 # THIS IS THE REGRESSION CHECK FOR #273. The canon used to be a hand-written
 # array in this very file, and re-introducing one is how the derivation gets
@@ -512,9 +554,11 @@ lesson_keys() {
 stray_work_mentions() {
     local data="$1" root="$2" work outside hit
     outside="$(awk '
-        /^export const lessons/ { inl = 1 }
-        inl && /^\};/           { inl = 0; next }
-        !inl                    { print NR ": " $0 }
+        /^export const lessons/    { inl = 1 }
+        inl && /^\};/              { inl = 0; next }
+        /^export const flagships/  { inf = 1 }
+        inf && /^\];/              { inf = 0; next }
+        !inl && !inf               { print NR ": " $0 }
     ' "$data")"
     while IFS= read -r work; do
         [ -n "$work" ] || continue
@@ -566,7 +610,7 @@ rendered_keys() {
 }
 
 # unescape — undo the templating's entity escapes on stdin. Split out of
-# `rendered_keys` so `spine_records` below cannot drift from it: "The Pragmatic
+# `rendered_keys` so `volume_records` below cannot drift from it: "The Pragmatic
 # Programmer — Andrew Hunt & David Thomas" reaches the page as `&#38;`, and a
 # second reader that forgets one entity reports a live work as missing.
 unescape() {
@@ -575,23 +619,32 @@ unescape() {
         -e 's/&lt;/</g' -e 's/&gt;/>/g'
 }
 
-# spine_records <index.html> — "<full>\t<type>\t<height-px>" per rendered spine,
-# in DOCUMENT ORDER.
+# volume_records <index.html> — "<full>\t<type>\t<height-px>" per rendered
+# volume, in DOCUMENT ORDER.
 #
 # THREE PROPERTIES OF ONE ELEMENT, READ IN ONE PASS, because issue #274 grades
 # them against each other: the sequence must be the order core lineage dictates,
 # and a paper must render as a visibly different object than a book — which on
-# this page means a shorter one, since the spine's height is the only part of its
-# form that reaches the HTML as a value a shell can read.
+# this page means a shorter one, since the object's height is the only part of
+# its form that reaches the HTML as a value a shell can read.
+#
+# SELECTED ON `data-key`, NOT ON A CLASS NAME. The canon section has been a rack
+# of vertical spines and is now a case of face-out covers, and the class name
+# moved with the form (`.spine` → `.volume`) while the property being graded did
+# not. A reader keyed on the presentation went dark on a redesign that changed
+# nothing it checks — and went dark the loud way, as a fatal about its own
+# reading. `data-key` is the contract this suite actually depends on: it is what
+# `rendered_keys` reads, so the two readers cannot disagree about which elements
+# are in the population.
 #
 # HEIGHT IS AN INLINE STYLE AND THAT IS WHY THIS WORKS. The board, the cloth
-# shadow, and the offprint's stapled edge are all in a <style> block, so a
+# weave, and the offprint's stapled edge are all in a <style> block, so a
 # checker that wanted them would be reduced to grepping CSS for a selector —
 # the weak, language-construct kind of detector this file already flags in the
 # narrowing check. The height is computed per work in the component's frontmatter
 # and emitted per element, so it can be compared against the canon instead.
-spine_records() {
-    { grep -o '<button[^>]*class="spine"[^>]*>' "$1" || true; } \
+volume_records() {
+    { grep -o '<button[^>]*data-key="[^"]*"[^>]*>' "$1" || true; } \
         | awk '
             {
                 h = ""; k = ""; t = ""
@@ -628,7 +681,7 @@ spine_records() {
 narrowing_calls() {
     sed -e 's|^[[:space:]]*//.*$||' -e 's|^[[:space:]]*\*[[:space:]/]*$||' \
         -e 's|^[[:space:]]*\*[[:space:]/].*$||' "$1" \
-        | grep -nE '\b(canon|spines)\b[^;]*\.(slice|filter|splice|shift|pop)\('
+        | grep -nE '\b(canon|spines|volumes)\b[^;]*\.(slice|filter|splice|shift|pop)\('
 }
 
 # offprint_scan <records> — the first (paper, book) pair the page renders where
@@ -1019,6 +1072,33 @@ EOF
 lesson_count="$(lesson_keys "$data_ts" | grep -c . || true)"
 [ -n "$orphans" ] || ok "all $lesson_count hand-written lesson(s) are keyed to a work some skill declares"
 
+# THE TOP BOARD, BOTH WAYS IT CAN ROT. `flagships` is exempt from the
+# stray-mention scan above because it only permutes the shelf, and that exemption
+# is only as safe as these two checks. A name matching no declared work is dead
+# prose that silently orders nothing — #272's shape in the ordering layer — and a
+# name listed twice is a rank the component resolves by taking the first, so the
+# array says one order and the page renders another.
+flagship_list="$(flagship_order "$data_ts")"
+flagship_count="$(printf '%s\n' "$flagship_list" | grep -c . || true)"
+flagship_orphans="$(comm -23 <(printf '%s\n' "$flagship_list" | grep -v '^$' | LC_ALL=C sort -u) \
+                             <(declared_works "$repo_root"/*/SKILL.md | LC_ALL=C sort -u))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "the flagship order names \"$offender\", which no skill declares" \
+        "the entry must be the verbatim sources: string of a declared work, or it orders nothing and the shelf silently ignores it."
+done <<EOF
+$flagship_orphans
+EOF
+flagship_dupes="$(printf '%s\n' "$flagship_list" | grep -v '^$' | LC_ALL=C sort | uniq -d)"
+if [ -n "$flagship_dupes" ]; then
+    bad "the flagship order lists a work twice" \
+        "$(printf '%s' "$flagship_dupes" | sed 's/^/       repeated: /')
+the component ranks on first occurrence, so the second one is inert and the array no longer describes the page."
+fi
+if [ -z "$flagship_orphans" ] && [ -z "$flagship_dupes" ]; then
+    ok "all $flagship_count flagship(s) name a distinct declared work"
+fi
+
 # THE NARROWING CHECK, and an honest note about what it is worth. This keys on
 # a language construct, which `mechanism-generality-lags-the-pattern-2026-08-23.md`
 # is explicit is the weaker kind of detector — it catches `.slice(` and misses a
@@ -1052,7 +1132,7 @@ else
     rendered="$(rendered_keys "$built_page" | LC_ALL=C sort -u)"
     rendered_count="$(printf '%s' "$rendered" | grep -c . || true)"
     if [ "$rendered_count" -lt "$MIN_RENDERED" ]; then
-        fatal "read $rendered_count spine(s) out of the built page, expected at least $MIN_RENDERED.
+        fatal "read $rendered_count volume(s) out of the built page, expected at least $MIN_RENDERED.
        The reader is broken, not the page — a page that reads as empty passes the
        comparison below vacuously, which is the failure this whole suite exists
        to make impossible."
@@ -1070,14 +1150,14 @@ EOF
     unbacked_render="$(comm -13 <(printf '%s\n' "$canon_set") <(printf '%s\n' "$rendered"))"
     while IFS= read -r offender; do
         [ -n "$offender" ] || continue
-        bad "the page renders a spine for \"$offender\", which is not in the canon" \
+        bad "the page renders a volume for \"$offender\", which is not in the canon" \
             "issue #272's direction: the shelf asserting a work the repo does not declare."
     done <<EOF
 $unbacked_render
 EOF
 
     if [ -z "$unrendered" ] && [ -z "$unbacked_render" ]; then
-        ok "all $rendered_count rendered spine(s) are exactly the $entry_count canon work(s)"
+        ok "all $rendered_count rendered volume(s) are exactly the $entry_count canon work(s)"
     fi
 
     # THE EYEBROW COUNTS BOOKS AND PAPERS SEPARATELY (issue #274). It advertised
@@ -1113,57 +1193,59 @@ EOF
     # renders. #274 is about the two things the section then does with that set,
     # and both are silent when they break: the page still builds, every spine
     # still traces to a declaration, and the coverage checks stay green.
-    records="$(spine_records "$built_page")"
+    records="$(volume_records "$built_page")"
     record_count="$(printf '%s' "$records" | grep -c . || true)"
 
     # COMPARED AGAINST AN UNDEDUPLICATED COUNT, AND THE TWO DIRECTIONS MEAN
     # DIFFERENT THINGS. `$rendered_count` above is a `sort -u` set, so comparing
     # against it conflated two unrelated events: a reader dropping elements, and
     # a PAGE rendering one work twice. The first draft did exactly that and read
-    # the second as the first — duplicating a single <button class="spine"> made
-    # the suite exit with "spine_records is broken, not the page … it is dropping
+    # the second as the first — duplicating a single <button class="volume">
+    # made the suite exit with "volume_records is broken, not the page … dropping
     # elements", every clause of which was false, and took the order and offprint
     # checks down with it. A duplicate is a plausible page defect (an ordering
     # bug, an alias-collapse regression, a stray map) and nothing else here
     # catches one, because `unbacked_render` also compares against the set.
     raw_key_count="$(rendered_keys "$built_page" | grep -c . || true)"
     if [ "$record_count" -lt "$raw_key_count" ]; then
-        fatal "read $record_count spine record(s) but $raw_key_count spine key(s) out of the same page.
-       spine_records is broken, not the page — it reads the height and type off the
+        fatal "read $record_count volume record(s) but $raw_key_count volume key(s) out of the same page.
+       volume_records is broken, not the page — it reads the height and type off the
        same <button> that carries the key, so reading FEWER records than keys means
        it is dropping elements, and a short list passes the order comparison below
        on a prefix."
     fi
     if [ "$raw_key_count" -gt "$rendered_count" ]; then
         dupes=$((raw_key_count - rendered_count))
-        bad "the page renders $raw_key_count spine(s) for $rendered_count distinct work(s) — $dupes duplicate(s)" \
+        bad "the page renders $raw_key_count volume(s) for $rendered_count distinct work(s) — $dupes duplicate(s)" \
             "$(rendered_keys "$built_page" | LC_ALL=C sort | uniq -d | sed 's/^/       repeated: /')
-one work, one spine. A duplicate passes every set comparison in this section vacuously — both directions above compare deduplicated sets — so this is the only check that sees it."
+one work, one volume. A duplicate passes every set comparison in this section vacuously — both directions above compare deduplicated sets — so this is the only check that sees it."
     fi
 
     # ORDER. The bookcase is sorted by core lineage, then breadth (see
     # `shelf_order` above for why, and for why the oracle is derived from the
     # canon rather than re-read out of the component).
-    want_order="$(shelf_order "$canon_ts")"
+    want_order="$(shelf_order "$canon_ts" "$data_ts")"
     got_order="$(printf '%s\n' "$records" | cut -f1)"
     if [ "$want_order" = "$got_order" ]; then
-        ok "the bookcase renders in core-lineage order: primary citations, then total, then title"
+        ok "the bookcase renders the $(flagship_order "$data_ts" | grep -c . || true) named flagship(s) first, then core-lineage order"
     else
         # `|| true` on the whole pipeline: diff exits 1 on a difference, which is
         # the case this branch exists for, and `set -o pipefail` would abort the
         # suite mid-report rather than print the failure it just found.
         first_wrong="$(diff <(printf '%s\n' "$want_order") <(printf '%s\n' "$got_order") | head -8 || true)"
-        bad "the rendered spine order is not the order core lineage dictates" \
+        bad "the rendered volume order is not the order the flagship list and core lineage dictate" \
             "$first_wrong
-issue #274: citation count alone measures breadth of reuse, not centrality, and sorting by it buried the four books the pipeline is most recognizably built on. The order must be primary-citation count desc, then total desc, then the declared string."
+the required order is: every work named in data.ts's \`flagships\` array, in the order the array lists them, then everything else by primary-citation count desc, then total desc, then the declared string. Issue #274 is why the tail is ranked on primary count rather than raw citations; the named head is why an engineer's first row is the books they already own."
     fi
 
     # PAPERS ARE A DIFFERENT OBJECT. #274 verbatim: "Books and papers are
     # different objects. Whatever form the section takes should be able to render
-    # both without pretending the papers are books." On a board of vertical
-    # spines the honest form is an offprint — slim, flat, and visibly shorter —
-    # and height is the one part of that form that reaches the HTML as a value
-    # rather than as a CSS rule, so it is what this grades.
+    # both without pretending the papers are books." On a case of face-out covers
+    # the honest form is an offprint — squat, flat, stapled, and visibly shorter
+    # than any bound volume — and height is the one part of that form that
+    # reaches the HTML as a value rather than as a CSS rule, so it is what this
+    # grades. It survived the spine-to-cover redesign unchanged, which is the
+    # point of grading the property rather than the picture.
     if [ "$paper_count" -gt 0 ]; then
         # NO DIRECTION FLAG TO INVERT. The first fix for this check pinned
         # `extreme`'s min/max semantics with a fixture — and left the two CALL
@@ -1183,7 +1265,7 @@ issue #274: citation count alone measures breadth of reuse, not centrality, and 
             # The PAGE defect comes first: the markup lost the type, so the
             # heights have nothing to be graded per type. Reported rather than
             # fatal, because the rest of the suite still has things to say.
-            bad "the page marks $rendered_papers spine(s) as papers and $rendered_books as books; the canon types $paper_count and $book_count" \
+            bad "the page marks $rendered_papers volume(s) as papers and $rendered_books as books; the canon types $paper_count and $book_count" \
                 "the type has to survive into the markup for the section to render the two differently. If data-type stopped being emitted, the offprints are being drawn as books."
         elif [ "$book_count" -eq 0 ]; then
             ok "every work in the canon is a paper, so there is no book to be shorter than"
@@ -1782,6 +1864,65 @@ else
         "this is the shape a straight revert of the pre-#273 shelf takes, and it is the one a membership test cannot see"
 fi
 
+# THE TOP BOARD'S EXEMPTION, BOTH DIRECTIONS. `flagships` was added to the
+# stray-mention scan's allowed blocks, and an exemption is the classic way to
+# blind a detector: widen the hole and the regression it was watching for walks
+# through it. The first fixture proves the sanctioned shape passes; the second
+# plants #273's array in a file that ALSO has a legitimate flagships block, which
+# is the shape the hole would hide.
+cat > "$fixtures/flagship-data.ts" <<'DATA'
+export const flagships: string[] = [
+	"Known Book — Jane Doe",
+];
+
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+DATA
+if [ -z "$(stray_work_mentions "$fixtures/flagship-data.ts" "$fixtures")" ]; then
+    ok "a flagships array naming a declared work is a sanctioned mention, not a stray one"
+else
+    bad "the sanctioned flagships block was reported as a stray work mention" \
+        "the ordering list is allowed to name works; it permutes the shelf and cannot subtract from it"
+fi
+
+cat > "$fixtures/flagship-plus-shelf.ts" <<'DATA'
+export const flagships: string[] = [
+	"Known Book — Jane Doe",
+];
+
+export const shelf = [
+	{ title: "Gamma Book", author: "Hopper", full: "Gamma Book — Grace Hopper" },
+];
+DATA
+if [ -n "$(stray_work_mentions "$fixtures/flagship-plus-shelf.ts" "$fixtures")" ]; then
+    ok "the flagships exemption does not hide a hand-written works array beside it"
+else
+    bad "a re-introduced works array passed once a flagships block was present" \
+        "the exemption is scoped to the flagships block by position; if it leaked to the rest of the file, #273's regression check is dead and reports nothing"
+fi
+
+# THE READER'S OWN BOUND. `flagship_order` must return the array in FILE order —
+# the sequence is the claim — and must stop at the array, or the lessons keys one
+# line down enter the order as phantom flagships.
+cat > "$fixtures/flagship-order.ts" <<'DATA'
+export const flagships: string[] = [
+	"Zeta Book — Ada Byron",
+	"Alpha Book — Jane Doe",
+];
+
+export const lessons: Lessons = {
+	"Leaked Book — Grace Hopper": "Must not be read as a flagship.",
+};
+DATA
+got_flagships="$(flagship_order "$fixtures/flagship-order.ts" | tr '\n' '|')"
+if [ "$got_flagships" = "Zeta Book — Ada Byron|Alpha Book — Jane Doe|" ]; then
+    ok "flagship_order reads the array in file order and stops at its closing bracket"
+else
+    bad "flagship_order misread the ordering array" \
+        "got: $got_flagships, want: Zeta Book — Ada Byron|Alpha Book — Jane Doe| — sorted output means the file order was lost, and a third entry means the lessons map leaked in"
+fi
+
 cat > "$fixtures/orphan-lesson-data.ts" <<'DATA'
 export const lessons: Lessons = {
 	"Known Book — Jane Doe": "A pull-quote.",
@@ -1805,7 +1946,7 @@ cat > "$fixtures/page.html" <<'HTML'
 HTML
 read_back="$(rendered_keys "$fixtures/page.html" | tr '\n' '|')"
 if [ "$read_back" = 'Known Book & Friends — Jane Doe|Gamma Book — Grace Hopper|' ]; then
-    ok "rendered_keys reads each spine's work and undoes the templating's entity escapes"
+    ok "rendered_keys reads each volume's work and undoes the templating's entity escapes"
 else
     bad "rendered_keys misread the built page" \
         "got: $read_back — an ampersand in a title is escaped by the templating, and a reader that does not undo it reports every such work as unrendered"
@@ -1879,22 +2020,27 @@ else
         "got: $(hero_count "$fixtures/hero.html" papers) — the live check reads empty as 'the page dropped the papers clause', so a reader that invents a number hides exactly that regression"
 fi
 
-# THE SPINE READER, all three fields at once. `rendered_keys` above proves only
+# THE VOLUME READER, all three fields at once. `rendered_keys` above proves only
 # that the key survives; the order and offprint checks also need the type and the
 # height off the SAME element, and a reader that pairs a key with the wrong row's
 # height would grade a real page against a shuffled one.
-cat > "$fixtures/spines.html" <<'HTML'
-<button type="button" class="spine" style="--i:0; height:356px; background:#54364F; color:#F0E9D8;" title="t" aria-pressed="false" data-key="The Pragmatic Programmer &#38; Friends" data-type="book" data-astro-cid-x>
-<span class="label">The Pragmatic Programmer</span></button>
-<button type="button" class="spine" style="--i:1; height:122px;" title="t" aria-pressed="false" data-key="Du et al. (2023)" data-type="paper" data-astro-cid-x>
-<span class="label">Du et al.</span></button>
+#
+# THE FIXTURE CARRIES A CLASS THE READER MUST NOT NEED. `class="volume"` is here
+# because that is what the page ships, and the second element deliberately omits
+# the class entirely: the reader selects on `data-key`, and a rewrite that put it
+# back on the presentation would pass the first row and drop the second.
+cat > "$fixtures/volumes.html" <<'HTML'
+<button type="button" class="volume" style="--i:0; height:176px; --h:176px; --vol-w:116px; --cloth:#54364F; --ink:#F0E9D8;" title="t" aria-pressed="false" data-key="The Pragmatic Programmer &#38; Friends" data-type="book" data-astro-cid-x>
+<img class="art" src="/canon/the-pragmatic-programmer.jpg" alt=""></button>
+<button type="button" style="--i:1; height:96px; --h:96px; --vol-w:75px;" title="t" aria-pressed="false" data-key="Du et al. (2023)" data-type="paper" data-astro-cid-x>
+<span class="face"><span class="ftitle">Du et al.</span></span></button>
 HTML
-want_records="$(printf 'The Pragmatic Programmer & Friends\tbook\t356\nDu et al. (2023)\tpaper\t122\n')"
-got_records="$(spine_records "$fixtures/spines.html")"
+want_records="$(printf 'The Pragmatic Programmer & Friends\tbook\t176\nDu et al. (2023)\tpaper\t96\n')"
+got_records="$(volume_records "$fixtures/volumes.html")"
 if [ "$got_records" = "$(printf '%s' "$want_records")" ]; then
-    ok "spine_records reads key, type and height off each spine, in document order, unescaped"
+    ok "volume_records reads key, type and height off each volume, in document order, unescaped, without keying on a class"
 else
-    bad "spine_records misread the spine markup" \
+    bad "volume_records misread the volume markup" \
         "got:
 $got_records
 want:
@@ -2027,44 +2173,46 @@ case "$scan_hit" in
         bad "the offprint scan named the wrong pair" "got: $scan_hit, want Tall Paper/300 vs Short Book/214" ;;
 esac
 
-# THE DUPLICATE-SPINE DIRECTION. The record count is compared against an
+# THE DUPLICATE-VOLUME DIRECTION. The record count is compared against an
 # UNDEDUPLICATED key count, because the deduplicated one conflated a reader
 # dropping elements with a page rendering one work twice — and the first draft
-# read the second as the first, aborting with "spine_records is broken, not the
+# read the second as the first, aborting with "volume_records is broken, not the
 # page" on a page that was the thing at fault.
 cat > "$fixtures/dupe.html" <<'HTML'
-<button type="button" class="spine" style="height:214px;" data-key="One Work — A" data-type="book"><span class="label">One Work</span></button>
-<button type="button" class="spine" style="height:214px;" data-key="One Work — A" data-type="book"><span class="label">One Work</span></button>
+<button type="button" class="volume" style="height:176px;" data-key="One Work — A" data-type="book"><span class="face">One Work</span></button>
+<button type="button" class="volume" style="height:176px;" data-key="One Work — A" data-type="book"><span class="face">One Work</span></button>
 HTML
 dupe_raw="$(rendered_keys "$fixtures/dupe.html" | grep -c . || true)"
 dupe_uniq="$(rendered_keys "$fixtures/dupe.html" | LC_ALL=C sort -u | grep -c . || true)"
-dupe_records="$(spine_records "$fixtures/dupe.html" | grep -c . || true)"
+dupe_records="$(volume_records "$fixtures/dupe.html" | grep -c . || true)"
 if [ "$dupe_raw" = "2" ] && [ "$dupe_uniq" = "1" ] && [ "$dupe_records" = "2" ]; then
-    ok "a duplicated spine reads as 2 records and 2 keys against 1 distinct work, so it lands on the duplicate check rather than the reader-is-broken fatal"
+    ok "a duplicated volume reads as 2 records and 2 keys against 1 distinct work, so it lands on the duplicate check rather than the reader-is-broken fatal"
 else
     bad "the duplicate fixture did not read as expected" \
-        "got raw=$dupe_raw uniq=$dupe_uniq records=$dupe_records, want 2/1/2 — if records and raw keys disagree here, the fatal fires and blames spine_records for a page defect."
+        "got raw=$dupe_raw uniq=$dupe_uniq records=$dupe_records, want 2/1/2 — if records and raw keys disagree here, the fatal fires and blames volume_records for a page defect."
 fi
 
-cat > "$fixtures/spineless.html" <<'HTML'
-<section id="canon"><div class="shelf"></div></section>
+cat > "$fixtures/empty-case.html" <<'HTML'
+<section id="canon"><div class="bookcase"></div></section>
 HTML
-if blind="$(rendered_keys "$fixtures/spineless.html")"; then
+if blind="$(rendered_keys "$fixtures/empty-case.html")"; then
     if [ -z "$blind" ]; then
-        ok "a page with no spines reads as empty rather than killing the suite"
+        ok "a page with no volumes reads as empty rather than killing the suite"
     else
         bad "rendered_keys invented $(printf '%s' "$blind" | grep -c .) key(s) from a page with none" "got: $blind"
     fi
 else
-    bad "rendered_keys aborted on a page with no spines" \
+    bad "rendered_keys aborted on a page with no volumes" \
         "under set -euo pipefail this kills the whole script with an empty stderr, so the MIN_RENDERED fatal that exists to report an empty page is unreachable and every check after it silently does not run"
 fi
 
 rm -f "$fixtures/canon-clean.ts" "$fixtures/canon-unparsed.ts" \
       "$fixtures/clean-data.ts" "$fixtures/rehanded-data.ts" \
       "$fixtures/rehanded-same-works.ts" \
-      "$fixtures/orphan-lesson-data.ts" "$fixtures/page.html" \
-      "$fixtures/spineless.html" "$fixtures/hero.html" "$fixtures/hero-none.html" "$fixtures/hero-early.html"
+      "$fixtures/orphan-lesson-data.ts" "$fixtures/flagship-data.ts" \
+      "$fixtures/flagship-plus-shelf.ts" "$fixtures/flagship-order.ts" \
+      "$fixtures/page.html" \
+      "$fixtures/empty-case.html" "$fixtures/volumes.html" "$fixtures/hero.html" "$fixtures/hero-none.html" "$fixtures/hero-early.html"
 
 # --- the mappings direction ---
 

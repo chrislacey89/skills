@@ -10,3 +10,9 @@ node_modules/
 
 # Real image assets under public/ are tracked (root .gitignore ignores *.png globally)
 !public/og-image.png
+# Canon cover art is page content, not a stray screenshot. Without this the root
+# rule swallows a PNG jacket dropped into the bookcase's art directory: `git add`
+# reports nothing, and the cover falls back to its printed face on the deployed
+# page only. JPEGs were never caught by that rule, which is why the first four
+# covers landed and a fifth in PNG would not have.
+!public/canon/*.png
