@@ -293,7 +293,7 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/closeout`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`, `/re-pitch`
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Handoff Table
@@ -327,6 +327,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/help` | Uncertainty about current pipeline position | Next-step recommendation with a one-line reason | The recommended next skill |
 | `/correct-course` | Invalidated artifact or changed assumption | Blast-radius diagnosis and artifact cleanup plan | The earliest skill that needs to re-run |
 | `/handoff` | Long session with no natural compression artifact — mid-skill, exploratory, side-route, or non-pipeline work | Transient handoff doc at a `mktemp` path; references existing artifacts by path, URL, or issue number | Fresh session opened by the user with the doc as input |
+| `/re-pitch` | An explanation that did not land, plus the user's signal of non-comprehension | A replacement explanation in the conversation — diagnosed cause, one-sentence anchor, capped sentences, every domain term glossed at first use. No durable artifact | Returns control to whatever was in flight; may recommend `/ubiquitous-language` when the same terms keep needing glosses |
 | `/init-pipeline` | Project that will use `/execute` | Claude Code hooks, git guardrails, pre-commit setup | `/execute` (auto-invokes it) |
 | `/setup-pre-commit` | Repo needing commit-time quality gates | Lefthook config plus formatter/linter wiring | Normal feature work, now gated at commit |
 | `/setup-ralph-loop` | Repo wanting repeatable Ralph execution | `ralph-once.sh` and bounded `ralph.sh` | `/execute`, first HITL then bounded AFK |
@@ -417,7 +418,8 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 ├── walk-commits/SKILL.md           # Interactive commit-by-commit comprehension walkthrough before merge (optional, recommended by /pre-merge)
 ├── visual-recap/SKILL.md           # Render a finished diff/PR/branch as a transient interactive HTML recap with line-anchored callouts (optional, never auto-invoked)
 ├── help/SKILL.md                   # Read repo state and recommend the next pipeline skill (advisory only)
-└── correct-course/SKILL.md         # Diagnose stale artifacts and walk the cleanup when an upstream assumption fails
+├── correct-course/SKILL.md         # Diagnose stale artifacts and walk the cleanup when an upstream assumption fails
+└── re-pitch/SKILL.md               # Re-state an explanation that did not land, in controlled technical English with every domain term glossed
 ```
 
 ### Ralph setup:
@@ -497,4 +499,5 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Clean up after ship | Close the PRD issue and any remaining slice issues; the research artifact persists (archive file outside the repo, or closed spike issue in GitHub) and is never deleted — supersede with a new dated artifact if research changes |
 | Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
 | Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next skill with a one-line reason |
+| Understand an explanation that did not land | `/re-pitch` — diagnose whether the reader is missing a term, the situation, or was given too much at once; re-state under checkable rules with every domain term glossed on first use; returns control to whatever was in flight |
 | Compact a long session into a fresh-start doc | `/handoff [next-session focus]` — writes a transient doc at a `mktemp` path referencing durable state rather than duplicating it; for mid-skill, exploratory, or cross-agent handoffs, not routine inter-skill ones |

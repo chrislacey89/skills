@@ -12,9 +12,7 @@ sources:
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
     - "Introduction to Software Testing — Ammann & Offutt"
     - "Domain Modeling Made Functional — Scott Wlaschin"
-    - "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn"
-  papers:
-    - "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn"
+    - "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn (Computational Linguistics 2014)"
 ---
 
 # Test-Driven Development
