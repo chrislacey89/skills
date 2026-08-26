@@ -12,6 +12,9 @@ sources:
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
     - "Introduction to Software Testing — Ammann & Offutt"
     - "Domain Modeling Made Functional — Scott Wlaschin"
+    - "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn"
+  papers:
+    - "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn"
 ---
 
 # Test-Driven Development
@@ -129,6 +132,7 @@ After all tests pass, look for [refactor candidates](refactoring.md):
 - [ ] Apply SOLID principles where natural
 - [ ] Consider what new code reveals about existing code
 - [ ] Run tests after each refactor step
+- [ ] **Consolidate a restated claim.** A *prose contract* often states one claim at several *operative sites* at once. That is information leakage with nothing to break when a site is missed, so an additive edit leaves the superseded statement live beside the new one. Census the artifact, then extract the claim to one interpolated constant. [references/restated-claims.md](references/restated-claims.md) defines both terms and carries the census move, the limit of the literal-count assertion, and the fallback when interpolation is unavailable.
 - [ ] **[TypeScript projects, when implementing a library-provided callback]** If the refactor produced a local wrapper type for the callback's return (e.g. `AdjacentStepOverrides` for a Mastra `prepareStep` return), anchor the return to the library's declared shape using `satisfies LibraryReturnType` on the object expression, or return a fresh object literal, or derive the local type via `ReturnType<typeof libraryCallback>` / `Parameters<…>`. Do **not** return a typed local variable. TypeScript's excess-property check does not run on returns of typed values, so any field not declared by the library's signature is silently dropped at runtime — build passes, tests pass, the library never sees the field. This is the failure mode `/research` Phase 1.25 and `/pre-merge` Dim 8 backstop, but `satisfies` at refactor time closes the gap at compile time. Cite: ts-essentials Rule 31, "Use `satisfies` for type validation without losing inference precision."
 
 **Never refactor while RED.** Get to GREEN first. One exception, and it is a narrow one: a type-first migration deliberately breaks the *build*, which is not a red bar — see [refactoring.md](refactoring.md) § *A broken build is not a red bar*.

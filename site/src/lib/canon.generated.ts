@@ -43,6 +43,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn",
+		title: "A Survey and Classification of Controlled Natural Languages",
+		author: "Tobias Kuhn",
+		type: "paper",
+		citations: [
+			{ skill: "tdd", tier: "secondary" },
+		],
+	},
+	{
 		full: "Advanced Vitest Patterns — Epic Web Dev",
 		title: "Advanced Vitest Patterns",
 		author: "Epic Web Dev",
