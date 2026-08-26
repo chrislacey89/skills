@@ -11,10 +11,21 @@ const {
 	description = "Skill Kit is a Claude Code skills pack that turns 50 years of software engineering discipline into a delivery pipeline your coding agent follows — shape, build, test, ship. Every skill cites its source.",
 } = Astro.props;
 
-const base = import.meta.env.BASE_URL;
-const favicon = `${base.replace(/\/$/, "")}/favicon.svg`;
+// EVERY ICON PATH GOES THROUGH `BASE_URL`. The site is served from a
+// project-pages subpath (`/skills`), so a root-absolute `/favicon.ico` resolves
+// on `localhost:4321` and 404s in production — and a 404 on an icon is silent,
+// because the browser just shows its default.
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const favicon = `${base}/favicon.svg`;
+// THE .ICO IS THE FALLBACK, NOT THE PRIMARY. The SVG is one 333-byte file that
+// stays sharp at any size, and every browser released since 2019 prefers it.
+// The `.ico` carries 16/32/48 rasters for the ones that do not — and for the
+// clients that never read the markup at all (feed readers, chat unfurlers,
+// bookmark managers), which ask the origin for a favicon and take what they get.
+const faviconIco = `${base}/favicon.ico`;
+const appleTouchIcon = `${base}/apple-touch-icon.png`;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
-const ogImage = new URL(`${base.replace(/\/$/, "")}/og-image.png`, Astro.site).href;
+const ogImage = new URL(`${base}/og-image.png`, Astro.site).href;
 ---
 
 <!doctype html>
@@ -28,6 +39,8 @@ const ogImage = new URL(`${base.replace(/\/$/, "")}/og-image.png`, Astro.site).h
 			document.documentElement.classList.add("has-js");
 		</script>
 		<link rel="icon" type="image/svg+xml" href={favicon} />
+		<link rel="icon" type="image/x-icon" sizes="16x16 32x32 48x48" href={faviconIco} />
+		<link rel="apple-touch-icon" sizes="180x180" href={appleTouchIcon} />
 		<title>{title}</title>
 		<meta name="description" content={description} />
 		<link rel="canonical" href={canonical} />
