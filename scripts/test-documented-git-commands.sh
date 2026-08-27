@@ -477,8 +477,6 @@ trap 'rm -rf "$sandbox" "$base_sandbox"' EXIT
 upstream="$base_sandbox/upstream"
 work="$base_sandbox/work"
 
-git_up() { git -C "$upstream" "$@"; }
-
 (
     mkdir -p "$upstream"
     cd "$upstream"
@@ -953,7 +951,7 @@ range_pattern='git (diff|log)( +--?[a-z-]+)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\
 scan_files="$(cd "$repo_root" && ls ./*/SKILL.md ./*/references/*.md ./docs/*.md 2>/dev/null) pre-merge/review-checklist.md"
 
 # shellcheck disable=SC2086
-range_hits="$(cd "$repo_root" && grep -hoE "$range_pattern" $scan_files || true)"
+range_hits="$(cd "$repo_root" && { grep -hoE "$range_pattern" $scan_files || true; })"
 range_count="$(printf '%s\n' "$range_hits" | grep -c . || true)"
 
 # Non-vacuity, and the specific kind this section needs. A count floor alone
@@ -962,7 +960,7 @@ range_count="$(printf '%s\n' "$range_hits" | grep -c . || true)"
 # section exists to fix. So compare against the raw number of `..HEAD` ranges
 # in the same files: the detector must account for every one of them.
 # shellcheck disable=SC2086
-raw_ranges="$(cd "$repo_root" && grep -hoE '\.\.\.?HEAD' $scan_files | grep -c . || true)"
+raw_ranges="$(cd "$repo_root" && { grep -hoE '\.\.\.?HEAD' $scan_files | grep -c . || true; })"
 assert_eq "$raw_ranges" "$range_count" \
     "the endpoint pattern accounts for every '..HEAD' range in the scanned files (none silently unparsed)"
 # A global floor has slack in it, and slack is where a real loss hides: with 11
@@ -972,7 +970,7 @@ assert_eq "$raw_ranges" "$range_count" \
 # derived: every skill that carries the detection block must document at least
 # one range, and so must the review checklist that restates the command.
 for site in $base_sites pre-merge/review-checklist.md; do
-    site_ranges="$(cd "$repo_root" && grep -cE "$range_pattern" "$site" || true)"
+    site_ranges="$(cd "$repo_root" && { grep -cE "$range_pattern" "$site" || true; })"
     if [[ "$site_ranges" -ge 1 ]]; then
         printf '  ok   %s documents %s range endpoint(s) for the census to check\n' "$site" "$site_ranges"
         pass=$((pass + 1))
