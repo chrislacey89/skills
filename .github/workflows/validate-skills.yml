@@ -153,6 +153,14 @@ jobs:
       - name: Run absent-local-gate tell contract suite
         run: bash scripts/test-absent-local-gate-tells.sh
 
+      # Measures git's own behavior in a scratch repo rather than reading a file
+      # in this one, so it is the one suite here that can go red because the
+      # runner's git changed rather than because this repo did. That is the
+      # point: CLAUDE.md states what `diff=markdown` does and does not do, and
+      # nothing else would notice if a future git made half of it false.
+      - name: Run markdown diff-attribute contract suite
+        run: bash scripts/test-markdown-diff-attribute.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference
