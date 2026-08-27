@@ -3,9 +3,11 @@
 # a bare line range. In a repo whose product is prose that is the difference
 # between knowing which section a hunk lands in and not.
 #
-# It does NOT supply a wordRegex. `git diff --word-diff` — the thing that makes
-# a paragraph edit legible here — is a display flag that needs no attribute, and
-# its output is byte-identical with and without this line. See CLAUDE.md
-# § Local dev setup, and scripts/test-markdown-diff-attribute.sh, which pins
-# both halves of that claim against the installed git rather than restating it.
+# What this driver does NOT supply, and why `git diff --word-diff` is a separate
+# thing that needs no attribute at all, is stated once in CLAUDE.md
+# § "Reading a prose diff" and pinned by scripts/test-markdown-diff-attribute.sh.
+# Deliberately not restated here: that suite greps CLAUDE.md, so a second copy
+# in this file would be an unpinned claim about third-party behavior sitting in
+# the file that configures it — which is how a correction reaches one site and
+# leaves the other asserting the opposite.
 *.md diff=markdown

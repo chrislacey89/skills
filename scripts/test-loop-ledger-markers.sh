@@ -126,7 +126,7 @@ section "the prose rule and the marker name the same three fields"
 # over-corrected. That line is a whole multi-sentence paragraph, and its FIRST
 # sentence reads "a judge is a system — model + prompt + sampling parameters —
 # not a model". Two of the three assertions below were therefore being satisfied
-# by a neighbouring sentence rather than by the rule.
+# by an adjacent sentence rather than by the rule.
 #
 # Reproduced on the unreflowed tree, before the fix: replacing "model" and
 # "prompt" inside the rule sentence with MODELREDACTED and PROMPTREDACTED left
@@ -147,17 +147,26 @@ if [[ -z "$judge_line" ]]; then
     exit 2
 fi
 
-judge_prose="records the reviewer${judge_line#*records the reviewer}"
-judge_prose="${judge_prose%%. *}"
+judge_from_anchor="records the reviewer${judge_line#*records the reviewer}"
+judge_prose="${judge_from_anchor%%. *}"
 
-# NON-VACUITY. The scoping must actually have happened: an extract equal to the
-# line it came from means the sentence split silently no-opped, which returns
-# this check to the widened state described above — green, and reading the wrong
-# text. Verified: removing the split turns this into a FATAL rather than a pass.
-if [[ "$judge_prose" == "$judge_line" ]]; then
-    printf 'FATAL: the judge-pin sentence did not narrow from its line in %s\n' "$premerge_skill" >&2
+# NON-VACUITY, and this guard shipped DEAD in its first draft — worth recording,
+# because the dead version carried a comment asserting it had been verified.
+#
+# That draft compared $judge_prose against $judge_line. The prefix strip above
+# has already removed the paragraph's opening sentence ("The delegated reviewer
+# is an AI judge…") by the time the comparison runs, so the two strings differ
+# whether or not the ". " split did anything. The condition was unreachable.
+# Deleting the split entirely still produced 13 passed, 0 failed.
+#
+# The comparison has to be against the UN-SPLIT value the split consumed. That
+# is $judge_from_anchor, so a no-op split is now the one thing that makes them
+# equal. Verified by deleting the split and watching this FATAL fire — which is
+# the check the first draft's comment claimed and did not have.
+if [[ "$judge_prose" == "$judge_from_anchor" ]]; then
+    printf 'FATAL: the judge-pin sentence did not narrow from its paragraph in %s\n' "$premerge_skill" >&2
     printf '       The ". " sentence terminator is gone, so the assertions below\n' >&2
-    printf '       would be satisfied by any neighbouring sentence on the same line.\n' >&2
+    printf '       would be satisfied by any adjacent sentence on the same line.\n' >&2
     exit 2
 fi
 

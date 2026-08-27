@@ -153,8 +153,10 @@ split_names() {
 # scripts/test-compound-clustering-single-source.sh — see that file's header for
 # the two reproductions behind it. Duplicated rather than shared: every suite in
 # scripts/ is deliberately self-contained down to its own ok/bad/section, and a
-# three-line awk function does not justify inventing a sourcing layer under all
-# sixteen of them.
+# three-line awk function does not justify inventing a sourcing layer under every
+# suite the scripts/test-*.sh glob matches. (The glob is the inventory — an
+# earlier draft wrote "all sixteen of them" and was wrong by two before it even
+# merged, which is the drift CLAUDE.md § "Commands a skill documents" warns about.)
 #
 # WHY THE TWO SITES BELOW NEED IT AND THE TWO FURTHER DOWN DO NOT. The reads
 # here want a paragraph: both lists run to a sentence terminator, and Phase 4's
@@ -168,12 +170,13 @@ split_names() {
 # `guard_line` and `stage_line` further down are the opposite case and must stay
 # line-scoped. Each sed's an ordinal out of the SAME clause its anchor names, so
 # a paragraph read there would widen the domain: the ordinal could then be
-# satisfied by a neighbouring sentence, which is the defect
+# satisfied by an adjacent sentence, which is the defect
 # test-widened-domain-tell.sh exists to name. Do not sweep them into this change.
 paragraph_at() {  # $1 = file, $2 = literal anchor
     awk -v anchor="$2" '
         BEGIN { RS = "" }
-        index($0, anchor) { gsub(/\n/, " "); print; exit }
+        { rec = $0; gsub(/\n/, " ", rec) }
+        index(rec, anchor) { print rec; exit }
     ' "$1"
 }
 
@@ -195,32 +198,23 @@ p4_list="${p4_list%%. *}"
 [ -n "$p4_list" ] || fatal "Phase 4 anchor found but the list after it is empty."
 ok "Phase 4 re-enumerates the mechanism list"
 
-# NON-NARROWING FLOOR, and an honest statement of its reach.
+# MULTI-SENTENCE FLOOR. The rationale — what it catches, what it does not, and
+# why the length-comparison guard that looks stronger is a tautology — is stated
+# once in scripts/test-compound-clustering-single-source.sh at its own floor.
+# Do not restate it here: the two copies were duplicated on arrival and had
+# already drifted in wording before review read them, which is the exact defect
+# docs/restated-claims.md exists to name.
 #
-# Both enumerations live in multi-sentence paragraphs, and both sites below read
-# ACROSS sentences — Phase 4's number-words sit in a later sentence than the list
-# they count. A single-sentence extract therefore cannot support the assertions,
-# whatever produced it.
-#
-# What this catches: paragraph_at regressing to a line read (or any sed/cut
-# truncation) against a source paragraph that has been wrapped. Verified.
-#
-# What it does NOT catch, stated rather than implied: a wrap that happens to
-# leave two sentences on the anchor's own line. The tempting stronger guard —
-# compare the extract's length against the line holding the anchor — is a
-# TAUTOLOGY under exactly the reversion it appears to guard, because a line read
-# and that comparison read the same line. It was written, tested, found to pass
-# silently under a live reversion, and removed rather than shipped as
-# decoration. A floor that states a property it does not have is the defect this
-# whole change exists to close.
+# What is local to this suite: both sites below read ACROSS sentences — Phase 4's
+# number-words sit in a later sentence than the list they count — so a
+# one-sentence extract cannot support them.
 for pair in "Q4:$q4_para" "Phase 4:$p4_para"; do
     site="${pair%%:*}"; para="${pair#*:}"
-    # `|| true` is load-bearing, not defensive noise, and this suite's siblings
-    # already record why: `grep` exits 1 when it matches nothing, and under
-    # `set -euo pipefail` that kills the script on PRECISELY the condition this
-    # floor exists to report — a bare exit 1 with no FATAL line, no reason, and
-    # every later section silently skipped. Reproduced here before the guard.
-    sentences="$(printf '%s' "$para" | grep -c -- '\. ' || true)"
+    # `grep -o | wc -l`, not `grep -c`: paragraph_at returns ONE logical line, so
+    # `grep -c` counts 0 or 1 and is a presence test wearing a count's name.
+    # `|| true` because grep exits 1 on no match, which under `set -euo pipefail`
+    # would kill the script on precisely the condition this floor reports.
+    sentences="$(printf '%s' "$para" | grep -o -- '\. ' | wc -l | tr -d ' ' || true)"
     sentences="${sentences:-0}"
     [ "$sentences" -ge 1 ] || fatal \
         "$site's enumeration extracted as a single sentence — the reads below span sentences, so the extractor has narrowed and every assertion after this point would pass over text it never read."
@@ -486,7 +480,17 @@ fi
 # -----------------------------------------------------------------------------
 section "the ownership guard is declared once and the report can print it"
 
-guard_hits="$(grep -c -F -- "$guard_marker" "$compound_skill" || true)"
+# `grep -o | wc -l`, not `grep -c`. THIS IS THE SAME DEFECT CLASS THE REST OF
+# THIS CHANGE FIXES, one level down, and it survived the change's own six-pass
+# audit because that audit enumerated extractor SHAPES and this is a counter.
+# `grep -c` counts matching LINES; in this repo a paragraph IS a line, so a
+# second declaration of the guard planted in the same paragraph counted as 1
+# and the `*)` arm below — "it is a rule; declare it once" — was unreachable
+# for exactly the duplicates most likely to occur. Reproduced before the fix:
+# grep -c returned 1 where grep -o returned 2, and the suite printed
+# "ok the ownership guard is declared exactly once".
+guard_hits="$(grep -o -F -- "$guard_marker" "$compound_skill" | wc -l | tr -d ' ' || true)"
+guard_hits="${guard_hits:-0}"
 case "$guard_hits" in
     1) ok "the ownership guard is declared exactly once" ;;
     0) bad "no ownership guard for the pack-level name" \

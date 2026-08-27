@@ -107,10 +107,23 @@ scan_files() {
 # Neither alternative fit on one line, so neither matched, and the suite was
 # green over a live threshold a second time. Unwrapping restores the paragraph
 # as the single LOGICAL line every downstream matcher was written against.
+#
+# THE UNWRAP MUST HAPPEN BEFORE THE MATCH, and the first draft of this function
+# got that backwards: it ran `index($0, anchor)` and only unwrapped inside the
+# action, so the anchor itself was still matched line-wise. One line break at the
+# em-dash inside an anchor — no rewording whatsoever — then produced
+# `FATAL: no Q4 mechanism list … Q4 was reworded; update this suite with it`, a
+# diagnostic naming a cause that had not occurred. That is precisely the false
+# red this whole change exists to prevent, reintroduced by the change itself and
+# caught in review rather than by any check. Build the unwrapped record first,
+# match against it, print it. scripts/test-review-dimension-partition.sh already
+# wrote it this way (`detect_title_rosters`); the idiom was prior art in this
+# repo and the first draft did not look for it.
 paragraph_at() {  # $1 = file, $2 = literal anchor — returns the paragraph as one logical line
     awk -v anchor="$2" '
         BEGIN { RS = "" }
-        index($0, anchor) { gsub(/\n/, " "); print; exit }
+        { rec = $0; gsub(/\n/, " ", rec) }
+        index(rec, anchor) { print rec; exit }
     ' "$1"
 }
 
@@ -189,15 +202,21 @@ else
                 "anchor \"$overview_anchor\" not found — the summary was restructured; update this suite"
             continue
         fi
-        # NON-NARROWING FLOOR, and an honest statement of its reach. See
-        # paragraph_at's header for the two failures behind it.
+        # MULTI-SENTENCE FLOOR — the canonical statement of this guard. The
+        # sibling in test-q4-mechanism-names.sh points here rather than
+        # restating it; the two copies had already drifted in wording by the
+        # time review read them, which is the restated-claim defect this repo
+        # keeps a doc about (docs/restated-claims.md).
         #
         # /compound's description is multi-sentence and both assertions below
-        # claim to scan all of it, so a single-sentence extract cannot support
-        # them whatever produced it. What this catches: paragraph_at regressing
-        # to a line read against a wrapped source. Verified.
+        # claim to scan all of it, so a one-sentence extract cannot support them
+        # whatever produced it.
         #
-        # What it does NOT catch, stated rather than implied: a wrap that leaves
+        # WHAT IT CATCHES: paragraph_at regressing to a line read against a
+        # wrapped source. Verified by reverting the extractor under a wrapped
+        # tree and watching this fire.
+        #
+        # WHAT IT DOES NOT CATCH, stated rather than implied: a wrap that leaves
         # two sentences on the anchor's own line. The tempting stronger guard —
         # compare the extract's length against the line holding the anchor — is
         # a TAUTOLOGY under exactly the reversion it appears to guard, since a
@@ -206,10 +225,15 @@ else
         # rather than shipped. A floor that states a property it does not have
         # is the defect this whole change exists to close.
         #
-        # `|| true`: grep exits 1 on no match, and relying on `if`-condition
-        # context to suppress `set -e` here would make this floor's survival an
-        # accident of where it is written rather than a property of how.
-        para_sentences="$(printf '%s' "$para" | grep -c -- '\. ' || true)"
+        # COUNT OCCURRENCES, NOT LINES. `grep -c` counts matching LINES, and
+        # paragraph_at returns exactly one, so `grep -c` here can only ever
+        # return 0 or 1 — a presence test wearing a count's name. Review caught
+        # that; `grep -o | wc -l` is the count the failure text claims.
+        # `|| true` is load-bearing: grep exits 1 on no match, and relying on
+        # `if`-condition context to suppress `set -e` would make this floor's
+        # survival an accident of where it is written rather than a property of
+        # how.
+        para_sentences="$(printf '%s' "$para" | grep -o -- '\. ' | wc -l | tr -d ' ' || true)"
         if [ "${para_sentences:-0}" -lt 1 ]; then
             bad "$ov's /compound paragraph extracted as a single sentence" \
                 "the assertions below claim to scan the whole description; a one-sentence extract makes both of them vacuous"

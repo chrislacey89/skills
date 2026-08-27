@@ -63,7 +63,10 @@ fi
 # is not. Without this, deleting the negative from CLAUDE.md leaves the suite
 # green while the documentation stops saying the thing it guards.
 # shellcheck disable=SC2016  # literal markdown backticks, no expansion intended
-if grep -qF -- 'supplies **no** `wordRegex`' CLAUDE.md; then
+# Matched with the emphasis optional. Pinning the literal `**` made a pure
+# formatting edit — same claim, no bold — turn this red, which is a suite
+# forbidding a legitimate change rather than guarding a real one.
+if grep -qE -- 'supplies \*{0,2}no\*{0,2} `wordRegex`' CLAUDE.md; then
     ok "CLAUDE.md states the negative explicitly"
 else
     bad "CLAUDE.md no longer states that the driver supplies no wordRegex" \
@@ -77,26 +80,47 @@ section "measured against the installed git ($(git --version))"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
+# The `-c` flags neutralize inherited global config that would otherwise make
+# this commit fail on someone else's machine: a signing requirement, or a
+# core.hooksPath pointing at hooks that reject the commit. An earlier draft
+# named both in its comment and passed only commit.gpgsign.
 (
     cd "$scratch"
     git init -q .
     git config user.email contract@test
     git config user.name contract
-    # -c is deliberate: an inherited global core.hooksPath or commit.gpgsign
-    # would make this commit fail on some machines and take the suite with it.
     printf '# Doc\n\n## Pre-merge\n\nA paragraph about review that is long and unremarkable.\n' > a.md
     git add -A
-    git -c commit.gpgsign=false commit -qm base
+    git -c commit.gpgsign=false -c core.hooksPath=/dev/null commit -qm base
     printf '# Doc\n\n## Pre-merge\n\nA paragraph about review that is long and notable.\n' > a.md
-) || fatal "could not build the scratch repo — git init/commit failed in $scratch"
+)
 
-header_without="$(git -C "$scratch" diff -U1 -- a.md | grep '^@@' | head -1)"
+# Check the RESULT, not the subshell's exit status. `set -e` is suppressed inside
+# the left operand of `||`, so the earlier `( … ) || fatal` form could not fire:
+# the subshell ran past a failed commit and exited 0. Reproduced under a global
+# core.hooksPath whose pre-commit exits 1 — the commit failed, the guard stayed
+# silent, and the suite passed only because `git diff` fell back to
+# index-vs-worktree and happened to produce the same answer.
+git -C "$scratch" rev-parse --verify HEAD >/dev/null 2>&1 \
+    || fatal "could not build the scratch repo — no commit exists in $scratch, so every diff below would be measuring an unborn branch."
+
+# `-c core.attributesFile=/dev/null` on the BASELINE reads. Without it, a user
+# who liked this change enough to set `*.md diff=markdown` machine-wide — which
+# the --global alias in CLAUDE.md invites — gets that attribute applied to the
+# "without" measurement too, both sides come back identical, and claim 1 reports
+# "diff=markdown changed nothing about the hunk header" while printing a hunk
+# header that plainly carries the heading. The earlier draft isolated the commit
+# from inherited config and left the measurement exposed.
+git_baseline() { git -C "$scratch" -c core.attributesFile=/dev/null "$@"; }
+
+header_without="$(git_baseline diff -U1 -- a.md | grep '^@@' | head -1)"
 # Content lines only. The hunk header legitimately DOES change — that is claim 1
 # — so leaving it in makes this comparison test claim 1 twice and claim 2 never.
 # The first draft did exactly that and reported a wordRegex that does not exist.
-wd_body() { git -C "$scratch" diff --word-diff -- a.md | grep -vE '^(diff |index |--- |\+\+\+ |@@)'; }
+wd_body()          { git -C "$scratch" diff --word-diff -- a.md | grep -vE '^(diff |index |--- |\+\+\+ |@@)'; }
+wd_body_baseline() { git_baseline      diff --word-diff -- a.md | grep -vE '^(diff |index |--- |\+\+\+ |@@)'; }
 
-wd_without="$(wd_body)"
+wd_without="$(wd_body_baseline)"
 
 printf '*.md diff=markdown\n' > "$scratch/.gitattributes"
 
@@ -105,10 +129,16 @@ wd_with="$(wd_body)"
 
 # Non-vacuity: every comparison below is between two strings pulled from git. If
 # git printed nothing, "identical" and "differs" both become meaningless.
-[ -n "$header_without" ] && [ -n "$header_with" ] \
-    || fatal "git produced no hunk header — the scratch diff is empty, so every comparison below would compare nothing to nothing."
-[ -n "$wd_without" ] && [ -n "$wd_with" ] \
-    || fatal "git produced no --word-diff output — same vacuity."
+# Written as `if [ -z … ] || [ -z … ]` rather than `[ -n … ] && [ -n … ] || fatal`.
+# The && || form is SC2015, which local shellcheck 0.11.0 accepts and the pinned
+# CI 0.9.0 rejects — the version gap .shellcheck-version exists to flag, met in
+# the same change that documented it.
+if [ -z "$header_without" ] || [ -z "$header_with" ]; then
+    fatal "git produced no hunk header — the scratch diff is empty, so every comparison below would compare nothing to nothing."
+fi
+if [ -z "$wd_without" ] || [ -z "$wd_with" ]; then
+    fatal "git produced no --word-diff output — same vacuity."
+fi
 case "$wd_without" in
     *'[-'*'-]'*) : ;;
     *) fatal "the scratch --word-diff carries no [-old-] run, so it is not exercising word-diff at all: $wd_without" ;;

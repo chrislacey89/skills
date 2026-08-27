@@ -199,7 +199,7 @@ Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local h
 
 ### Reading a prose diff
 
-Paragraphs here are single physical lines, routinely past 400 characters. Git's unit is the line, so a paragraph edit renders as the whole paragraph deleted and a near-identical paragraph re-added, with nothing marking where the two diverge. Measured across the last 60 markdown commits: 214 hunks replace one line with one line, and at least 58% of the characters a reviewer must re-read in them never changed.
+Paragraphs here are single physical lines, routinely past 400 characters — `SYSTEM-OVERVIEW.md:207` is 1,051 and `pre-merge/review-checklist.md` tops out near 2,800. Git's unit is the line, so a paragraph edit renders as the whole paragraph deleted and a near-identical paragraph re-added, with nothing marking where the two diverge, and a large share of what the reviewer re-reads never changed. (#295 quantified that share; the figure is not restated here, because a count over "the last 60 markdown commits" is a sliding window that moves with every commit and nothing checks it. The two line lengths above are fixed and greppable.)
 
 **Use `git diff --word-diff`.** It renders the same change as `[-old-]{+new+}` word-runs instead of two walls of text. It is a display flag on git's own diff ([git-diff docs](https://git-scm.com/docs/git-diff)) and needs no repo configuration. Worth an alias once per machine:
 
