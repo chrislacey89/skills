@@ -116,16 +116,48 @@ done
 
 section "the prose rule and the marker name the same three fields"
 
-# Pull the sentence stating what loop-mode records, and confirm it still names
+# Pull the SENTENCE stating what loop-mode records, and confirm it still names
 # the three things the template carries. If the prose grows a fourth pinned
 # input, the template needs the field before the rule can enforce it.
-# Take the whole line: the sentence contains "review-checklist.md", so stopping
-# at the first period would truncate it mid-filename and drop the later fields.
-judge_prose="$(grep 'records the reviewer' "$premerge_skill" | head -1)"
+#
+# WHY THIS IS SCOPED TO A SENTENCE. The previous version took the whole physical
+# line, on the reasoning that "review-checklist.md" would be truncated mid-
+# filename by a naive split at the first period. The concern was real; the cure
+# over-corrected. That line is a whole multi-sentence paragraph, and its FIRST
+# sentence reads "a judge is a system — model + prompt + sampling parameters —
+# not a model". Two of the three assertions below were therefore being satisfied
+# by a neighbouring sentence rather than by the rule.
+#
+# Reproduced on the unreflowed tree, before the fix: replacing "model" and
+# "prompt" inside the rule sentence with MODELREDACTED and PROMPTREDACTED left
+# the suite at 13 passed, 0 failed, still printing "the rule names the model"
+# and "the rule names the prompt shape". This is issue #295's defect in its
+# other direction — there an extractor read a line where it meant a paragraph;
+# here it read a paragraph where it meant a sentence. Same root cause: the
+# extraction unit did not match the unit the claim is about.
+#
+# Splitting on ". " (period-SPACE) rather than "." is what makes the original
+# filename concern moot: "review-checklist.md" is period-then-`m`, so it cannot
+# match, and the sentence survives intact.
+judge_line="$(grep 'records the reviewer' "$premerge_skill" | head -1 || true)"
 
-if [[ -z "$judge_prose" ]]; then
+if [[ -z "$judge_line" ]]; then
     printf 'FATAL: no "records the reviewer..." rule found in %s\n' "$premerge_skill" >&2
     printf '       The judge-pin rule moved or was reworded; update this suite with it.\n' >&2
+    exit 2
+fi
+
+judge_prose="records the reviewer${judge_line#*records the reviewer}"
+judge_prose="${judge_prose%%. *}"
+
+# NON-VACUITY. The scoping must actually have happened: an extract equal to the
+# line it came from means the sentence split silently no-opped, which returns
+# this check to the widened state described above — green, and reading the wrong
+# text. Verified: removing the split turns this into a FATAL rather than a pass.
+if [[ "$judge_prose" == "$judge_line" ]]; then
+    printf 'FATAL: the judge-pin sentence did not narrow from its line in %s\n' "$premerge_skill" >&2
+    printf '       The ". " sentence terminator is gone, so the assertions below\n' >&2
+    printf '       would be satisfied by any neighbouring sentence on the same line.\n' >&2
     exit 2
 fi
 
