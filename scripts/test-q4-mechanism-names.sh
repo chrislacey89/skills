@@ -148,23 +148,77 @@ split_names() {
         | sed '/^[[:space:]]*$/d'
 }
 
+# Return the blank-line-delimited PARAGRAPH containing $2, unwrapped to one
+# logical line. Same helper, and same reasoning, as
+# scripts/test-compound-clustering-single-source.sh — see that file's header for
+# the two reproductions behind it. Duplicated rather than shared: every suite in
+# scripts/ is deliberately self-contained down to its own ok/bad/section, and a
+# three-line awk function does not justify inventing a sourcing layer under every
+# suite the scripts/test-*.sh glob matches. (The glob is the inventory — an
+# earlier draft wrote "all sixteen of them" and was wrong by two before it even
+# merged, which is the drift CLAUDE.md § "Commands a skill documents" warns about.)
+#
+# WHY THE TWO SITES BELOW NEED IT AND THE TWO FURTHER DOWN DO NOT. The reads
+# here want a paragraph: both lists run to a sentence terminator, and Phase 4's
+# two number-words sit in a LATER sentence of the same paragraph than the list
+# they count. Reproduced: one SemBr break after Phase 4's first sentence — prose
+# entirely correct, both words still "five" — put `none of the five can be
+# built` outside the window and the suite reported `could not read the
+# number-word … the cross-reference was reworded`. A false red on a rewording
+# that never happened is the failure that gets a suite deleted rather than fixed.
+#
+# `guard_line` and `stage_line` further down are the opposite case and must stay
+# line-scoped. Each sed's an ordinal out of the SAME clause its anchor names, so
+# a paragraph read there would widen the domain: the ordinal could then be
+# satisfied by an adjacent sentence, which is the defect
+# test-widened-domain-tell.sh exists to name. Do not sweep them into this change.
+paragraph_at() {  # $1 = file, $2 = literal anchor
+    awk -v anchor="$2" '
+        BEGIN { RS = "" }
+        { rec = $0; gsub(/\n/, " ", rec) }
+        index(rec, anchor) { print rec; exit }
+    ' "$1"
+}
+
 # -----------------------------------------------------------------------------
 section "both enumerations are findable"
 
-q4_line="$(grep -F -- "$q4_anchor" "$compound_skill" | head -1 || true)"
-[ -n "$q4_line" ] || fatal "no Q4 mechanism list in $compound_skill (anchor: \"$q4_anchor\"). Q4 was reworded; update this suite with it."
+q4_para="$(paragraph_at "$compound_skill" "$q4_anchor")"
+[ -n "$q4_para" ] || fatal "no Q4 mechanism list in $compound_skill (anchor: \"$q4_anchor\"). Q4 was reworded; update this suite with it."
 # Everything between the anchor and the question mark that ends Q4's question.
-q4_list="${q4_line#*"$q4_anchor"}"
+q4_list="${q4_para#*"$q4_anchor"}"
 q4_list="${q4_list%%\?*}"
 [ -n "$q4_list" ] || fatal "Q4 anchor found but the list after it is empty."
 ok "Q4 declares a mechanism list"
 
-p4_line="$(grep -F -- "$phase4_anchor" "$compound_skill" | head -1 || true)"
-[ -n "$p4_line" ] || fatal "no Phase 4 mechanism list in $compound_skill (anchor: \"$phase4_anchor\"). The promote-to-mechanism sentence was reworded; update this suite with it."
-p4_list="${p4_line#*"$phase4_anchor"}"
+p4_para="$(paragraph_at "$compound_skill" "$phase4_anchor")"
+[ -n "$p4_para" ] || fatal "no Phase 4 mechanism list in $compound_skill (anchor: \"$phase4_anchor\"). The promote-to-mechanism sentence was reworded; update this suite with it."
+p4_list="${p4_para#*"$phase4_anchor"}"
 p4_list="${p4_list%%. *}"
 [ -n "$p4_list" ] || fatal "Phase 4 anchor found but the list after it is empty."
 ok "Phase 4 re-enumerates the mechanism list"
+
+# MULTI-SENTENCE FLOOR. The rationale — what it catches, what it does not, and
+# why the length-comparison guard that looks stronger is a tautology — is stated
+# once in scripts/test-compound-clustering-single-source.sh at its own floor.
+# Do not restate it here: the two copies were duplicated on arrival and had
+# already drifted in wording before review read them, which is the exact defect
+# docs/restated-claims.md exists to name.
+#
+# What is local to this suite: both sites below read ACROSS sentences — Phase 4's
+# number-words sit in a later sentence than the list they count — so a
+# one-sentence extract cannot support them.
+for pair in "Q4:$q4_para" "Phase 4:$p4_para"; do
+    site="${pair%%:*}"; para="${pair#*:}"
+    # `grep -o | wc -l`, not `grep -c`: paragraph_at returns ONE logical line, so
+    # `grep -c` counts 0 or 1 and is a presence test wearing a count's name.
+    # `|| true` because grep exits 1 on no match, which under `set -euo pipefail`
+    # would kill the script on precisely the condition this floor reports.
+    sentences="$(printf '%s' "$para" | grep -o -- '\. ' | wc -l | tr -d ' ' || true)"
+    sentences="${sentences:-0}"
+    [ "$sentences" -ge 1 ] || fatal \
+        "$site's enumeration extracted as a single sentence — the reads below span sentences, so the extractor has narrowed and every assertion after this point would pass over text it never read."
+done
 
 # -----------------------------------------------------------------------------
 section "the two lists hold the same number of names"
@@ -186,8 +240,11 @@ fi
 # -----------------------------------------------------------------------------
 section "Phase 4's number-words match the list it enumerates"
 
-named_word="$(printf '%s' "$p4_line" | sed -n 's/.*the \([a-z]*\) Q4 names.*/\1/p')"
-none_word="$(printf '%s' "$p4_line" | sed -n 's/.*none of the \([a-z]*\) can be built.*/\1/p')"
+# Read from the PARAGRAPH, not the list: "none of the five can be built" sits in
+# a later sentence than the list it counts, so a line read loses it to any
+# sentence break and reports a rewording that never happened.
+named_word="$(printf '%s' "$p4_para" | sed -n 's/.*the \([a-z]*\) Q4 names.*/\1/p')"
+none_word="$(printf '%s' "$p4_para" | sed -n 's/.*none of the \([a-z]*\) can be built.*/\1/p')"
 
 for pair in "the N Q4 names:$named_word" "none of the N:$none_word"; do
     label="${pair%%:*}"
@@ -423,7 +480,17 @@ fi
 # -----------------------------------------------------------------------------
 section "the ownership guard is declared once and the report can print it"
 
-guard_hits="$(grep -c -F -- "$guard_marker" "$compound_skill" || true)"
+# `grep -o | wc -l`, not `grep -c`. THIS IS THE SAME DEFECT CLASS THE REST OF
+# THIS CHANGE FIXES, one level down, and it survived the change's own six-pass
+# audit because that audit enumerated extractor SHAPES and this is a counter.
+# `grep -c` counts matching LINES; in this repo a paragraph IS a line, so a
+# second declaration of the guard planted in the same paragraph counted as 1
+# and the `*)` arm below — "it is a rule; declare it once" — was unreachable
+# for exactly the duplicates most likely to occur. Reproduced before the fix:
+# grep -c returned 1 where grep -o returned 2, and the suite printed
+# "ok the ownership guard is declared exactly once".
+guard_hits="$(grep -o -F -- "$guard_marker" "$compound_skill" | wc -l | tr -d ' ' || true)"
+guard_hits="${guard_hits:-0}"
 case "$guard_hits" in
     1) ok "the ownership guard is declared exactly once" ;;
     0) bad "no ownership guard for the pack-level name" \
