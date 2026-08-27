@@ -92,13 +92,26 @@ scan_files() {
 # own error text: an extractor that finds nothing passes everything it was
 # meant to check.
 #
-# awk's paragraph mode (RS="") is the whole fix: records are separated by blank
+# awk's paragraph mode (RS="") is half the fix: records are separated by blank
 # lines, so the record IS the markdown paragraph however it is wrapped. `index`
 # is a literal substring test, preserving the `grep -F` semantics the anchor was
 # written for — an anchor carrying a regex metacharacter must not start matching
 # as a pattern. `exit` after the first hit keeps the old `head -1` behavior.
-paragraph_at() {  # $1 = file, $2 = literal anchor
-    awk -v anchor="$2" 'BEGIN { RS = ""; } index($0, anchor) { print; exit }' "$1"
+#
+# `gsub(/\n/, " ")` is the OTHER half, and it is not cosmetic. Widening the
+# window does not help a matcher that still reads one line at a time: `grep -qE`
+# is line-wise, and threshold_re spans a gap (`[0-9]+[[:space:]]+solutions`,
+# `(when|at)[[:space:]]+[0-9]+`). Also reproduced — wrapping the paragraph so the
+# match straddles, as `…check when 3\nsolutions share a root cause`, returned
+# 18 passed, 0 failed against the paragraph-aware extractor with no unwrap.
+# Neither alternative fit on one line, so neither matched, and the suite was
+# green over a live threshold a second time. Unwrapping restores the paragraph
+# as the single LOGICAL line every downstream matcher was written against.
+paragraph_at() {  # $1 = file, $2 = literal anchor — returns the paragraph as one logical line
+    awk -v anchor="$2" '
+        BEGIN { RS = "" }
+        index($0, anchor) { gsub(/\n/, " "); print; exit }
+    ' "$1"
 }
 
 if [ ! -f "$compound_skill" ]; then
