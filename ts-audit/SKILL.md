@@ -30,7 +30,7 @@ Use `/ts-audit` when you want to audit TypeScript or React code against expert-l
 
 Do not use it as a substitute for `/pre-merge` architectural review (which checks structural principles) or `/tdd` (which enforces red-green-refactor). It complements both by focusing specifically on type-safety gaps and TypeScript idiom improvements.
 
-For TypeScript projects, `/ts-audit` pairs naturally with `/pre-merge` Phase 3 (Architectural Review) — running it on changed files provides type-safety analysis that complements the seven structural dimensions.
+For TypeScript projects, `/ts-audit` pairs naturally with `/pre-merge` Phase 3 (Architectural Review) — running it on changed files provides type-safety analysis that complements the structural review dimensions defined in `pre-merge/review-checklist.md`.
 
 ## Step 1: Read the target code
 

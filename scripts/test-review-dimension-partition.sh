@@ -1,68 +1,82 @@
 #!/usr/bin/env bash
-# test-review-dimension-partition.sh — contract test for /pre-merge Phase 3's
+# test-review-dimension-partition.sh — contract test for /pre-merge's
 # review-dimension partition.
 #
-# THE DRIFT CLASS: a guard whose own coverage is a hand-maintained restatement
-# of the thing it guards. `pre-merge/review-checklist.md` is the canon — one
-# `## N. Title` heading per review dimension. `pre-merge/SKILL.md` Phase 3 used
-# to restate that roster as two hand-written bullets assigning dimensions to
-# sub-agent A and sub-agent B. The restatement drifted from the canon *at
-# birth*: commit ae362eb added Dimension 5 (Coverage Matrix Reconciliation) to
-# the canon and never touched SKILL.md, so on any diff large enough to trigger
-# the split, the one dimension carrying Blocker authority silently never ran —
-# while SKILL.md's loop-mode ledger attested that every dimension had. Not a
-# missing check: a false attestation. Reported from a real PR review (#291).
+# THE DRIFT CLASS: a hand-maintained restatement of the thing that defines it.
+# `pre-merge/review-checklist.md` is the canon — one `## N. Title` heading per
+# review dimension, each carrying a `**Runs in:**` marker naming its owner.
+# `pre-merge/SKILL.md` used to restate that roster as two hand-written bullets;
+# the restatement drifted from the canon at birth (ae362eb added Dimension 5 to
+# the canon and never touched SKILL.md), so on any diff large enough to split,
+# the one dimension carrying Blocker authority silently never ran — while the
+# loop-mode ledger attested that every dimension had. Reported from a real PR
+# review (#291).
 #
-# Dimension 5 could not simply be appended to a sub-agent's bullet. Its
-# procedure needs the PRD and the full set of merged slices held together, a
-# cross-slice view only the controller assembles. So ownership now lives in the
-# canon as a `**Runs in:**` line inside each dimension's own section, and
-# SKILL.md derives the split from those markers.
+# WHAT THIS SUITE CLAIMS, AND — DELIBERATELY — WHAT IT DOES NOT.
 #
-# The contract is a THREE-bucket total partition:
+# Two earlier versions of this file also asserted SEMANTIC properties of the
+# prose: "Phase 4 runs the controller-owned dimensions," "SKILL.md derives the
+# split." Both shipped, and both were defeated in one review pass each,
+# because a substring assertion cannot decide what a reader does with a
+# sentence: prose that names the right marker while instructing the OPPOSITE
+# ("skip every dimension whose marker reads…") satisfied every grep. Each
+# hardening round reproduced the ticket's own defect class one level up — the
+# assertions were themselves a hand-maintained restatement of what the prose
+# means. That is the boundary #284 recorded: a contract test reconciles a
+# writer and a reader across a machine-readable seam; a claim about how prose
+# reads has one machine-readable surface and is not testable here.
 #
-#     {sub-agent A} ∪ {sub-agent B} ∪ {controller} == the canon's roster
+# So this suite holds exactly two kinds of claim, and the third lives
+# elsewhere:
 #
-# with every dimension in exactly one bucket. A two-list assertion would go
-# green on exactly the arrangement that caused the incident, because a
-# dimension pushed into a sub-agent it cannot execute still satisfies "appears
-# on some list."
+#   1. WELL-FORMEDNESS of the canon's marker vocabulary (schema validation
+#      over structured data): every dimension carries exactly one owner, the
+#      three buckets partition the roster, the incident's dimension stays
+#      controller-owned.
+#   2. SYNTACTIC DETECTORS for roster restatements repo-wide: a literal
+#      dimension count, a paragraph listing 4+ canon titles, a numeric roster
+#      list. Detectors, not proofs — each carries a planted self-test (a
+#      positive that must hit and a near-miss that must stay silent), because
+#      a detector whose healthy state is zero hits needs a self-test, not a
+#      floor (mechanism-generality-lags-the-pattern-2026-08-23 § Prevention).
+#   3. NOT HERE: whether SKILL.md's Phase 3/4 prose actually instructs a
+#      reader to derive the split and run the controller-owned dimensions.
+#      That property's only competent oracle is a reader. It is held by
+#      review — hand a fresh-context agent the two files and ask it to
+#      produce the split — not by this script. On this ticket's branch that
+#      reader-check caught every semantic defect and these greps caught none.
 #
-# WHAT THE CROSS-FILE ASSERTIONS HAD WRONG, AND WHY IT IS WRITTEN DOWN HERE.
-# The first version of this suite checked SKILL.md by searching the whole file
-# for the marker string, and checked Phase 4 by searching it for a dimension's
-# title. Both went green on mutations that broke the mechanism outright:
+# CENSUS SCOPE, learned the hard way: v1 scanned three named files for
+# `11|eleven` and missed "10 dimensions" one directory away; v2 scanned
+# `pre-merge/*.md` and missed "seven structural dimensions" one directory the
+# other way, plus a full roster in a .js file. The tell is recorded in
+# docs/restated-claims.md: a census scoped by where the known sites live
+# cannot find the site that lives elsewhere. The population is now ALL tracked
+# files, minus a short explicit allowlist (dated history, generated copies,
+# this file's own fixtures) — and the population check pins that the two
+# historically-missed files are in it.
 #
-#   * Deleting Phase 3's derivation rule left the marker string present at
-#     three other sites in SKILL.md, so the anchor held.
-#   * The only occurrence of "Coverage Matrix Reconciliation" inside Phase 4 is
-#     the sentence saying when to SKIP it, so the "Phase 4 runs it" assertion
-#     was satisfied by prose asserting the opposite.
-#   * The no-restatement check pinned the retired BULLET SYNTAX, so writing the
-#     same roster back as a Markdown table walked straight past it.
+# PORTABILITY: re-execs under /bin/bash when available, so on macOS every run
+# — CI, lefthook, manual — exercises bash 3.2, the strictest shell this file
+# must survive. No bash-4 builtins.
 #
-# Each is the same error: asserting that a string exists where the claim was
-# that something reads it. The assertions below are scoped to the phase span
-# that must contain the instruction, and the no-restatement check keys on the
-# PROPERTY (many canon titles listed together on one line) rather than on the
-# syntax the retired instance happened to use — per
-# docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md.
-#
-# PORTABILITY: bash 3.2 only. macOS ships /bin/bash 3.2 and lefthook resolves
-# `bash` through PATH, so `mapfile` and `declare -A` would make this the one
-# suite of the repo's set that dies at exit 127 on the local pre-push gate —
-# the gate it exists to run on. No bash-4 builtins below.
-#
-# Lineage: docs/solutions/testing-patterns/partial-oracle-selfcheck-2026-08-22.md
-# ("derive the coverage instead of restating it") and docs/restated-claims.md.
-# Gilb & Graham, Software Inspection, Ch. 11 (Douglas Aircraft, 1988):
-# "it was silly to rewrite a rule into a checklist question."
+# Lineage: docs/solutions/testing-patterns/partial-oracle-selfcheck-2026-08-22.md,
+# docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md,
+# docs/restated-claims.md, #284, #291. Gilb & Graham, Software Inspection,
+# Ch. 11: "it was silly to rewrite a rule into a checklist question."
+
+# Re-exec under /bin/bash so the strictest available shell is the one that
+# runs. PATH bash here is 5.x (Homebrew/Linux); /bin/bash on macOS is 3.2.
+if [ -z "${PARTITION_SUITE_REEXEC:-}" ] && [ -x /bin/bash ]; then
+    PARTITION_SUITE_REEXEC=1 exec /bin/bash "$0" "$@"
+fi
 
 set -euo pipefail
+export LC_ALL=C   # binary-safe scans; BSD awk multibyte conversion warnings otherwise
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 checklist="$repo_root/pre-merge/review-checklist.md"
-premerge_skill="$repo_root/pre-merge/SKILL.md"
+manifest="$repo_root/scripts/skill-references.manifest"
 
 pass=0
 fail=0
@@ -96,37 +110,23 @@ assert_true() {
     fi
 }
 
-bool() { if "$@" >/dev/null 2>&1; then echo true; else echo false; fi; }
-
 [ -f "$checklist" ] || fatal "canon not found: $checklist"
-[ -f "$premerge_skill" ] || fatal "skill not found: $premerge_skill"
+[ -f "$manifest" ] || fatal "manifest not found: $manifest"
 
-# --- Read the roster out of the canon ---------------------------------------
-#
-# The roster is the set of numbered dimension headings. Nothing restates it;
-# this is the only place it is defined.
+# ============================================================================
+# Part 1 — well-formedness of the canon's marker vocabulary
+# ============================================================================
 
 roster="$(grep -oE '^## [0-9]+\. ' "$checklist" | grep -oE '[0-9]+' || true)"
 roster_count="$(printf '%s\n' "$roster" | grep -c '[0-9]' || true)"
 
-# Empty-scan floor. Without this the whole suite passes vacuously the moment
-# the heading format changes — a guard that reports coverage it does not have
-# is the exact failure this file exists to prevent.
+# Empty-scan floor: a heading-format change must FATAL, not pass vacuously.
 if [ "$roster_count" -lt 5 ]; then
     fatal "roster scan found $roster_count dimension heading(s) in $checklist; expected at least 5. The '^## N. ' heading format changed, or the scan is broken. Refusing to report a vacuous pass."
 fi
 
-# --- Read the ownership markers out of the canon ----------------------------
-#
-# One `**Runs in:** <bucket>` line per dimension section. Walk the file
-# linearly so each marker is attributed to the heading it sits under; that is
-# what makes "exactly one marker per dimension" checkable rather than a count
-# comparison that a doubled marker on one dimension and a missing marker on
-# another would cancel out.
-#
-# Associative arrays are bash 4, so ownership is accumulated as newline-
-# delimited "N<TAB>bucket" records and looked up with grep.
-
+# Walk the canon linearly, attributing each marker to the heading above it.
+# (bash-3.2: no associative arrays — newline-delimited "N<TAB>bucket" records.)
 owners=""
 marker_counts=""
 current=""
@@ -157,24 +157,17 @@ owner_of() {
     printf '%s' "$owners" | awk -F'\t' -v n="$1" '$1 == n { print $2 }' | tail -1
 }
 
-marker_count_of() {
-    printf '%s' "$marker_counts" | grep -cx "$1" || true
-}
-
 section "Every dimension declares exactly one owner"
 
 assert_eq "0" "$stray_markers" "no '**Runs in:**' marker sits outside a numbered dimension section"
 
-# A duplicated `## N.` heading would let two dimensions share one number: the
-# second resets the first's marker, every bucket total still agrees, and one
-# dimension silently has no recorded owner.
 unique_count="$(printf '%s\n' "$roster" | grep '[0-9]' | sort -u | grep -c '[0-9]' || true)"
 assert_eq "$roster_count" "$unique_count" "no two dimensions share a heading number"
 
 missing=""
 duplicated=""
 for n in $roster; do
-    c="$(marker_count_of "$n")"
+    c="$(printf '%s' "$marker_counts" | grep -cx "$n" || true)"
     case "$c" in
         0) missing="$missing $n" ;;
         1) ;;
@@ -187,28 +180,24 @@ assert_eq "" "${duplicated# }" "no dimension declares two owners"
 
 section "Three-bucket total partition over the roster"
 
-count_a=0; count_b=0; count_c=0; bucket_c=""
+count_a=0; count_b=0; count_c=0
 for n in $roster; do
     case "$(owner_of "$n")" in
         "sub-agent A")    count_a=$((count_a + 1)) ;;
         "sub-agent B")    count_b=$((count_b + 1)) ;;
-        "the controller") count_c=$((count_c + 1)); bucket_c="$bucket_c $n" ;;
+        "the controller") count_c=$((count_c + 1)) ;;
     esac
 done
 
 partitioned=$((count_a + count_b + count_c))
 assert_eq "$roster_count" "$partitioned" "{A} ∪ {B} ∪ {controller} covers the roster exactly ($roster_count dimensions)"
-
-# Each bucket must be inhabited. All-controller or all-sub-agent-A would
-# satisfy the union check above while describing an arrangement nobody means.
 assert_true "$([ "$count_a" -gt 0 ] && echo true || echo false)" "sub-agent A's bucket is non-empty (has $count_a)"
 assert_true "$([ "$count_b" -gt 0 ] && echo true || echo false)" "sub-agent B's bucket is non-empty (has $count_b)"
 assert_true "$([ "$count_c" -gt 0 ] && echo true || echo false)" "the controller's bucket is non-empty (has $count_c)"
 
-section "The incident's dimension is controller-owned, not sub-agent-assigned"
+section "The incident's dimension is controller-owned"
 
-# Pin the specific arrangement #291 turned on. Found by title rather than by
-# number, so renumbering the roster cannot silently retarget the check.
+# Found by title, not number, so renumbering cannot silently retarget the pin.
 coverage_n="$(grep -oE '^## [0-9]+\. Coverage Matrix Reconciliation' "$checklist" | grep -oE '[0-9]+' || true)"
 assert_true "$([ -n "$coverage_n" ] && echo true || echo false)" "Coverage Matrix Reconciliation is still in the canon"
 if [ -n "$coverage_n" ]; then
@@ -216,125 +205,129 @@ if [ -n "$coverage_n" ]; then
     assert_eq "the controller" "${got:-<none>}" "Dimension $coverage_n (Coverage Matrix Reconciliation) is controller-owned"
 fi
 
-# --- Phase spans ------------------------------------------------------------
+# ============================================================================
+# Part 2 — syntactic roster-restatement detectors, repo-wide
+# ============================================================================
 #
-# Every cross-file assertion below is scoped to the phase span that must carry
-# the instruction. Whole-file searches are what the first version of this suite
-# got wrong: SKILL.md mentions the marker vocabulary in four places, so a
-# whole-file search proves the string exists and proves nothing about whether
-# the controller is told to act on it.
+# Each detector is a function reading stdin, so the planted self-tests below
+# exercise the identical code path the corpus scan uses.
 
-phase3="$(sed -n '/^### Phase 3/,/^### Phase 4/p' "$premerge_skill")"
-phase4="$(sed -n '/^### Phase 4/,/^### Phase 5/p' "$premerge_skill")"
+# Detector 1: a literal dimension count, in a paragraph that is about the
+# review. The context filter exists because the repo legitimately counts other
+# things ("Zeller's six dimensions of uncontrolled input" in /triage-issue) —
+# a bare count-near-"dimensions" match is not a roster claim; one inside a
+# paragraph naming the review machinery is.
+count_context='pre-merge|review-checklist|architectural review|review dimensions'
+count_pattern='\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|[0-9]+)([- ][a-z]+){0,2}[- ]dimensions\b|\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|[0-9]+)-dimension\b'
 
-phase3_lines="$(printf '%s\n' "$phase3" | wc -l | tr -d ' ')"
-phase4_lines="$(printf '%s\n' "$phase4" | wc -l | tr -d ' ')"
-[ "$phase3_lines" -ge 5 ] || fatal "Phase 3 span extraction returned $phase3_lines line(s). The '### Phase N' heading format changed. Refusing to report a vacuous pass."
-[ "$phase4_lines" -ge 5 ] || fatal "Phase 4 span extraction returned $phase4_lines line(s). The '### Phase N' heading format changed. Refusing to report a vacuous pass."
+detect_count_literals() {
+    # stdin: file content. stdout: one line per offending paragraph.
+    awk 'BEGIN { RS=""; ORS="\n" } { gsub(/\n/, " "); print }' \
+        | grep -iE "$count_context" \
+        | grep -iE "$count_pattern" || true
+}
 
-section "Phase 3 derives the delegated split from the canon"
+# Detector 2: a paragraph listing 4 or more canon dimension titles —
+# a hand-written roster in any markup. Case-insensitive; a bullet list with
+# no blank lines between items is one paragraph, so one-title-per-line
+# restatements are caught too. Threshold 4: the retired restatement carried 5
+# per line, any hand split of this roster puts ≥4 in some bucket, and the
+# busiest legitimate contrast sentence in the corpus carries 3.
+titles_tsv="$(grep -oE '^## [0-9]+\. [^(]+' "$checklist" | sed -E 's/^## [0-9]+\. //; s/ +$//' | tr '\n' '\t')"
 
-# Scoped to Phase 3: deleting the derivation rule must fail here, which a
-# whole-file search could not detect.
-assert_true "$(printf '%s' "$phase3" | bool grep -qF '**Runs in:**')" \
-    "Phase 3 names the canon's '**Runs in:**' marker, so the derivation is anchored to the canon's vocabulary"
-assert_true "$(printf '%s' "$phase3" | bool grep -qF 'sub-agent A')" "Phase 3 names the 'sub-agent A' bucket value"
-assert_true "$(printf '%s' "$phase3" | bool grep -qF 'sub-agent B')" "Phase 3 names the 'sub-agent B' bucket value"
+detect_title_rosters() {
+    awk -v titles="$titles_tsv" '
+        BEGIN { RS=""; n = split(titles, T, "\t") }
+        {
+            rec = tolower($0); gsub(/\n/, " ", rec); hits = 0
+            for (i = 1; i <= n; i++)
+                if (T[i] != "" && index(rec, tolower(T[i])) > 0) hits++
+            if (hits >= 4) { printf "[%d titles] %s\n", hits, substr(rec, 1, 120) }
+        }' || true
+}
 
-section "Phase 4 derives the controller-owned dimensions from the canon"
+# Detector 3: a numeric roster list ("Dimensions 1, 2, 3, 10, 11") — the most
+# natural markup for a hand-written split, invisible to the title detector.
+detect_number_rosters() {
+    grep -iE '\bdimensions? [0-9]+(, ?[0-9]+){2,}' || true
+}
 
-# The controller bucket's marker value appears in SKILL.md only where Phase 4
-# is instructed to execute those dimensions. Deleting the run block removes it.
-#
-# Deliberately NOT asserted: that Phase 4 contains a particular dimension's
-# title. The earlier version did that, and Phase 4's only occurrence of the
-# title is the sentence saying when to skip the dimension — so the assertion
-# was satisfied by prose asserting the opposite of what it certified. Phase 4
-# should derive from the marker, not name dimensions, so the check derives too.
-assert_true "$(printf '%s' "$phase4" | bool grep -qF 'the controller, in Phase 4')" \
-    "Phase 4 names the controller bucket's marker value, so the controller-owned dimensions have a consumer that derives them"
+section "Detector self-tests (planted positive must hit, near-miss must stay silent)"
 
-section "No hand-written roster survives in SKILL.md"
+# Detector 1
+hit="$(printf 'The architectural review in pre-merge covers all 11 dimensions of the checklist.\n' | detect_count_literals)"
+assert_true "$([ -n "$hit" ] && echo true || echo false)" "count detector: flags 'all 11 dimensions' in a review paragraph"
+hit="$(printf 'The eleven-dimension architectural review from pre-merge runs next.\n' | detect_count_literals)"
+assert_true "$([ -n "$hit" ] && echo true || echo false)" "count detector: flags the spelled hyphenated form 'eleven-dimension'"
+miss="$(printf 'Scan Zellers six dimensions of uncontrolled input: data, time, randomness.\n' | detect_count_literals)"
+assert_eq "" "$miss" "count detector: silent on a count about something other than the review"
 
-# THE PROPERTY, NOT THE SYNTAX. The retired instance was two Markdown bullets,
-# and pinning that syntax let the identical roster return as a table. What
-# actually characterizes a roster restatement is that several canon dimension
-# titles are listed together on one line, whatever markup carries them.
-#
-# The threshold is calibrated against both ends rather than guessed. The
-# retired bullets carried FIVE titles each, and any hand-written split of this
-# roster carries at least four in some bucket. The busiest legitimate line in
-# SKILL.md carries THREE — the Surgical Scope paragraph, which contrasts that
-# dimension against Boundary Map Contracts and Coverage Matrix Reconciliation
-# in one sentence. So the bar sits at four: above every observed contrast, at
-# or below every reconstruction of the list. If a future legitimate sentence
-# needs four, that is the signal to split the sentence, not to raise the bar.
-titles="$(grep -oE '^## [0-9]+\. [^(]+' "$checklist" | sed -E 's/^## [0-9]+\. //; s/ +$//')"
-title_total="$(printf '%s\n' "$titles" | grep -c . || true)"
-[ "$title_total" -ge 5 ] || fatal "title scan found $title_total dimension title(s); expected at least 5. Refusing to report a vacuous pass."
+# Detector 2
+hit="$(printf -- '- deep modules, vertical slice integrity, state discipline\n- surgical scope, review-friendly size\n' | detect_title_rosters)"
+assert_true "$([ -n "$hit" ] && echo true || echo false)" "title detector: flags a lowercase 5-title roster split across bullet lines"
+miss="$(printf 'Where Boundary Map Contracts and Coverage Matrix Reconciliation check plan-vs-actual, Surgical Scope checks drift.\n' | detect_title_rosters)"
+assert_eq "" "$miss" "title detector: silent on a legitimate 3-title contrast sentence"
 
-worst_line=""
-worst_hits=0
-line_no=0
-while IFS= read -r line; do
-    line_no=$((line_no + 1))
-    hits=0
-    while IFS= read -r t; do
-        [ -n "$t" ] || continue
-        case "$line" in *"$t"*) hits=$((hits + 1)) ;; esac
-    done <<EOF
-$titles
-EOF
-    if [ "$hits" -gt "$worst_hits" ]; then
-        worst_hits="$hits"
-        worst_line="$premerge_skill:$line_no"
-    fi
-done < "$premerge_skill"
+# Detector 3
+hit="$(printf 'Sub-agent A gets Dimensions 1, 2, 3, 10, 11 as before.\n' | detect_number_rosters)"
+assert_true "$([ -n "$hit" ] && echo true || echo false)" "number detector: flags 'Dimensions 1, 2, 3, 10, 11'"
+miss="$(printf 'Where Dimensions 4 and 5 check plan-vs-actual between slices.\n' | detect_number_rosters)"
+assert_eq "" "$miss" "number detector: silent on a two-dimension contrast"
 
-assert_true "$([ "$worst_hits" -lt 4 ] && echo true || echo false)" \
-    "no single line of pre-merge/SKILL.md lists 4+ canon dimension titles (worst: $worst_hits at ${worst_line:-none}) — a hand-written roster in any markup"
+section "Census population (set-membership pins)"
 
-section "The dimension count is not restated as a literal"
+# Population: every tracked file, minus dated history (CHANGELOG,
+# docs/solutions/ entries are records of past states and legitimately quote
+# old counts), generated copies (manifest targets — sync-skill-references.sh
+# regenerates them from canonical sources this scan already covers), and this
+# file (it plants offending strings as fixtures).
+targets_file="$(mktemp)"
+awk '!/^#/ && NF == 2 { split($1, a, "/"); print $2 "/references/" a[length(a)] }' "$manifest" | sort -u > "$targets_file"
 
-# docs/restated-claims.md: the count is derivable from the canon's headings, so
-# any literal restatement of it is a second operative site that can drift.
-#
-# THE FILE LIST AND THE PATTERN BOTH WIDENED AFTER A MISS. The first version
-# scanned three named files for `11|eleven`. It reported a complete census and
-# missed pre-merge/references/comment-craft.md, which says "10 dimensions" at
-# two operative sites and is loaded on every reviewer-mode run — a file one
-# directory away that had been wrong since before the roster changed. That is
-# the tell docs/restated-claims.md § "The census comes before the remedy"
-# predicts verbatim: "a search scoped by the phrasing that surfaced the known
-# sites cannot surface a site worded differently."
-#
-# So the scan now covers the whole population that can state a roster size —
-# all of pre-merge/ plus SYSTEM-OVERVIEW.md — with a pattern that matches any
-# leading count, digits or spelled, rather than the two spellings that happened
-# to surface first. Bundled SYSTEM-OVERVIEW copies are excluded deliberately:
-# sync-skill-references.sh generates them and check-skill-references pins them,
-# so the canonical file is the only place the claim can be authored.
-sysoverview="$repo_root/SYSTEM-OVERVIEW.md"
-[ -f "$sysoverview" ] || fatal "SYSTEM-OVERVIEW.md not found at $sysoverview"
+population_file="$(mktemp)"
+git -C "$repo_root" ls-files \
+    | grep -v '^CHANGELOG\.md$' \
+    | grep -v '^docs/solutions/' \
+    | grep -v '^scripts/test-review-dimension-partition\.sh$' \
+    | grep -v -F -x -f "$targets_file" \
+    > "$population_file"
 
-# A roster size is always PLURAL ("11 dimensions", "eleven review dimensions"),
-# which is what separates it from the many singular uses that are not claims
-# about the roster at all — "one dimension carrying Blocker authority", "each
-# dimension sits in exactly one bucket". The hyphenated attributive form
-# ("11-dimension architectural review") is singular but IS a roster claim, so
-# it gets its own branch.
-count_pattern='\b((one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|[0-9]+)[- ]([a-z]+[- ]){0,2}dimensions\b|[0-9]+-dimension\b)'
+pop_count="$(grep -c . "$population_file" || true)"
+[ "$pop_count" -ge 50 ] || fatal "census population has $pop_count file(s); expected at least 50. git ls-files or the allowlist filtering broke. Refusing to report a vacuous pass."
 
-scanned="$(find "$repo_root/pre-merge" -type f -name '*.md' | wc -l | tr -d ' ')"
-[ "$scanned" -ge 3 ] || fatal "count-literal scan found only $scanned file(s) under pre-merge/. Refusing to report a vacuous pass."
+# Pin the two files earlier censuses missed — one per historical miss. If an
+# allowlist edit ever drops them, this fails before the scan goes blind.
+assert_true "$(grep -qx 'pre-merge/references/comment-craft.md' "$population_file" && echo true || echo false)" "population contains pre-merge/references/comment-craft.md (v1's miss)"
+assert_true "$(grep -qx 'vite-project/src/data/workflow-data.js' "$population_file" && echo true || echo false)" "population contains vite-project/src/data/workflow-data.js (v2's miss — not a .md file)"
 
-count_literals="$(grep -rniE "$count_pattern" "$repo_root/pre-merge" --include='*.md' || true)"
-sys_literals="$(grep -niE "$count_pattern" "$sysoverview" || true)"
+section "No roster restatement survives in the census population"
 
-assert_eq "" "$count_literals" "no literal dimension count survives anywhere under pre-merge/ ($scanned files scanned)"
-assert_eq "" "$sys_literals" "no literal dimension count survives in SYSTEM-OVERVIEW.md"
+count_hits=""
+title_hits=""
+number_hits=""
+while IFS= read -r f; do
+    p="$repo_root/$f"
+    [ -f "$p" ] || continue
+    h="$(detect_count_literals < "$p")"
+    [ -n "$h" ] && count_hits="$count_hits$f: $h
+"
+    h="$(detect_title_rosters < "$p")"
+    [ -n "$h" ] && title_hits="$title_hits$f: $h
+"
+    h="$(detect_number_rosters < "$p" | head -1)"
+    [ -n "$h" ] && number_hits="$number_hits$f: $h
+"
+done < "$population_file"
 
-# --- Summary ----------------------------------------------------------------
+rm -f "$targets_file" "$population_file"
 
-printf '\n%d passed, %d failed\n' "$pass" "$fail"
+assert_eq "" "$count_hits" "no literal review-dimension count in any of $pop_count tracked files"
+assert_eq "" "$title_hits" "no paragraph lists 4+ canon dimension titles in any tracked file"
+assert_eq "" "$number_hits" "no numeric roster list ('Dimensions N, N, N…') in any tracked file"
+
+# ============================================================================
+# Summary
+# ============================================================================
+
+printf '\n%d passed, %d failed  (bash %s)\n' "$pass" "$fail" "${BASH_VERSION%%(*}"
 [ "$fail" -eq 0 ]
