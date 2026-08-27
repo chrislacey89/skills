@@ -10,7 +10,7 @@ Used by `/pre-merge` during Phase 3 in all three modes — author-mode, reviewer
 
 The themes are labels for two parallel review contexts. They are defined here only — the markers do not repeat them — and they are **not** statements about what a sub-agent may read; `/pre-merge` Phase 3's context contract is the only thing that says that, and it says the same thing to both.
 
-**A known unresolved question sits next to this, and it is not settled here.** Phase 3's context contract reads as a closed list ("Nothing else"), while several delegated dimensions have procedures that read slice issue bodies, the registry, or the merged tree. The controller bucket above does not depend on how that resolves. Tracked as #293.
+**What a sub-agent may read is settled in one place, and that place is not here.** Many dimensions below send the reviewer to state the diff does not contain — the merged tree, a slice or PRD issue body, the package registry, the research archive, an installed `.d.ts`. None of that conflicts with Phase 3's context contract, because the contract is a rule about *provenance*: it fixes what may be **handed** to a sub-agent, and requires everything else to be read at its source rather than accepted as the controller's account of it. Read the contract in `/pre-merge` Phase 3; this file does not restate it.
 
 `/pre-merge` Phase 3 **derives** its split from these markers rather than restating the roster. The marker is not decoration: it is the only place ownership is written down, so a dimension added here without one has no consumer and `scripts/test-review-dimension-partition.sh` fails. The script's header carries the incident that made it necessary.
 
