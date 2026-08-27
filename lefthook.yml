@@ -36,6 +36,8 @@ pre-push:
       run: bash scripts/test-verify-install.sh
     review-currency-marker-tests:
       run: bash scripts/test-review-currency-marker.sh
+    review-dimension-partition-tests:
+      run: bash scripts/test-review-dimension-partition.sh
     loop-ledger-marker-tests:
       run: bash scripts/test-loop-ledger-markers.sh
     context-block-contract-tests:
