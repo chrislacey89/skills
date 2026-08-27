@@ -163,7 +163,7 @@ Either way the controller-owned dimensions are outside this choice entirely — 
 
 **Handed over — the same in all three modes.** The diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else is *given* to a sub-agent, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no `## Review Notes` block, because `/execute` never ran on it; that is an absent input, not a missing step.
 
-**Reached for itself — durable state, read at the source.** A dimension's own procedure may send its sub-agent past that list: to the merged tree, `git show` on a deleted path, the slice or PRD issue body, the package registry, the research archive, an installed `.d.ts`, `docs/solutions/`, a scratch `tsc --noEmit`. That is not an exception to the contract; it is the contract working. Reading a durable artifact yourself is what *preserves* independence — what destroys it is receiving that artifact pre-digested by the session under review. One rule governs it: **read it at its source and cite it, never accept the controller's account of it.** The reviewer reading the diff rather than a summary of the diff is the same rule, applied to the one input that is always present.
+**Reached for itself — durable state, read at the source.** A dimension's own procedure may send its sub-agent past that list: to the merged tree, the branch's commit history — `git log`, the commit messages, the per-commit diffs — `git show` on a deleted path, the slice or PRD issue body, the package registry, the research archive, an installed `.d.ts`, `docs/solutions/`, a scratch `tsc --noEmit`. The commit history is on that list because two dimensions cannot execute without it: Vertical Slice Integrity is defined entirely over commit structure, and Surgical Scope names the commit messages and branch name as its stated-task source of last resort — the only one available on a branch with no PRD. It is a separate artifact, not a summary of the diff, so reading it does not touch the rule below. **In reviewer-mode, reach it with `gh pr view <n> --json commits`**, which needs no local checkout and so does not cross Phase 1's rule against one. That is not an exception to the contract; it is the contract working. Reading a durable artifact yourself is what *preserves* independence — what destroys it is receiving that artifact pre-digested by the session under review. One rule governs it: **read it at its source and cite it, never accept the controller's account of it.** The reviewer reading the diff rather than a summary of the diff is the same rule, applied to the one input that is always present.
 
 **Withheld absolutely — the change's context.** That phrase means the authoring session's working state: its reasoning, the alternatives it discarded, the justifications it assembled while writing the diff, and any controller-authored narration, summary, or paraphrase standing in for something the sub-agent could have read directly. `## Review Notes` is handed over despite being author-written because it is a *checkable* record — `/execute` Step 6 requires commands and exit statuses the reviewer can re-run — and not a construal to inherit.
 
@@ -254,10 +254,19 @@ specific code, and explains why it matters — and reads cold to someone
 who did not write the diff, per the reader bar above
 (`references/writing-for-humans.md`).]
 
+### Verify before merge (findings that hold no tier)
+
+[Findings the "Verify, don't suspect" downgrade clause removed from the
+tiers — library callback semantics, subpath resolution, or provider schema
+constraints that nothing could cite. Each names the check that would settle
+it. Omit the section when there are none.]
+
 ---
 No action is required. These are advisory.
 When ready, merge the PR at <PR-URL>.
 ```
+
+**A downgraded follow-up counts toward the minimum-findings guard below.** It is a finding the review produced; the downgrade moved where it prints, not whether it exists. Counting only the three tiers would let a review that surfaced four real problems read as thin and trigger a second pass it does not need.
 
 **This block is the last review action author-mode takes.** Finish the rest of Phase 4 below, then hand back at the `## Handoff` next-step menu (`references/next-step-menu.md`) — that menu is where what-happens-to-a-finding gets decided, and the user picks, not this session.
 
