@@ -114,17 +114,17 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 
 ## 5. Coverage Matrix Reconciliation (multi-slice PRD PRs only)
 
-**Runs in:** the controller, in Phase 4 — not a sub-agent. The procedure below needs the PRD issue body, every slice issue, and the set of *merged* slices held together at once. Phase 1 assembles that cross-slice view in the controller and nowhere else, so a sub-agent reading this PR’s diff cannot reach it — it could only return a Blocker it has no way to substantiate, which is worse than not running the dimension at all.
+**Runs in:** the controller, in Phase 4 — not a sub-agent. The procedure below needs the PRD issue body, every slice issue, and the set of *merged* slices held together at once. Phase 1 assembles that cross-slice view in the controller and nowhere else, so a sub-agent reading this PR’s diff cannot reach it — it could only return this skill's strongest verdict on ground it has no way to substantiate, which is worse than not running the dimension at all.
 
 **Principle:** Every PRD Must-commitment should be covered by at least one shipped slice. Wants may be consciously cut. ~Tildes are already cut by definition.
 
 **Procedure.** If this PR closes the last slice in a multi-slice PRD, regenerate the Coverage Matrix: read the PRD issue body, classify each user story (Must / Want / ~Tilde), and check each slice issue's `User Stories Addressed` section to see which slice covers which commitment. Compare against the set of *merged* slices.
 
-This is a **reconciliation test, not a gate.** Block only on unmapped Musts. Warn on unmapped Wants. Accept unmapped ~Tildes silently.
+This is a **reconciliation test, not a gate** — `/pre-merge` is advisory in every mode and merges nothing itself. Escalate only on unmapped Musts. Warn on unmapped Wants. Accept unmapped ~Tildes silently.
 
 **Violation patterns:**
-- **Unmapped Must (Blocker):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. This blocks merge.
-- **Unmapped Want (Concern/Warning):** A Want-commitment in the PRD has no merged slice covering it. Surface as a warning — the scope hammer may have cut it consciously; confirm with the user and add a `Scope Notes` entry if so.
+- **Unmapped Must (Concern — with the withheld action named):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. Classify as **Concern** and state the action inside the finding: the branch should not merge until the Must is covered by a slice or consciously cut with a `Scope Notes` entry on the PRD body. Concern is the strongest tier this skill defines — there is no fourth — and naming the withheld action is how it carries that weight without claiming a gate `/pre-merge` does not own.
+- **Unmapped Want (Suggestion):** A Want-commitment in the PRD has no merged slice covering it. Surface it as a warning — the scope hammer may have cut it consciously; confirm with the user and add a `Scope Notes` entry if so.
 - **Renegotiation not recorded:** A commitment was consciously cut or added mid-cycle but the PRD issue body was not edited to reflect the new state. The matrix is a derived view; the PRD is the single source of truth. Flag for update.
 
 **Out of scope:** Single-slice PRDs (no matrix derived). Boundary-map contract checks (Dimension 4). Whether Musts were correctly classified during `/prd-to-issues` (that conversation happens there, not here).

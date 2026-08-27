@@ -241,7 +241,7 @@ The pipeline described above is the forward path. This section covers what happe
 
 **Forward failure: `/execute` on a PRD issue.** A common misroute is invoking `/execute` directly on a shaped PRD issue that was never decomposed via `/prd-to-issues`. `/execute`'s Step 0 issue-shape detection gate catches this: if the task issue has shaped-pitch markers (Appetite / Rabbit Holes / User Stories / Implementation Decisions) and no `Decomposed into: #…` comment from `/prd-to-issues`, `/execute` halts and routes to `/prd-to-issues`. After decomposition, re-invoke `/execute` on a specific child slice — not the PRD.
 
-**Renegotiation path (PRD ↔ Coverage Matrix).** When `/execute` discovers an unmapped commitment mid-cycle, or a commitment is consciously cut during implementation, the update flow is: edit the PRD issue body → regenerate the Coverage Matrix from the new PRD content. The matrix is a derived view; the PRD is the single source of truth. Never hand-edit a matrix to paper over a PRD change. `/pre-merge` Dimension 5 reconciles the merged slices against the regenerated matrix at the end of a multi-slice PRD and blocks merge only on unmapped Musts.
+**Renegotiation path (PRD ↔ Coverage Matrix).** When `/execute` discovers an unmapped commitment mid-cycle, or a commitment is consciously cut during implementation, the update flow is: edit the PRD issue body → regenerate the Coverage Matrix from the new PRD content. The matrix is a derived view; the PRD is the single source of truth. Never hand-edit a matrix to paper over a PRD change. `/pre-merge`'s Coverage Matrix Reconciliation dimension reconciles the merged slices against the regenerated matrix at the end of a multi-slice PRD and raises a Concern only on unmapped Musts, naming the merge as the action to withhold.
 
 ---
 
@@ -256,7 +256,7 @@ A companion to Boundary Maps. The Boundary Map answers *what flows between slice
 - **Generation difficulty is a PRD-quality signal.** If the matrix is noisy to generate, report that to the user — do not push structure back into the PRD. PRDs stay rough (Shape Up).
 - **Regenerated, not stored.** Whenever a consumer needs the matrix (`/prd-to-issues` Step 5, `/pre-merge` Dimension 5), it derives the matrix on the spot from current PRD + slice issues. No stored artifact to drift out of sync.
 
-**Reconciliation gates:** `/prd-to-issues` surfaces unmapped Musts as backpressure before slice creation. `/pre-merge` Dimension 5 blocks merge on unmapped Musts at the end of a multi-slice PRD, warns on unmapped Wants, accepts unmapped ~Tildes silently.
+**Reconciliation gates:** `/prd-to-issues` surfaces unmapped Musts as backpressure before slice creation. `/pre-merge`'s Coverage Matrix Reconciliation raises a Concern on unmapped Musts at the end of a multi-slice PRD — advisory, with the withheld merge named as the action — warns on unmapped Wants, and accepts unmapped ~Tildes silently. `/pre-merge` gates nothing itself; Concern is the strongest tier it defines.
 
 ---
 

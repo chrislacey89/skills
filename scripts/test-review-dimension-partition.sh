@@ -6,11 +6,11 @@
 # `pre-merge/review-checklist.md` is the canon — one `## N. Title` heading per
 # review dimension, each carrying a `**Runs in:**` marker naming its owner.
 # `pre-merge/SKILL.md` used to restate that roster as two hand-written bullets;
-# the restatement drifted from the canon at birth (ae362eb added Dimension 5 to
-# the canon and never touched SKILL.md), so on any diff large enough to split,
-# the one dimension carrying Blocker authority silently never ran — while the
-# loop-mode ledger attested that every dimension had. Reported from a real PR
-# review (#291).
+# the restatement drifted from the canon at birth (ae362eb added Coverage
+# Matrix Reconciliation to the canon and never touched SKILL.md), so on any
+# diff large enough to split, the one dimension whose Concern names a withheld
+# merge silently never ran — while the loop-mode ledger attested that every
+# dimension had. Reported from a real PR review (#291).
 #
 # WHAT THIS SUITE CLAIMS, AND — DELIBERATELY — WHAT IT DOES NOT.
 #
