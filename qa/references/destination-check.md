@@ -10,7 +10,7 @@ Ask, as a single concrete question, after the symptom / reproducer / expected-vs
 
 > **How will we know the fix worked end-to-end? Name the specific destination — a file/function, a log query, a dashboard view, a user-observable behavior, an assertion in a test — where the fix's effect must land.**
 
-Record the answer as a `Verification destination:` line in the filed issue body. Downstream skills (`/execute` Step 4 Tier 3 behavioral verification, `/pre-merge` Dimension 8) can then check the actual destination instead of inferring one from the proposed code change.
+Record the answer as a `Verification destination:` line in the filed issue body. Downstream skills (`/execute` Step 4 Tier 3 behavioral verification, `/pre-merge`'s Runtime Initialization & Production-Runtime Parity dimension) can then check the actual destination instead of inferring one from the proposed code change.
 
 ## Substantive vs vacuous answers
 

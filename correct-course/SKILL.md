@@ -32,7 +32,7 @@ Use `/correct-course` when any of the following is true:
 - `/write-a-prd` reveals the problem was misframed during shaping
 - `/prd-to-issues` reveals that the total work materially exceeds the stated appetite
 - `/execute` hits an error whose root cause is that the archived research or the PRD is wrong
-- `/pre-merge` Dimension 4 surfaces a spec-reality mismatch — the code reflects external reality but the declared spec has rotted (non-existent package, renamed public API, version skew past what the research snapshot pinned)
+- `/pre-merge`'s Boundary Map Contracts dimension surfaces a spec-reality mismatch — the code reflects external reality but the declared spec has rotted (non-existent package, renamed public API, version skew past what the research snapshot pinned)
 - `/pre-merge` surfaces an architectural concern that warrants rework, not advisory findings
 - A GitHub issue has gone stale because the work it described has been reshaped or superseded
 
