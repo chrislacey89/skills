@@ -154,6 +154,8 @@ The checkable trigger, in the one-line form this family requires:
 
 ## Related
 
+- `guard-and-subject-must-be-one-artifact-2026-08-25.md` — this entry's thesis restated a third time: `scripts/test-oracle-table-coverage.sh` could not fire on a suite with no `case` table, so a third mechanism was written for a third syntax.
+
 - PR #271 — where this surfaced; issue #268 the driving proposal
 - `partial-oracle-selfcheck-2026-08-22.md` — parent entry, second recording
 - `mutate-the-oracle-not-only-the-subject-2026-08-19.md` — grandparent

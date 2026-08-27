@@ -54,6 +54,8 @@ pre-push:
       run: bash scripts/test-q4-mechanism-names.sh
     oracle-table-coverage-tests:
       run: bash scripts/test-oracle-table-coverage.sh
+    duplicate-guard-program-tests:
+      run: bash scripts/test-duplicate-guard-programs.sh
     widened-domain-tell-tests:
       run: bash scripts/test-widened-domain-tell.sh
     canon-coverage-tests:
