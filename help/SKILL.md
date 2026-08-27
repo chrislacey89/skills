@@ -49,13 +49,14 @@ if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
   BASE_REF="origin/$BASE_BRANCH"
 else
   BASE_REF="$BASE_BRANCH"
+  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
 fi
 echo "base=$BASE_BRANCH ref=$BASE_REF"
 ```
 
 Do not hardcode `main` or `master` — not every repo uses them (Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name). If `origin/HEAD` is not set and none of the fallback candidates exist, ask the user for the base branch name before continuing.
 
-**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then silently falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 **Phase 1b — gather the snapshot (run in parallel, each call independent):**
 

@@ -74,13 +74,14 @@ If you are running on a branch other than the user's working branch and `--pr` w
      BASE_REF="origin/$BASE_BRANCH"
    else
      BASE_REF="$BASE_BRANCH"
+     echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
    fi
    git diff "$BASE_REF...HEAD" --stat
    git log --oneline "$BASE_REF..HEAD"
    ```
    For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target) and re-derive `$BASE_REF` from it. If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
 
-   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then silently falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 **Reviewer-mode (`--pr <number>`):**
 

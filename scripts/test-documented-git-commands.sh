@@ -53,6 +53,22 @@
 #      it must also carry the note explaining why it does not use one" — so
 #      deleting the note deleted the trigger, and that mutation went green. It
 #      is now two unconditional assertions.
+#   6. Enumerate by what the claim DOES, not by how one site words it. The
+#      base-branch census below first derived its population by grepping for
+#      the detection block's own assignment — so a skill that committed the
+#      same defect without adopting the block (compound/SKILL.md, a runnable
+#      `git diff main...HEAD`) could not enter the population at all. Review
+#      caught it; this suite did not. The census now scans every documented
+#      `git diff`/`git log` range in every skill, and asserts it accounts for
+#      every `..HEAD` in those files so a range in an unparseable shape fails
+#      loudly instead of dropping out of the count.
+#
+# WHAT THIS SUITE DOES NOT HOLD, said plainly so a green run is not misread:
+# the cross-site equality checks (fallback candidate list, **Residual:**
+# paragraph) pin that the five copies stay IDENTICAL, not that they stay
+# CORRECT. A sweep that edits all five the same wrong way keeps them equal.
+# The named content assertions beside each one pin the load-bearing clauses;
+# everything else in that prose is held by review, not by this file.
 
 set -euo pipefail
 
@@ -564,7 +580,12 @@ extract_detect_block() {
 # Anchored at line start so the prose restatements (which sit inside sentences)
 # are not collected here — they get their own check further down.
 extract_range_lines() {
-    grep -hE '^[[:space:]]*git (diff|log) .*\$\{?BASE_' "$1" | sed 's/^[[:space:]]*//'
+    # `|| true` because this file runs under `set -o pipefail`: a site that
+    # stops carrying a range line would otherwise make the assignment fail and
+    # kill the run at that line, *before* the `fatal` guard that names the
+    # cause. Found by mutation — reverting compound/SKILL.md to a hardcoded
+    # `main` produced a silent exit 1 with no assertion and no message.
+    { grep -hE '^[[:space:]]*git (diff|log) .*\$\{?BASE_' "$1" || true; } | sed 's/^[[:space:]]*//'
 }
 
 # A literal dollar, spliced in from a variable rather than written inside
@@ -608,8 +629,19 @@ for site in $base_sites; do
         printf '  ok   fallback candidate loop (%s): %s\n' "$site" "$list"
         pass=$((pass + 1))
     else
-        assert_eq "$canonical_list" "$list" "$site's fallback candidate loop matches the other sites'"
+        assert_eq "$canonical_list" "$list" "$site's fallback candidate loop is byte-identical to the other sites'"
     fi
+done
+
+# Equality alone pins that the lists stay the *same*, not that they stay
+# *correct*: dropping a candidate from all five in one sweep keeps them equal
+# and goes green — the exact sweep-wide shape closeout/SKILL.md's note warns
+# about, and a mutation that was green before this check existed. So pin the
+# names too. This is content, not drift, and it is deliberately a short list of
+# what the loop must still be able to find.
+for candidate_name in main master prod develop trunk; do
+    assert_contains "$canonical_list" " $candidate_name" \
+        "the fallback loop can still find a repo whose base is '$candidate_name'"
 done
 
 for site in $base_sites; do
@@ -648,20 +680,45 @@ for site in $base_sites; do
         fail=$((fail + 1))
     elif [[ -z "$canonical_residual" ]]; then
         canonical_residual="$residual"
-        printf '  ok   %s states the residual for the guarded fallback\n' "$site"
+        printf '  ok   %s carries a **Residual:** paragraph\n' "$site"
         pass=$((pass + 1))
     else
-        assert_eq "$canonical_residual" "$residual" "$site's residual note matches the other sites'"
+        assert_eq "$canonical_residual" "$residual" "$site's **Residual:** paragraph is byte-identical to the other sites'"
     fi
+done
+
+# Presence and cross-site equality say nothing about what the paragraph claims:
+# replacing all five with an identical "**Residual:** none — $BASE_REF is always
+# correct" was green before this check existed. Pin the two clauses that carry
+# the warning. The rest of the wording is held by review, not by this suite —
+# see the header note.
+assert_contains "$canonical_residual" 'falls back to the local branch' \
+    "the residual still names what the fallback actually does"
+assert_contains "$canonical_residual" 'only as fresh as the last' \
+    "the residual still names the staleness window it cannot close"
+
+# The fallback's stderr note is the residual's operative half — the difference
+# between an operator who sees the degradation and one who reads a plausible
+# wrong number, which is how the original defect survived five months.
+for site in $base_sites; do
+    block="$(extract_detect_block "$repo_root/$site")"
+    assert_contains "$block" 'does not resolve — measuring against the local branch, which may be stale' \
+        "$site's else branch says on stderr that it fell back, rather than degrading silently"
 done
 
 # -----------------------------------------------------------------------------
 
 section "every documented range endpoint reports the branch's real size"
 
-# The planted truth. Nothing below reads git's summary sentence, whose wording
-# has already broken this suite once across git versions — the numbers are
-# parsed out and compared as a triple.
+# The planted truth. The *assertions* below compare planted numbers, never git's
+# summary sentence — but `stat_triple` does read that sentence to find them: its
+# awk keys on the literal tokens `files`, `insertions(+)` and `deletions(-)`.
+# That is a real coupling to git's wording, which has already broken this suite
+# once across versions (header lesson 3), so it is named rather than denied. If
+# git rewords the summary, `stat_triple` returns 0/0/0 and roughly fifteen
+# assertions redden pointing at the skills — which is why it gets the planted
+# self-check immediately below, so a wording change fails as one accurate
+# `fatal` instead of fifteen misleading ones.
 truth_files=2
 truth_ins=10
 truth_del=0
@@ -680,6 +737,19 @@ stat_triple() {
             printf "%d/%d/%d", files, ins, del
         }'
 }
+
+# Validate the instrument before trusting what it measures. `stat_triple` is the
+# oracle every count assertion in this file runs through, and its three arms are
+# otherwise exercised only indirectly. A planted input with all three fields
+# non-zero and distinct catches an arm that silently returns 0.
+for probe in \
+    '1 file changed, 2 insertions(+), 3 deletions(-)|1/2/3' \
+    '4 files changed, 5 insertions(+)|4/5/0' \
+    '6 files changed, 7 deletions(-)|6/0/7'
+do
+    assert_eq "${probe#*|}" "$(stat_triple "${probe%|*}")" \
+        "stat_triple parses a planted summary: ${probe%|*}"
+done
 
 run_in_fixture() {
     # Run a site's detection block, then one extracted command, in the clone.
@@ -802,50 +872,89 @@ done
 
 # -----------------------------------------------------------------------------
 
-section "the prose restatements name the same endpoint the block runs"
+section "no skill uses a base branch NAME where a ref belongs — anywhere"
 
-# /pre-merge names its own diff command in three more places: twice in Phase 3
-# (author-mode and loop-mode) and once in review-checklist.md's Dimension 11
-# verification procedure, which instructs the reviewer to cite its numbers. A
-# restatement that drifts from the block publishes a fabricated measurement
-# with authority, so the endpoint has to match.
+# This is the census the #298 fix needed and the first draft of this suite did
+# not run. `$base_sites` above enumerates skills that carry *this block*, which
+# is enumeration by the assignment's wording. The defect is not the wording; it
+# is "a base branch used as a range endpoint," and a site can commit it without
+# ever adopting the block. Review found exactly that: compound/SKILL.md shipped
+# a runnable `git diff main...HEAD --stat`, a hardcoded name that does not even
+# reach the stale-local behavior — it exits 128 on every repo whose base is not
+# `main`, including this one. It could never enter `$base_sites`, so nothing
+# above ran against it.
 #
-# The dollar sign is spliced in from a variable rather than written inline: a
-# literal one inside single quotes is indistinguishable, to a reader and to the
-# linter alike, from a variable that failed to expand.
-# The dollar is escaped for the ERE as well as spliced in: bare `$` is an
-# end-of-line anchor, and a pattern anchored mid-string matches nothing at all
-# — silently, which is what the coverage guard below exists to notice.
-any_endpoint="git diff \"\\${d}BASE_[A-Z]+\\.\\.\\.?HEAD\""
-right_endpoint="git diff \"${d}BASE_REF...HEAD\""
+# pre-merge/references/restated-claims.md names the tell: "every site found
+# shares one wording, or they all live in one kind of file." Both were true.
+# So this section enumerates by *what the claim does* — every `git diff` or
+# `git log` range against HEAD, in every skill and in the review checklist —
+# and it subsumes the narrow restatement check it replaces. Four defects fall
+# under it at once: a hardcoded name, a bare `$BASE_BRANCH`, a two-dot `git
+# diff`, and a three-dot `git log`.
 
-restatements="$(grep -hoE "$any_endpoint" \
-    "$repo_root/pre-merge/SKILL.md" "$repo_root/pre-merge/review-checklist.md" \
-    | grep -vxF "$right_endpoint" || true)"
-if [[ -z "$restatements" ]]; then
-    printf '  ok   every prose restatement of the diff command uses the BASE_REF three-dot endpoint\n'
+# The endpoint is matched structurally (optional flags, optional quote, a
+# variable or a bare word, then the dots) rather than by any site's phrasing,
+# which is what makes this a census and not a fifth copy of one site's wording.
+range_pattern='git (diff|log)( +--?[a-z-]+)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+scan_files="$(cd "$repo_root" && ls ./*/SKILL.md) pre-merge/review-checklist.md"
+
+# shellcheck disable=SC2086
+range_hits="$(cd "$repo_root" && grep -hoE "$range_pattern" $scan_files || true)"
+range_count="$(printf '%s\n' "$range_hits" | grep -c . || true)"
+
+# Non-vacuity, and the specific kind this section needs. A count floor alone
+# would not notice a range written in a shape the pattern cannot parse — it
+# would just quietly drop out of the census, which is the failure this whole
+# section exists to fix. So compare against the raw number of `..HEAD` ranges
+# in the same files: the detector must account for every one of them.
+# shellcheck disable=SC2086
+raw_ranges="$(cd "$repo_root" && grep -hoE '\.\.\.?HEAD' $scan_files | grep -c . || true)"
+assert_eq "$raw_ranges" "$range_count" \
+    "the endpoint pattern accounts for every '..HEAD' range in the scanned files (none silently unparsed)"
+if [[ "$range_count" -ge 8 ]]; then
+    printf '  ok   %s documented range endpoints found to check\n' "$range_count"
     pass=$((pass + 1))
 else
-    printf '  FAIL a prose restatement names an endpoint the block does not run:\n%s\n' "$restatements"
+    printf '  FAIL only %s range endpoints found; the scan is reading almost nothing\n' "$range_count"
     fail=$((fail + 1))
 fi
 
-# The restatement check above only fires on a *wrong* endpoint, so it would
-# stay green if every restatement were deleted. Confirm it is reading something.
-restatement_count="$(grep -hoE "$any_endpoint" \
-    "$repo_root/pre-merge/SKILL.md" "$repo_root/pre-merge/review-checklist.md" | grep -c . || true)"
-if [[ "$restatement_count" -ge 3 ]]; then
-    printf '  ok   %s prose restatements of the diff command were found to check\n' "$restatement_count"
-    pass=$((pass + 1))
-else
-    printf '  FAIL only %s prose restatement(s) found; the check above is reading almost nothing\n' "$restatement_count"
-    fail=$((fail + 1))
-fi
+bad_endpoint=0
+bad_operator=0
+while IFS= read -r hit; do
+    [[ -n "$hit" ]] || continue
+    verb="$(printf '%s' "$hit" | awk '{print $2}')"
+    # The endpoint char class excludes '.' so the greedy prefix cannot eat the
+    # first dot of a three-dot range and leave it in the captured name.
+    endpoint="$(printf '%s' "$hit" | sed -E 's/.*[ "]([^ ".]*)\.\.\.?HEAD$/\1/')"
+    dots="$(printf '%s' "$hit" | grep -oE '\.\.\.?HEAD$')"
+
+    if [[ "$endpoint" != "${d}BASE_REF" ]]; then
+        printf '  FAIL %s uses %q as a range endpoint; only %sBASE_REF is a ref — a name is frozen at checkout time\n' \
+            "$verb" "$endpoint" "$d"
+        bad_endpoint=$((bad_endpoint + 1))
+    fi
+    # Three-dot diffs from the merge base; two-dot subtracts base-side work and
+    # reports it as deletions this branch never made. `git log` is the mirror:
+    # two-dot is the commits on this branch, three-dot is the symmetric
+    # difference and pulls in the base's own commits.
+    case "$verb:$dots" in
+        diff:...HEAD|log:..HEAD) ;;
+        *) printf '  FAIL %s uses %q; diff must be three-dot and log must be two-dot\n' "$verb" "$dots"
+           bad_operator=$((bad_operator + 1)) ;;
+    esac
+done <<< "$range_hits"
+
+assert_eq 0 "$bad_endpoint" "every documented range endpoint is a ref, not a branch name"
+assert_eq 0 "$bad_operator" "every documented range uses the operator its verb requires"
 
 # /closeout resolves the same base branch and must NOT grow a BASE_REF: it feeds
-# the name to `git switch`, which rejects a remote-tracking ref outright. This
-# pins the note that says so, so a sweep across the four sites above cannot
-# quietly "fix" a correct one.
+# the name to `git switch`, which rejects a remote-tracking ref outright. The
+# census above already catches it growing a *range* endpoint of any shape, which
+# is the half its note claims ("never uses the base as a range endpoint"). This
+# pins the other half — the note itself — so a sweep across the five sites
+# cannot quietly "fix" a correct one.
+#
 # Two assertions, not one conditional. The first draft here fired only *if*
 # closeout mentioned BASE_REF at all — so deleting the note deleted the check's
 # own trigger and the mutation went green. A guard that disappears with the

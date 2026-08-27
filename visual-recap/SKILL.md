@@ -79,6 +79,7 @@ if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
   BASE_REF="origin/$BASE_BRANCH"
 else
   BASE_REF="$BASE_BRANCH"
+  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
 fi
 git diff --stat "$BASE_REF...HEAD"
 git log --oneline --no-merges "$BASE_REF..HEAD"
@@ -86,7 +87,7 @@ git log --oneline --no-merges "$BASE_REF..HEAD"
 
 Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a PR, resolve its head/base with `gh pr view <n>`. The `git diff` is three-dot (diff from the merge base) while the `git log` stays two-dot — swapping the diff to two-dot reports deletions for base-side work this branch never touched, and the Grounding Rule above stakes this skill on those ±counts being real.
 
-**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then silently falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 **Scope the whole work unit.** When invoked mid-session after work has already happened, the default scope is everything the session produced — the original implementation plus follow-up fixes, tests, and doc updates — not just the most recent edit. Exclude unrelated dirty work that predates the session. When regenerating a recap after feedback, keep the broad scope; never narrow it to just the latest fix unless asked.
 
