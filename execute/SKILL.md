@@ -383,6 +383,10 @@ The deeper fix usually lives upstream in `/tdd`: a seam that had to be mocked to
 
 **If verification reveals gaps**, fix them and commit the fix as its own commit. Do not amend a prior commit — the history should show what was built and what was corrected.
 
+**Scope check on set-claims.** Before writing any sentence that quantifies over a set, name the set, the enumeration that produced it, and the members not covered. If every member found shares one wording or one kind of file, the enumeration stopped early — see [references/restated-claims.md](references/restated-claims.md).
+
+**Then mutate at the point of consumption.** A census enumerates occurrences of the symbol your representation names; it cannot enumerate the ways the property can be broken. Name the property the change establishes, produce the cheapest single edit that would revert it, and confirm a named test fails. If that edit lands at a site the census did not list, the census was over the wrong set.
+
 #### Bug-Fix Verification (when the task is a fix, not a feature)
 
 If this unit of work is fixing a bug, apply these additional checks before committing:
