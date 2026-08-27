@@ -430,7 +430,7 @@ assert_matches "$bisect_out" "$expected_bad is the first '?bad'? commit" \
 
 
 # -----------------------------------------------------------------------------
-# Base-branch detection: four skills, one clone-bearing fixture (#298)
+# Base-branch detection: every skill that carries the block, one clone-bearing fixture (#298)
 # -----------------------------------------------------------------------------
 #
 # The suite above could never have caught #298, and the reason is its fixture,
@@ -555,7 +555,7 @@ fi
 
 # -----------------------------------------------------------------------------
 
-section "the four documented blocks resolve a name and a ref, and they agree"
+section "every documented detection block resolves a name and a ref, and they agree"
 
 # The fenced block is pulled out of the skill and dedented — shell does not care
 # about leading whitespace, and /pre-merge's block is indented inside a numbered
@@ -600,13 +600,28 @@ d='$'
 detect_marker="BASE_BRANCH=${d}(git symbolic-ref"
 # `|| true` so a derivation that finds nothing reaches the floor assertion
 # below instead of killing the run under `set -e` with no assertion reported.
+# The fallback's stderr note is the residual's operative half — the difference
+# between an operator who sees the degradation and one who reads a plausible
+# wrong number, which is how the original defect survived five months.
+#
+# It is pinned by RUNNING each block in both fixtures, never by grepping the
+# source. A substring test cannot separate the note on stderr from: the same
+# note on stdout (where it lands ahead of the `base=… ref=…` value a consumer
+# reads), the note moved into the `then` arm (where it fires exactly when the
+# fallback did *not* happen), or the note commented out. All three mutations
+# were green against the grep this replaced.
+fallback_note='does not resolve — measuring against the local branch, which may be stale'
+
 base_sites="$(cd "$repo_root" && { grep -lF "$detect_marker" ./*/SKILL.md || true; } \
     | sed 's|^\./||' | sort | tr '\n' ' ')"
 base_site_count="$(printf '%s\n' "$base_sites" | tr ' ' '\n' | grep -c . || true)"
 # A derivation that returns nothing passes every loop below without running
-# one. Four is what exists today; a fifth copier should raise this floor
-# deliberately, and a drop below it means the derivation broke.
-if [[ "$base_site_count" -ge 4 ]]; then
+# one. This floor is the count of skills that carry the block today; a new
+# copier raises it, and a drop below it means either the derivation broke or a
+# site was quietly removed from the population. It was a stale `4` for one
+# commit after /compound became the fifth site, which made reverting /compound
+# a green no-op — the review caught that, this comment is why it stays current.
+if [[ "$base_site_count" -ge 5 ]]; then
     printf '  ok   derived %s skills carrying the base-branch detection block\n' "$base_site_count"
     pass=$((pass + 1))
 else
@@ -646,6 +661,21 @@ done
 
 for site in $base_sites; do
     block="$(extract_detect_block "$repo_root/$site")"
+
+    # The mirror of the no-remote check further down: a note that fires when the
+    # ref *does* resolve is the `then`-arm mutation, and it is exactly as wrong
+    # as no note at all — it tells the operator the measurement is degraded when
+    # it is not, which is how a warning gets trained out of a reader.
+    set +e
+    ok_err="$(cd "$work" && eval "$block" 2>&1 >/dev/null)"
+    set -e
+    if [[ "$ok_err" == *"$fallback_note"* ]]; then
+        printf '  FAIL %s announces a fallback even though origin/<base> resolved\n' "$site"
+        fail=$((fail + 1))
+    else
+        printf '  ok   %s stays quiet when origin/<base> resolves\n' "$site"
+        pass=$((pass + 1))
+    fi
 
     # Parse the block before running it. Without this, an edit that leaves the
     # guard half-deleted shows up only as an empty BASE_REF several assertions
@@ -700,11 +730,9 @@ assert_contains "$canonical_residual" 'only as fresh as the last' \
 # The fallback's stderr note is the residual's operative half — the difference
 # between an operator who sees the degradation and one who reads a plausible
 # wrong number, which is how the original defect survived five months.
-for site in $base_sites; do
-    block="$(extract_detect_block "$repo_root/$site")"
-    assert_contains "$block" 'does not resolve — measuring against the local branch, which may be stale' \
-        "$site's else branch says on stderr that it fell back, rather than degrading silently"
-done
+#
+# It is checked by RUNNING the block, not by grepping it — see `fallback_note`
+# above and its two use sites, one per fixture.
 
 # -----------------------------------------------------------------------------
 
@@ -741,11 +769,14 @@ stat_triple() {
 # Validate the instrument before trusting what it measures. `stat_triple` is the
 # oracle every count assertion in this file runs through, and its three arms are
 # otherwise exercised only indirectly. A planted input with all three fields
-# non-zero and distinct catches an arm that silently returns 0.
+# non-zero and distinct catches an arm that silently returns 0 — and the last
+# probe uses git's *singular* spellings (`1 insertion(+)`, `1 deletion(-)`),
+# which a one-line change really emits and which plural-only patterns miss.
 for probe in \
     '1 file changed, 2 insertions(+), 3 deletions(-)|1/2/3' \
     '4 files changed, 5 insertions(+)|4/5/0' \
-    '6 files changed, 7 deletions(-)|6/0/7'
+    '6 files changed, 7 deletions(-)|6/0/7' \
+    '8 files changed, 1 insertion(+), 1 deletion(-)|8/1/1'
 do
     assert_eq "${probe#*|}" "$(stat_triple "${probe%|*}")" \
         "stat_triple parses a planted summary: ${probe%|*}"
@@ -860,6 +891,23 @@ for site in $base_sites; do
     assert_eq 'prod|prod' "$resolved" \
         "$site falls back to the local branch when origin/<base> does not resolve"
 
+    # Run the block with the streams kept apart, and assert the note is on the
+    # one that does not carry the block's answer. See the fallback_note comment
+    # above for the three mutations a source grep cannot separate.
+    set +e
+    fb_out="$(cd "$noremote" && eval "$block" 2>/dev/null)"
+    fb_err="$(cd "$noremote" && eval "$block" 2>&1 >/dev/null)"
+    set -e
+    assert_contains "$fb_err" "$fallback_note" \
+        "$site announces the fallback on stderr when origin/<base> does not resolve"
+    if [[ "$fb_out" == *"$fallback_note"* ]]; then
+        printf '  FAIL %s puts the fallback note on stdout, where it lands ahead of the value a consumer reads\n' "$site"
+        fail=$((fail + 1))
+    else
+        printf '  ok   %s keeps the fallback note off stdout\n' "$site"
+        pass=$((pass + 1))
+    fi
+
     line="$(extract_range_lines "$repo_root/$site" | grep -m1 '^git diff' || true)"
     [[ -n "$line" ]] || continue
     set +e
@@ -896,7 +944,13 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # variable or a bare word, then the dots) rather than by any site's phrasing,
 # which is what makes this a census and not a fifth copy of one site's wording.
 range_pattern='git (diff|log)( +--?[a-z-]+)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
-scan_files="$(cd "$repo_root" && ls ./*/SKILL.md) pre-merge/review-checklist.md"
+# The scan set has to match the label above it, or this section commits the
+# overclaim it exists to prevent. `*/references/*.md` install into the skill
+# directories and are read at runtime; `docs/*.md` are the canonical copies
+# those are synced from. A hardcoded range planted in either was invisible to
+# an earlier draft that scanned only `*/SKILL.md` — same defect class, same
+# file class the label claimed to cover.
+scan_files="$(cd "$repo_root" && ls ./*/SKILL.md ./*/references/*.md ./docs/*.md 2>/dev/null) pre-merge/review-checklist.md"
 
 # shellcheck disable=SC2086
 range_hits="$(cd "$repo_root" && grep -hoE "$range_pattern" $scan_files || true)"
@@ -911,13 +965,22 @@ range_count="$(printf '%s\n' "$range_hits" | grep -c . || true)"
 raw_ranges="$(cd "$repo_root" && grep -hoE '\.\.\.?HEAD' $scan_files | grep -c . || true)"
 assert_eq "$raw_ranges" "$range_count" \
     "the endpoint pattern accounts for every '..HEAD' range in the scanned files (none silently unparsed)"
-if [[ "$range_count" -ge 8 ]]; then
-    printf '  ok   %s documented range endpoints found to check\n' "$range_count"
-    pass=$((pass + 1))
-else
-    printf '  FAIL only %s range endpoints found; the scan is reading almost nothing\n' "$range_count"
-    fail=$((fail + 1))
-fi
+# A global floor has slack in it, and slack is where a real loss hides: with 11
+# ranges and a floor of 8, any three could be deleted silently — including all
+# three of /pre-merge's, one of which is the line telling a reviewer to cite the
+# diff-stat numbers in a Dimension 11 finding. So the floor is per-file and
+# derived: every skill that carries the detection block must document at least
+# one range, and so must the review checklist that restates the command.
+for site in $base_sites pre-merge/review-checklist.md; do
+    site_ranges="$(cd "$repo_root" && grep -cE "$range_pattern" "$site" || true)"
+    if [[ "$site_ranges" -ge 1 ]]; then
+        printf '  ok   %s documents %s range endpoint(s) for the census to check\n' "$site" "$site_ranges"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s documents no range endpoint; the census is silent about a file it should cover\n' "$site"
+        fail=$((fail + 1))
+    fi
+done
 
 bad_endpoint=0
 bad_operator=0

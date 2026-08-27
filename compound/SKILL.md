@@ -86,8 +86,9 @@ Look at:
 
 1. **Git log** — What commits were made? What changed?
    ```bash
-   git log --oneline -20
+   git log --oneline "$BASE_REF..HEAD"
    ```
+   Base-relative, not `-20`: a fixed count reads the base's own history as "the work under review" on any branch shorter than it. Two-dot here is correct — these are the commits on this branch and not on the base. (The `git diff` below is three-dot for the mirror reason: it diffs from the merge base rather than subtracting base-side work.) On the post-merge fallback path the branch is gone, so use `gh pr diff <n>` as above.
 
 2. **Issue thread** — What was the original problem? What was discussed?
 
