@@ -8,11 +8,11 @@ This doc captures the convergent comment-craft methodology from three independen
 
 Tacke's rubric for whether a review is functioning:
 
-- **Effective** — catches what automation cannot: maintainability, architectural fit, domain convention, intent vs. implementation. The 10 dimensions in `review-checklist.md` cover this axis.
+- **Effective** — catches what automation cannot: maintainability, architectural fit, domain convention, intent vs. implementation. The dimensions in `review-checklist.md` cover this axis.
 - **Empathetic** — feedback targets the artifact, not the author. Reviews that feel like personal attacks discourage future participation and corrupt the process into theatrical agreement.
 - **Effortless** — automation and structure remove mechanical friction (formatting, lint, test pass) before human attention. Reviewer attention is finite; spending it on the computable leaves less for judgment work only humans can do.
 
-`/pre-merge`'s 10 architectural dimensions handle Effective. Pre-commit hooks and CI handle Effortless. **Comment craft is what fills the Empathetic axis.** The rest of this doc is how.
+`/pre-merge`'s architectural dimensions handle Effective. Pre-commit hooks and CI handle Effortless. **Comment craft is what fills the Empathetic axis.** The rest of this doc is how.
 
 ## The 5P pre-comment gate
 

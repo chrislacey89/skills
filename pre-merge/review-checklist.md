@@ -10,9 +10,9 @@ Used by `/pre-merge` during Phase 3 in all three modes — author-mode, reviewer
 
 The first two names are labels for two parallel review contexts, grouped by theme. They are **not** statements about what a sub-agent may read — `/pre-merge` Phase 3's context contract is the only thing that says that, and it says the same thing to both.
 
-**A known unresolved question sits next to this, and it is not settled here.** Phase 3's context contract reads as a closed list ("Nothing else"), while several delegated dimensions — Boundary Map Contracts, Surgical Scope, Review-friendly Size — have procedures that read slice issue bodies, the registry, or the merged tree. Either the contract is narrower than it sounds or those dimensions are partly inoperable as delegated work. This change does not decide it: the controller bucket is justified above on the cross-slice-view ground, which holds under either reading. Tracked separately.
+**A known unresolved question sits next to this, and it is not settled here.** Phase 3's context contract reads as a closed list ("Nothing else"), while several delegated dimensions have procedures that read slice issue bodies, the registry, or the merged tree. The controller bucket above does not depend on how that resolves. Tracked as #293.
 
-`/pre-merge` Phase 3 **derives** its split from these markers rather than restating the roster. The marker is not decoration: it is the only place ownership is written down, so a dimension added here without one has no consumer and `scripts/test-review-dimension-partition.sh` fails. That script exists because the previous arrangement — a hand-written assignment list living in `pre-merge/SKILL.md` — omitted Dimension 5 from the day it was added and stayed wrong for months while the loop-mode ledger reported full coverage.
+`/pre-merge` Phase 3 **derives** its split from these markers rather than restating the roster. The marker is not decoration: it is the only place ownership is written down, so a dimension added here without one has no consumer and `scripts/test-review-dimension-partition.sh` fails. The script's header carries the incident that made it necessary.
 
 In **loop-mode**, every finding below gets a durable row in the PR's `## Review Disposition Ledger` (`/pre-merge` Phase 5) rather than scrolling past in a terminal. The dimensions and severity rules are unchanged — but each finding is checked against the tree and carries that evidence into the ledger, so the operator reads a claim with proof beside it. Loop-mode records and hands back; it does not act on findings.
 
@@ -114,7 +114,7 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 
 ## 5. Coverage Matrix Reconciliation (multi-slice PRD PRs only)
 
-**Runs in:** the controller, in Phase 4 — not a sub-agent. The procedure below reads GitHub issue state (the PRD issue body, each slice issue’s `User Stories Addressed` section, and the set of *merged* slices), and Phase 3’s sub-agent context contract grants none of it. A sub-agent handed this dimension could only return a Blocker it cannot substantiate — strictly worse than not running it.
+**Runs in:** the controller, in Phase 4 — not a sub-agent. The procedure below needs the PRD issue body, every slice issue, and the set of *merged* slices held together at once. Phase 1 assembles that cross-slice view in the controller and nowhere else, so a sub-agent reading this PR’s diff cannot reach it — it could only return a Blocker it has no way to substantiate, which is worse than not running the dimension at all.
 
 **Principle:** Every PRD Must-commitment should be covered by at least one shipped slice. Wants may be consciously cut. ~Tildes are already cut by definition.
 
