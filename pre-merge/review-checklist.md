@@ -4,9 +4,13 @@ Used by `/pre-merge` during Phase 3 in all three modes — author-mode, reviewer
 
 **Every dimension declares its own owner**, on a `**Runs in:**` line directly under its heading. There are three buckets and each dimension sits in exactly one:
 
-- `sub-agent A (structural & scope)` — runnable from the diff alone.
-- `sub-agent B (contracts & quality)` — runnable from the diff plus the merged tree.
-- `the controller, in Phase 4` — needs GitHub issue state the Phase 3 sub-agent context contract does not grant, so no sub-agent can execute it.
+- `sub-agent A (structural & scope)` — delegated, in Phase 3.
+- `sub-agent B (contracts & quality)` — delegated, in Phase 3.
+- `the controller, in Phase 4` — **not** delegated. Its procedure needs the whole PRD and the full set of merged slices held together, which is a cross-slice view Phase 1 assembles in the controller and Phase 4 already reasons over. A sub-agent given only this PR's diff has no way to reach it.
+
+The first two names are labels for two parallel review contexts, grouped by theme. They are **not** statements about what a sub-agent may read — `/pre-merge` Phase 3's context contract is the only thing that says that, and it says the same thing to both.
+
+**A known unresolved question sits next to this, and it is not settled here.** Phase 3's context contract reads as a closed list ("Nothing else"), while several delegated dimensions — Boundary Map Contracts, Surgical Scope, Review-friendly Size — have procedures that read slice issue bodies, the registry, or the merged tree. Either the contract is narrower than it sounds or those dimensions are partly inoperable as delegated work. This change does not decide it: the controller bucket is justified above on the cross-slice-view ground, which holds under either reading. Tracked separately.
 
 `/pre-merge` Phase 3 **derives** its split from these markers rather than restating the roster. The marker is not decoration: it is the only place ownership is written down, so a dimension added here without one has no consumer and `scripts/test-review-dimension-partition.sh` fails. That script exists because the previous arrangement — a hand-written assignment list living in `pre-merge/SKILL.md` — omitted Dimension 5 from the day it was added and stayed wrong for months while the loop-mode ledger reported full coverage.
 
