@@ -189,16 +189,28 @@ else
                 "anchor \"$overview_anchor\" not found — the summary was restructured; update this suite"
             continue
         fi
-        # NON-NARROWING FLOOR. See paragraph_at's header for the failure this
-        # guards. Both bounds are derived from the subject file, so a legitimate
-        # rewording cannot trip them; only a degraded extractor can.
-        anchor_line="$(grep -F -- "$overview_anchor" "$ov" | head -1 || true)"
-        if [ "${#para}" -lt "${#anchor_line}" ]; then
-            bad "$ov's /compound paragraph extracted shorter than the line holding its anchor" \
-                "${#para} < ${#anchor_line} chars — the extractor narrowed to a line; the assertions below would pass over text they never read"
-            continue
-        fi
-        if [ "$(printf '%s' "$para" | grep -c -- '\. ')" -lt 1 ]; then
+        # NON-NARROWING FLOOR, and an honest statement of its reach. See
+        # paragraph_at's header for the two failures behind it.
+        #
+        # /compound's description is multi-sentence and both assertions below
+        # claim to scan all of it, so a single-sentence extract cannot support
+        # them whatever produced it. What this catches: paragraph_at regressing
+        # to a line read against a wrapped source. Verified.
+        #
+        # What it does NOT catch, stated rather than implied: a wrap that leaves
+        # two sentences on the anchor's own line. The tempting stronger guard —
+        # compare the extract's length against the line holding the anchor — is
+        # a TAUTOLOGY under exactly the reversion it appears to guard, since a
+        # line read and that comparison read the same line. It was written,
+        # tested, found to pass silently under a live reversion, and removed
+        # rather than shipped. A floor that states a property it does not have
+        # is the defect this whole change exists to close.
+        #
+        # `|| true`: grep exits 1 on no match, and relying on `if`-condition
+        # context to suppress `set -e` here would make this floor's survival an
+        # accident of where it is written rather than a property of how.
+        para_sentences="$(printf '%s' "$para" | grep -c -- '\. ' || true)"
+        if [ "${para_sentences:-0}" -lt 1 ]; then
             bad "$ov's /compound paragraph extracted as a single sentence" \
                 "the assertions below claim to scan the whole description; a one-sentence extract makes both of them vacuous"
             continue
