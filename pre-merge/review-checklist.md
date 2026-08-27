@@ -1,6 +1,18 @@
 # Review Checklist
 
-Used by `/pre-merge` during Phase 3 in all three modes — author-mode, reviewer-mode, and loop-mode. Eleven dimensions, each independent. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
+Used by `/pre-merge` during Phase 3 in all three modes — author-mode, reviewer-mode, and loop-mode. Each numbered dimension below is independent; the `## N.` headings **are** the roster, so nothing outside this file needs to restate how many there are. For every finding, classify as Observation, Suggestion, or Concern using the severity rules at the bottom.
+
+**Every dimension declares its own owner**, on a `**Runs in:**` line directly under its heading. There are three buckets and each dimension sits in exactly one:
+
+- `sub-agent A` — delegated, in Phase 3. Theme: structural & scope.
+- `sub-agent B` — delegated, in Phase 3. Theme: contracts & quality.
+- `the controller, in Phase 4` — **not** delegated; the controller runs it in Phase 4, where the cross-slice context Phase 1 assembles already lives. Each controller-owned dimension's own marker carries the reason it cannot be delegated.
+
+The themes are labels for two parallel review contexts. They are defined here only — the markers do not repeat them — and they are **not** statements about what a sub-agent may read; `/pre-merge` Phase 3's context contract is the only thing that says that, and it says the same thing to both.
+
+**A known unresolved question sits next to this, and it is not settled here.** Phase 3's context contract reads as a closed list ("Nothing else"), while several delegated dimensions have procedures that read slice issue bodies, the registry, or the merged tree. The controller bucket above does not depend on how that resolves. Tracked as #293.
+
+`/pre-merge` Phase 3 **derives** its split from these markers rather than restating the roster. The marker is not decoration: it is the only place ownership is written down, so a dimension added here without one has no consumer and `scripts/test-review-dimension-partition.sh` fails. The script's header carries the incident that made it necessary.
 
 In **loop-mode**, every finding below gets a durable row in the PR's `## Review Disposition Ledger` (`/pre-merge` Phase 5) rather than scrolling past in a terminal. The dimensions and severity rules are unchanged — but each finding is checked against the tree and carries that evidence into the ledger, so the operator reads a claim with proof beside it. Loop-mode records and hands back; it does not act on findings.
 
@@ -9,6 +21,8 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 ---
 
 ## 1. Deep Modules (Ousterhout)
+
+**Runs in:** sub-agent A.
 
 **Principle:** Modules should have small interfaces hiding deep implementations. A module's interface complexity should be justified by the implementation complexity it hides.
 
@@ -25,6 +39,8 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 
 ## 2. Vertical Slice Integrity
 
+**Runs in:** sub-agent A.
+
 **Principle:** Each slice cuts through all layers end-to-end (schema, API, UI, tests). Implementation follows red-green-refactor rhythm, not batch-by-layer.
 
 **Violation patterns:**
@@ -37,6 +53,8 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 ---
 
 ## 3. State Discipline
+
+**Runs in:** sub-agent A.
 
 **Principle:** State lives in GitHub (issues) or in code (`docs/solutions/`, skills). No ad-hoc filesystem state.
 
@@ -52,6 +70,8 @@ Research files produced by `/research` live in the per-user archive at `~/.claud
 ---
 
 ## 4. Boundary Map Contracts
+
+**Runs in:** sub-agent B.
 
 **Principle:** Each slice's Produces and Consumes declarations are contracts. The implementation should match them, and upstream slices this PR consumes from must have actually shipped what their Produces claimed.
 
@@ -94,6 +114,8 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 
 ## 5. Coverage Matrix Reconciliation (multi-slice PRD PRs only)
 
+**Runs in:** the controller, in Phase 4 — not a sub-agent. The procedure below needs the PRD issue body, every slice issue, and the set of *merged* slices held together at once. Phase 1 assembles that cross-slice view in the controller and nowhere else, so a sub-agent reading this PR’s diff cannot reach it — it could only return a Blocker it has no way to substantiate, which is worse than not running the dimension at all.
+
 **Principle:** Every PRD Must-commitment should be covered by at least one shipped slice. Wants may be consciously cut. ~Tildes are already cut by definition.
 
 **Procedure.** If this PR closes the last slice in a multi-slice PRD, regenerate the Coverage Matrix: read the PRD issue body, classify each user story (Must / Want / ~Tilde), and check each slice issue's `User Stories Addressed` section to see which slice covers which commitment. Compare against the set of *merged* slices.
@@ -110,6 +132,8 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 ---
 
 ## 6. Test Quality
+
+**Runs in:** sub-agent B.
 
 **Principle:** Tests verify behavior through public interfaces, not implementation details. Tests should survive internal refactors unchanged.
 
@@ -128,6 +152,8 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 
 ## 7. docs/solutions/ Adherence
 
+**Runs in:** sub-agent B.
+
 **Principle:** Past lessons should inform current work. If the implementation touches areas with documented solutions, it should follow those patterns or consciously update them.
 
 **Violation patterns:**
@@ -140,6 +166,8 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 ---
 
 ## 8. Runtime Initialization & Production-Runtime Parity (Schema/Config/CLI/Deploy-runtime PRs only)
+
+**Runs in:** sub-agent B.
 
 **Principle:** Code that builds and passes tests is not necessarily code that runs correctly. When a slice changes database schema, migrations, environment configuration, server initialization, ships a CLI/orchestration entrypoint with a dry-run mode, or deploys to a runtime that differs from the one its tests run in, the actual production path must work — not just the build, the test suite, the dry-run shortcut, or the test runtime. Green tests certify behavior in the environment the *tests* model; when that environment is more permissive than production, or a seam is mocked away from the real deployed artifact, green is not evidence of working (Twelve-Factor Factor X dev/prod parity; Continuous Delivery's smoke-against-production-like-environment).
 
@@ -164,6 +192,8 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 
 ## 9. Fix Completeness (Bug-Fix PRs only)
 
+**Runs in:** sub-agent B.
+
 **Principle:** A correction removes the defect; a workaround suppresses the failure while the defect remains. Corrections are complete; workarounds are technical debt that must be tracked.
 
 **Only runs when the PR is linked to a bug-fix issue (not a feature).**
@@ -178,6 +208,8 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 ---
 
 ## 10. Surgical Scope
+
+**Runs in:** sub-agent A.
 
 **Principle:** Every changed hunk should trace to the stated task. A diff is the answer to a question; the question was not "what else could be improved?"
 
@@ -203,6 +235,8 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 ---
 
 ## 11. Review-friendly Size
+
+**Runs in:** sub-agent A.
 
 **Principle:** Code review effectiveness is bounded by reviewer engagement, and the variable with the strongest empirical support across independent research streams is diff size. Cohen et al.'s 2,500-review Cisco dataset shows defect detection drops sharply past 100–300 LOC per session and a 60-minute ceiling; Tacke documents engagement degradation past ~500 lines or ~20 files; Rigby's 13-project study (Microsoft, AMD, Android, Chrome OS, Apache, Linux) found medians of 11–78 LOC. Three independent streams converging on one variable.
 

@@ -91,7 +91,7 @@ export const STEPS = [
     source: "New",
     time: "5-10 min",
     summary: "PR creation + architectural review",
-    detail: "Creates a GitHub PR linking PRD and slice issues. Reviews the full diff against seven dimensions: deep modules, vertical slices, state discipline, boundary map contracts, test quality, docs/solutions/ adherence, and fix completeness (bug-fix PRs only — catches workarounds disguised as corrections, missing regression tests, lone instance fixes). Findings are advisory — Observations, Suggestions, and Concerns in terminal. When a PRD exists, also notes scope drift between planned boundary maps and actual diff.",
+    detail: "Creates a GitHub PR linking PRD and slice issues. Reviews the full diff against the review dimensions defined in pre-merge/review-checklist.md — that file's numbered headings are the roster, and each dimension's Runs-in marker names where it executes. Findings are advisory — Observations, Suggestions, and Concerns in terminal. When a PRD exists, also notes scope drift between planned boundary maps and actual diff.",
     produces: "GitHub PR with structured body, advisory findings in terminal",
     consumes: "Feature branch diff, PRD issue, slice issues with boundary maps",
     stateLocation: "GitHub PR",
