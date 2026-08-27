@@ -52,12 +52,25 @@ Resolve the commit range to walk — the commits on this branch not yet on the b
 
 ```bash
 BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
-[ -z "$BASE_BRANCH" ] && for c in main master prod trunk; do git rev-parse --verify "$c" >/dev/null 2>&1 && BASE_BRANCH=$c && break; done
-git log --oneline --no-merges "$BASE_BRANCH..HEAD"
-git diff --stat "$BASE_BRANCH..HEAD"
+if [ -z "$BASE_BRANCH" ]; then
+  for candidate in main master prod develop trunk; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
+  done
+fi
+# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
+# $BASE_REF points at it, and is the only thing safe as a range endpoint.
+if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  BASE_REF="origin/$BASE_BRANCH"
+else
+  BASE_REF="$BASE_BRANCH"
+fi
+git log --oneline --no-merges "$BASE_REF..HEAD"
+git diff --stat "$BASE_REF...HEAD"
 ```
 
-Do not hardcode `main` — detect the base (this repo itself uses `prod`). If the range is empty or the base can't be resolved, ask the user which range to walk.
+Do not hardcode `main` — detect the base (this repo itself uses `prod`). If the range is empty or the base can't be resolved, ask the user which range to walk. The `git diff` is three-dot (diff from the merge base) while the `git log` stays two-dot (commits reachable from HEAD but not the base) — these are different operators for different questions, and swapping the diff to two-dot reports deletions for base-side work this branch never touched.
+
+**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then silently falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 Then present an **overview before the first commit** (Spinellis: *overview first*). It is short and does two jobs:
 

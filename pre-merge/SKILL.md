@@ -68,10 +68,19 @@ If you are running on a branch other than the user's working branch and `--pr` w
        if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
      done
    fi
-   git diff "$BASE_BRANCH...HEAD" --stat
-   git log --oneline "$BASE_BRANCH..HEAD"
+   # A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
+   # $BASE_REF points at it, and is the only thing safe as a range endpoint.
+   if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+     BASE_REF="origin/$BASE_BRANCH"
+   else
+     BASE_REF="$BASE_BRANCH"
+   fi
+   git diff "$BASE_REF...HEAD" --stat
+   git log --oneline "$BASE_REF..HEAD"
    ```
-   For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target). If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
+   For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target) and re-derive `$BASE_REF` from it. If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
+
+   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then silently falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 **Reviewer-mode (`--pr <number>`):**
 
@@ -140,9 +149,9 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 Consult `review-checklist.md` for the review dimensions and their violation patterns. That file is the roster — its `## N.` headings are the only place the set of dimensions is defined, and nothing here restates it. The dimensions run identically in all three modes; only the `diff` they read differs:
 
-- **Author-mode** — the local `git diff "$BASE_BRANCH...HEAD"`.
+- **Author-mode** — the local `git diff "$BASE_REF...HEAD"`.
 - **Reviewer-mode** — the `gh pr diff <pr-number>` output.
-- **Loop-mode** — the same local `git diff "$BASE_BRANCH...HEAD"` as author-mode. Loop-mode makes no commits, so on a later invocation the diff has moved only if the *operator* pushed fixes; the ledger, not a narrowed diff, is what stops the pass re-reporting settled findings.
+- **Loop-mode** — the same local `git diff "$BASE_REF...HEAD"` as author-mode. Loop-mode makes no commits, so on a later invocation the diff has moved only if the *operator* pushed fixes; the ledger, not a narrowed diff, is what stops the pass re-reporting settled findings.
 
 **Delegation exists for reviewer independence; parallelism on large diffs is a sub-case of it.** When `/pre-merge` is auto-invoked by `/execute` Step 6 it runs in the session that just wrote the code, holding every rationalization the implementing agent made while writing it. The dimensions are sound; the reviewer is not independent. Cohen's finding is that the author's job is to *annotate for* a reviewer, not to be one — so the sub-agent split below is first a way to put a clean context in front of the diff, and only second a way to halve wall-clock on a big one.
 

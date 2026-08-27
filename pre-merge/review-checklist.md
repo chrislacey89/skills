@@ -252,7 +252,7 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 
 **Verification procedure — cited counts, not impressions:**
 
-1. Read the diff stat from Phase 1 — `git diff "$BASE_BRANCH...HEAD" --stat` in author-mode, or the file count and additions/deletions from `gh pr view --json` / `gh pr diff` in reviewer-mode. Cite the actual numbers in the finding.
+1. Read the diff stat from Phase 1 — `git diff "$BASE_REF...HEAD" --stat` in author-mode, or the file count and additions/deletions from `gh pr view --json` / `gh pr diff` in reviewer-mode. Cite the actual numbers in the finding.
 2. Compare line count and file count against the bands above. Use additions + deletions, not net change — a 600-add / 400-delete diff is a 1,000-line review burden, not a 200-line one.
 3. If the Concern band may fire, enumerate the conceptual areas touched (e.g., "schema, API handler, React component, migration script") and confirm three or more independent areas before classifying as Concern. Two-domain >800 LOC diffs land at Suggestion, not Concern.
 4. If the slice is the tracer (per the issue body or PRD decomposition order), suppress the finding regardless of band; note in the findings output that the dimension was suppressed under the tracer exemption so the suppression is visible rather than silent.
