@@ -9,7 +9,8 @@ the claim has a failure mode with no equivalent in code.
 
 This file is the canonical statement. `/tdd` § 4 Refactor points at it for the
 author-time move; `/pre-merge` Dimension 1 points at it for the review-time
-detector. Neither restates it.
+detector; `/execute` Step 4 points at it for the scope check on set-claims.
+None of them restates it.
 
 ## Why an additive edit is not a replacement
 
