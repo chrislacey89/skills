@@ -190,10 +190,31 @@ assert_eq "0" "$retired_bullets" "the hand-enumerated 'Sub-agent A/B:' bullets a
 # SKILL.md would go on pointing at a string that no longer exists.
 assert_true "$(grep -qF '**Runs in:**' "$premerge_skill" && echo true || echo false)" "pre-merge/SKILL.md names the canon's '**Runs in:**' marker so the derivation is anchored"
 
-# The controller bucket needs a reader. A dimension marked controller-owned
-# with nothing in Phase 4 executing it is the same dead-prose failure in a new
-# location.
-assert_true "$(grep -qF 'Coverage Matrix' "$premerge_skill" && echo true || echo false)" "pre-merge/SKILL.md still has a consumer for the controller-owned coverage reconciliation"
+section "Every controller-owned dimension has a reader inside Phase 4"
+
+# A dimension marked controller-owned with nothing in Phase 4 executing it is
+# the same dead-prose failure in a new location — a bucket that reports
+# coverage it does not have.
+#
+# This assertion is scoped to the Phase 4 section, and that scoping is the
+# assertion. An earlier draft checked only that the dimension's name appeared
+# somewhere in SKILL.md; deleting Phase 4's entire runner left it green,
+# because the name also occurs in Phase 1's no-PRD note and in the Surgical
+# Scope contrast. A whole-file substring search is not evidence that anything
+# runs the dimension. Found by mutating the fix and watching the test hold.
+phase4="$(sed -n '/^### Phase 4/,/^### Phase 5/p' "$premerge_skill")"
+
+if [[ "$(printf '%s' "$phase4" | wc -l)" -lt 5 ]]; then
+    fatal "Phase 4 section extraction from $premerge_skill returned fewer than 5 lines. The '### Phase N' heading format changed. Refusing to report a vacuous pass."
+fi
+
+for n in "${bucket_c[@]}"; do
+    # Take the dimension's title from the canon and drop any parenthetical
+    # gating clause, so the check tracks a rename instead of a hardcoded string.
+    title="$(grep -oE "^## $n\. [^(]+" "$checklist" | sed -E "s/^## $n\. //; s/ +$//")"
+    assert_true "$(printf '%s' "$phase4" | grep -qF "$title" && echo true || echo false)" \
+        "Phase 4 names '$title' (Dimension $n), the controller-owned dimension it is responsible for running"
+done
 
 section "The dimension count is not restated as a literal"
 
