@@ -191,7 +191,9 @@ The one carve-out is the **diagram figure**, and it is a scoping of this invaria
 
 - A Mermaid figure carries a **visible degrade note beside the figure**, not once in a footer: *"Best rendered with an active internet connection — this figure loads Mermaid from a CDN and shows its source text offline. The rest of this file reads identically either way."* A reader who jumps straight to that figure has to see it there.
 - **Losing the figure never loses the finding.** Anything a diagram is the sole carrier of has to also exist as prose or as a block that survives offline. The picture may be the fastest route to the point; it may not be the only one.
-- **Known-offline review context → the CSS primitive**, regardless of the picture's complexity, with the caption saying that is what happened.
+- **When the review context is known to be offline** — a plane, an air-gapped sandbox, a CI log — take the CSS primitive regardless of the picture's complexity, with the caption saying that is what happened.
+
+Everything else about the load-bearing layer is unchanged:
 
 - **Copy the canonical token core** from `visual-recap-design.md` §1 — a fixed `:root`/`[data-theme="dark"]` block of named CSS variables (`--bg`, `--fg`, `--add`, `--del`, `--risk`, the `--flag-*` and `--sx-*` ramps, a base-16 spacing scale, …), with light as the default and dark flipped on `[data-theme]`. Keep the variable names; do not re-derive a fresh palette per run. This is the load-bearing layer; it must not depend on any CDN.
 - **Forcing function — confirm the token core is canonical before presenting.** The artifact's `:root`/`[data-theme]` block must be the canonical `visual-recap-design.md` §1 set (canonical variable names and values), **not** a palette, font stack, or chrome re-derived from the app under review. A review instrument stays visually independent of its subject; the temptation to theme the recap in a well-designed app's own aesthetic is the deviation most likely to occur and most harmful when it does. This is a checked step, not stated hope — verify it (Norman: *knowledge in the world, not the head*; Gawande: the killer-item an expert skips under load).
