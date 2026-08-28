@@ -64,6 +64,15 @@ assert_has() {
     fi
 }
 
+# assert_has_re <haystack> <extended-regex> <label> — the regex sibling of
+# assert_has. Same here-string discipline, and for the same reason.
+assert_has_re() {
+    if grep -qE -- "$2" <<<"$1"; then ok "$3"; else
+        bad "$3"
+        printf '       expected to match: %s\n' "$2"
+    fi
+}
+
 # assert_lacks <haystack> <needle> <label>
 assert_lacks() {
     if has "$1" "$2"; then
@@ -289,6 +298,51 @@ assert_has "$skill_txt" 'Part I'  "the skill routes readers to Part I by name"
 assert_has "$part2" '/re-pitch' "§D6 records the /re-pitch pairing"
 assert_has "$skill_txt" 'recommend `/re-pitch`' "the skill recommends /re-pitch"
 assert_lacks "$skill_txt" 'invoke `/re-pitch`' "the skill never invokes /re-pitch"
+
+# ---------------------------------------------------------------------------
+section "9. The serializer's scope is stated in both halves, everywhere it is stated"
+
+# This claim was INTRODUCED by the change this suite guards, and it is restated
+# at four sites. Section 2 pins the diagram-default claim that way; without the
+# same treatment here the change would ship the exact drift shape it exists to
+# remove, one claim later.
+#
+# The failure mode is not omission, it is HALF-restatement. "Required on
+# handoff" alone reads as unconditional and silently contradicts the canon; a
+# plain presence check on the required half would score that as a pass. So both
+# halves are asserted at every site that states the rule.
+REQ_RE='required (whenever the artifact is handed off|on handoff|for handoff)'
+OPT_RE='optional (final-screen block|in the room|when the author is in the room)'
+
+serializer_canon="$(extract "$core" '^## 4\. The copy-text feedback loop' '^## 5\.')"
+[ -n "$serializer_canon" ] || fatal "core §4 extracted to 0 lines."
+
+skill_clause="$(grep -F 'layered-clipboard serializer' "$skill" || true)"
+claude_clause="$(grep -oE 'copy-text feedback serializer[^)]*' "$claude_md" || true)"
+overview_clause="$(grep -oE 'copy-text feedback serializer[^)]*' "$overview" || true)"
+
+for pair in "canon (core §4)|$serializer_canon" \
+            "the skill's Step 4|$skill_clause" \
+            "CLAUDE.md's inventory|$claude_clause" \
+            "SYSTEM-OVERVIEW's inventory|$overview_clause"; do
+    label="${pair%%|*}"
+    text="${pair#*|}"
+    if [ -z "$text" ]; then
+        bad "$label states the serializer scope (clause not found at all)"
+        continue
+    fi
+    assert_has_re "$text" "$REQ_RE" "$label states the required-on-handoff half"
+    assert_has_re "$text" "$OPT_RE" "$label states the optional-in-the-room half"
+done
+
+# Written down rather than taken silently: SYSTEM-OVERVIEW's handoff-table row
+# (`| /visual-recap | … |`) says "copied back where the artifact is handed off"
+# and is deliberately NOT in the set above. That column describes what the skill
+# *produces*, not when the mechanism is required, so it carries no obligation to
+# restate the optional half. Asserting both halves there would force a rule into
+# a cell that is answering a different question.
+assert_has "$overview_row" 'handed off' \
+    "the handoff-table row names the handoff condition (produces-column, rule not required)"
 
 # ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
