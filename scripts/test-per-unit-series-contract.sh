@@ -334,16 +334,26 @@ live_md="$( { git ls-files '*.md' 2>/dev/null || true; } \
 # near-miss self-tests below pin that prose sentence alongside the earlier
 # false positives (`aria-hidden` on a glyph, `classList` on an active state).
 #
+# The `getElementById` arm requires the lookup to be FOLLOWED by a hide on the
+# same statement — `.hidden` or `.style.display`. Without that it fired on
+# `getElementById('dk-prev')`, the walkthrough deck's pager button (§D3/§D8):
+# `prev`/`next` are in SIDE because a comparison half can be named that way, but
+# a pager control is not a comparison and disabling a button is not hiding a
+# side. The real case it must still catch — `getElementById('ba-before').hidden
+# = side === 'after'` — carries the hide on the same line, which is what makes
+# the narrowing safe rather than a hole.
+#
 # WHAT THIS DOES NOT CATCH, stated so nobody over-trusts it: a side pair named
 # outside the list (`a`/`b`, `v1`/`v2`), `display:none` on an element whose id
 # does not name a side, hiding through a CSS class defined elsewhere,
-# `visibility:hidden`, `height:0`, or a `<details>` element. This narrows the
+# `visibility:hidden`, `height:0`, a `<details>` element, or a lookup and a hide
+# split across two statements. This narrows the
 # class; it does not close it — which is why the header above says "detected by
 # SHAPE" rather than "any handler that hides one comparison side".
 # Braced on every use: bare `$SIDE[` reads as array indexing to shellcheck (SC1087).
 SIDE='(before|after|old|new|left|right|prev|next)'
 detect_hidden_side() {   # stdin: file text. stdout: offending lines.
-    grep -nE "id=\"ba-|toggle variant|id=\"[^\"]*${SIDE}[^\"]*\"[^>]*(display:none|[[:space:]](hidden|aria-hidden))|(display:none|[[:space:]](hidden|aria-hidden))[^>]*id=\"[^\"]*${SIDE}|getElementById\('[^']*${SIDE}|classList\.[a-z]+\('hidden'" || true
+    grep -nE "id=\"ba-|toggle variant|id=\"[^\"]*${SIDE}[^\"]*\"[^>]*(display:none|[[:space:]](hidden|aria-hidden))|(display:none|[[:space:]](hidden|aria-hidden))[^>]*id=\"[^\"]*${SIDE}|getElementById\('[^']*${SIDE}[^)]*\)[^;]*\.(hidden|style\.display)|classList\.[a-z]+\('hidden'" || true
 }
 
 toggle_hits=""
