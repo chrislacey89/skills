@@ -492,7 +492,11 @@ each: **`bad`** (`--del`) for the mechanism that failed, **`good`** (`--add`) fo
 the fix encodes, **`warn`** (`--risk`) for a caveat that survives the fix. Pure markup — no
 JavaScript and no new block; it nests inside the callout card above and inherits that
 callout's `data-feedback-id`, so the serializer needs no new id shape. Render one, two, or
-all three halves. A note-pair carrying only a `good` half is a callout — write it as one.
+all three halves. A note-pair carrying only a `good` half is usually a callout — write it
+as one. **The exception is a §12 `exempt` unit**, whose whole content is the reason a site
+was deliberately left alone: there is no `bad` half because nothing broke there, and the
+`--add` framing is what distinguishes a documented exception from an oversight. Render
+that one as a lone `good` half.
 
 ```html
 <!-- nests inside the .vr-callout card above, under its note line -->
@@ -972,8 +976,11 @@ still governs *depth within* a unit; it never caps how many units the series ren
    comprehension and drops the round-trip is half a surface.
 
 **The chip strip is what carries the exception.** Each unit header shows one or two chips
-naming its kind — `fixed`, `exempt`, `missed`, `mechanical` — from the same `--flag-*` ramp
-the file tree uses. The chips are how a reader tells a documented exception from an
+naming its kind. The four kinds map to fixed tokens, stated here because a chip strip whose
+colors move between recaps stops being readable at a glance — which is the Constancy of Design
+property this block leans on: `fixed` → `--add`, `exempt` → `--risk`, `missed` → `--del`,
+`mechanical` → `--flag-mech`. Only `mechanical` comes from the file tree's `--flag-*` ramp; the
+other three carry diff and risk semantics, which is what they mean here. The chips are how a reader tells a documented exception from an
 oversight without reading a word of prose, so an `exempt` unit **must** also carry the
 reason in its `good` note. An exempt unit with no stated reason is the oversight it is
 trying not to look like.
@@ -1014,7 +1021,7 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
 <!-- One real <section> per unit. No stage, no innerHTML swap: the rail scrolls to these. -->
 <section id="unit-execute" data-feedback-id="u-execute" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
-    <span style="border:1px solid var(--flag-load);color:var(--flag-load);background:color-mix(in srgb,var(--flag-load) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">fixed</span>
+    <span style="border:1px solid var(--add);color:var(--add);background:var(--add-bg);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">fixed</span>
     <div>
       <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">execute/SKILL.md:118</div>
       <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">One-sentence lede, in the reader's own words — what this site did wrong and what it does now.</div>
@@ -1069,7 +1076,8 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
   used sparingly.
 - **Don't** color syntax tokens with `--add` / `--del`; reserve those hues for diff
   semantics so meaning never blurs.
-- **Do** annotate only the changes that matter — 3–8 *key files/hunks*, each with a one-line
+- **Do** annotate only the changes that matter — 3–8 *key files/hunks* (a **depth** budget:
+  it bounds annotation within a unit and never caps how many units §12 renders), each with a one-line
   intent summary and a few high-signal callouts, focused excerpts of ~150 lines max (the
   core's reading budget: a ceiling *and* a floor).
 - **Don't** add decorative drop shadows or gradients beyond `--shadow`; separate with

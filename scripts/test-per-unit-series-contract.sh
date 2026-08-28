@@ -159,6 +159,23 @@ assert_found "one root cause"                    "$span"      "§12 states the o
 assert_found "one root cause"                    "$skillbody" "the skill's body states the same condition"
 assert_found "Then choose the axis"              "$skillbody" "the skill's Step 3 carries the axis question itself"
 
+# The gate is restated at five live surfaces. Review found it pinned at two and
+# already drifted at a third: README.md rendered it as "four or more sites",
+# dropping "near-identical" — the qualifier §12 says keeps the gate deliberately
+# high. Enumerate the surfaces and hold them all to the same phrase.
+# coverage: enumerated — the files that must agree on this block's trigger.
+# Not derivable: "the surfaces that restate the gate" is a property of the
+# contract, not something a scan of the tree can find.
+for f in "$CORE" "$WALK" README.md SYSTEM-OVERVIEW.md; do
+    assert_found "four or more near-identical sites" "$f" \
+        "$f states the gate with its near-identical qualifier"
+done
+
+# walk-commits shares the rendering core, so a sweep walked commit-by-commit
+# needs the same route to §12. It had none: it named §11 and stopped.
+assert_found "per-unit series" "$WALK" "walk-commits routes a sweep to the per-unit series"
+assert_found "§12"             "$WALK" "walk-commits names the block by section number"
+
 # ---------------------------------------------------------------------------
 section "§12's two required elements are present in its MARKUP, not its prose"
 # ---------------------------------------------------------------------------
@@ -305,6 +322,30 @@ else
 fi
 
 assert_found "sec-compare-<slug>" "$DESIGN" "§7's section id carries a slug so a comparison can repeat"
+
+# ---------------------------------------------------------------------------
+section "§12's chip strip uses the tokens its prose binds"
+# ---------------------------------------------------------------------------
+# The prose named a `--flag-*` ramp while the example used `--flag-load` for
+# `fixed` (which means load-bearing in the file tree) and `--risk` for `exempt`
+# (not a --flag-* token at all). Two agents rendering the same sweep then pick
+# different colors and the strip stops being readable across recaps — the
+# Constancy of Design property the block leans on. The prose now states an
+# explicit mapping; this holds the example to it.
+chip_violations=0
+while IFS='|' read -r kind token; do
+    [ -n "$kind" ] || continue
+    if grep -qF "var($token)" "$markup" && grep -qE "var\($token\)[^>]*>$kind</span>" "$markup"; then
+        ok "the $kind chip uses $token"
+    else
+        chip_violations=$((chip_violations + 1))
+        bad "the $kind chip uses $token" "§12's prose binds $kind to $token; the worked example does not"
+    fi
+done <<'CHIPS'
+fixed|--add
+exempt|--risk
+CHIPS
+assert_eq "0" "$chip_violations" "every chip rendered in §12 matches the mapping its prose states"
 
 # ---------------------------------------------------------------------------
 section "the prose bar is wired into both rendering skills"

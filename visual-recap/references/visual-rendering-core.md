@@ -143,7 +143,7 @@ A minimal serializer (hand-roll per artifact; this is the shape, not a shipped l
     const lines = ['## recap-feedback v1  (recap: ' + RECAP_SLUG + ')'];
     document.querySelectorAll('[data-feedback-id]').forEach(el => {
       const id = el.dataset.feedbackId;
-      const kind = el.dataset.feedbackKind;     // callout | question | signoff
+      const kind = el.dataset.feedbackKind;     // any kind registered in §4 above
       const verdict = el.dataset.verdict || ''; // e.g. needs-change, 🟡
       const note = (el.querySelector('[data-feedback-note]')?.value || '').trim();
       if (!verdict && !note) return;            // skip untouched units
