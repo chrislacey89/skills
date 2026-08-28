@@ -460,6 +460,20 @@ dark_metrics="$(palette_metrics "$dark_block")"
 [[ -n "$light_metrics" && -n "$dark_metrics" ]] \
     || fatal "palette_metrics resolved no --sx-* colors; the token core changed shape and every measurement below would pass vacuously."
 
+# palette_metrics parses `hsl()` / `hsla()` and nothing else, so a token written
+# as a hex literal, a `color-mix()`, or `hsl(210deg …)` drops out of its output
+# and is silently exempted from every measurement below. Verified: rewriting
+# --sx-s as `#a1a1a1` left five light tokens measured for distinctness instead of
+# six, with no line saying one had gone missing. A token that escapes the checks
+# is the same hole as a check that cannot fire, so a value shape this cannot read
+# stops the run rather than quietly narrowing the population.
+declared_n="$(printf '%s\n' "$all_tokens" | grep -c .)"
+for theme_name in light dark; do
+    m="$light_metrics"; [[ "$theme_name" == dark ]] && m="$dark_metrics"
+    resolved_n="$(printf '%s\n' "$m" | grep -c .)"
+    [[ "$resolved_n" -eq "$declared_n" ]] || fatal "the $theme_name theme declares $declared_n --sx-* token(s) but palette_metrics resolved $resolved_n. A token whose value is not hsl()/hsla() is skipped by every measurement below, so it would clear the distinctness floor and the AA check by being invisible to them. Teach palette_metrics that value shape, or write the token as hsl()."
+done
+
 section "the vocabulary is closed at the size the prose claims"
 
 # The prose one screen below the token core says "These six are the whole
@@ -513,8 +527,17 @@ exception_sentence="$(grep -F 'body-text bar' "$design" | head -1 || true)"
     || fatal "the AA exception sentence ('… body-text bar: …') is gone from $design; the AA claim's scope is unreadable and this check cannot run."
 
 # The sentence names its light exceptions before "in light" and its dark ones after.
-claimed_light="$(printf '%s' "$exception_sentence" | sed 's/ in light.*//'    | grep -oE -- '--sx-[a-z]' | sort -u)"
-claimed_dark="$( printf '%s' "$exception_sentence" | sed 's/^.* in light,//'  | grep -oE -- '--sx-[a-z]' | sort -u)"
+#
+# Each half is `|| true`-guarded and then required to be non-empty. Without the
+# guard, `grep -oE` matching nothing returns 1, and under `set -o pipefail`
+# inside `$( … )` that trips `set -e`: verified — rewording the sentence to name
+# no tokens printed the section header and then nothing at all, no summary line,
+# no message, exit 1. A check that dies silently is worse than one that fails,
+# because the run looks truncated rather than wrong.
+claimed_light="$(printf '%s' "$exception_sentence" | sed 's/ in light.*//'   | grep -oE -- '--sx-[a-z]' | sort -u || true)"
+claimed_dark="$( printf '%s' "$exception_sentence" | sed 's/^.* in light,//' | grep -oE -- '--sx-[a-z]' | sort -u || true)"
+[[ -n "$claimed_light" && -n "$claimed_dark" ]] \
+    || fatal "the AA exception sentence in $design names no --sx-* tokens on one or both sides of 'in light' (light: '${claimed_light:-none}', dark: '${claimed_dark:-none}'). The claim's scope cannot be read, so comparing it against the measured set would compare two empty sets and pass vacuously. State the exception list as backticked token names, or delete the sentence and re-broaden the claim deliberately."
 
 for theme_name in light dark; do
     m="$light_metrics"; claimed="$claimed_light"
