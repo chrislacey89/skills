@@ -8,6 +8,15 @@ are the token core, the shell, and the interactions they all share); §11 is the
 forward-looking block, used by any skill that emits an N-way fork of options that do not exist
 yet.
 
+**The document has two parts, and they are two rendering modes, not two layouts of one thing.**
+Everything numbered §1–§11 is **Part I — the scroll recap**: a single scrolling column for a
+reviewer *auditing* a change. **Part II — the walkthrough deck** (§D1–§D9, at the end of this
+file) is a paged, one-idea-per-screen shell for a reviewer being *argued through* a change with a
+causal arc. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading
+budget, and the transient-artifact rule; they differ in shell and reading order only. The
+selection rule is one line and lives in §D1: **is there one story the screens advance? deck. Is
+the reviewer auditing parallel hunks? scroll.**
+
 > **This is a reference you inline, not a library you ship.** Exactly like the
 > `recap-feedback v1` serializer in `visual-rendering-core.md` §4: copy the token core and
 > the block markup below into your single self-contained `.html` file, then fill only the
@@ -311,31 +320,43 @@ links to its hunk in §6. The five flag hues are fixed: `new` `moved` `load-bear
 
 ## 5. Block: diagram
 
-A recap's diagrams are almost always a **simple flow or short sequence** — "where the code
-moved," "data flows A → B → C," "step 1 then step 2." These have no graph-layout problem to
-solve, so the default is a **pure-CSS diagram primitive** (the `.fc-*` classes in §1): a
-vertical spine of node cards joined by connectors, with `.fc-fan` for a parallel row of
-children. It renders identically online and offline, needs no CDN, has no label grammar to
-escape, and fills its frame by construction — so none of the Mermaid guards in the opt-in
-below apply to it.
+Two diagram forms, and the split is by what the picture has to say — not by a global
+preference for one technology.
 
-**Decision rule (one line):** simple flow / sequence / step-spine → the **CSS primitive**
-(default, below). Genuinely complex graph — a dense DAG, an ER or class diagram, anything
-that needs real auto-layout → the **Mermaid opt-in** further down. When unsure, start with
-CSS; reach for Mermaid only when CSS would force you to hand-position a graph (which is the
-layout problem the "don't hand-roll graph layout" rule exists to prevent — it still holds for
-that case).
+**Decision rule (one line):** a **trivial spine** — one straight flow, a short sequence, "step 1
+then step 2," no labeled edges, no branches — takes the **CSS primitive** (`.fc-*`, §1).
+Anything **multi-stage or behavioral** — labeled edges, fan-outs, guards, failure states, a
+before/after pair of graphs, a dense DAG, an ER or class diagram — takes **Mermaid via CDN**.
+When the review context is known to be offline (a plane, an air-gapped sandbox, a CI log), take
+the CSS primitive regardless and say in the caption that you did.
 
-**Why CSS is the default here, and why this does not contradict #83.** The surface's
-load-bearing invariant is "reads identically with the network off" (core §6). A self-contained
-recap opened from `file://` has no native Mermaid renderer, so Mermaid needs a CDN — and its
-offline fallback is unparsed source text, which is not a diagram (the exact failure that
-recurred across #128, #129, and #131). The CSS primitive has no such failure mode. This is a
-**different context** from #83, which chose Mermaid for **GitHub-bound markdown** (issues, PR
-bodies) where GitHub renders `mermaid` fences natively with no CDN — that decision stands. The
-boundary: **GitHub-rendered markdown → Mermaid; self-contained offline HTML → CSS-first.**
+**This reverses #131, and the fence it reopens is named rather than stepped over.** #128/#129/
+#131 made CSS the default because a Mermaid figure with no network degrades to unparsed source
+text, and the surface's invariant was "reads identically with the network off." That failure
+mode is real and has not gone away. What changed is evidence about the other side of the trade:
+the diagrams that carried the most comprehension in the field — a before/after of a mechanism,
+with labeled edges, fan-outs, and styled failure and guard nodes — are exactly the ones the CSS
+spine cannot express, and the pack was teaching authors away from them. So §6's invariant is
+**scoped rather than deleted**: core blocks — prose, panes, diffs, cards, the feedback loop —
+must still read identically offline; a **diagram figure** may degrade, and must say so on its
+own face. #129's render-confirm gate is retained unchanged (core §7).
 
-### Default — the CSS diagram primitive
+**Every Mermaid figure carries a visible degrade note.** Not once in a footer — beside the
+figure, where a reader who jumped straight to it will see it:
+
+```html
+<div class="mmd-note" style="font-size:11px;color:var(--fg-faint);margin-top:var(--s2)">
+  Best rendered with an active internet connection — this figure loads Mermaid from a CDN and
+  shows its source text offline. The rest of this file reads identically either way.
+</div>
+```
+
+**Neither half of this contradicts #83.** #83 chose Mermaid for **GitHub-bound markdown**
+(issues, PR bodies), which GitHub renders natively with no CDN at all; that decision stands and
+is untouched. The boundary that changed is only inside self-contained HTML, and it is now drawn
+by *what the graph needs* rather than by *how it is delivered*.
+
+### Trivial spines — the CSS diagram primitive
 
 A spine of `.fc-node`s separated by `.fc-conn` connectors (add `.fc-lbl` for an edge label,
 `.is-dashed` for a derived/handoff edge). Nest a `.fc-fan` inside a node for a parallel row of
@@ -369,19 +390,19 @@ dashed), `.is-muted` (context).
 ```
 
 The container is a **full-width block** (not flex-centered); the spine centers itself and each
-node stretches to `max-width`. No script, no CDN, no render-confirm step — it is correct the
-moment it is written.
+node stretches to `max-width`. No script, no CDN, no render-confirm step, and no degrade note to
+write — it is correct the moment it is written, which is why it stays the answer whenever the
+picture is simple enough to be drawn this way and the required answer when the review context is
+known to be offline.
 
-### Opt-in — embedded Mermaid (complex graphs only)
+### Multi-stage and behavioral graphs — embedded Mermaid (the default for this case)
 
-Use this **only** when the decision rule above sends you here. When topology genuinely needs
-auto-layout, author the source via `/mermaid` (which verifies its own render, #94) and embed
-it in the same full-width frame; the `.mermaid svg` rule from §1 sizes it. The
-`<pre class="mermaid">` carries the source, which Mermaid replaces with an SVG when the CDN
-loads. **Be honest about the offline state:** with no network the `<pre>` shows source text,
-not a diagram — a degraded fallback, *not* an offline-equivalent render (that is precisely why
-the CSS primitive is the default). If you embed Mermaid, **confirm it renders before
-presenting** (core §7).
+Author the source via `/mermaid` (which verifies its own render, #94) and embed it in the same
+full-width frame; the `.mermaid svg` rule from §1 sizes it. The `<pre class="mermaid">` carries
+the source, which Mermaid replaces with an SVG when the CDN loads. **Be honest about the offline
+state:** with no network the `<pre>` shows source text, not a diagram — a degraded fallback,
+*not* an offline-equivalent render, which is why the degrade note above is required rather than
+recommended. **Confirm it renders before presenting** (core §7).
 
 ```html
 <!-- embed inside the same <section>/<figure>/full-width <div> frame the default example shows -->
@@ -951,3 +972,389 @@ never committed.
 - **Don't** turn this skeleton into a shipped/versioned/imported component library — it is a
   copyable reference, exactly like the §4 serializer. If you reach for an npm package, a
   build step, or a CDN runtime, pull it back.
+
+---
+
+# Part II — the walkthrough deck (narrative mode)
+
+Everything above renders a change the reviewer will **audit**: parallel hunks, contract cards,
+line-anchored callouts, a topology to check against. This part specifies the second canonical
+mode — a **paged walkthrough deck** for a change the reviewer has to be **argued through**: one
+causal arc, one idea per screen, the before/after pair inside the screen.
+
+It is here because the field built it twice without being asked to. On PR #299 an agent produced
+a paged deck unprompted; on PR #297 an agent rendered the canonical scroll first, was shown
+#299's deck, and rebuilt to match. Two independent sessions, no coordination, the same override.
+A format arrived at twice that the canon does not describe is a gap in the canon, not an
+authoring lapse — so the deck is specified rather than re-derived per run, which is the argument
+that produced this document in the first place (#126/#127).
+
+The deck **inherits everything and changes two things.** It inherits the §1 token core verbatim,
+the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. It
+changes the **shell** and the **reading order**. It introduces no new palette, no new block
+semantics, and no runtime dependency.
+
+---
+
+## §D1. Mode selection (answer this before rendering anything)
+
+**Is there one story the screens advance? → deck. Is the reviewer auditing parallel hunks? →
+scroll.**
+
+| Take the **deck** when | Take the **scroll** when |
+|---|---|
+| The change has a causal arc — a premise, a sequence of moves that depend on each other, a mechanism that pins them, an aftermath | The reviewer's job is to check a topology — which files moved, which contracts changed, which hunks are load-bearing |
+| A reviewer needs the *why* before any hunk means anything | A reviewer already holds the why and needs the *where* |
+| The change is a sweep with one thesis, or a review's own story | The change is a set of independent edits with no single thesis |
+| The prose is doing the work and the code excerpts are evidence for it | The code is doing the work and the prose is a label on it |
+
+When both fit, take the scroll — it is the cheaper artifact and the reviewer can always be
+walked through it in chat. When neither fits because the diff is small or obvious, render
+nothing; the skip gate outranks both modes.
+
+**The deck does not replace the scroll for narrative-shaped code audits.** A deck screen still
+carries the scroll's blocks — the same panes, the same cards, the same callouts. What differs is
+that they arrive one argument at a time instead of all at once.
+
+---
+
+## §D2. The two rules that bound paging
+
+Paging buys sequence and costs simultaneity, and Tufte names the cost by name: *"The viewer
+cannot compare what they cannot see at the same time. Memory is not vision."* Both rules below
+exist to keep the deck from spending what it cannot afford. They are not style preferences —
+a deck that breaks either one is worse than the scroll it replaced.
+
+**Rule 1 — no comparison may span screens.** Any before/after pair, any A-vs-B, any
+option-comparison shares a single screen. Paging separates **topics**; it never separates the
+halves of a comparison. This is why `.panes` (§D5) is a side-by-side grid rather than a toggle:
+the comparison is the payload, and the payload is never the thing you page away from.
+
+**Rule 2 — never page a population.** When N sites are near-identical instances of one cause,
+the population *is* the finding, and N screens turn "five fixed, one deliberately exempt, two
+found late" into a memory test the reviewer cannot pass. A population belongs in one screen as a
+co-visible series or matrix, with per-unit before/afters inside it. Page *between* topics; never
+page *within* a set the reader is being asked to compare across.
+
+Together the two rules say the same thing from opposite ends: **the deck pages arguments, not
+evidence.**
+
+---
+
+## §D3. The shell (rail + stage), and paging without a router
+
+The deck shell is a grouped sticky rail beside a single stage. The rail carries brand, one
+`.navitem` per screen with a subtitle, and the key hints; the stage carries a progress bar,
+prev/next, a counter, and the current screen.
+
+**Every screen is a real `<section>` in the document, present in the markup from the start.**
+Paging shows one and hides the rest by toggling `hidden`. There is no template array, no
+`innerHTML` assignment, and no render function that rebuilds the stage — a store plus routing is
+the app this whole surface exists to avoid (`visual-rendering-core.md` §4), and it is what §12
+refuses. The single integer `cur` is a *view* index over a document that is entirely there.
+
+That distinction is load-bearing for four separate reasons, and every one of them is a thing a
+reviewer will actually do:
+
+- **Show-all is one keystroke.** `A` unhides every screen into one scrolling column — the deck
+  collapses into the scroll. The reviewer who wants simultaneity is never trapped in sequence,
+  which is the honest answer to Rule 1's residual.
+- **Browser find works.** `⌘F` searches the whole change, not the current screen. With an
+  `innerHTML` router, eight-ninths of the artifact is not in the DOM to find.
+- **Print and PDF work**, because `@media print` can unhide everything.
+- **The §4 serializer sees every unit.** `querySelectorAll('[data-feedback-id]')` returns
+  elements on hidden screens too, so feedback written on screen 2 still serializes from screen 9.
+  A router loses it the moment you page away.
+
+```html
+<style>
+  /* deck shell (§D3) — same §1 tokens, no new palette */
+  .dk{display:grid;grid-template-columns:290px minmax(0,1fr);align-items:start;max-width:1500px;margin:0 auto}
+  @media (max-width:960px){.dk{grid-template-columns:1fr} .dk aside{position:static;height:auto}}
+  .dk aside{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--border);background:var(--bg-subtle);padding:var(--s5) var(--s4)}
+  .dk main{padding:var(--s7) var(--s7) var(--s8);min-width:0}
+  .dk-grp{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin:var(--s5) 0 var(--s2);padding-left:var(--s2)}
+  .dk-grp:first-of-type{margin-top:0}
+  .navitem{display:block;width:100%;text-align:left;border:1px solid transparent;background:none;color:var(--fg-muted);font-family:var(--sans);font-size:13px;padding:var(--s2) var(--s3);border-radius:var(--r2);cursor:pointer;margin-bottom:2px;line-height:1.35}
+  .navitem:hover{background:var(--bg-inset);color:var(--fg)}
+  .navitem.on{background:var(--accent-dim);border-color:var(--accent);color:var(--fg)}
+  .navitem .nm{font-family:var(--mono);font-size:12.5px;font-weight:600;display:block}
+  .navitem .sb{font-size:11px;color:var(--fg-faint);display:block;margin-top:2px}
+  .keyhint{margin-top:var(--s6);font-size:11px;color:var(--fg-faint);line-height:1.7;border-top:1px solid var(--border);padding-top:var(--s4)}
+  kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:4px;padding:1px 5px;background:var(--bg-inset);color:var(--fg-muted)}
+  .topbar{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s6);flex-wrap:wrap}
+  .prog{flex:1;height:3px;background:var(--bg-inset);border-radius:999px;overflow:hidden;min-width:120px}
+  .prog i{display:block;height:100%;background:var(--accent);transition:width .25s ease}
+  .pgbtn{border:1px solid var(--border-strong);background:var(--bg-elev);color:var(--fg-muted);border-radius:var(--r2);padding:var(--s2) var(--s3);font-size:12px;cursor:pointer;font-family:var(--sans)}
+  .pgbtn:hover:not(:disabled){color:var(--fg);border-color:var(--accent)}
+  .pgbtn:disabled{opacity:.35;cursor:default}
+  .count{font-family:var(--mono);font-size:11px;color:var(--fg-faint);letter-spacing:.06em}
+  /* show-all: the deck collapsing back into the scroll */
+  .dk.all .screen[hidden]{display:block}
+  .dk.all .screen{margin-bottom:var(--s8);border-bottom:1px solid var(--border);padding-bottom:var(--s8)}
+  @media print{.dk aside,.topbar{display:none} .screen[hidden]{display:block}}
+</style>
+
+<div class="dk" id="dk">
+  <aside>
+    <div class="brand"><span class="mk">297</span><span class="tx">Change-by-change</span></div>
+    <div class="brand-sub">PR #297 · closes #293 · 8 commits</div>
+    <nav id="dk-nav">
+      <div class="dk-grp">Start here</div>
+      <button class="navitem" data-to="premise"><span class="nm">The premise</span><span class="sb">one disease, five instances</span></button>
+      <!-- …one .navitem per screen, in render order; a .dk-grp heads each new group -->
+    </nav>
+    <div class="keyhint">
+      <kbd>J</kbd>/<kbd>&darr;</kbd> next &nbsp; <kbd>K</kbd>/<kbd>&uarr;</kbd> prev<br>
+      <kbd>1</kbd>&ndash;<kbd>9</kbd> jump &nbsp; <kbd>A</kbd> show all<br><kbd>T</kbd> light / dark
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <button class="pgbtn" id="dk-prev">&larr; Prev</button>
+      <button class="pgbtn" id="dk-next">Next &rarr;</button>
+      <div class="prog"><i id="dk-bar"></i></div>
+      <span class="count" id="dk-cnt"></span>
+      <button class="pgbtn" id="dk-all">Show all</button>
+    </div>
+
+    <!-- every screen is here from the start; paging only toggles [hidden] -->
+    <section class="screen" id="premise"> … </section>
+    <section class="screen" id="picture" hidden> … </section>
+    <!-- … -->
+
+    <footer id="dk-foot"></footer>
+  </main>
+</div>
+```
+
+---
+
+## §D4. The screen model
+
+One screen is one idea. Its slots are fixed so two decks read the same way; render only the
+slots the screen needs, in this order.
+
+| Slot | Markup | What it carries | Grounded or authored |
+|---|---|---|---|
+| `id` | `<section id>` | stable, kebab-case, the paging and deep-link handle | authored (stable across regenerations) |
+| group | `.dk-grp` in the rail | the arc stage this screen belongs to (§D5) | authored |
+| nav label + subtitle | `.navitem .nm` / `.sb` | the rail's two-line entry; the subtitle is what puts "where am I in this argument" in the artifact rather than the reader's head (Norman, *knowledge in the world*) | authored |
+| `kind` | `.ovl` overline | the screen's register — `CONTEXT · ISSUE #293`, `CHANGE 3 OF 6`, `MECHANISM` | mixed: the number is derived, the label authored |
+| headline | `<h1>` | one sentence, the claim this screen proves | authored |
+| lede | `.lede` | 1–3 sentences; **every domain term glossed on first use** (§D6) | authored |
+| chips | `.chip` | 2–4 status pills — `fix` / `op` / `keep` / `miss` | authored flags over derived facts |
+| panes | `.panes` | the before/after pair, side by side, in this screen (Rule 1) | hunk text derived; pane headers authored |
+| blocks | `.mmd-wrap` / `.term` / `.defs` / any §3–§12 block | diagram, terminal transcript, definition table, contract card, per-unit series | per the block's own rule |
+| notes | `.note` + `.good`/`.warn`/`.bad` | a typed aside — what to notice, what nearly went wrong | authored |
+| keyline | `.keyline` | **one sentence**, the lesson this screen leaves behind. At most one per screen, and not on every screen | authored |
+| stats | `.stat` | 3–5 tabular figures — files, net diff, commits, checks | derived (`git diff --stat`, CI) |
+
+**The keyline is rationed on purpose.** It is the accent-bordered box, and a deck where every
+screen has one has no emphasis at all — the same subtraction-of-weight rule the scroll applies to
+borders (`visual-rendering-core.md` §5). Use it where the screen genuinely leaves a portable
+lesson.
+
+```html
+<style>
+  /* screen primitives (§D4) — see §1 for every color used here */
+  .ovl{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 var(--s2)}
+  .screen h1{font-size:31px;font-weight:600;letter-spacing:-0.022em;margin:0 0 var(--s3);line-height:1.15}
+  .lede{color:var(--fg-muted);font-size:15.5px;line-height:1.65;margin:0 0 var(--s5);max-width:74ch;text-wrap:pretty}
+  .lede b{color:var(--fg)}
+  .chips{display:flex;gap:var(--s2);flex-wrap:wrap;margin-bottom:var(--s4)}
+  .chip{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--fg-muted);background:var(--bg-elev)}
+  .chip.fix{color:var(--add);border-color:var(--add);background:var(--add-bg)}
+  .chip.op{color:var(--risk);border-color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent)}
+  .chip.keep{color:var(--accent);border-color:var(--accent);background:var(--accent-dim)}
+  .chip.miss{color:var(--del);border-color:var(--del);background:var(--del-bg)}
+  .panes{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
+  @media (max-width:1180px){.panes{grid-template-columns:1fr}}
+  .pane{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden;box-shadow:var(--shadow);min-width:0}
+  .pane-hd{display:flex;align-items:center;gap:var(--s2);padding:var(--s3) var(--s4);border-bottom:1px solid var(--border);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:var(--bg-subtle)}
+  .pane.b .pane-hd{color:var(--del)} .pane.a .pane-hd{color:var(--add)}
+  .pane-path{margin-left:auto;font-family:var(--mono);font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--fg-faint)}
+  .note{border-left:3px solid var(--accent);background:var(--bg-subtle);padding:var(--s3) var(--s4);border-radius:0 var(--r2) var(--r2) 0;font-size:13.5px;line-height:1.65;color:var(--fg-muted);margin-top:var(--s4);text-wrap:pretty}
+  .note.warn{border-left-color:var(--risk)} .note.bad{border-left-color:var(--del)} .note.good{border-left-color:var(--add)}
+  .note .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s1)}
+  .note.warn .lbl{color:var(--risk)} .note.bad .lbl{color:var(--del)} .note.good .lbl{color:var(--add)}
+  .keyline{font-size:15px;line-height:1.6;color:var(--fg);border:1px solid var(--accent);background:var(--accent-dim);border-radius:var(--r3);padding:var(--s4) var(--s5);margin-top:var(--s5);text-wrap:pretty}
+  .keyline .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s2)}
+  .stats{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s4)}
+  .stat{flex:1 1 130px;border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev);padding:var(--s3) var(--s4)}
+  .stat .v{font-size:20px;font-weight:680;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+  .stat .k{font-size:11px;color:var(--fg-muted);margin-top:2px}
+  .stat.bad .v{color:var(--del)} .stat.good .v{color:var(--add)}
+  .term{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden;box-shadow:var(--shadow);margin:var(--s4) 0}
+  .term-hd{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4);border-bottom:1px solid var(--border);background:var(--bg-subtle);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted)}
+  .term pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.9;padding:var(--s3) 0;overflow-x:auto}
+  .term .tl{display:block;padding:0 var(--s4);white-space:pre;color:var(--fg-muted)}
+  .term .tl.cmd{color:var(--fg);font-weight:500}
+  .term .tl.cmd::before{content:"$ ";color:var(--accent);font-weight:700}
+  .term .tl.ok{background:var(--add-bg)} .term .tl.no{background:var(--del-bg)}
+  .term .tl.ok .an{color:var(--add);font-weight:600;padding-left:var(--s2)}
+  .term .tl.no .an{color:var(--del);font-weight:600;padding-left:var(--s2)}
+</style>
+```
+
+One screen, whole:
+
+```html
+<section class="screen" id="contract" hidden>
+  <p class="ovl">CHANGE 1 OF 6 · THE CONTEXT CONTRACT</p>
+  <h1>&ldquo;Nothing else&rdquo; was false for five of eleven lenses.</h1>
+  <div class="chips"><span class="chip fix">fixed</span><span class="chip keep">gate kept</span></div>
+  <p class="lede">A <b>lens</b> is one of the eleven review dimensions&hellip; 1&ndash;3 sentences, every
+     domain term glossed the first time it appears.</p>
+
+  <div class="panes">
+    <div class="pane b"><div class="pane-hd"><span class="dot" style="background:var(--del)"></span>Before<span class="pane-path">pre-merge/SKILL.md:118</span></div>
+      <pre class="code"><span class="ln d">Hand the sub-agent these four items. Nothing else.</span></pre></div>
+    <div class="pane a"><div class="pane-hd"><span class="dot" style="background:var(--add)"></span>After<span class="pane-path">pre-merge/SKILL.md:118</span></div>
+      <pre class="code"><span class="ln a">Hand the sub-agent these four items, plus whatever</span><span class="ln a">its dimension's row in the checklist declares.</span></pre></div>
+  </div>
+
+  <div class="note good"><span class="lbl">Why it matters</span>Five dimensions needed the repo, the
+    issue bodies, or npm &mdash; and the contract forbade all three.</div>
+  <div class="keyline"><span class="lbl">The lesson</span>A contract that is cheaper to violate than to
+    honor is not a contract.</div>
+</section>
+```
+
+---
+
+## §D5. The arc
+
+Four groups, in this order. The rail's `.dk-grp` headings are these names (or the change's own
+words for them); the reader is told the arc up front on the first screen.
+
+1. **Premise** — *why any of this matters*, before a single hunk. One or two screens: the
+   situation, and optionally the same story as a picture (§D7). Nothing here is a change; this is
+   the ground the changes stand on. This screen is the one most likely to be authored badly, so
+   §D6 gives it a rule set.
+2. **The changes** — one screen per move, in the order the moves depend on each other, **not** the
+   order the commits landed. Each screen: what was true, what is true now, why the second is
+   better. This is where `.panes` earns the deck.
+3. **The mechanism** — what pins the changes so they cannot silently regress: the contract test,
+   the hook, the schema constraint. If a change has no mechanism, this group is where you say so
+   in as many words, rather than leaving its absence to be inferred.
+4. **Aftermath** — what was fixed versus filed, what is deliberately still open, what the reviewer
+   is being asked to decide, and the lesson that rode along.
+
+A deck missing group 3 or group 4 is usually a deck that should have been the scroll: without a
+mechanism and an aftermath there is no arc, only a list.
+
+---
+
+## §D6. The premise screen, and its `/re-pitch` pairing
+
+The premise screen is a **retelling for a reader who does not hold the context** — which is the
+job `/re-pitch` does in chat. The two are the same move in two media, and the field evidence for
+this is direct: on PR #297 a `/re-pitch` was run mid-session and its framing became the deck's
+opening screen.
+
+Write the premise screen under `/re-pitch`'s rule set:
+
+- **One anchor sentence first** — the whole change in a sentence a reader can carry.
+- **Every domain term glossed on first use**, in the sentence that uses it. Not a glossary block
+  the reader has to cross-reference; that is the legend the callout rule already forbids.
+- **Sentences capped.** A premise screen that runs long has become the thing it exists to
+  replace.
+- **No forward references.** Nothing on the premise screen may depend on a screen the reader has
+  not reached.
+
+`SKILL.md` may **recommend** `/re-pitch` when the audience signals the change feels abstract. It
+never invokes it — same rule as every other cross-skill seam in the pack.
+
+---
+
+## §D7. Diagrams in a deck
+
+Deck diagrams are usually the picture of *the whole mechanism before and after* — labeled edges,
+fan-outs, styled failure and guard nodes, two graphs the reader compares. That is the
+multi-stage/behavioral case, so the default is **Mermaid via CDN with the visible degrade note**
+(`visual-rendering-core.md` §5, §6; markup and label-safety in §5 above). The `.fc-*` primitive
+stays the right answer for a trivial spine, and is the *recommended* answer when the review
+context is known to be offline.
+
+Under Rule 1 a before/after diagram pair is a comparison, so both graphs live on one screen —
+`.mmd-wrap` twice inside the same `<section>`, each with its own caption.
+
+Two deck-specific consequences of the CDN opt-in:
+
+- **The degrade note is per figure and on its face**, not once in a footer. A reader who pages
+  straight to screen 6 must see it there.
+- **Re-run Mermaid when a screen becomes visible**, because a diagram inside a `hidden` section
+  has no layout box and renders at zero size. Initialize with `startOnLoad:false` and call
+  `run({nodes})` for the screen you just revealed — see §D8.
+
+---
+
+## §D8. The interactions (the whole script)
+
+Prev/next, rail jump, number keys, show-all, theme, and the Mermaid re-run. That is all of it. If
+this grows a store, a router, or an `innerHTML` assignment, it has become the app this surface
+exists to avoid (`visual-rendering-core.md` §4) — pull it back. The §4 `copyFeedback()`
+serializer is separate and unchanged.
+
+```html
+<script>
+  const dk = document.getElementById('dk');
+  const screens = [...dk.querySelectorAll('.screen')];
+  const items = [...dk.querySelectorAll('.navitem')];
+  let cur = 0;
+
+  function show(i){
+    cur = Math.max(0, Math.min(screens.length - 1, i));
+    dk.classList.remove('all');
+    screens.forEach((s, j) => { s.hidden = j !== cur; });
+    items.forEach((b, j) => b.classList.toggle('on', j === cur));
+    document.getElementById('dk-bar').style.width = ((cur + 1) / screens.length * 100) + '%';
+    document.getElementById('dk-cnt').textContent = (cur + 1) + ' / ' + screens.length;
+    document.getElementById('dk-prev').disabled = cur === 0;
+    document.getElementById('dk-next').disabled = cur === screens.length - 1;
+    // a diagram inside a hidden section has no layout box, so lay it out on reveal
+    if (window.__mmd) { try { window.__mmd.run({ nodes: screens[cur].querySelectorAll('.mermaid') }); } catch (e) {} }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  function showAll(){
+    dk.classList.add('all');
+    if (window.__mmd) { try { window.__mmd.run({ nodes: dk.querySelectorAll('.mermaid') }); } catch (e) {} }
+  }
+  items.forEach((b, j) => b.addEventListener('click', () => show(j)));
+  document.getElementById('dk-prev').addEventListener('click', () => show(cur - 1));
+  document.getElementById('dk-next').addEventListener('click', () => show(cur + 1));
+  document.getElementById('dk-all').addEventListener('click', showAll);
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'j' || e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); show(cur + 1); }
+    else if (k === 'k' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); show(cur - 1); }
+    else if (k === 'a') showAll();
+    else if (k === 't') dk.dataset.theme = dk.dataset.theme === 'light' ? 'dark' : 'light';
+    else if (/^[1-9]$/.test(k) && +k - 1 < screens.length) show(+k - 1);
+  });
+  show(0);
+</script>
+```
+
+The `INPUT|TEXTAREA` guard is not optional: without it, typing the letter `a` into a
+`[data-feedback-note]` field pages the deck out from under the reviewer mid-sentence.
+
+---
+
+## §D9. Deck Do's and Don'ts
+
+- **Do** put the whole arc in the rail before the reader starts — group headings and per-item
+  subtitles. A deck whose rail is a flat list of nine identical labels has spent the paging cost
+  and bought nothing.
+- **Don't** page a comparison or a population (§D2). If you catch yourself writing "screen 4 vs
+  screen 5," you have written the anti-pattern.
+- **Do** keep every screen in the DOM and page by `hidden`. Show-all, browser find, print, and
+  the feedback serializer all depend on it.
+- **Don't** give every screen a keyline; the box means nothing when everything wears it.
+- **Do** order the change screens by dependency, not by commit date — the deck is an argument,
+  and an argument has an order the history does not.
+- **Don't** let the deck outgrow the reading budget (`visual-rendering-core.md` §5). More screens
+  is not more coverage; ~8–12 screens is a walkthrough, 30 is a document nobody finishes.
