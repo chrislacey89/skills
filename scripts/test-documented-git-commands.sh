@@ -15,11 +15,17 @@
 # repository. A block that stops being a valid invocation fails this suite.
 #
 # Covered today: /triage-issue Step 2's regression-bisect block (all three of
-# its lines) and its "prior incident patterns" fix-commit grep (#236), and the
-# base-branch detection block that /pre-merge, /help, /walk-commits and
-# /visual-recap each carry (#298). Extend the suite when a skill documents
-# another runnable command; do not maintain a list of the commands in prose,
-# since that list is itself the thing that drifts.
+# its lines) and its "prior incident patterns" fix-commit grep (#236), the
+# base-branch detection block that /pre-merge, /help, /walk-commits,
+# /visual-recap and /compound each carry (#298), and every documented
+# `origin/HEAD` line in `$scan_files`, fenced or cited, including /closeout's
+# bare one-liner
+# (#310). That last clause is deliberately narrower than "every name claim":
+# the population is keyed on one literal, so a site resolving the base another
+# way (`git remote show origin`, `gh repo view --json defaultBranchRef`) is NOT
+# covered — see the section's own reach note. Extend the suite when a skill
+# documents another runnable command; do not maintain a list of the commands in
+# prose, since that list is itself the thing that drifts.
 #
 # Highest-value next extension: /closeout, which documents 13 runnable git
 # invocations including `git worktree remove`, `git branch -d`, and
@@ -62,6 +68,80 @@
 #      `git diff`/`git log` range in every skill, and asserts it accounts for
 #      every `..HEAD` in those files so a range in an unparseable shape fails
 #      loudly instead of dropping out of the count.
+#   7. Generalize a census lesson to the claim's SHAPE, not just its instance.
+#      Lesson 6 was applied to *range* claims and stopped there. /closeout
+#      makes a base-branch **name** claim: it wants the name for `git switch`,
+#      so it documents no range and carries no `BASE_BRANCH=` assignment, and
+#      it therefore fell in no block of either population. Its line emitted
+#      `origin/prod` where its own inline comment claimed `prod` — wrong on
+#      every healthy repo, for as long as the line existed, and never executed
+#      by anything (#310). Two sub-lessons came out of building the fix:
+#        (a) Derive the population from the LOOSEST signal, then fail loudly on
+#            members the runner cannot execute. Deriving it from `git
+#            symbolic-ref` would rebuild the same trap one level up: a claim
+#            written as `git rev-parse --abbrev-ref origin/HEAD` (same wrong
+#            output, same defect) would simply not be in the population, and
+#            its absence would read as coverage.
+#        (b) An "accounting" assertion is only non-vacuous when two DIFFERENT
+#            patterns can disagree. The first draft here compared a partition
+#            against a raw count of the same literal — total by construction,
+#            and so a tautology wearing a non-vacuity label. Deleted rather
+#            than kept as reassurance.
+#        (c) The prose half of a partition needs a real discriminator, and it
+#            took THREE drafts. (1) "does the line still say something once its
+#            code spans are removed" — a bare recipe has no spans, so nothing
+#            was removed and every bare recipe passed. (2) "is there a backtick
+#            before the signal and one after it" — prose here is dense with
+#            inline code, so a recipe dropped mid-sentence is almost always
+#            straddled by unrelated spans; found in review with a planted line
+#            whose signal sat between a `base` span and a `git switch` one.
+#            (3) strip balanced spans and require the signal to VANISH, which
+#            is the only form that asks the question the branch is named for.
+#            Drafts 1 and 2 were each caught by a mutation the previous draft's
+#            author did not think to write — see (e).
+#        (d) `set -o pipefail` turns a no-match `grep` inside a command
+#            substitution into a silent run-ending failure. The comment-claim
+#            check shipped it: the suite exited mid-section at the first site
+#            whose line carried no claim, printing no assertion and no message,
+#            and every "green" reading of that draft was an early exit rather
+#            than a pass. `|| true` goes INSIDE the substitution, before the
+#            pipe. The range extractor above documents this same defect; it
+#            recurred anyway, twenty lines from its own warning.
+#        (e) A detector whose healthy state is zero hits needs a SELF-TEST, not
+#            a count floor — plant the shape it must flag and require a hit,
+#            plant the corrected shape and require silence. EACH detector here
+#            carries one — say "each", never a count: this file shipped
+#            "both detectors" at four sites and then grew a third, and every
+#            one of the four went stale in the same PR. The oracle needed one
+#            too and was missed precisely because it is not a detector; its
+#            healthy state on a claimless line is silence, so when it stopped
+#            extracting, the assertion it feeds vanished with no message. A floor says
+#            "we looked at N lines"; it never says the predicate still
+#            discriminates, and drafts (c)(1) and (c)(2) both passed a floor.
+#            Likewise a floor over the whole population is not a floor over any
+#            site in it: the first draft's global `-ge 6` let a seventh claim
+#            planted anywhere mask the deletion of the one site this section
+#            exists for. It is now per-site. (The global floor was then deleted
+#            outright in the next round — once the per-site loop existed, the
+#            floor could not fail while those checks passed, which is 7(b)
+#            again, one round later, in the fix for 7(e).)
+#        (f) A check that reads an environment variable to decide what the
+#            SUBJECT produced cannot tell the subject from its caller. The
+#            harvest fell back to `$BASE_BRANCH` to catch a line that assigns
+#            rather than prints — and the subshell inherits that variable, so
+#            with `BASE_BRANCH=prod` exported a /closeout line rewritten to emit
+#            NOTHING passed every assertion and the suite reported 138/0. It is
+#            cleared before the eval now. The variable is not exotic: it is the
+#            one five skills in this pack tell an agent to assign, three lines
+#            from where they say to run these blocks.
+#        (g) An oracle built from a line's prose must key on the CLAIM, not on
+#            the punctuation the claim happens to use. The comment-claim check
+#            first grabbed every `→` on the line and treated each right-hand
+#            side as an expected output. Trimming /closeout's comment to one
+#            worked example reddened a correct command, and an unrelated arrow
+#            elsewhere produced `claimed: the` — the parser reading English. It
+#            now reads the mapping whose left-hand side is the ref the fixture
+#            actually resolves, and skips a comment that claims nothing about it.
 #
 # WHAT THIS SUITE DOES NOT HOLD, said plainly so a green run is not misread:
 # the cross-site equality checks (fallback candidate list, **Residual:**
@@ -1008,6 +1088,369 @@ done <<< "$range_hits"
 
 assert_eq 0 "$bad_endpoint" "every documented range endpoint is a ref, not a branch name"
 assert_eq 0 "$bad_operator" "every documented range uses the operator its verb requires"
+
+# -----------------------------------------------------------------------------
+
+section "every documented base-branch NAME claim produces the name it claims"
+
+# The census above enumerates by what a *range* claim does. It still cannot see
+# a **name** claim. /closeout wants the base branch's name — it feeds `git
+# switch` — so it documents no range and carries no `BASE_BRANCH=` assignment,
+# and it therefore fell in no block of either population: the extraction census
+# keyed on the assignment's wording, the range census on `..HEAD`. Nothing ran
+# its line. It emitted `origin/prod` where its own inline comment claimed
+# `prod`, on every healthy repo, for as long as the line has existed (#310).
+# Header lesson 6 was learned for range claims and never generalized; this
+# section is the generalization, and it is why lesson 7 exists.
+#
+# The population is every line carrying the literal `origin/HEAD`, partitioned
+# into `fenced` (an agent copies it and runs it) and `prose` (a citation inside
+# an inline-code span). Membership is total *with respect to that literal* —
+# and that is the honest reach, not "anything that could be a name claim". A
+# site resolving the base some other way (`git remote show origin`, `gh repo
+# view --json defaultBranchRef`) makes the same claim with the same failure
+# mode and does NOT enter this population. Widen the signal when such a site
+# appears; do not read the current green as covering it.
+#
+# SECOND NARROWING, equally load-bearing: the population is total only inside
+# `$scan_files`, and `docs/*.md` does not recurse — so `docs/solutions/**`,
+# `CHANGELOG.md`, `CLAUDE.md` and `README.md` are outside it. That exclusion is
+# deliberate rather than incidental: `docs/solutions/` entries quote defective
+# "before" lines on purpose, and this very section's lesson entry carries two
+# fenced `origin/HEAD` recipes missing the `sed`. Scanning them would red the
+# suite for text that is doing its job. But the exclusion is invisible in a
+# green run, which is why it is written here — the same reason `:1019` gives
+# for making the range census's scan set match its own label. What the loose literal
+# *does* buy is that the population is not keyed on the one command shape the
+# runner knows: a claim written as `git rev-parse --abbrev-ref origin/HEAD` is
+# in the population and fails loudly (below) rather than being absent, where
+# its absence would read as coverage.
+name_signal='origin/HEAD'
+# The one shape the runner knows how to execute. A fenced claim that does NOT
+# match this fails loudly rather than being skipped: extending the runner is a
+# deliberate act, and a silent skip is what this whole section exists to end.
+name_invocation='git symbolic-ref'
+# The base branch this section's fixture resolves. Named once so the mapping
+# check below reads the comment's claim ABOUT THIS REF rather than any arrow.
+fixture_base='prod'
+
+# Partition every line carrying the signal into `fenced` and `prose`.
+classify_name_claims() {
+    awk -v label="$2" -v signal="$3" '
+        /^[[:space:]]*```/ { infence = !infence; next }
+        index($0, signal) {
+            printf "%s\t%s\t%d\t%s\n", (infence ? "fenced" : "prose"), label, FNR, $0
+        }
+    ' "$1"
+}
+
+# DETECTOR: is the signal INSIDE an inline-code span on this line?
+#
+# Strip balanced `...` pairs left to right; if the signal survives the strip it
+# was never inside a span, so the line is a bare recipe an agent will copy and
+# must be fenced instead. Two earlier drafts of this predicate were wrong, and
+# both are recorded in header lesson 7(c):
+#   - "does the line still say something once code spans are removed" — a bare
+#     recipe has no spans, so nothing was removed and every bare recipe passed.
+#   - "is there a backtick somewhere before the signal and somewhere after it"
+#     — prose here is dense with inline code, so a recipe dropped mid-sentence
+#     is almost always straddled by unrelated spans. Found in review, with a
+#     planted line whose signal sat between a `base` span and a `git switch` one.
+signal_is_inline_code() {
+    # shellcheck disable=SC2016  # the backticks are markdown delimiters in a sed script, not command substitution
+    ! printf '%s' "$1" | sed 's/`[^`]*`//g' | grep -qF "$name_signal"
+}
+
+# DETECTOR: is the line's inline-code markup even well-formed?
+#
+# `sed` pairs backticks left to right, so ONE stray backtick ahead of the signal
+# re-pairs the spans ACROSS it — the signal vanishes into a phantom span and the
+# line is filed as prose and never run. That is drafts (1) and (2)'s outcome
+# reached by a third trigger, and neither self-test fixture could catch it
+# because both are balanced. An unbalanced line is not prose and not a recipe;
+# it is unclassifiable, and this section fails loudly everywhere else it cannot
+# decide.
+line_backticks_balanced() {
+    local ticks
+    ticks="$(printf '%s' "$1" | tr -cd '`' | wc -c | tr -d '[:space:]')"
+    [ $((ticks % 2)) -eq 0 ]
+}
+
+# DETECTOR: can the runner execute this claim?
+claim_is_runnable() { [ "${1#*"$name_invocation"}" != "$1" ]; }
+
+# ORACLE: what name does this line's own comment promise for the fixture's ref?
+#
+# A claim is a MAPPING — `origin/prod → prod` — and only the mapping whose
+# left-hand side is the ref THIS fixture resolves says anything about this run.
+# An earlier draft grabbed every `→` and treated each right-hand side as an
+# expected output, which reddened correct commands two ways (a comment trimmed
+# to one unrelated worked example, and an unrelated arrow that produced
+# `claimed: the` — the parser reading English). Prints the promised name, or
+# nothing when the line promises nothing about this ref.
+claimed_name_for_ref() {
+    { printf '%s' "$1" | grep -oE '[A-Za-z0-9/_.-]+ *→ *[A-Za-z0-9/_.-]+' || true; } \
+        | sed -n "s@^origin/$fixture_base *→ *@@p" | tail -1
+}
+
+# Each detector has zero hits as its healthy state, which is the kind that
+# rots silently — a floor says "we looked at N lines", never "the predicate
+# still discriminates". So each is run against a fixture it MUST flag and a
+# corrected fixture it MUST NOT, the shape test-guards-can-fire.sh uses and
+# docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md
+# Prevention #2 prescribes.
+# shellcheck disable=SC2016  # fixtures are literal markdown, not expansions
+bare_recipe='Use the `base` value: run git symbolic-ref refs/remotes/origin/HEAD --short to get it, then hand it to `git switch`.'
+# shellcheck disable=SC2016
+cited_recipe='The repo declares its base (`git symbolic-ref refs/remotes/origin/HEAD`). Do not assume `main`.'
+if signal_is_inline_code "$bare_recipe"; then
+    fatal "the inline-code detector calls a bare straddled recipe 'prose' — the prose branch below now passes every copyable recipe."
+fi
+printf '  ok   inline-code detector flags a bare recipe straddled by unrelated code spans\n'; pass=$((pass + 1))
+if signal_is_inline_code "$cited_recipe"; then
+    printf '  ok   inline-code detector leaves a genuinely cited command alone\n'; pass=$((pass + 1))
+else
+    fatal "the inline-code detector flags the CORRECTED form, so the fix it prescribes does not clear it."
+fi
+# SYNTHETIC, declared as execute/SKILL.md Step 4 requires: the corpus holds no
+# unbalanced-backtick line to draw from, so this one is composed from the nearest
+# real shape (help/SKILL.md:57's sentence) with one closing tick doubled. A
+# declared narrowness is checkable; an undeclared one reads as coverage.
+# shellcheck disable=SC2016  # fixture is literal markdown, not an expansion
+odd_tick_recipe='Do not hardcode `main` or `master`` — run git symbolic-ref refs/remotes/origin/HEAD --short, then hand it to `git switch`.'
+if line_backticks_balanced "$odd_tick_recipe"; then
+    fatal "the backtick-balance detector calls an unbalanced line balanced — a stray backtick would hide a copyable recipe in the prose branch."
+fi
+printf '  ok   backtick-balance detector flags a line whose inline-code markup is unbalanced\n'; pass=$((pass + 1))
+if line_backticks_balanced "$cited_recipe"; then
+    printf '  ok   backtick-balance detector leaves a well-formed line alone\n'; pass=$((pass + 1))
+else
+    fatal "the backtick-balance detector flags a well-formed line; every prose citation would fail."
+fi
+if claim_is_runnable 'git rev-parse --abbrev-ref origin/HEAD'; then
+    fatal "the runnable detector calls an unknown shape runnable — the unknown-shape branch below can never fire."
+fi
+printf '  ok   runnable detector flags a name claim written in a shape the runner does not know\n'; pass=$((pass + 1))
+# shellcheck disable=SC2016  # fixture is a literal skill line, not an expansion
+if claim_is_runnable 'BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short)'; then
+    printf '  ok   runnable detector accepts the shape the runner executes\n'; pass=$((pass + 1))
+else
+    fatal "the runnable detector rejects the shape it is named for; every fenced claim would fail as unrunnable."
+fi
+
+# The ORACLE needs a self-test for the same reason the detectors do, and it is
+# the one that was missed: its healthy state on a claimless line is SILENCE, so
+# when it stops extracting anything the assertion it feeds simply disappears
+# — no message, no signal, and the only evidence is a pass count nothing
+# asserts. Review found the one-character edit that does it: swapping the
+# comment's Unicode `→` for ASCII `->` took the run from 139 to 138 passed and
+# still exited 0. Two fixtures and a live-site floor below close that.
+if [ "$(claimed_name_for_ref "x --short   # e.g. origin/main → main; origin/$fixture_base → $fixture_base")" = "$fixture_base" ]; then
+    printf '  ok   claim oracle extracts the mapping for the fixture'"'"'s ref\n'; pass=$((pass + 1))
+else
+    fatal "the claim oracle no longer extracts a mapping it is handed — every comment-claim assertion below has silently vanished."
+fi
+if [ -z "$(claimed_name_for_ref 'x --short   # e.g. origin/main → main')" ]; then
+    printf '  ok   claim oracle stays silent on a comment that claims nothing about this ref\n'; pass=$((pass + 1))
+else
+    fatal "the claim oracle invents a claim from a comment that makes none; correct commands will red."
+fi
+
+name_claims=""
+# shellcheck disable=SC2086
+for name_file in $scan_files; do
+    name_claims="$name_claims$(classify_name_claims "$repo_root/$name_file" "${name_file#./}" "$name_signal")"$'\n'
+done
+
+# Per-site, not a global floor. A global floor has slack in it and slack is
+# where a real loss hides — the range census says exactly this about itself
+# ninety lines up, and the detection-block floor above carries the incident
+# that proves it (a stale `4` made reverting /compound a green no-op). Review
+# reproduced the hole here: add a seventh claim anywhere, delete /closeout's
+# line, and the run went green with the assertion this section exists for
+# silently absent. So each site that must carry a runnable name claim is
+# asserted to contribute at least one.
+#
+# The roster is HALF derived and half hand-added, and saying so is the point.
+# `$base_sites` is derived (it greps for the detection block's assignment).
+# `closeout/SKILL.md` is typed in, because it carries no assignment to derive
+# from — that absence is the whole reason #310's defect went unrun. Deriving
+# the roster from the population it guards would be circular, so hand-adding is
+# the only independent source available; the range census above handles its own
+# hand-added member the same way, by naming it. RESIDUAL: a future site in
+# /closeout's bare shape gets run by the loop below but is not in this roster,
+# so deleting it later would go green. Add it here by hand when one appears.
+for site in $base_sites closeout/SKILL.md; do
+    site_claims="$(printf '%s\n' "$name_claims" | grep -c "^fenced$(printf '\t')$site$(printf '\t')" || true)"
+    if [[ "$site_claims" -ge 1 ]]; then
+        printf '  ok   %s documents %s runnable base-branch name claim(s)\n' "$site" "$site_claims"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s documents no runnable base-branch name claim; the census is silent about a file it must cover\n' "$site"
+        fail=$((fail + 1))
+    fi
+done
+
+# NO global floor here, deliberately. A `fenced_claims -ge 6` sat in this spot
+# and was implied by the six per-site passes above it — it could not fail while
+# they passed, and its comment claimed it covered "a site nobody thought to
+# name", which the per-line run loop below already does (an unnamed site's
+# claim is still extracted, still run, still asserted). That is header lesson
+# 7(b)'s own class: an accounting assertion is only non-vacuous when two
+# DIFFERENT patterns can disagree. Deleted rather than kept as reassurance,
+# which is what 7(b) says to do. Non-vacuity for the derivation itself lives at
+# the `base_site_count -ge 5` floor further up, which guards `$base_sites`.
+
+# Run each one in the clone fixture, which has refs/remotes/origin/HEAD set and
+# a base branch named `prod`. Harvest the name the line produced whichever way
+# it produced it — printed to stdout, or left in $BASE_BRANCH — because *how*
+# the claim delivers the name is the wording this census refuses to key on.
+name_out="$base_sandbox/name-claim.out"
+claims_checked=0
+while IFS="$(printf '\t')" read -r kind site lineno line; do
+    [[ "$kind" == "fenced" ]] || continue
+    if ! claim_is_runnable "$line"; then
+        printf '  FAIL %s:%s makes a base-branch name claim this census cannot run; teach the runner rather than letting it drop out\n       line: %s\n' \
+            "$site" "$lineno" "$line"
+        fail=$((fail + 1))
+        continue
+    fi
+    # A line continued onto the next physical line is also unrunnable here: the
+    # runner evals ONE line, so it would execute the truncated first half and
+    # report a correct command as defective. Route it to the same branch, which
+    # points the reader at the runner instead of at the command.
+    if [[ "$line" == *\\ ]]; then
+        printf '  FAIL %s:%s continues onto a second physical line, which this census cannot run; teach the runner rather than reporting the truncated half\n       line: %s\n' \
+            "$site" "$lineno" "$line"
+        fail=$((fail + 1))
+        continue
+    fi
+    resolved="$(
+        cd "$work" || exit 1
+        set +e
+        # Clear BASE_BRANCH before the eval, or the fallback below cannot tell
+        # "the line assigned it" from "the caller exported it". Found in review:
+        # with BASE_BRANCH=prod in the environment, a /closeout line rewritten to
+        # emit NOTHING passed both assertions and the suite reported 138/0. This
+        # is not an exotic variable — it is the one five skills in this pack tell
+        # an agent to assign, three lines from where they say to run these blocks.
+        BASE_BRANCH=
+        eval "$line" > "$name_out" 2>/dev/null
+        printed="$(cat "$name_out")"
+        printf '%s' "${printed:-${BASE_BRANCH:-}}"
+    )"
+    assert_eq "$fixture_base" "$resolved" "$site:$lineno produces the base branch NAME (not a remote-tracking ref)"
+
+    # The section is named "produces the name it CLAIMS", and equality against
+    # the fixture's base does not test that: #310's defect was output
+    # disagreeing with the line's own inline comment, and rewriting the comment
+    # to claim `origin/prod` would leave the assertion above green. So when the
+    # line carries `-> <name>` claims, the name it really produced must be among
+    # them. Sites with no such comment skip this and keep the equality above.
+    #
+    # `|| true` INSIDE the substitution, before the pipe: this file runs under
+    # `set -o pipefail`, so grep's exit 1 on a line with no claim would fail the
+    # assignment and kill the run under `set -e` — silently, mid-section, with
+    # no assertion and no message. That is the same defect the range extractor
+    # above documents, and this section's first draft shipped it: the suite
+    # exited after the first claim-less site and every "green" reading of it was
+    # an early exit, not a pass.
+    # A comment that makes no claim about `origin/<base>` is not a contract
+    # about it, so it is skipped rather than guessed at. `claims_checked`
+    # counts the ones that were NOT skipped — see the floor after this loop.
+    claim_for_ref="$(claimed_name_for_ref "$line")"
+    if [[ -n "$claim_for_ref" ]]; then
+        claims_checked=$((claims_checked + 1))
+        if [[ "$claim_for_ref" == "$resolved" ]]; then
+            printf '  ok   %s:%s produces the name its own comment maps origin/%s to (%s)\n' \
+                "$site" "$lineno" "$fixture_base" "$claim_for_ref"
+            pass=$((pass + 1))
+        else
+            printf '  FAIL %s:%s comment maps origin/%s to %q but the command produces %q\n' \
+                "$site" "$lineno" "$fixture_base" "$claim_for_ref" "$resolved"
+            fail=$((fail + 1))
+        fi
+    fi
+done <<< "$name_claims"
+
+# The self-tests above prove the oracle still extracts. This proves it is still
+# extracting from a REAL SITE. Both are needed and neither substitutes for the
+# other: a self-test passes on fixtures while every live comment has drifted out
+# of the shape, and a live count passes while the oracle has rotted into
+# matching anything. `/closeout:84` is the site that carries a mapping today, so
+# the floor is 1 — raise it when another site starts promising a name.
+if [[ "$claims_checked" -ge 1 ]]; then
+    printf '  ok   %s documented line(s) promise a name for origin/%s, and each was checked against it\n' \
+        "$claims_checked" "$fixture_base"
+    pass=$((pass + 1))
+else
+    printf '  FAIL no documented line promises a name for origin/%s any more; the comment-claim check ran on nothing and vanished silently\n' "$fixture_base"
+    fail=$((fail + 1))
+fi
+
+# The other half of the partition. An unfenced line is only *prose* if it cites
+# the mechanism inside an inline-code span; a bare invocation outside a fence is
+# a recipe an agent will copy, and it must be fenced — which puts it in the
+# population above and gets it RUN — not left as unrun text.
+#
+# A CITATION IS STILL A COMMAND, and this branch now runs it. "Cited inside a
+# span" is a proxy for "no caller consumes this", and the two came apart:
+# execute/SKILL.md cites the command in a span three lines below telling an
+# agent to run `git checkout <base>` with the value. Without `--short | sed` it
+# emitted `refs/remotes/origin/prod`, which `git checkout` accepts into a
+# DETACHED HEAD — leaving `git branch --show-current` empty, the value
+# /execute Step 0 rule 1 reads. Quieter than /closeout'"'"'s `fatal:`, so worse.
+#
+# Review found that fix shipped UNPINNED: reverting it left all 24 suites green
+# and this branch printing `ok` on the defective line, because it asserted
+# markup shape and nothing about content. Deciding whether a citation is
+# consumed is hard; running one is not — the span content is right here, and
+# the runner already executes this exact pipeline for six other sites. So each
+# span that carries the signal AND is runnable goes through the same eval and
+# the same assertion as a fenced claim. A span that is not runnable
+# (help/SKILL.md cites the bare ref name `origin/HEAD`) is left alone.
+#
+# RESIDUAL: this pins the citations that are runnable commands. A consumed
+# citation written in a shape the runner does not know still passes, and
+# nothing here decides consumption.
+while IFS="$(printf '\t')" read -r kind site lineno line; do
+    [[ "$kind" == "prose" ]] || continue
+    if ! line_backticks_balanced "$line"; then
+        printf '  FAIL %s:%s has unbalanced inline-code markup, so this census cannot tell a citation from a copyable recipe\n       line: %s\n' \
+            "$site" "$lineno" "$line"
+        fail=$((fail + 1))
+        continue
+    fi
+    if signal_is_inline_code "$line"; then
+        printf '  ok   %s:%s cites the command inside a sentence, not as a runnable recipe\n' "$site" "$lineno"
+        pass=$((pass + 1))
+        # ...and if what it cites is itself a runnable invocation, run it. A
+        # citation an agent is told to execute has to produce the same name a
+        # fenced block would.
+        # shellcheck disable=SC2016  # backticks are markdown span delimiters, not command substitution
+        while IFS= read -r span; do
+            [[ -n "$span" ]] || continue
+            [[ "$span" == *"$name_signal"* ]] || continue
+            claim_is_runnable "$span" || continue
+            cited_resolved="$(
+                cd "$work" || exit 1
+                set +e
+                BASE_BRANCH=
+                eval "$span" > "$name_out" 2>/dev/null
+                cited_printed="$(cat "$name_out")"
+                printf '%s' "${cited_printed:-${BASE_BRANCH:-}}"
+            )"
+            assert_eq "$fixture_base" "$cited_resolved" \
+                "$site:$lineno cites a runnable command, and it produces the base branch NAME"
+        done < <({ printf '%s' "$line" | grep -oE '`[^`]*`' || true; } | tr -d '`')
+    else
+        printf '  FAIL %s:%s documents a base-branch name command outside any fence and outside inline code; fence it so the census runs it\n       line: %s\n' \
+            "$site" "$lineno" "$line"
+        fail=$((fail + 1))
+    fi
+done <<< "$name_claims"
+
+# -----------------------------------------------------------------------------
 
 # /closeout resolves the same base branch and must NOT grow a BASE_REF: it feeds
 # the name to `git switch`, which rejects a remote-tracking ref outright. The
