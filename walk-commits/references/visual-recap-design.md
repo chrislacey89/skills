@@ -926,6 +926,141 @@ never committed.
 
 ---
 
+## 12. Block: per-unit series (one root cause, N sites)
+
+**Gate — this is not a default layout.** Render a per-unit series only when the change is
+**one root cause repeated across four or more near-identical sites**: one defect
+copy-pasted into six skills, one rename swept through nine call sites, one policy applied to
+every route. Below four sites the default block-type-major layout (§3–§9) reads faster, and
+below one root cause the sites are separate findings that belong in the file tree. The gate
+is deliberately high because the evidence behind this block is a single loved artifact — if
+it starts firing on diffs §3–§9 served fine, raise the threshold rather than living with it.
+
+**What it is: §7 repeated under Constancy of Design — not a second comparison primitive.**
+Each unit *is* the §7 labeled-columns comparison, rendered in the same frame and at the same
+scale as every other unit, with a lede and the §6 typed note-pair attached. Nothing here
+introduces a new way to compare two states. If you find yourself designing one, stop: the
+doc already has it, and a second one destroys the constancy that makes the units comparable.
+
+**Why the axis, not just more sections.** Under §3–§9 a sweep renders as a file tree of
+near-identical rows, and the 3–8 budget then forces you to *sample* it. For a sweep the
+population **is** the finding — say, five sites fixed, one deliberately exempt, two nearly
+missed — and sampling destroys the one distinction that matters, because a documented
+exception becomes indistinguishable from an oversight. Cohen's rule for an oversized review
+has the same shape: split it into **complete** sessions, never sample one. The 3–8 budget
+still governs *depth within* a unit; it never caps how many units the series renders.
+
+**Three requirements, each load-bearing:**
+
+1. **Every unit is a real `<section>` in the document.** Navigate with §2's existing sticky
+   rail and `scroll-margin-top` — no store, no routing, no `innerHTML` swap, no keyboard
+   stepper. §10's stop-rule is not relaxed for this block; it is the reason the block is
+   shaped this way. With every unit present in the document, a unit-to-unit question is a
+   scroll rather than a memory test, which is also what keeps the series clear of Tufte's
+   sequential-display anti-pattern.
+2. **The all-units matrix is required, not optional.** Scrolling a series indexes *units*,
+   and a question asked across units — "which sites got the operator fix too?" — is exactly
+   the comparison a sequence cannot answer. So the series **opens** with a matrix (§11's
+   `.oc-matrix`, same CSS, no new palette): units are rows, the properties that vary are
+   columns. That is Tufte's Rule 4 — a matrix when two independent categorical variables are
+   present — and it is what turns the sweep's population into one eyespan. A series without
+   it is the anti-pattern with extra steps.
+3. **The feedback serializer is retained.** Each unit carries
+   `data-feedback-id="u-<unit-slug>"`, `data-feedback-kind="unit"`, and a
+   `[data-feedback-note]` input, and the page keeps §7's review block with its **Copy
+   feedback** button wired to the core §4 `copyFeedback()`. A surface that renders
+   comprehension and drops the round-trip is half a surface.
+
+**The chip strip is what carries the exception.** Each unit header shows one or two chips
+naming its kind — `fixed`, `exempt`, `missed`, `mechanical` — from the same `--flag-*` ramp
+the file tree uses. The chips are how a reader tells a documented exception from an
+oversight without reading a word of prose, so an `exempt` unit **must** also carry the
+reason in its `good` note. An exempt unit with no stated reason is the oversight it is
+trying not to look like.
+
+**Prose here is per-unit and short.** Each unit gets a one-sentence lede in the reader's own
+words plus the §6 note-pair; the length cap on the §3 overview does not reach it, and the
+bar that does is `writing-for-humans.md` — the revision bar and the mental-model test.
+
+```html
+<!-- The rail (§2) gains one nav entry per unit, in the same shape as its other
+     entries: <a href="#unit-closeout">…</a>. Nothing else about §2 changes. -->
+<section id="sec-units" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">07</span> &nbsp;All sites</div>
+
+  <!-- REQUIRED: the all-units matrix. Units are rows; the properties that vary are columns.
+       Reuses §11's .oc-* CSS verbatim — paste that style block alongside the §1 core. -->
+  <div class="oc-scroll">
+    <div class="oc-matrix" style="grid-template-columns:170px repeat(3, minmax(0,1fr))">
+      <div class="oc-rowlabel is-head">Site</div>
+      <div class="oc-cell is-head"><span class="oc-name">root fix</span></div>
+      <div class="oc-cell is-head"><span class="oc-name">operator fix</span></div>
+      <div class="oc-cell is-head"><span class="oc-name">note</span></div>
+
+      <div class="oc-rowlabel">execute</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell">—</div>
+
+      <div class="oc-rowlabel">closeout</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell"><span class="oc-chip is-asserted">exempt</span></div>
+      <div class="oc-cell">keeps the old form on purpose — see the unit below</div>
+    </div>
+  </div>
+  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Every site is a row — the population, not a sample. An empty cell is a gap, not an omission.</p>
+</section>
+
+<!-- One real <section> per unit. No stage, no innerHTML swap: the rail scrolls to these. -->
+<section id="unit-execute" data-feedback-id="u-execute" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
+    <span style="border:1px solid var(--flag-load);color:var(--flag-load);background:color-mix(in srgb,var(--flag-load) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">fixed</span>
+    <div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">execute/SKILL.md:118</div>
+      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">One-sentence lede, in the reader's own words — what this site did wrong and what it does now.</div>
+    </div>
+  </div>
+  <!-- the §7 comparison, unchanged: identical frame and scale in every unit -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the BEFORE state, one row per line, exactly as §7… --></div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the AFTER state, identical frame and scale… --></div>
+    </div>
+  </div>
+  <!-- the §6 typed note-pair, and the note input the §4 serializer reads -->
+  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke here.</span></div>
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The rule this site now encodes.</span></div>
+  </div>
+  <textarea data-feedback-note placeholder="Notes on this site…" style="width:100%;margin-top:var(--s3);min-height:52px;resize:vertical;padding:var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
+</section>
+
+<section id="unit-closeout" data-feedback-id="u-closeout" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
+    <span style="border:1px solid var(--risk);color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">exempt</span>
+    <div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">closeout/SKILL.md:64</div>
+      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">This site keeps the old form on purpose — the lede says why, so the reader never has to guess whether it was missed.</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start"><!-- …identical §7 comparison frame… --></div>
+  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The stated reason this site is exempt — required on every exempt unit.</span></div>
+  </div>
+  <textarea data-feedback-note placeholder="Notes on this site…" style="width:100%;margin-top:var(--s3);min-height:52px;resize:vertical;padding:var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
+</section>
+
+<!-- §7's review block still closes the page: verdict chips, notes, and the Copy feedback
+     button wired to the core §4 copyFeedback(). Each unit above serializes as
+     `unit#u-<slug>: "…"`. Nothing new is added to the serializer. -->
+```
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
