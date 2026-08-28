@@ -192,7 +192,7 @@ section "the block count in the core matches its own table"
 # §3 asserts a countable number of blocks. It said "Nine" against a ten-row
 # table for one commit of #245's review.
 
-declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve) blocks' "$CORE" | head -1 | cut -d' ' -f1)
+declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve) blocks' "$CORE" | head -1 | cut -d' ' -f1 || true)
 rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
 case "$declared" in
     Nine) declared_n=9 ;; Ten) declared_n=10 ;; Eleven) declared_n=11 ;; Twelve) declared_n=12 ;;

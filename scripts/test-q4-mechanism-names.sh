@@ -291,7 +291,7 @@ section "the pack-level name's ordinal is constructed, not hand-maintained"
 # what turns those claims from a hand-maintained cross-reference into a
 # constructed one, which is the whole point of the file.
 pack_index() {
-    split_names "$1" | grep -n -F -- "$pack_name_token" | head -1 | cut -d: -f1
+    split_names "$1" | grep -n -F -- "$pack_name_token" | head -1 | cut -d: -f1 || true
 }
 
 q4_idx="$(pack_index "$q4_list")"

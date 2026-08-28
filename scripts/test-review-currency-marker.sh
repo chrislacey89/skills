@@ -45,7 +45,7 @@ assert_eq() {
 
 # The full reader line from /closeout Step 2, which this suite splits into the
 # sed script and the filter applied after it.
-reader_line="$(grep "sed -n 's/[^']*reviewed-at" "$closeout_skill" | head -1)"
+reader_line="$(grep "sed -n 's/[^']*reviewed-at" "$closeout_skill" | head -1 || true)"
 
 # The sed script /closeout Step 2 pipes the PR body through.
 reader_expr="$(printf '%s' "$reader_line" \
@@ -58,7 +58,7 @@ reader_filter="$(printf '%s' "$reader_line" \
     | sed "s/.*'[[:space:]]*|[[:space:]]*//; s/)[[:space:]]*\$//")"
 
 # The marker template /pre-merge Phase 4 substitutes the reviewed SHA into.
-writer_template="$(grep -o '<!-- reviewed-at: [^ ]* -->' "$premerge_skill" | head -1)"
+writer_template="$(grep -o '<!-- reviewed-at: [^ ]* -->' "$premerge_skill" | head -1 || true)"
 
 if [[ -z "$reader_expr" ]]; then
     printf 'FATAL: no sed -n reviewed-at extraction found in %s\n' "$closeout_skill" >&2

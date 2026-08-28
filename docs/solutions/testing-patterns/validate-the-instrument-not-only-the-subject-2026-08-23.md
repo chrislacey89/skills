@@ -48,7 +48,7 @@ Five instances, five instruments, one shape:
 | 3 | `git archive \| tar -x` for a scratch tree | Produces no `.git`; two suites read git | "two suites are RED at this commit" |
 | 4 | `sed` matching `too_far_fixture` when it meant `far_fixture` | Mangled the file into an exit 127 | (caught before reporting) |
 | 5 | Local `shellcheck` 0.11.0 vs CI's 0.9.0 | SC2317's reachability analysis narrowed between releases | "shellcheck clean" — three times, while the PR's required check was red |
-| 6 | `printf '%s' "$hay" \| grep -q "$needle"` under `pipefail`, on a 93 KB file (2026-08-28, PR #308) | `grep -q` exits at the first match; `printf` takes SIGPIPE mid-write; `pipefail` reports the *producer's* death as the pipeline's result | "needle absent" — for a needle the file contains |
+| 6 | `printf '%s' "$hay" \| grep -q "$needle"` under `pipefail`, on a 94 KB file (2026-08-28, PR #308) | `grep -q` exits at the first match; `printf` takes SIGPIPE mid-write; `pipefail` reports the *producer's* death as the pipeline's result | "needle absent" — for a needle the file contains |
 
 **Instance 6 is the one that changes this entry's prescription**, and it took five
 days to arrive. It is the same shape as instance 2 — a size-dependent instrument
@@ -71,7 +71,8 @@ absence of a thing that is *there*.
 
 Second, **it is size-gated, so it is not introduced — it is grown into.** The
 identical two-line matcher answered correctly against `docs/visual-rendering-core.md`
-(27,888 bytes) and wrongly against `docs/visual-recap-design.md` (93,559 bytes) in
+(27,888 characters) and wrongly against `docs/visual-recap-design.md` (93,559
+characters) in
 the same run. Nothing changed in the assertion. The file it scanned got bigger. So
 review cannot catch it: the code was correct when written, correct when reviewed,
 and became wrong later without being edited.
@@ -194,6 +195,25 @@ whole time, waiting for a scanned file to cross the pipe buffer. Written as a
 scope rule: **an instrument is mechanizable exactly when it is committed**, and
 five ad-hoc instruments in a row is a fact about one PR's working style, not
 evidence about where instruments live.
+
+**Two things the mechanism caught that the census had not.** First, the detector's
+own first regex required a single literal `-` before the flag cluster, so
+`grep --quiet` reproduced the bug and the detector reported clean against a repo
+containing it — a guardrail a rename walks straight past, which is this entry's
+own pattern one level down. It now matches every spelling grep accepts. Second,
+rebasing onto a `prod` that had moved surfaced **four more sites** in
+`test-syntax-palette-contract.sh` and `test-restated-review-operatives.sh`,
+arriving from a different PR while this one was in review. A census is a
+measurement of one moment; the detector is what makes it hold.
+
+**The sibling shape is now mechanized too, and it fails in the opposite
+direction.** `var="$(producer | head -1 | cut …)"` under `set -e` + `pipefail`
+aborts the script at the assignment the instant the producer finds nothing —
+and every one of the seventeen sites found was followed by a hand-written
+empty-check (`FAIL Step 1 instruction not found`, `FATAL: no loop-pass marker
+template found`) written for exactly that case and unreachable when it happens.
+CI still reddens; the crafted reason never prints. `|| true` is the guard,
+because the next line already decides what empty means.
 
 Instances 1–4 remain prose, now for the narrower and checkable reason: those four
 scripts were never written to the repo. Instance 2's truncating-read shape

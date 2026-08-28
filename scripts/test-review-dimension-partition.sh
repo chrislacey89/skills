@@ -314,7 +314,7 @@ while IFS= read -r f; do
     h="$(detect_title_rosters < "$p")"
     [ -n "$h" ] && title_hits="$title_hits$f: $h
 "
-    h="$(detect_number_rosters < "$p" | head -1)"
+    h="$(detect_number_rosters < "$p" | head -1 || true)"
     [ -n "$h" ] && number_hits="$number_hits$f: $h
 "
 done < "$population_file"

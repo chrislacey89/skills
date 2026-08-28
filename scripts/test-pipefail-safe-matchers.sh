@@ -46,8 +46,13 @@
 #
 # REACH — stated, because a mechanism that implies coverage it lacks is the
 # defect one level up (see mechanism-generality-lags-the-pattern-2026-08-23.md):
-# this suite catches the `| grep -q` form, which is the mechanically decidable
-# member of the family. It does NOT catch the truncating-read form
+# this suite catches the `| grep -q` form in every spelling GNU and BSD grep
+# accept — the clustered short flags (`-q`, `-qF`, `-Fq`) and the long forms
+# (`--quiet`, `--silent`). The long forms are named explicitly because the
+# first draft of this regex required a single literal `-` before the flag
+# cluster, so `grep --quiet` reproduced the bug and the detector reported
+# "ok" against a repo containing it. A guardrail that a rename walks straight
+# past is the shape this suite exists to prevent, one level down. It does NOT catch the truncating-read form
 # (`sed -n 'Np' | cut -c1-200` losing a claim past the cut) — that is instance 2
 # of the entry above and stays prose, because "this cut is too narrow for its
 # input" is not decidable from the text.
@@ -70,7 +75,7 @@ printf '\n=== 1. No committed suite pipes a producer into `grep -q` ===\n'
 violations="$(
   for f in scripts/*.sh; do
     [ "$f" = "scripts/test-pipefail-safe-matchers.sh" ] && continue
-    grep -nE '\|[[:space:]]*grep[[:space:]]+-[A-Za-z]*q' "$f" \
+    grep -nE '\|[[:space:]]*grep[[:space:]]+(--quiet|--silent|-[A-Za-z]*q)' "$f" \
       | grep -vE '^[0-9]+:[[:space:]]*#' \
       | grep -vE '\|\|[[:space:]]*grep' \
       | sed "s|^|$f:|" || true
@@ -86,7 +91,43 @@ else
   printf '       fix: grep -q NEEDLE <<<"$var"   or   grep -q NEEDLE < <(producer)\n'
 fi
 
-printf '\n=== 2. The replacement forms are actually safe (not just different) ===\n'
+printf '\n=== 2. No capture dies before its own diagnostic can print ===\n'
+
+# The sibling shape, and the one that fails *silently in the other direction*.
+#
+#   var="$(producer | head -1 | cut -d: -f1)"
+#
+# `head` exits after its line, so the producer takes SIGPIPE — but the louder
+# case needs no SIGPIPE at all: when `grep` simply finds nothing it exits 1, and
+# under `set -e` + `pipefail` the assignment aborts the whole script *there*.
+# Every one of these captures is followed by a hand-written empty-check —
+# `FAIL Step 1 instruction not found`, `FATAL: no loop-pass marker template
+# found` — that exists precisely for the not-found case and is unreachable when
+# it happens. CI still reddens; the crafted reason never prints.
+#
+# `|| true` is the correct guard here rather than a mask: the next line already
+# decides what an empty capture means, and this only lets it run.
+capture_violations="$(
+  for f in scripts/*.sh; do
+    [ "$f" = "scripts/test-pipefail-safe-matchers.sh" ] && continue
+    grep -q 'set -[a-z]*o pipefail\|set -o pipefail' "$f" || continue
+    grep -nE '=\"?\$\(.*\|[[:space:]]*head\b' "$f" \
+      | grep -vE '^[0-9]+:[[:space:]]*#' \
+      | grep -vF '|| true' \
+      | sed "s|^|$f:|" || true
+  done
+)"
+
+if [ -z "$capture_violations" ]; then
+  ok "every '\$(… | head …)' capture under pipefail is guarded"
+else
+  n=$(wc -l <<<"$capture_violations" | tr -d ' ')
+  bad "$n capture(s) abort before their own empty-check can run"
+  printf '       %s\n' "$capture_violations"
+  printf '       fix: append `|| true` inside the substitution, so the next line decides\n'
+fi
+
+printf '\n=== 3. The replacement forms are actually safe (not just different) ===\n'
 
 # A sweep that swaps one unsafe idiom for another is the defect class
 # re-introduced by its own correction — sweep-commits-reintroduce-their-own-

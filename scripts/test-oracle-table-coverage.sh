@@ -386,7 +386,7 @@ esc_probe="$(mktemp)"
 probe_escape() {  # $1 = label, $2 = fixture body, $3 = expected (declared|undeclared)
     printf '%s' "$2" > "$esc_probe"
     local hit ln
-    hit="$(hand_listed "$esc_probe" | head -1)"; ln="${hit%%:*}"
+    hit="$(hand_listed "$esc_probe" | head -1 || true)"; ln="${hit%%:*}"
     if [ -z "$ln" ]; then
         bad "escape probe fixture was not detected at all: $1" \
             "the fixture no longer trips hand_listed(), so this probe proves nothing"

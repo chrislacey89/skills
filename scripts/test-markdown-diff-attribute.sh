@@ -113,7 +113,7 @@ git -C "$scratch" rev-parse --verify HEAD >/dev/null 2>&1 \
 # from inherited config and left the measurement exposed.
 git_baseline() { git -C "$scratch" -c core.attributesFile=/dev/null "$@"; }
 
-header_without="$(git_baseline diff -U1 -- a.md | grep '^@@' | head -1)"
+header_without="$(git_baseline diff -U1 -- a.md | grep '^@@' | head -1 || true)"
 # Content lines only. The hunk header legitimately DOES change — that is claim 1
 # — so leaving it in makes this comparison test claim 1 twice and claim 2 never.
 # The first draft did exactly that and reported a wordRegex that does not exist.
@@ -124,7 +124,7 @@ wd_without="$(wd_body_baseline)"
 
 printf '*.md diff=markdown\n' > "$scratch/.gitattributes"
 
-header_with="$(git -C "$scratch" diff -U1 -- a.md | grep '^@@' | head -1)"
+header_with="$(git -C "$scratch" diff -U1 -- a.md | grep '^@@' | head -1 || true)"
 wd_with="$(wd_body)"
 
 # Non-vacuity: every comparison below is between two strings pulled from git. If
