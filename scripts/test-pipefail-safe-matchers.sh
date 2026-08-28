@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# The literals below quote shell syntax — `grep -q`, `<<<"$var"` — so single
+# quotes are what keeps them literal. File-wide, so it precedes the first command.
+# shellcheck disable=SC2016
+# test-pipefail-safe-matchers.sh — no committed suite may feed a producer into
+# an early-exiting reader while `pipefail` is on.
+#
+# THE DEFECT: `producer | grep -q NEEDLE` under `set -o pipefail`.
+#
+# `grep -q` exits at the first match. The producer to its left is still writing,
+# takes SIGPIPE, and dies non-zero. Under `pipefail` the *pipeline* then reports
+# that failure — so the caller reads "no match" from a pipeline that matched.
+#
+# It is invisible at small sizes. If the producer's whole output fits in the pipe
+# buffer it finishes writing before `grep -q` exits, and the pipeline is correct.
+# The bug appears only when the haystack outgrows the buffer, which happens when
+# a file the suite scans *grows* — long after the assertion was written and
+# reviewed. The two directions it fails in are not symmetric:
+#
+#   assert_has   -> reports FAIL on a needle that is present  (loud, annoying)
+#   assert_lacks -> reports  ok  BECAUSE the needle was found (silent, and wrong)
+#
+# The second is the one that matters: a ban that passes because the banned thing
+# is there. It reproduced in this repo — `docs/visual-recap-design.md` at 93 KB
+# answered NOT-FOUND for a needle it contains, while the 27 KB
+# `docs/visual-rendering-core.md` answered correctly with the identical code.
+#
+# THE FIX, and why it is not "add `|| true`": take the producer out of the
+# pipeline, so `pipefail` has no second exit status to see.
+#
+#   grep -q NEEDLE <<<"$var"          # variable haystack
+#   grep -q NEEDLE < <(producer)      # command haystack
+#
+# `|| true` only hides the wrong status; the pipeline still races, and the next
+# reader sees a matcher whose correctness depends on a file staying small.
+#
+# WHY A TEST AND NOT PROSE: docs/solutions/testing-patterns/
+# validate-the-instrument-not-only-the-subject-2026-08-23.md already recorded
+# this pattern — a measuring instrument that fails while reporting normally —
+# and shipped prose for it, on the stated ground that its instruments "were
+# ad-hoc, authored in-session, and discarded. Nothing in a repository can assert
+# a property of a script that was never written to it." That reason does not
+# hold for this instance: the instrument is a committed suite, and 23 siblings
+# of the same shape were committed across 11 files. Committed instruments are
+# exactly what a repository *can* assert a property of.
+#
+# REACH — stated, because a mechanism that implies coverage it lacks is the
+# defect one level up (see mechanism-generality-lags-the-pattern-2026-08-23.md):
+# this suite catches the `| grep -q` form, which is the mechanically decidable
+# member of the family. It does NOT catch the truncating-read form
+# (`sed -n 'Np' | cut -c1-200` losing a claim past the cut) — that is instance 2
+# of the entry above and stays prose, because "this cut is too narrow for its
+# input" is not decidable from the text.
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$repo_root"
+
+pass=0
+fail=0
+ok()  { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
+bad() { printf '  FAIL %s\n' "$1"; fail=$((fail + 1)); }
+
+printf '\n=== 1. No committed suite pipes a producer into `grep -q` ===\n'
+
+# Strip comment-only lines first: this file's own header describes the banned
+# shape, and a detector that flags its own explanation is the self-matching
+# defect #306's mutation pass found in its suite.
+violations="$(
+  for f in scripts/*.sh; do
+    [ "$f" = "scripts/test-pipefail-safe-matchers.sh" ] && continue
+    grep -nE '\|[[:space:]]*grep[[:space:]]+-[A-Za-z]*q' "$f" \
+      | grep -vE '^[0-9]+:[[:space:]]*#' \
+      | grep -vE '\|\|[[:space:]]*grep' \
+      | sed "s|^|$f:|" || true
+  done
+)"
+
+if [ -z "$violations" ]; then
+  ok "no 'producer | grep -q' pipeline in any committed suite"
+else
+  n=$(printf '%s\n' "$violations" | wc -l | tr -d ' ')
+  bad "$n pipeline(s) feed a producer into 'grep -q' under pipefail"
+  printf '%s\n' "$violations" | sed 's/^/       /'
+  printf '       fix: grep -q NEEDLE <<<"$var"   or   grep -q NEEDLE < <(producer)\n'
+fi
+
+printf '\n=== 2. The replacement forms are actually safe (not just different) ===\n'
+
+# A sweep that swaps one unsafe idiom for another is the defect class
+# re-introduced by its own correction — sweep-commits-reintroduce-their-own-
+# defect-class-2026-08-18.md. So prove both replacements on a haystack far
+# larger than any pipe buffer, with the needle at the very front so an
+# early-exiting reader is guaranteed to quit while the producer is mid-write.
+big="$(python3 -c 'print("NEEDLE"); print("x"*200000)')"
+
+if grep -q 'NEEDLE' <<<"$big"; then
+  ok "here-string form finds a front-loaded needle in a 200 KB haystack"
+else
+  bad "here-string form MISSED a needle it contains — replacement is unsafe"
+fi
+
+if grep -q 'NEEDLE' < <(printf '%s\n' "$big"); then
+  ok "process-substitution form finds a front-loaded needle in a 200 KB haystack"
+else
+  bad "process-substitution form MISSED a needle it contains — replacement is unsafe"
+fi
+
+# The negative control: the banned form must actually be broken here, or this
+# suite is banning a shape that does nothing and rows 1-2 prove nothing.
+# (Guarded so a future shell/grep that fixes the race turns this into a
+# reported change rather than a silent green.)
+if printf '%s\n' "$big" | grep -q 'NEEDLE'; then
+  ok "NOTE: the banned form answered correctly here — the race did not fire on this shell/grep; the ban still stands on the reproduced 93 KB case"
+else
+  ok "banned form reproduces the defect: reports NOT-FOUND for a needle it contains"
+fi
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

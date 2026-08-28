@@ -72,6 +72,8 @@ pre-push:
       run: bash scripts/test-guards-can-fire.sh
     syntax-palette-contract-tests:
       run: bash scripts/test-syntax-palette-contract.sh
+    pipefail-safe-matcher-tests:
+      run: bash scripts/test-pipefail-safe-matchers.sh
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the

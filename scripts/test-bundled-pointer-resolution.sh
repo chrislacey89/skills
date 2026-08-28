@@ -83,7 +83,7 @@ for bundled in $(git ls-files '*/references/*.md'); do
     for up in $upstreams; do
         if cmp -s "$bundled" "$up"; then
             copies=$((copies + 1))
-            if printf '%s\n' "$produced" | grep -qxF "$bundled"; then
+            if grep -qxF "$bundled" <<<"$produced"; then
                 ok "$bundled is a synced copy of $up, and the manifest says so"
             else
                 bad "$bundled is byte-identical to $up with no manifest row" \

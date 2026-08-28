@@ -148,7 +148,7 @@ esac
 if [ "$header_with" = "$header_without" ]; then
     bad "diff=markdown changed nothing about the hunk header" \
         "expected the enclosing '## Pre-merge' heading; got: $header_with"
-elif printf '%s' "$header_with" | grep -qF -- '## Pre-merge'; then
+elif grep -qF -- '## Pre-merge' <<<"$header_with"; then
     ok "diff=markdown puts the enclosing heading on the hunk header: $header_with"
 else
     bad "diff=markdown changed the hunk header but not to the enclosing heading" \

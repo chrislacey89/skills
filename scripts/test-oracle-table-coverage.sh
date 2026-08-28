@@ -264,7 +264,7 @@ DECL_WINDOW=6
 declared_within_window() {  # $1 = file, $2 = line number of the population
     local start
     start=$(( $2 > DECL_WINDOW ? $2 - DECL_WINDOW : 1 ))
-    sed -n "${start},${2}p" "$1" | grep -q 'coverage:'
+    grep -q 'coverage:' < <(sed -n "${start},${2}p" "$1")
 }
 
 populations=0

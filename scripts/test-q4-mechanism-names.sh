@@ -271,7 +271,7 @@ section "the pack-level name is present at both sites"
 for pair in "Q4:$q4_list" "Phase 4:$p4_list"; do
     site="${pair%%:*}"
     body="${pair#*:}"
-    if printf '%s' "$body" | grep -qF -- "$pack_name_token"; then
+    if grep -qF -- "$pack_name_token" <<<"$body"; then
         ok "$site's list includes the pack-level name ($pack_name_token)"
     else
         bad "$site's list dropped the pack-level name" \

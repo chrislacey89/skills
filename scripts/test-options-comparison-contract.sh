@@ -122,7 +122,7 @@ while IFS= read -r line; do
     fi
     total=$((cited + asserted))
     has_chip=0
-    printf '%s' "$line" | grep -qF 'oc-chip is-asserted' && has_chip=1
+    grep -qF 'oc-chip is-asserted' <<<"$line" && has_chip=1
     # asserted/total >= 2/3  <=>  3*asserted >= 2*total
     should_chip=0
     [ $((3 * asserted)) -ge $((2 * total)) ] && should_chip=1
