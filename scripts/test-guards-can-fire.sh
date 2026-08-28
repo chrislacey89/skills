@@ -217,6 +217,33 @@ detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending
         # identical failure, and was a silent gap when only $( … ) was matched.
         printf '%s' "$body" | grep -nE '(\$\(([^)]*[^[:alnum:]_])?|`([^`]*[^[:alnum:]_])?)'"$n"'([[:space:]]|\||\)|;|`)' || true
     done <<< "$exiters"
+# Detector C — a counting pipeline that cannot survive a zero match.
+#
+# These suites run under `set -o pipefail`, so a `grep` that legitimately finds
+# NOTHING returns 1 and aborts the whole script at that line — before the floor
+# or assertion on the next line can report the count. The guard names what it
+# protects and cannot fire, which is this suite's whole subject, arriving
+# through a pipeline instead of through a subshell.
+#
+# The tell is narrow and unambiguous: a command substitution whose pipeline
+# sends `grep` into a counter (`wc -l`, `wc -c`). Counting is the operation
+# whose ZERO result is meaningful, so those are exactly the greps that must be
+# allowed to match nothing. A bare `grep` elsewhere may legitimately be required
+# to match, so it is not flagged.
+#
+# Three instances shipped in #304's own contract test — the tracked-markdown
+# census, the unit count, and the id count — and none was caught by reading.
+# All three surfaced only by running the suite against a tree where the thing
+# being counted was absent, which is the mutation direction
+# docs/solutions/testing-patterns/
+# battery-that-only-perturbs-what-is-present-2026-08-28.md is about.
+detect_unguarded_count() {  # stdin: file text. stdout: offending lines.
+    local text; text="$(cat)"
+    if printf '%s' "$text" | strip_comments | grep -q 'set -[a-z]*o pipefail\|set -o pipefail'; then
+        printf '%s' "$text" | strip_comments \
+            | grep -nE '\$\(.*grep[^|]*\|[[:space:]]*wc ' \
+            | grep -v '|| true' || true
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -248,6 +275,21 @@ while IFS= read -r f; do
     fi
 done <<< "$suites"
 [ "$fail" -eq 0 ] && ok "no inert subshell guards"
+
+# ---------------------------------------------------------------------------
+section "no counting pipeline dies on a legitimate zero match"
+# ---------------------------------------------------------------------------
+
+before_c="$fail"
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    hits="$(detect_unguarded_count < "$f")"
+    if [ -n "$hits" ]; then
+        bad "$f counts with an unguarded grep under pipefail" \
+            "a zero match aborts the run before the floor can report it; wrap as { grep … || true; }: $(printf '%s' "$hits" | tr '\n' ' ')"
+    fi
+done <<< "$suites"
+[ "$fail" -eq "$before_c" ] && ok "every counting pipeline survives a zero match"
 
 # ---------------------------------------------------------------------------
 section "no awk paragraph reader matches its anchor against the wrapped record"
@@ -346,6 +388,32 @@ else
     fatal "detector B flags the CORRECTED form, so the fix it prescribes does not clear it."
 fi
 
+# shellcheck disable=SC2016  # literal fixture text
+bad_count='set -euo pipefail
+n="$(grep -oE "<section" "$f" | wc -l | tr -d " ")"'
+# shellcheck disable=SC2016  # literal fixture text
+good_count='set -euo pipefail
+n="$( { grep -oE "<section" "$f" || true; } | wc -l | tr -d " ")"'
+# shellcheck disable=SC2016  # literal fixture text
+no_pipefail='set -eu
+n="$(grep -oE "<section" "$f" | wc -l)"'
+
+if [ -n "$(printf '%s' "$bad_count" | detect_unguarded_count)" ]; then
+    ok "detector C flags an unguarded counting grep under pipefail"
+else
+    fatal "detector C no longer matches the shape it is named for — its section above now passes everything."
+fi
+if [ -z "$(printf '%s' "$good_count" | detect_unguarded_count)" ]; then
+    ok "detector C leaves the guarded form alone"
+else
+    fatal "detector C flags the CORRECTED form, so the fix it prescribes does not clear it."
+fi
+if [ -z "$(printf '%s' "$no_pipefail" | detect_unguarded_count)" ]; then
+    ok "detector C stays silent without pipefail, where the shape is harmless"
+else
+    fatal "detector C fires without pipefail, where a zero match does not abort — it is matching syntax, not the hazard."
+fi
+
 # The comment exclusion is load-bearing: this file's own header quotes both
 # shapes, and so does the fix in test-compound-clustering-single-source.sh.
 # Without it the detectors would flag the prose explaining them.
@@ -354,8 +422,9 @@ commented='# ) || fatal "this is prose about the defect"
 #     index($0, anchor) { … }
 BEGIN { RS = "" }'
 if [ -z "$(printf '%s' "$commented" | detect_subshell_guard)" ] \
-   && [ -z "$(printf '%s' "$commented" | detect_wrapped_anchor_match)" ]; then
-    ok "both detectors ignore commented-out prose about the shapes"
+   && [ -z "$(printf '%s' "$commented" | detect_wrapped_anchor_match)" ] \
+   && [ -z "$(printf '%s' "$commented" | detect_unguarded_count)" ]; then
+    ok "all three detectors ignore commented-out prose about the shapes"
 else
     fatal "a detector flags a comment — every suite that documents this defect class, including this one, would go red for explaining it."
 fi
