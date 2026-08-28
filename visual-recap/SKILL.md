@@ -1,6 +1,6 @@
 ---
 name: visual-recap
-description: "Side-route skill that renders a finished diff, PR, or branch as a single self-contained interactive HTML recap — file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites, CSS-first flow diagrams (Mermaid opt-in for complex graphs), and a copy-text feedback loop. Use when a reviewer who didn't author the change needs to grasp its shape before reading lines. Optional and never auto-invoked; skip for small or obvious diffs. Not a defect finder (that's /pre-merge), not free-form diagramming (that's /excalidraw-diagram), not a committed artifact (the HTML is transient)."
+description: "Side-route skill that renders a finished diff, PR, or branch as a single self-contained interactive HTML artifact, in one of two modes — a scrolling recap for auditing a change (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes, before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a paged walkthrough deck for arguing a reader through one (premise → changes → mechanism → aftermath). Diagrams take a CSS spine when trivial and Mermaid-via-CDN when multi-stage or behavioral. Use when a reviewer who didn't author the change needs to grasp its shape before reading lines. Optional and never auto-invoked; skip for small or obvious diffs. Not a defect finder (that's /pre-merge), not free-form diagramming (that's /excalidraw-diagram), not a committed artifact (the HTML is transient)."
 sources:
   primary:
     - "Best Kept Secrets of Peer Code Review — Jason Cohen"
@@ -14,6 +14,8 @@ sources:
 # Visual Recap
 
 Render a finished change as a single self-contained interactive HTML file that shows a reviewer the *shape* of the diff before they read the lines: which surfaces moved, which hunks are load-bearing, what's risky — with callouts anchored to the exact lines, then a drop into the literal code. The output is **reviewer comprehension as a portable artifact**, not a defect list.
+
+It renders in one of **two modes**, chosen in Step 1 and never defaulted into: a **scrolling recap** when the reviewer is auditing a change, and a **walkthrough deck** — one idea per screen, premise → changes → mechanism → aftermath — when the reviewer has to be argued through one.
 
 This skill exists because Cohen's strongest empirical finding is *author preparation*: an annotated walkthrough prepared by someone who understands the change correlates with near-zero defect variance. The pipeline produces that annotation as terminal prose (`/pre-merge`, `/walk-commits`) but never as a highlightable, shape-first surface — so the reviewer rebuilds the change's topology in their own head before judging any line. `/visual-recap` produces the missing surface (Meadows: a missing high-bandwidth feedback flow in the review loop) **without any lock-in** — the agent authors the HTML directly; there is no renderer package, no build system, no server, no MCP connector, and no hosted database. GitHub PR review comments stay the durable channel.
 
@@ -51,7 +53,7 @@ The skip gate cuts filler — but a change that *passes* the gate owes the revie
 
 ## The shared rendering core
 
-All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so recaps come out consistent run-to-run. Read both before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
+All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so artifacts come out consistent run-to-run. That doc has two parts, and they are two **modes**, not two layouts: **Part I (§1–§12)** is the scrolling recap; **Part II (§D1–§D9)** is the walkthrough deck. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. Read the core and the part your mode selects, before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
 
 When a *choice* is what needs rendering rather than a change — three or more mutually exclusive options, each carrying three or more attributes, not orderable on one axis — the block is the **options-comparison** (`references/visual-recap-design.md` §11), and its threshold and its relationship to the `AskUserQuestion` menu live in `references/next-step-menu.md`. That block is forward-looking, so its grounding rule differs: each cell is cited with its source or visibly marked asserted (`references/visual-rendering-core.md` §1, *Forward-looking blocks*).
 
@@ -93,6 +95,17 @@ Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a
 
 **Apply the skip gate now.** Look at the `--stat`. If the change is small or obvious — a single file, a handful of lines, a mechanical rename — say so and **recommend skipping the recap**; the terminal output from `/pre-merge` or `/walk-commits` is faster. Only proceed when the topology genuinely warrants a shape-first surface. This gate is the skill's main defense against becoming filler.
 
+**Then choose the mode, and say which you chose and why.** There are two canonical modes and they answer different questions. Do not default into one — a mode that is never selected is a mode that happens when nothing selects anything.
+
+> **Is there one story the screens advance? → the deck. Is the reviewer auditing parallel hunks? → the scroll.**
+
+- **Scroll recap** (`references/visual-recap-design.md` Part I, §1–§12) — a single scrolling column. Take it when the reviewer's job is to check a topology: which files moved, which contracts changed, which hunks are load-bearing. They already hold the *why* and need the *where*.
+- **Walkthrough deck** (`references/visual-recap-design.md` Part II, §D1–§D9) — one idea per screen, paged, with a grouped rail and the arc **premise → the changes → the mechanism → aftermath**. Take it when the change has a causal arc and the *why* has to land before any hunk means anything: a sweep with one thesis, a chain of moves that depend on each other, a review's own story.
+
+When both fit, take the scroll — it is the cheaper artifact. Two rules bound the deck and are not negotiable (§D2): **no comparison may span screens**, and **never page a population** — N near-identical instances of one cause are the finding, so they go co-visible in one screen, never one per screen.
+
+**When the change feels abstract to the audience, recommend `/re-pitch` — never invoke it.** The deck's premise screen is a re-pitch-shaped retelling (one anchor sentence, every domain term glossed on first use, no forward references), and in the field a `/re-pitch` run mid-session became a deck's opening screen directly. If the reader signals the change is not landing, name `/re-pitch` as the option and let them take it; same rule as every other cross-skill seam here.
+
 ### 2. Derive the grounded skeleton (tooling, not prose)
 
 Build the structural inputs mechanically, before writing a single sentence:
@@ -132,16 +145,17 @@ When the diff changes a **schema or API surface**, the resulting contract is the
 
 When the diff changes **rendered UI** — layout, controls, navigation, dialogs, visible states, design tokens — include **wireframe block(s)** (`references/visual-recap-design.md` §9); code diffs are not a substitute for showing what the user will see. Cover the **entry surface**, the **interaction surface** that opens or changes, and the **resulting state**, plus role variants when permissions changed. After-only is fine for purely additive UI; skip wireframes when the UI delta is trivial. Wireframes are one of the two model-authored blocks: labels and controls come from diff-visible strings and component names, and inferred layout says "layout inferred" in the caption.
 
-When the change needs an architecture, data-flow, or sequence picture, default to the **CSS diagram primitive** (`references/visual-recap-design.md` §1/§5 `.fc-*`) — a node-and-connector spine that renders identically offline with no CDN and no parse grammar. Reach for embedded Mermaid (via `/mermaid`) **only** for a genuinely complex graph that needs real auto-layout; do not hand-roll *that* layout by hand. (Issue #83 chose Mermaid for GitHub-bound markdown, rendered natively — a different context from this self-contained offline HTML.)
+When the change needs an architecture, data-flow, or sequence picture, **pick the form by what the picture has to say** (`references/visual-recap-design.md` §5). A **trivial spine** — one straight flow, a short sequence, no labeled edges, no branches — takes the **CSS diagram primitive** (`§1/§5 .fc-*`), which renders identically offline with no CDN and no parse grammar. Anything **multi-stage or behavioral** — labeled edges, fan-outs, guards, failure states, a before/after pair of graphs, a dense DAG or ER diagram — takes **Mermaid via CDN**, authored through `/mermaid`, with the visible per-figure degrade note beside it. When the review context is known to be offline, take the CSS primitive regardless and say so in the caption. Whatever the figure carries, the *finding* must also survive offline as prose or a core block (`references/visual-rendering-core.md` §6). (Issue #83 chose Mermaid for GitHub-bound markdown, rendered natively with no CDN — a different context, and untouched.)
 
 ### 4. Render the self-contained HTML
 
 Author one `.html` file by copying the canonical skeleton in `references/visual-recap-design.md` — the fixed token core (§1) and the per-block markup (§3–§9) — then filling only the grounded data and the prose. Deviate from the skeleton only where the change genuinely needs it; do not re-derive a fresh design system per run.
 
-- Inline, themeable CSS is load-bearing — copy the skeleton's `:root`/`[data-theme="dark"]` token block verbatim (light default, dark flipped on `[data-theme]`) and keep the variable names. CDN libraries are enhancement-only and always have a no-CDN fallback. The file must read identically with the network off.
+- Inline, themeable CSS is load-bearing — copy the skeleton's `:root`/`[data-theme="dark"]` token block verbatim (light default, dark flipped on `[data-theme]`) and keep the variable names. **Every core block must read identically with the network off**; the one licensed exception is a Mermaid **diagram figure**, which may degrade to source text and must carry its degrade note on its own face (`references/visual-rendering-core.md` §6). Any other CDN library is enhancement-only and always has a no-CDN fallback.
 - Line-anchored callouts are **direct labels** rendered at the line, not a separate legend (Tufte; Norman, *natural mapping*). Clicking a marker highlights the exact line — scope the highlight to the code cell, not the whole row.
 - Maximize data-ink: no chartjunk, no decorative shadows; small multiples + constancy of design for before/after comparisons — labeled side-by-side columns by default, identical scale and frame on both sides, the state named in the column header (never inside the frame); when the content is too wide to halve, stack the two frames rather than hiding one behind a toggle.
-- Include the **Copy feedback** button and its layered-clipboard serializer with stable `data-feedback-id`s, exactly per the core's `recap-feedback v1` format.
+- Include the **Copy feedback** button and its layered-clipboard serializer with stable `data-feedback-id`s, exactly per the core's `recap-feedback v1` format — **required whenever the artifact is handed off** (mailed, attached, opened in another session, read asynchronously). When the author is in the room and the reviewer answers out loud, it is an optional final-screen block instead (`references/visual-rendering-core.md` §4). When unsure which case you are in, include it.
+- **In deck mode**, page by toggling `hidden` over real `<section>`s that are all in the DOM (§D3) — never by swapping `innerHTML` from a template store. Show-all, browser find, print, and the feedback serializer each depend on it, and a store plus routing is the app this surface exists to avoid.
 
 Write the file to a **transient** path — gitignored `.context/` or `mktemp` — never the tracked tree.
 
@@ -149,8 +163,8 @@ Write the file to a **transient** path — gitignored `.context/` or `mktemp` �
 
 **Confirm the token core is canonical, not the reviewed app's aesthetic (forcing function).** Before presenting, verify the artifact's `:root`/`[data-theme]` block is the canonical `references/visual-recap-design.md` §1 set — canonical variable names and values — and **not** a palette, font stack, or chrome re-derived from the app under review. This is the deviation most likely to occur on a well-designed downstream app and the most harmful when it does: the neutral instrument adopts its subject's brand and loses run-to-run constancy. It is a checked step, not stated hope (core §6).
 
-The default CSS diagram primitive needs no render check — it has no parse grammar and no CDN.
-**Only if you took the Mermaid opt-in** for a complex graph, **confirm it renders without a
+The CSS diagram primitive needs no render check — it has no parse grammar and no CDN.
+**For every Mermaid figure**, **confirm it renders without a
 parse error before presenting it** (a quick load, or a re-check against the
 `references/visual-recap-design.md` §5 label-safety rules). The `<pre class="mermaid">` source
 fallback shows source text — the exact thing that fails to parse — so it does not stand in for
@@ -174,7 +188,7 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 
 - **Not a defect review.** It does not sweep the diff for bugs — `/pre-merge` does that and emits advisory findings. Recap renders comprehension.
 - **Not free-form diagramming.** It stays clean and structured; exploratory "diagrams that argue" are `/excalidraw-diagram`.
-- **Not a graph-layout engine.** Simple flow/sequence pictures use the CSS diagram primitive; complex graphs that need auto-layout come from `/mermaid`. The core owns callouts and diffs, not hand-positioned graph layout.
+- **Not a graph-layout engine.** Trivial spines use the CSS diagram primitive; multi-stage and behavioral graphs come from `/mermaid`. The core owns callouts and diffs, not hand-positioned graph layout.
 - **Not a renderer we ship.** The core is a vocabulary the agent hand-authors against — no package, no build, no server, no committed app. The canonical skeleton (`references/visual-recap-design.md`) is a *copyable reference the agent inlines*, the same status as the §4 serializer — **not** the runtime component library this bullet forbids: no package, no build step, no CDN runtime, nothing the artifact imports. If "self-contained HTML with CDN imports" starts growing state, routing, or an imported component library, pull it back.
 - **Not a mandatory stage, and not auto-invoked.** It is optional, gated by the skip-for-small-diffs rule. If a later PR sample shows it is rarely invoked or only fires on diffs `/pre-merge` already covers, fold it into `/pre-merge` as an optional phase (mirrors `/walk-commits`'s own self-deprecation clause).
 - **Not a committed artifact.** The HTML is transient — gitignored or `mktemp`, deleted after the round. Per SYSTEM-OVERVIEW §Philosophy.
@@ -182,6 +196,6 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 ## Handoff
 
 - **Expected input:** a finished change to comprehend — a branch range, a PR number, or a working diff — plus the base branch to diff against. No upstream artifact is required, though a linked PRD or slice issue helps frame intent.
-- **Produces:** a transient, self-contained interactive HTML recap (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series for one-cause-N-sites sweeps, CSS-first flow diagrams with Mermaid opt-in for complex graphs) and the reviewer's copied-back feedback, with durable items promoted to GitHub PR review comments. A comprehension surface and a decision, not a committed file.
+- **Produces:** a transient, self-contained interactive HTML artifact in the selected mode — a **scrolling recap** (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a **walkthrough deck** (premise → changes → mechanism → aftermath, one idea per screen, before/after panes inside the screen) — with diagrams as a CSS spine when trivial and Mermaid-via-CDN when multi-stage or behavioral. Plus the reviewer's feedback, copied back where the artifact is handed off, with durable items promoted to GitHub PR review comments. A comprehension surface and a decision, not a committed file.
 - **Reconnects at:** the `/pre-merge` → merge boundary. Run it before approving; proceed to merge once the change is understood, then `/compound` if a durable lesson emerged.
 - **What comes next:** the user merges (or pauses on unresolved items). `/visual-recap` does not invoke anything.

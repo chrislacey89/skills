@@ -180,6 +180,12 @@ jobs:
       # in use, which is the half a membership check alone would miss.
       - name: Run syntax-palette contract suite
         run: bash scripts/test-syntax-palette-contract.sh
+      # #307's drift class: an always-on surface contradicting the doc it points
+      # at. The `description:` frontmatter is in every downstream session's
+      # context window, and it announced a diagram default the canon no longer
+      # states. Five copies of one rule, none of them the canon.
+      - name: Run recap mode + diagram default contract suite
+        run: bash scripts/test-recap-mode-contract.sh
 
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
