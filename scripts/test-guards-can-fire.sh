@@ -100,6 +100,92 @@ detect_wrapped_anchor_match() {  # stdin: file text. stdout: offending lines.
 }
 
 # ---------------------------------------------------------------------------
+# Detector C — a `fatal`-calling helper invoked inside a command substitution.
+#
+# Third shape of the same class, and the one that arrived by the route this
+# suite exists to close: it was written INTO the fix for detector A's shape,
+# in the same session, by the author who had just diagnosed it (#305).
+#
+# `fatal` runs `exit`. Inside `$( … )` that exits only the subshell, so the
+# FATAL text reaches stderr, the assignment silently yields the empty string,
+# and the run continues to a summary line that says everything passed. Observed
+# exactly once, verbatim: `stragglers="$(scan_stragglers "$repo_root" | …)"`
+# printed its FATAL and still finished "27 passed, 0 failed", exit 0.
+#
+# It is a distinct shape from detector A, not a rewording of it: A keys on `)`
+# followed by `||` at the start of a line, which is absent here — the subshell
+# is `$( … )` on an assignment's right-hand side and there is no `||` at all.
+# A mechanism written against one instance's syntax stays silent on the next
+# (docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md),
+# which is why this is a third detector rather than a widened first one.
+#
+# The rule the fix follows: a helper that can abort the run returns a status and
+# sets a variable; the CALLER, in the main shell, calls fatal.
+#
+# WHAT IT DOES NOT CATCH. Only helpers defined in the same file, and only where
+# the call is textually inside `$( … )` on one line. An exiting helper reached
+# through a variable, a pipeline built across lines, or a function defined in a
+# sourced file all pass. This narrows the shape; it does not close the class.
+detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending lines.
+    local text; text="$(cat)"
+    local body; body="$(printf '%s' "$text" | strip_comments)"
+
+    # Helpers whose body reaches `exit` — either directly, or by calling fatal().
+    #
+    # The one-liner form is handled explicitly, not as an afterthought: most
+    # suites here define `fatal() { printf …; exit 2; }` on a single line, so an
+    # extractor that only walked multi-line bodies would skip the very helper
+    # this detector is named for. Its own self-test caught that on first run.
+    local exiters; exiters="$(printf '%s' "$body" | awk '
+        # Keyed on a `fatal` CALL, not on the bare word `exit`. This comment
+        # deliberately avoids apostrophes: it sits inside a single-quoted awk
+        # program, and one apostrophe here closes the shell string. That is not
+        # hypothetical either — it happened while writing this block.
+        #
+        # The narrowing is measured, not cautious. Nine helpers in this repo
+        # embed an awk program, and the awk `exit` statement is both correct and
+        # indistinguishable from a shell exit to a line-level regex. The first
+        # draft matched `exit` anywhere in a body and flagged all nine —
+        # theme_block, section_body, hero_count, paragraph_at and the rest —
+        # every one a false positive on an awk statement doing its job. A
+        # detector that reddens on correct code gets deleted, so it is worse
+        # than no detector.
+        #
+        # WHAT THAT GIVES UP, stated plainly: a helper that runs a bare shell
+        # `exit` without going through fatal() is not caught. That hole is real
+        # and accepted, because fatal() is the uniform convention across this
+        # suite family for aborting a run, while `exit` is a word two other
+        # languages in these same files also use.
+        function reaches(s) {
+            return (s ~ /(^|[^[:alnum:]_])fatal[[:space:]]*["$a-zA-Z]/)
+        }
+        /^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*\(\)[[:space:]]*\{/ {
+            name = $0; sub(/\(\).*/, "", name); gsub(/[[:space:]]/, "", name)
+            rest = $0; sub(/^[^{]*\{/, "", rest)
+            if (rest ~ /\}/) { if (reaches(rest)) hit[name] = 1; cur = ""; next }
+            cur = name; if (reaches(rest)) hit[cur] = 1
+            next
+        }
+        cur != "" && /^[[:space:]]*\}/ { cur = ""; next }
+        cur != "" && reaches($0) { hit[cur] = 1 }
+        END { for (n in hit) print n }
+    ')"
+    [ -n "$exiters" ] || { printf ''; return 0; }
+
+    # Any call to one of them textually inside $( … ).
+    local n
+    while IFS= read -r n; do
+        [ -n "$n" ] || continue
+        # The prefix group is OPTIONAL. `\$\(` consumes the `(`, so a call sitting
+        # immediately after it — `$(scan foo)`, the exact observed shape — has no
+        # boundary character left for a mandatory `[^[:alnum:]_]` to match. The
+        # first draft required one and silently matched nothing; its own
+        # self-test is what caught that.
+        printf '%s' "$body" | grep -nE '\$\(([^)]*[^[:alnum:]_])?'"$n"'([[:space:]]|\||\)|;)' || true
+    done <<< "$exiters"
+}
+
+# ---------------------------------------------------------------------------
 section "the scan covers a real file list"
 
 # Excludes ITSELF. The self-tests below hold both forbidden shapes as fixture
@@ -142,6 +228,20 @@ while IFS= read -r f; do
     fi
 done <<< "$suites"
 [ "$fail" -eq "$before_fail" ] && ok "every paragraph reader matches an unwrapped record"
+
+# ---------------------------------------------------------------------------
+section "no run-aborting helper is called inside a command substitution"
+
+before_fail_c="$fail"
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    hits="$(detect_exiting_helper_in_substitution < "$f")"
+    if [ -n "$hits" ]; then
+        bad "$f calls a fatal/exit helper inside \`\$( … )\`, where the exit kills only the subshell" \
+            "the FATAL prints, the assignment yields empty, and the run reports a pass; return a status and let the caller abort: $(printf '%s' "$hits" | tr '\n' ' ')"
+    fi
+done <<< "$suites"
+[ "$fail" -eq "$before_fail_c" ] && ok "every run-aborting helper can actually abort the run"
 
 # ---------------------------------------------------------------------------
 section "the detectors still detect (self-test)"
@@ -220,5 +320,31 @@ printf '%s\n' "$suites" | grep -qx -- "$self" \
 ok "this suite is excluded from its own scan, and the exclusion still matches"
 
 # ---------------------------------------------------------------------------
+
+# shellcheck disable=SC2016  # fixtures are literal shell source, not expansions
+bad_subst='#!/usr/bin/env bash
+fatal() { printf "FATAL: %s\\n" "$1" >&2; exit 2; }
+scan() { git grep -l -- "$1" || fatal "cannot read the tree"; }
+hits="$(scan foo | grep -v skip)"
+'
+# shellcheck disable=SC2016  # fixtures are literal shell source, not expansions
+good_subst='#!/usr/bin/env bash
+fatal() { printf "FATAL: %s\\n" "$1" >&2; exit 2; }
+scan() { out="$(git grep -l -- "$1")" || return 2; }
+scan foo || fatal "cannot read the tree"
+hits="$(printf "%s" "$out" | grep -v skip)"
+'
+
+if [ -n "$(printf '%s' "$bad_subst" | detect_exiting_helper_in_substitution)" ]; then
+    ok "detector C flags a fatal-calling helper invoked inside \$( … )"
+else
+    fatal "detector C no longer matches the shape it is named for — the regex rotted, and its section above now passes everything."
+fi
+if [ -z "$(printf '%s' "$good_subst" | detect_exiting_helper_in_substitution)" ]; then
+    ok "detector C leaves the status-returning form alone"
+else
+    fatal "detector C flags the CORRECTED form, so the fix it prescribes does not clear it."
+fi
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

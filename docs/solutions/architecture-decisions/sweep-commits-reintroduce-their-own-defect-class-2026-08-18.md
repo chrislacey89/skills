@@ -1,9 +1,9 @@
 ---
 date: 2026-08-18
-updated: 2026-08-26
+updated: 2026-08-28
 category: architecture-decisions
 problem_type: corrective commit re-introduces the defect class it was written to remove
-components: [pre-merge, execute, compound, tdd, docs, skill-references]
+components: [pre-merge, execute, compound, tdd, docs, skill-references, scripts]
 technologies: [markdown, bash, git]
 severity: medium
 volatility: stable
@@ -57,6 +57,30 @@ that contained it. Every census since normalizes whitespace first (`tr '\n' ' '`
 the same genre as this entry's original `rg -r` bug: the sweep's *instrument* is drawn from
 the same well as the sweep.
 
+## Third observation (2026-08-28, PR #309 / issue #305) — the medium was executable, not prose
+
+The first two observations were prose fixing prose. This one is **a contract test fixing a contract test**, which is why it is recorded here rather than filed separately: it is the same structure in a medium the Rule Scope did not yet cover, and it widens that scope (below).
+
+Issue #305 removed a CSS token, `--sx-t`, from a palette two skills copy verbatim. The palette had a defect: it measured that a token was *named*, never that it *covered the language being rendered* — so an agent hit a gap, invented a token, and repurposed another, which is the incident #305 exists for.
+
+| Round | Artifact | What its mechanism actually measured | What its label claimed |
+|---|---|---|---|
+| 1 | the palette itself | a token was *named* | a working vocabulary |
+| 2 | `test-syntax-palette-contract.sh`, written to pin round 1 | a token was *named and present* | *shown, distinct, counted* |
+| 3 | the checks written to fix round 2 | tokens it could *parse*; a claim it could *read* | all tokens, all claims |
+
+Round 2 shipped four assertions that could not fail, each confirmed by mutation: a straggler detector that stayed green with an unmatchable pattern **and** when run outside a git work tree (a trailing `|| true` turned a dead instrument into a clean bill of health); a "demonstration" assertion — the one the suite's own header called load-bearing — satisfied by prose that merely *named* a token rather than a span that colored something; a contract pinning the deleted token's *name* rather than the two properties that condemned it, so re-adding it under another name passed at 26/0; and a `$` matcher met by `costs US$5`.
+
+Round 3, written in the same session by the author who had just diagnosed round 2, shipped three more:
+
+- The first draft of the guard closing "the detector cannot fire" **put its `exit` inside `$( … )`**, where it kills only the subshell. The FATAL printed to stderr, the assignment yielded empty, the assertion compared that emptiness and passed, and the run reported **27 passed, 0 failed, exit 0**.
+- The fixture builder for that guard was written as `( cd … ) || fatal` — the unfireable-guard shape `scripts/test-guards-can-fire.sh` already existed to detect. **The repo's own mechanism caught it**, which is the first time in three observations that anything but a human or a fresh-context sub-agent did.
+- A token whose value was not `hsl()`/`hsla()` was silently dropped by the new color parser, exempting it from the distinctness floor entirely — five tokens measured where six were declared, with no line saying one had gone missing. Separately, the new AA-claim parser **died silently** on a sentence it could not read: section header, then nothing, no summary, exit 1, because `grep -oE` matching nothing returns 1 and `pipefail` inside `$( … )` trips `set -e`.
+
+And then the mechanism written for *this* observation did it once more. Detector C (below) shipped a first draft matching the word `exit` anywhere in a helper body — which flagged **nine** correct helpers whose `exit` was an awk statement inside an embedded awk program. A detector that reddens on correct code is worse than none, because the fix is to delete it. Its own self-test caught two further defects in it before it ran clean: an extractor blind to one-liner function definitions (and `fatal() { …; exit 2; }` is a one-liner in most suites here, so it would have missed every real case), and a call-site regex requiring a boundary character that `\$\(` had already consumed, so it silently matched nothing.
+
+**Four rounds, four fresh instances, in executable code rather than prose.** The count is the same as observation one; the medium is not.
+
 ## Symptoms
 
 - A commit message credibly says "swept every instance," and a later reviewer finds one it missed **in the file that references the ones it fixed**.
@@ -80,13 +104,14 @@ Not carelessness, and not insufficient rigor — each sweep enumerated deliberat
 ## Rule Scope
 
 - **Applies when** all three hold:
-  - The defect is **textual and multi-site** — the same claim, path, or count restated in several files, with no compiler or type system relating them.
-  - The sweep is **enumerated by search** rather than by a structural list, so its completeness is bounded by the query's shape.
-  - The correction is written in **the same medium** as the defect (prose fixing prose, a path fixing a path), so the author's just-falsified model is the one authoring the fix.
+  - The defect is **not caught by a compiler, type system, or schema** — so nothing mechanically relates the correction to the property it is supposed to establish. Observations 1 and 2 read this as *textual and multi-site* (the same claim restated across files); observation 3 widened it, because a contract test is a single site with no restatement and reproduced the structure anyway. The general condition is the absence of a checking relation, not the presence of duplicated text.
+  - The sweep is **enumerated by search** rather than by a structural list, so its completeness is bounded by the query's shape. In the executable case the query is the check's own matcher, and its blind spots are invisible in its output: a check reports on the population it could parse, never on the population it was pointed at.
+  - The correction is written in **the same medium** as the defect (prose fixing prose, a path fixing a path, a check fixing a check), so the author's just-falsified model is the one authoring the fix.
 - **Inverts or does not apply when:**
   - A compiler, type checker, or schema relates the sites. Renaming a symbol across a typed codebase is not this shape — the tool enumerates, and a miss fails the build rather than shipping.
   - The sweep is over a **generated or synced** surface. The ten `<skill>/references/` mirrors in this PR were never at risk; `sync-skill-references.sh --check` makes a partial sweep impossible by construction. **This is the exemption to engineer into, not merely to note.** PR #282 spent three corrections restating a rule across two skills that could both have taken a synced copy — the exemption was one manifest row away and was reached for only on the fourth attempt. Before sweeping a textual multi-site defect, ask first whether every consumer can accept a generated copy; if so, the sweep is the wrong move entirely.
   - The instances are genuinely independent — three unrelated typos are three events, and treating them as a class manufactures a pattern.
+  - **The generate-instead-of-restate exemption does not reach the executable case.** Observation 3's defects were in a single file with nothing to sync, so "let the manifest carry it" had no purchase. Where the corrective artifact is a check rather than a restatement, the only cure available is a detector for the specific shape *plus* a self-test proving that detector can fire — which is why observation 3's mechanism is a third detector in an existing suite rather than a new generated surface.
 - **Sibling docs:**
   - `by-construction-claims-need-a-mechanism-2026-08-11.md` — the adjacent shape and the prescribed cure. That entry says a cross-file agreement asserted in prose needs a test shipped *in the same change*. This entry is the empirical case for **why that timing clause is load-bearing**: the sweep that would have added the test late is the same sweep that adds the next instance.
   - `deletion-unit-is-function-not-syntax-2026-08-15.md` — the same completeness failure in the deletion direction, where the unit of removal was drawn too narrowly.
@@ -137,6 +162,10 @@ Mutation-testing found two holes in a 27-assertion suite written by an author wh
 
 **Process-level.** `/pre-merge` Dimension 1 now carries a *Restated claim in unchecked prose* detector, added in PR #282, which routes to `docs/restated-claims.md` rather than restating the remedy. Note the trigger's own history: as first written it fired only on sites *the diff leaves untouched*, and so could not fire on either commit in that branch that carried the defect — both wrote all their sites at once. A trigger drawn from the previous incident's shape misses the next one. Separately, `/pre-merge` Dimension 9 (Fix Completeness) already asks whether structural siblings were found; the gap is that it reads the diff as a *fix* and not as *new text that can carry the same defect*. The cheap addition is one question at the point of review: **does the corrective hunk itself satisfy the rule it enforces?** Reviewing a sweep is not the same job as reviewing a feature — the highest-yield place to look is the correction, not the code around it.
 
+**Code-level, third observation.** `scripts/test-guards-can-fire.sh` gains **detector C**: a helper that can abort the run (reaches `fatal`) called inside `$( … )`, where its `exit` kills only the subshell and the run continues to a passing summary. It is a third detector rather than a widened first one because detector A keys on `)` followed by `||` at line start — syntax entirely absent from this shape — which is the failure `mechanism-generality-lags-the-pattern-2026-08-23.md` names. Both self-tests are mandatory and both caught real defects in the detector before it shipped. Its narrowing is stated in the code and is the load-bearing part: it keys on a `fatal` call, **not** the word `exit`, because nine helpers here embed awk programs whose own `exit` is correct — and it says plainly what that gives up (a bare shell `exit` outside `fatal()` is not caught).
+
+**Process-level, third observation — the reviewable unit is the correction, not the branch.** Observation 2's Prevention already proposed the question *"does the corrective hunk itself satisfy the rule it enforces?"* Observation 3 is the case for making it unconditional after **every** corrective commit, not once per branch: three consecutive corrections each carried a fresh instance, and each was found only because something re-examined the correction specifically. Note what did the finding, in order: a fresh-context sub-agent (round 2), the repo's existing `test-guards-can-fire.sh` (round 3's fixture), and the new detector's own self-tests (round 3's detector). The trend is the point — mechanisms caught what review caught in observations 1 and 2, and they caught it at authoring time rather than one pass late. That is the delay this entry's feedback-loop note says review cannot remove.
+
 The loop-mode ledger is what made this visible at all. Four passes with durable rows showed *findings introduced by the previous fix* as a countable series (8 → 5 → 3 → 3); in a single advisory pass each would have read as an unrelated miss.
 
 ## Planning / Calibration Notes
@@ -179,8 +208,13 @@ Split the decision by consumer, not by count:
 - `scripts/test-bundled-pointer-resolution.sh` — the mechanism for the second observation: pins that every bundled-reference pointer resolves, that no file inside `references/` writes the `references/` prefix, and that a copy of an upstream file has a manifest row
 - `docs/solutions/architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md` — the rule this entry supplies evidence for
 - `docs/solutions/architecture-decisions/deletion-unit-is-function-not-syntax-2026-08-15.md` — the same completeness failure, deletion direction
+- PR #309, issue #305 — the third observation, and the first in executable rather than prose medium
+- `scripts/test-guards-can-fire.sh` detector C — the mechanism for the third observation: pins that a run-aborting helper is not called inside `$( … )`, where its exit cannot stop the run
+- `scripts/test-syntax-palette-contract.sh` — the artifact of rounds 2 and 3; its header records the palette defect, and its straggler self-test and token-coverage floor are the round-3 repairs
+- `docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md` — why detector C is a third detector and not a widened first one
+- `docs/solutions/testing-patterns/dead-guards-report-coverage-they-do-not-have-2026-08-27.md` — the nearest neighbor in `testing-patterns/`, and deliberately not the home for this: it names one artifact class (a guard that cannot fire), where the structure recorded here is that the *correction* reliably carries the defect, whatever the artifact
 - `docs/solutions/architecture-decisions/self-review-blind-to-composition-2026-08-13.md` — why a fresh context caught every instance
 
 ## Shelf Life
 
-Stable. Supersede if the repo adopts generation for cross-file restatements (which would make the enumeration structural rather than search-scoped), or if a later sample shows sweeps landing clean without a pinning test — this is one branch and one author, which is why Rule Scope calls it Pattern and not Structure. If two or three more branches show the same series, promote it: the claim would then be about how corrections are authored generally, not about this repo's prose surfaces.
+Stable, and now evidenced across three branches and two media (prose, executable checks) — the promotion condition below is met, so it is no longer pending. Supersede if the repo adopts generation for cross-file restatements (which would make the enumeration structural rather than search-scoped), or if a later sample shows sweeps landing clean without a pinning test — this is one branch and one author, which is why Rule Scope calls it Pattern and not Structure. The 2026-08-26 note asked for two or three more branches before the claim could be about how corrections are authored generally rather than about this repo's prose surfaces. Observation 3 supplies the third branch and, more usefully, the second medium: the structure held where there was no prose, no second site, and nothing to sync. Treat the claim as general. What would still falsify it: a branch whose corrective commits land clean under the same review intensity, or a mechanism class that reliably catches these at authoring time — detector C and the round-3 self-tests are the first evidence that the second is possible.
