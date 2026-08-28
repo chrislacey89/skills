@@ -34,7 +34,9 @@ shellcheck-version: local $local_v, CI gates on $pinned.
 
   A local pass does NOT mean the merge gate passes. Findings differ between
   releases in BOTH directions — 0.11.0 misses SC2317 cases that 0.9.0 reports.
-  Read the PR check, not this run, before reporting "shellcheck clean".
+  Run \`bash scripts/shellcheck-pinned.sh\` to lint with the gate's own binary
+  (pre-push does this automatically); do not report "shellcheck clean" from a
+  $local_v run. PR #299 shipped three commits on that exact claim.
 
   Update .shellcheck-version (and the workflow reads it) if the pin should move.
 MSG

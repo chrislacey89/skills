@@ -59,18 +59,42 @@ Without this step, you've done traditional engineering with AI assistance. The f
 
 ### Phase 1: Identify What to Capture
 
-On the in-PR default path the work under review is the open PR branch, so the commands below read it directly (`git log` and `git diff main...HEAD` against the still-unmerged branch). On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, `git diff main...HEAD` is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work. Look at:
+On the in-PR default path the work under review is the open PR branch, so the commands below read it directly — a `git log` and a `git diff` of the branch against the base it will merge into, while it is still unmerged. On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, that diff is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work.
+
+Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. `/pre-merge`, `/help`, `/walk-commits` and `/visual-recap` carry this same block for the same reason.
+
+```bash
+BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
+if [ -z "$BASE_BRANCH" ]; then
+  for candidate in main master prod develop trunk; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
+  done
+fi
+# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
+# $BASE_REF points at it, and is the only thing safe as a range endpoint.
+if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  BASE_REF="origin/$BASE_BRANCH"
+else
+  BASE_REF="$BASE_BRANCH"
+  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
+fi
+```
+
+**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+
+Look at:
 
 1. **Git log** — What commits were made? What changed?
    ```bash
-   git log --oneline -20
+   git log --oneline "$BASE_REF..HEAD"
    ```
+   Base-relative, not `-20`: a fixed count reads the base's own history as "the work under review" on any branch shorter than it. Two-dot here is correct — these are the commits on this branch and not on the base. (The `git diff` below is three-dot for the mirror reason: it diffs from the merge base rather than subtracting base-side work.) On the post-merge fallback path the branch is gone, so use `gh pr diff <n>` as above.
 
 2. **Issue thread** — What was the original problem? What was discussed?
 
 3. **The diff** — What files changed? What patterns emerged?
    ```bash
-   git diff main...HEAD --stat
+   git diff --stat "$BASE_REF...HEAD"
    ```
 
 Ask the user: "What was the most important thing you learned or the trickiest part of this feature?" Their answer often reveals the highest-value lesson to capture.
