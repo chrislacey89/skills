@@ -484,6 +484,34 @@ Stable ids per `visual-rendering-core.md` §4: callout cards and their markers s
 </section>
 ```
 
+**The typed note-pair.** A callout says what a line *does*. When the change also encodes a
+*rule* — the mechanism that broke, and the rule the fix now enforces — render the two as
+labeled halves beside each other instead of folding both into one sentence, so the reader
+can see which half is the diagnosis and which is the guarantee. Three labels, one token
+each: **`bad`** (`--del`) for the mechanism that failed, **`good`** (`--add`) for the rule
+the fix encodes, **`warn`** (`--risk`) for a caveat that survives the fix. Pure markup — no
+JavaScript and no new block; it nests inside the callout card above and inherits that
+callout's `data-feedback-id`, so the serializer needs no new id shape. Render one, two, or
+all three halves. A note-pair carrying only a `good` half is a callout — write it as one.
+
+```html
+<!-- nests inside the .vr-callout card above, under its note line -->
+<div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke — one sentence, in the reader's own words.</span>
+  </div>
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The rule this line now encodes — what it makes impossible, not what it adds.</span>
+  </div>
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--risk)">warn</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">What the fix does not cover — the caveat that outlives it.</span>
+  </div>
+</div>
+```
+
 A secret-masked value renders as an inert chip, never the value (per
 `visual-rendering-core.md` §2): `<span style="…">••• masked</span>`.
 
