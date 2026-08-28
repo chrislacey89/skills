@@ -382,13 +382,18 @@ fi
 section "the block count §3 restates is unchanged"
 
 # #305 rejected an eleventh block precisely because the count is restated across
-# five files. If a future change adds one, this fails and names the sweep.
+# five files. If a future change adds one, this fails and names the sweep —
+# which is exactly what happened: #304 added the per-unit series (§12), ran the
+# sweep across every enumeration surface, and updated this pin in the same
+# change. test-options-comparison-contract.sh separately derives the count from
+# §3's own table rows, so the two checks disagree loudly if a block lands
+# without its sweep.
 block_sentence="$(grep -o 'blocks cover the surface' "$core" || true)"
 [[ -n "$block_sentence" ]] || fatal "the '… blocks cover the surface' sentence is gone from $core — §3's opening moved; update this suite with it."
 
 count_word="$(grep -o '[A-Z][a-z]* blocks cover the surface' "$core" || true)"
 count_word="$(printf '%s' "$count_word" | head -1 | awk '{print $1}')"
-assert_eq "Ten" "$count_word" "§3 still opens 'Ten blocks cover the surface'"
+assert_eq "Eleven" "$count_word" "§3 still opens 'Eleven blocks cover the surface'"
 
 # -----------------------------------------------------------------------------
 #
@@ -467,10 +472,10 @@ dark_metrics="$(palette_metrics "$dark_block")"
 # six, with no line saying one had gone missing. A token that escapes the checks
 # is the same hole as a check that cannot fire, so a value shape this cannot read
 # stops the run rather than quietly narrowing the population.
-declared_n="$(printf '%s\n' "$all_tokens" | grep -c .)"
+declared_n="$(printf '%s\n' "$all_tokens" | { grep -c . || true; } )"
 for theme_name in light dark; do
     m="$light_metrics"; [[ "$theme_name" == dark ]] && m="$dark_metrics"
-    resolved_n="$(printf '%s\n' "$m" | grep -c .)"
+    resolved_n="$(printf '%s\n' "$m" | { grep -c . || true; } )"
     [[ "$resolved_n" -eq "$declared_n" ]] || fatal "the $theme_name theme declares $declared_n --sx-* token(s) but palette_metrics resolved $resolved_n. A token whose value is not hsl()/hsla() is skipped by every measurement below, so it would clear the distinctness floor and the AA check by being invisible to them. Teach palette_metrics that value shape, or write the token as hsl()."
 done
 
@@ -489,7 +494,7 @@ case "$vocab_word" in
     four) vocab_n=4 ;; five) vocab_n=5 ;; six) vocab_n=6 ;; seven) vocab_n=7 ;; eight) vocab_n=8 ;;
     *) fatal "unrecognized numeral '$vocab_word' in the vocabulary-size claim; add it to this case statement rather than leaving the claim unchecked." ;;
 esac
-actual_n="$(printf '%s\n' "$all_tokens" | grep -c .)"
+actual_n="$(printf '%s\n' "$all_tokens" | { grep -c . || true; } )"
 assert_eq "$vocab_n" "$actual_n" "§1 claims '$vocab_word' tokens and defines $actual_n"
 
 section "no two tokens are the same color (the other half of why --sx-t went)"

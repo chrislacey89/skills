@@ -99,19 +99,19 @@ Counters get a floor against a separately-derived population rather than an equa
 **Before:** `assert_eq "0" "$bad_ids"` — passes on an empty stream.
 **After:** `assert_eq "$unit_headers" "$unit_ids"` — cannot pass unless both are derived and agree.
 
-The suite went from 28 assertions to 49. Twelve mutations, one per named row.
+The suite roughly doubled — 28 assertions to 40 in the repair alone — and every mutation in the widened battery is caught by a named row.
 
 ## Prevention
 
-**Code-level:** `scripts/test-guards-can-fire.sh` gains **Detector C** — a `grep` feeding a counter (`wc`, or another `grep -c`) without `|| true`, or a bare `grep -c`, inside a command substitution in a suite running `set -o pipefail`. That is root cause 7 made mechanical, and it is narrow on purpose: counting is the operation whose *zero* result is meaningful, so those are exactly the greps that must survive matching nothing.
+**Code-level:** `scripts/test-guards-can-fire.sh` gains **Detector D** — a `grep` feeding a counter (`wc`, or another `grep -c`) without `|| true`, or a bare `grep -c`, inside a command substitution in a suite running `set -o pipefail`. That is root cause 7 made mechanical, and it is narrow on purpose: counting is the operation whose *zero* result is meaningful, so those are exactly the greps that must survive matching nothing.
 
-Its first version was narrower than that principle: it required `$(`, `grep`, `|`, and `wc` on one physical line, which caught **one** of the four counting sites in the file that motivated it and none elsewhere in the tree — the syntax of the instance standing in for the class, which is the failure [`mechanism-generality-lags-the-pattern`](mechanism-generality-lags-the-pattern-2026-08-23.md) names. Review caught it. It now joins continuation lines, allows intermediate pipeline stages, and covers bare `grep -c`; reverting the three fixes in `test-per-unit-series-contract.sh` names all three, and it found a live unguarded instance in `test-options-comparison-contract.sh` that the first version reported clean.
+Its first two versions were wrong in opposite directions, and both were caught by review rather than by its author. Version 1 required `$(`, `grep`, `|`, and `wc` on one physical line — the syntax of the instance standing in for the class, the failure [`mechanism-generality-lags-the-pattern`](mechanism-generality-lags-the-pattern-2026-08-23.md) names — and caught one counting site of three. Version 2 widened to any line holding a grep and a counter, which flagged a substitution in *argument* position, where `set -e` discards the status and the hazard does not exist; and its own guard piped into `grep -q` under `pipefail`, took SIGPIPE, and silently skipped the largest files — green on BSD grep's buffering, red 20/20 on GNU grep, which is what CI runs. The shipped version is anchored to *assignment* position (the hazard), joins continuation lines, covers bare `grep -c`, and tests its guard variable without a pipe. It names all three reverted instances in `test-per-unit-series-contract.sh`, found a live one in `test-options-comparison-contract.sh`, and on its first run against the rebased tree found three more in `test-syntax-palette-contract.sh` — a suite merged the same week by a different author.
 
-**What Detector C still does not catch,** stated so its coverage is not over-read: a counting command outside the `wc`/`grep -c` set, a non-`grep` command that exits non-zero in the same position, and a count assembled across two statements. Narrowed, not closed. It carries the suite's self-test convention — four hazardous fixtures that must be flagged, three safe ones that must not, and a no-`pipefail` near-miss.
+**What Detector D still does not catch,** stated so its coverage is not over-read: a counting command outside the `wc`/`grep -c` set, a non-`grep` command that exits non-zero in the same position, a count assembled across two statements, and a guarded pipeline whose *last* stage lost its `|| true` (the guard-exclusion sees `|| true` anywhere on the joined record). Narrowed, not closed. It carries the suite's self-test convention — four hazardous fixtures that must be flagged, three safe ones that must not, and a no-`pipefail` near-miss.
 
 **A second review round found the repair had reproduced the class one level up**, at four more sites: two stop-rule self-tests that *re-typed* their needle instead of calling the detector (so typo-ing the operative regex left them green while a planted router shipped); a "behavioral" toggle detector that a rename to `old`/`new` plus `display:none` walked through; a census loop that redirected from a tracked-but-deleted path and so aborted 40 lines before the guard written to report it; and the sibling suite `test-options-comparison-contract.sh`, which carried root cause 1 verbatim and a live unguarded `grep -c` — because the structural-sibling search of Q4/Dimension 9 was never run. That round is the strongest evidence for the recipe below: the author had *just written this entry* and still aimed the second battery the same way.
 
-Root causes 1–6 are **not** mechanized, and the reason is worth stating rather than leaving as an omission: each is a property of what an assertion *means*, and deciding whether a needle is "too generic to die with its sentence" requires reading the sentence. Detector C exists because root cause 7 is the one shape in the set that is decidable by grep. The rest are carried by the battery recipe above and by review.
+Root causes 1–6 are **not** mechanized, and the reason is worth stating rather than leaving as an omission: each is a property of what an assertion *means*, and deciding whether a needle is "too generic to die with its sentence" requires reading the sentence. Detector D exists because root cause 7 is the one shape in the set that is decidable by grep. The rest are carried by the battery recipe above and by review.
 
 **Process-level:** `/pre-merge`'s delegated review is what caught all five here, and it caught them because a sub-agent chose mutations the author had not. That is the argument for the delegation being unconditional rather than size-gated — the author's battery was not lazy, it was *systematically* aimed at one half, and only a different reader breaks that. When a PR's own diff contains a `scripts/test-*.sh`, the reviewer should run the delete-the-subject direction explicitly rather than reading the assertions.
 
@@ -124,16 +124,16 @@ Root causes 1–6 are **not** mechanized, and the reason is worth stating rather
 ## Actuals Worth Reusing
 
 - **Comparable future work:** any slice satisfying `CLAUDE.md` rule (b) by adding a `scripts/test-*.sh` over prose.
-- **Reusable baseline:** a suite pinning one doc section landed at 28 assertions; making *that same coverage* honest took it to 40 — **1.43×**, and those 12 really are floors, self-tests, and separated extracts. A further 9 arrived with the drift sweep (gate surfaces, chip mapping, routing) and are new subject coverage, not hardening. Budget the two separately: a planner who reads one 1.75× figure will over-budget the hardening by the cost of a sweep that is a different job. A second review round then added 4 more, so the suite as merged is 53.
+- **Reusable baseline:** a suite pinning one doc section landed at 28 assertions; making *that same coverage* honest took it to 40 — **1.43×**, and those 12 really are floors, self-tests, and separated extracts. Assertions added after that are drift-sweep and new-subject coverage, a different job — budget the two separately, and do not restate the running total in prose: this entry stated a terminal count twice and both went stale within a day, which is the restated-claim class it warns about. The suite prints its own count; cite the run, not a number.
 
 ## Defect Classification
 
 **Origin phase:** Design error — the battery's design, not its execution. Every mutation in it ran and reported correctly.
-**Fix type:** Correction for root cause 7 (Detector C removes the defect class mechanically) and for the six specific assertions. Mitigation for root causes 1–6 as a class: the battery recipe is a procedure, and a procedure is weaker than a check.
+**Fix type:** Correction for root cause 7 (Detector D removes the defect class mechanically) and for the six specific assertions. Mitigation for root causes 1–6 as a class: the battery recipe is a procedure, and a procedure is weaker than a check.
 
 ## Related
 
-- PR #306 / issue #304 — the branch this was found on; the suite is `scripts/test-per-unit-series-contract.sh` and the mechanism is Detector C in `scripts/test-guards-can-fire.sh`
+- PR #306 / issue #304 — the branch this was found on; the suite is `scripts/test-per-unit-series-contract.sh` and the mechanism is Detector D in `scripts/test-guards-can-fire.sh`
 - [`mutate-the-oracle-not-only-the-subject`](mutate-the-oracle-not-only-the-subject-2026-08-19.md) — same pattern, different axis; read both
 - [`dead-guards-report-coverage-they-do-not-have`](dead-guards-report-coverage-they-do-not-have-2026-08-27.md)
 - [`prose-contract-tests-are-restated-claims`](prose-contract-tests-are-restated-claims-2026-08-27.md)
@@ -141,4 +141,4 @@ Root causes 1–6 are **not** mechanized, and the reason is worth stating rather
 
 ## Shelf Life
 
-Evergreen — no expiration condition. The gravity it describes is a property of how humans and agents design mutations, not of any tool. Detector C expires only if these suites stop running under `set -o pipefail`.
+Evergreen — no expiration condition. The gravity it describes is a property of how humans and agents design mutations, not of any tool. Detector D expires only if these suites stop running under `set -o pipefail`.

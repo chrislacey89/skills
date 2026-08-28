@@ -327,20 +327,23 @@ live_md="$( { git ls-files '*.md' 2>/dev/null || true; } \
 # the id half now covers the pairs an author actually reaches for, and the hiding
 # half covers the three ways to hide a node in a self-contained file.
 #
-# `display:none` is flagged UNCONDITIONALLY. These docs are a rendering skeleton
-# in which hiding a node IS the anti-pattern; there are zero legitimate uses
-# today, and the near-miss self-tests below pin the constructs that look similar
-# (`aria-hidden` on a decorative glyph, `classList` toggling an active state).
+# `display:none` is flagged only when it sits on an element whose id names a
+# comparison side — round 3 tried it unconditional, and ordinary prose
+# ("Never hide a pane with display:none") plus a print stylesheet both went
+# red. In a repo whose product is English, an unanchored token is noise; the
+# near-miss self-tests below pin that prose sentence alongside the earlier
+# false positives (`aria-hidden` on a glyph, `classList` on an active state).
 #
 # WHAT THIS DOES NOT CATCH, stated so nobody over-trusts it: a side pair named
-# outside the list (`a`/`b`, `v1`/`v2`), hiding through a CSS class defined
-# elsewhere, `visibility:hidden`, `height:0`, or a `<details>` element. This
-# narrows the class; it does not close it — which is why the header above says
-# "detected by SHAPE" rather than "any handler that hides one comparison side".
+# outside the list (`a`/`b`, `v1`/`v2`), `display:none` on an element whose id
+# does not name a side, hiding through a CSS class defined elsewhere,
+# `visibility:hidden`, `height:0`, or a `<details>` element. This narrows the
+# class; it does not close it — which is why the header above says "detected by
+# SHAPE" rather than "any handler that hides one comparison side".
 # Braced on every use: bare `$SIDE[` reads as array indexing to shellcheck (SC1087).
 SIDE='(before|after|old|new|left|right|prev|next)'
 detect_hidden_side() {   # stdin: file text. stdout: offending lines.
-    grep -nE "id=\"ba-|toggle variant|display:none|getElementById\('[^']*${SIDE}|id=\"[^\"]*${SIDE}[^\"]*\"[^>]*[[:space:]](hidden|aria-hidden)|[[:space:]](hidden|aria-hidden)[^>]*id=\"[^\"]*${SIDE}|classList\.[a-z]+\('hidden'" || true
+    grep -nE "id=\"ba-|toggle variant|id=\"[^\"]*${SIDE}[^\"]*\"[^>]*(display:none|[[:space:]](hidden|aria-hidden))|(display:none|[[:space:]](hidden|aria-hidden))[^>]*id=\"[^\"]*${SIDE}|getElementById\('[^']*${SIDE}|classList\.[a-z]+\('hidden'" || true
 }
 
 toggle_hits=""
@@ -350,7 +353,7 @@ while IFS= read -r f; do
     # aborts the run right here — 40 lines before the writing-for-humans guard
     # below that exists to report exactly that, with an actionable message.
     # Third instance of the dead-guard shape in this file, and the one that
-    # arrives through a redirect rather than a pipeline, so Detector C in
+    # arrives through a redirect rather than a pipeline, so Detector D in
     # test-guards-can-fire.sh cannot see it either.
     [ -f "$f" ] || continue
     hits="$(detect_hidden_side < "$f")"
@@ -373,29 +376,64 @@ section "§12's chip strip uses the tokens its prose binds"
 # different colors and the strip stops being readable across recaps — the
 # Constancy of Design property the block leans on. The prose now states an
 # explicit mapping; this holds the example to it.
+# The expected tokens are PARSED from §12's own table, never re-typed here — a
+# re-typed heredoc was round 3's finding: flipping the doc's `fixed` row to
+# `--del` left this green, because the check compared the markup against this
+# file's copy of the mapping instead of against the mapping. Rows are
+# `| \`kind\` | \`--token\` |`; parse both columns.
+# shellcheck disable=SC2016  # literal backticks in a grep pattern, not a command substitution
+# Backticks are NOT escaped: GNU grep reads \` as a buffer-start anchor (a GNU
+# extension), so the escaped form matches zero rows in CI while matching all
+# five under BSD — the same toolchain divergence that made Detector D's guard
+# green locally and red 20/20 in CI.
+chip_rows="$( { grep -oE '^\| `[a-z]+` \| `--[a-z-]+`' "$span" || true; } \
+    | sed 's/^| `\([a-z]*\)` | `\(--[a-z-]*\)`/\1|\2/' )"
+chip_row_n="$(printf '%s\n' "$chip_rows" | { grep -c . || true; } )"
+assert_eq "5" "$chip_row_n" "§12's chip table carries five kind rows"
+
+# The rule §12 states — no two kinds share a token — checked by shape over the
+# parsed rows, so it survives a reword and reddens on any future collision.
+dup_tokens="$(printf '%s\n' "$chip_rows" | cut -d'|' -f2 | sort | uniq -d)"
+if [ -n "$dup_tokens" ]; then
+    bad "no two chip kinds share a token" "duplicated: $(printf '%s' "$dup_tokens" | tr '\n' ' ') — an exempt site and an open one would be indistinguishable at a glance"
+else
+    ok "no two chip kinds share a token"
+fi
+
+# Every chip the worked example RENDERS must use the token the parsed table
+# binds to its kind. Kinds the example does not render (missed, open,
+# mechanical today) cannot be held to anything until a unit uses one — stated
+# rather than left to read as full coverage.
 chip_violations=0
+rendered_chips=0
 while IFS='|' read -r kind token; do
     [ -n "$kind" ] || continue
-    if grep -qF "var($token)" "$markup" && grep -qE "var\($token\)[^>]*>$kind</span>" "$markup"; then
-        ok "the $kind chip uses $token"
-    else
-        chip_violations=$((chip_violations + 1))
-        bad "the $kind chip uses $token" "§12's prose binds $kind to $token; the worked example does not"
+    if grep -qE '>'"$kind"'</span>' "$markup"; then
+        rendered_chips=$((rendered_chips + 1))
+        if grep -qE 'var\('"$token"'\)[^>]*>'"$kind"'</span>' "$markup"; then
+            ok "the rendered $kind chip uses $token (parsed from the table)"
+        else
+            chip_violations=$((chip_violations + 1))
+            bad "the rendered $kind chip uses $token" "§12's table binds $kind to $token; the worked example disagrees"
+        fi
     fi
-done <<'CHIPS'
-fixed|--add
-exempt|--risk
-CHIPS
-# Only the kinds the worked example RENDERS can be held to the table. `missed`,
-# `open`, and `mechanical` are normative in §12's prose and unpinnable until a
-# unit using one is added — stated rather than left to read as full coverage.
-assert_found "\`open\` | \`--flag-moved\`" "$span" "§12's chip table carries the open kind"
+done <<EOF
+$chip_rows
+EOF
+[ "${rendered_chips:-0}" -ge 2 ] \
+    || bad "the worked example renders at least two chips from the table" \
+           "found ${rendered_chips:-0}; the per-chip loop above was a universal over an empty set"
+assert_eq "0" "$chip_violations" "every chip rendered in §12 matches the mapping its prose states"
+
 # The sub-population rule came out of §12's first real use: the gate reads as
 # "is this DIFF a sweep", and the case that actually occurred was a sweep inside
 # a diff that was not one. Deleting the paragraph left the suite green.
 assert_found "sub-population" "$span" "§12 states that the sweep may be a sub-population of the diff"
-assert_found "must not share a token"          "$span" "§12 states why exempt and open cannot share a token"
-assert_eq "0" "$chip_violations" "every chip rendered in §12 matches the mapping its prose states"
+assert_found "must not share a token" "$span" "§12 states why exempt and open cannot share a token"
+# §6's carve-out is the contradiction this branch was opened to fix: §12's
+# exempt unit renders a lone `good` half, which §6's general rule outlaws.
+# Deleting the exception paragraph went green in round 3.
+assert_found "The exception is a §12 \`exempt\` unit" "$outside" "§6 carves out the exempt unit's lone good half"
 
 # ---------------------------------------------------------------------------
 section "the prose bar is wired into both rendering skills"
@@ -443,8 +481,10 @@ fi
 
 # A toggle that renames the handler AND the ids still hides a comparison side
 # through the attribute form. This is the evasion the literal-name census missed.
+toggle_rows=0
 while IFS='|' read -r label fixture; do
     [ -n "$label" ] || continue
+    toggle_rows=$((toggle_rows + 1))
     if [ -n "$(printf '%s' "$fixture" | detect_hidden_side)" ]; then
         ok "the hide-one-side detector flags $label"
     else
@@ -456,11 +496,15 @@ old/new naming with display:none|<div id="cmp-thumb-new" style="display:none">ne
 a left/right pair hidden by attribute|<div id="pane-right" hidden></div>
 a DOM lookup of a comparison side|document.getElementById('prev-state').hidden = true
 TOGGLES
+[ "${toggle_rows:-0}" -ge 4 ] \
+    || fatal "the TOGGLES table ran only ${toggle_rows:-0} row(s) — an emptied body passes silently, and the evasions review demonstrated would go unpinned."
 
 # Four near-misses: the two false positives this detector produced while being
 # built, plus the two legitimate constructs the widening put at risk.
+legit_rows=0
 while IFS='|' read -r label fixture; do
     [ -n "$label" ] || continue
+    legit_rows=$((legit_rows + 1))
     if [ -z "$(printf '%s' "$fixture" | detect_hidden_side)" ]; then
         ok "the hide-one-side detector ignores $label"
     else
@@ -469,15 +513,21 @@ while IFS='|' read -r label fixture; do
 done <<'LEGIT'
 the serializer revealing its fallback textarea|ta.value = blob; ta.hidden = false; ta.select();
 English prose using hidden and after|Probe hidden functions for failures that only surface after rollout.
+prose naming display:none as the thing not to do|Never hide a pane with display:none.
+a print stylesheet hiding the rail|@media print{.rail{display:none}}
 aria-hidden on a decorative glyph|<span aria-hidden="true">lock</span>
 classList toggling the active state|el.classList.remove('is-active')
 LEGIT
+[ "${legit_rows:-0}" -ge 6 ] \
+    || fatal "the LEGIT table ran only ${legit_rows:-0} row(s) — an emptied body passes silently, and the recorded false positives could silently re-acquire."
 
 # Every fixture goes through detect_router — the SAME function the assertion
 # above calls. Typo the operative regex and every row here reddens, which is the
 # whole point and was not true of the version these replaced.
+router_rows=0
 while IFS='|' read -r label fixture; do
     [ -n "$label" ] || continue
+    router_rows=$((router_rows + 1))
     if [ -n "$(printf '%s' "$fixture" | detect_router)" ]; then
         ok "the router detector flags $label"
     else
@@ -488,11 +538,15 @@ a planted script tag|<section id="unit-x"><script>var a = 1</script></section>
 a planted stage swap|stage.innerHTML = units[i]
 a planted keyboard stepper|document.addEventListener('keydown', next)
 ROUTERS
+[ "${router_rows:-0}" -ge 3 ] \
+    || fatal "the ROUTERS table ran only ${router_rows:-0} row(s) — an emptied body passes silently, and the router detector would be certified by nothing."
 
 # Near-misses. §12's skeleton really does carry a comment forbidding the swap, so
 # a detector that fires on it makes the doc unable to state its own rule.
+nearmiss_rows=0
 while IFS='|' read -r label fixture; do
     [ -n "$label" ] || continue
+    nearmiss_rows=$((nearmiss_rows + 1))
     if [ -z "$(printf '%s' "$fixture" | detect_router)" ]; then
         ok "the router detector ignores $label"
     else
@@ -502,6 +556,8 @@ done <<'NEARMISS'
 the comment forbidding a stage swap|<!-- One real section per unit. No stage, no innerHTML swap. -->
 prose that merely names innerHTML|the rule forbids an innerHTML swap
 NEARMISS
+[ "${nearmiss_rows:-0}" -ge 2 ] \
+    || fatal "the NEARMISS table ran only ${nearmiss_rows:-0} row(s) — an emptied body passes silently, and the prose near-misses would go unpinned."
 
 # ---------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

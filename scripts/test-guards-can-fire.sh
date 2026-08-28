@@ -217,53 +217,56 @@ detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending
         # identical failure, and was a silent gap when only $( … ) was matched.
         printf '%s' "$body" | grep -nE '(\$\(([^)]*[^[:alnum:]_])?|`([^`]*[^[:alnum:]_])?)'"$n"'([[:space:]]|\||\)|;|`)' || true
     done <<< "$exiters"
-# Detector C — a counting pipeline that cannot survive a zero match.
+}
+
+# ---------------------------------------------------------------------------
+# Detector D — an ASSIGNMENT from a counting pipeline that cannot survive a zero match.
 #
 # These suites run under `set -o pipefail`, so a `grep` that legitimately finds
-# NOTHING returns 1 and aborts the whole script at that line — before the floor
-# or assertion on the next line can report the count. The guard names what it
-# protects and cannot fire, which is this suite's whole subject, arriving
-# through a pipeline instead of through a subshell.
+# NOTHING returns 1 — and when the substitution is the right-hand side of an
+# ASSIGNMENT, `set -e` aborts the script at that line, before the floor or
+# assertion on the next line can report the count. The guard names what it
+# protects and cannot fire: this suite's whole subject, arriving through a
+# pipeline instead of a subshell.
 #
-# The tell is narrow and unambiguous: a command substitution whose pipeline
-# sends `grep` into a counter (`wc -l`, `wc -c`). Counting is the operation
-# whose ZERO result is meaningful, so those are exactly the greps that must be
-# allowed to match nothing. A bare `grep` elsewhere may legitimately be required
-# to match, so it is not flagged.
+# The position matters and the first two versions of this detector got it
+# wrong in opposite directions. Version 1 required `$( grep | wc )` on one
+# physical line and missed every wrapped pipeline and every bare `grep -c`.
+# Version 2 widened to any line with a grep and a counter — and flagged
+# `assert_eq "$x" "$(grep -c . f)"`, which is ARGUMENT position, where `set -e`
+# discards the substitution's status and the hazard does not exist. Verified:
+#     f "$(printf %s "" | grep -c .)"   -> survives under set -euo pipefail
+#     n="$(printf %s "" | grep -c .)"   -> aborts
+# So the regex is anchored to assignment position, which is where the three
+# instances in #304's own contract test and the live one in
+# test-options-comparison-contract.sh all sat.
 #
-# Three instances shipped in #304's own contract test — the tracked-markdown
-# census, the unit count, and the id count — and none was caught by reading.
-# All three surfaced only by running the suite against a tree where the thing
-# being counted was absent, which is the mutation direction
-# docs/solutions/testing-patterns/
-# battery-that-only-perturbs-what-is-present-2026-08-28.md is about.
+# Version 2's GUARD was also this suite's own defect class: `printf | sed |
+# grep -q` under pipefail — `grep -q` exits on first match, `sed` takes
+# SIGPIPE, pipefail promotes 141, `|| return 0` swallows it, and the detector
+# silently skips the file. BSD grep's buffering hid it; GNU grep failed 20/20
+# in CI's toolchain. The guard now tests the variable it already holds — no
+# pipe, nothing to race.
 #
-# WIDENED after review. The first version required `$(`, `grep`, `|`, and `wc` on
-# ONE physical line, which is a syntactic reading of a semantic rule. It caught
-# one of the four counting sites in the file that motivated it and none of the
-# instances elsewhere in the tree. Three additions:
-#
-#   * bare `grep -c` with no pipe at all — the most common counting form, and the
-#     one the declared principle ("counting is the operation whose zero result is
-#     meaningful") most obviously covers. A live unguarded instance sat in
-#     test-options-comparison-contract.sh while the first version reported clean.
-#   * continuation lines are joined before matching, because the house style
-#     wraps long pipelines and the first version was blind to every wrapped one.
-#   * `grep` into any counter, not only `wc` — `sed`/`awk` may sit between.
-#
-# WHAT THIS STILL DOES NOT CATCH: a counting command this list does not name, a
-# zero-exit command other than grep in the same position, and a count assembled
-# across two statements. Narrowed, not closed.
+# WHAT THIS STILL DOES NOT CATCH: a counting command outside the `wc`/`grep -c`
+# set, a non-grep command that exits non-zero in the same position, a count
+# assembled across two statements, and a guarded-early pipeline whose LAST
+# stage lost its `|| true` (the `grep -v` sees the guard anywhere on the
+# joined record). Narrowed, not closed.
 detect_unguarded_count() {  # stdin: file text. stdout: offending lines.
     local text; text="$(cat)"
-    printf '%s' "$text" | strip_comments | grep -q 'set -[a-z]*o pipefail\|set -o pipefail' || return 0
+    # Test the variable, never a pipe into `grep -q` — see the header.
+    case "$text" in
+        *"set -o pipefail"*|*"set -eo pipefail"*|*"set -euo pipefail"*|*"set -exuo pipefail"*) ;;
+        *) return 0 ;;
+    esac
     # Join backslash-continuations so a wrapped pipeline is read as the one
-    # command it is. `=` keeps the original line number on the joined record.
+    # command it is; the first line's number is kept on the joined record.
     printf '%s' "$text" | strip_comments \
         | awk '{ if (buf != "") { line = buf $0; buf = "" } else { line = $0; ln = NR }
                  if (line ~ /\\$/) { sub(/\\$/, "", line); buf = line; next }
                  printf "%d:%s\n", ln, line }' \
-        | grep -E '\$\(|`' \
+        | grep -E '^[0-9]+:[[:space:]]*(local[[:space:]]+|readonly[[:space:]]+|export[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*=["'"'"']?[\$\`]' \
         | grep -E 'grep.*\|.*(wc|grep[[:space:]]+-[a-zA-Z]*c)|grep[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]' \
         | grep -v '|| true' || true
 }
@@ -413,18 +416,22 @@ fi
 # Each hazardous shape must be flagged; each safe one must not. The wrapped and
 # bare-`grep -c` rows are the two review found the first version blind to.
 # shellcheck disable=SC2016  # literal fixture text
+hazard_rows=0
 while IFS='~' read -r label fixture; do
     [ -n "$label" ] || continue
+    hazard_rows=$((hazard_rows + 1))
     if [ -n "$(printf 'set -euo pipefail\n%s\n' "$fixture" | detect_unguarded_count)" ]; then
-        ok "detector C flags $label"
+        ok "detector D flags $label"
     else
-        fatal "detector C no longer matches $label — its section above now passes everything."
+        fatal "detector D no longer matches $label — its section above now passes everything."
     fi
 done <<'HAZARD'
 a single-line counting grep~n="$(grep -oE "<x" "$f" | wc -l)"
 a bare grep -c with no pipe~n=$(grep -cF "<x" "$f")
 a grep piped through sed into wc~n="$(grep -E "<x" "$f" | sed s/a/b/ | wc -l)"
 HAZARD
+[ "${hazard_rows:-0}" -ge 3 ] \
+    || fatal "the HAZARD table ran only ${hazard_rows:-0} row(s) — an emptied body passes silently, and detector D would be certified by nothing."
 
 # Tested outside the table: `read -r` consumes one line, so a wrapped fixture
 # cannot be a table row — and the wrapped form is exactly what the first version
@@ -434,32 +441,37 @@ wrapped_count='set -euo pipefail
 n="$(grep -E "<x" "$f" \
     | grep -oE "y" | wc -l)"'
 if [ -n "$(printf '%s' "$wrapped_count" | detect_unguarded_count)" ]; then
-    ok "detector C flags a counting pipeline wrapped across lines"
+    ok "detector D flags a counting pipeline wrapped across lines"
 else
-    fatal "detector C no longer joins continuation lines — every wrapped pipeline in the tree is invisible to it, which is the gap review found."
+    fatal "detector D no longer joins continuation lines — every wrapped pipeline in the tree is invisible to it, which is the gap review found."
 fi
 
 # shellcheck disable=SC2016  # literal fixture text
+safe_rows=0
 while IFS='~' read -r label fixture; do
     [ -n "$label" ] || continue
+    safe_rows=$((safe_rows + 1))
     if [ -z "$(printf 'set -euo pipefail\n%s\n' "$fixture" | detect_unguarded_count)" ]; then
-        ok "detector C leaves $label alone"
+        ok "detector D leaves $label alone"
     else
-        fatal "detector C flags $label, so the fix it prescribes does not clear it."
+        fatal "detector D flags $label, so the fix it prescribes does not clear it."
     fi
 done <<'SAFE'
 the guarded single-line form~n="$( { grep -oE "<x" "$f" || true; } | wc -l)"
 the guarded bare form~n=$(grep -cF "<x" "$f" || true)
 a grep whose zero match is a real failure~grep -q "<x" "$f"
+a counting substitution in ARGUMENT position~assert_eq "$truth" "$(printf %s "$out" | grep -c .)"
 SAFE
+[ "${safe_rows:-0}" -ge 4 ] \
+    || fatal "the SAFE table ran only ${safe_rows:-0} row(s) — an emptied body passes silently, and the recorded false positive could silently re-acquire."
 
 # shellcheck disable=SC2016  # literal fixture text
 no_pipefail='set -eu
 n="$(grep -oE "<section" "$f" | wc -l)"'
 if [ -z "$(printf '%s' "$no_pipefail" | detect_unguarded_count)" ]; then
-    ok "detector C stays silent without pipefail, where the shape is harmless"
+    ok "detector D stays silent without pipefail, where the shape is harmless"
 else
-    fatal "detector C fires without pipefail, where a zero match does not abort — it is matching syntax, not the hazard."
+    fatal "detector D fires without pipefail, where a zero match does not abort — it is matching syntax, not the hazard."
 fi
 
 # The comment exclusion is load-bearing: this file's own header quotes both
@@ -471,8 +483,9 @@ commented='# ) || fatal "this is prose about the defect"
 BEGIN { RS = "" }'
 if [ -z "$(printf '%s' "$commented" | detect_subshell_guard)" ] \
    && [ -z "$(printf '%s' "$commented" | detect_wrapped_anchor_match)" ] \
+   && [ -z "$(printf '%s' "$commented" | detect_exiting_helper_in_substitution)" ] \
    && [ -z "$(printf '%s' "$commented" | detect_unguarded_count)" ]; then
-    ok "all three detectors ignore commented-out prose about the shapes"
+    ok "all four detectors ignore commented-out prose about the shapes"
 else
     fatal "a detector flags a comment — every suite that documents this defect class, including this one, would go red for explaining it."
 fi

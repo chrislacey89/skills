@@ -151,6 +151,13 @@ assert_found 'opt-<option-slug>' "$CORE" "core registers the opt- id shape"
 # docs/solutions/testing-patterns/battery-that-only-perturbs-what-is-present-2026-08-28.md,
 # which was fixed in the §12 suite and not carried across until review asked.
 opt_headers=$( { grep -cF 'data-feedback-kind="option"' "$DESIGN" || true; } )
+# The floor. Equality alone is root cause 1 with two counters: delete every
+# option unit and both sides agree at 0. §11's worked example renders four
+# options; below two, the example cannot demonstrate a comparison and every
+# per-option assertion below it is a universal over an empty set.
+[ "${opt_headers:-0}" -ge 2 ] \
+    || bad "§11's worked example renders at least two option units" \
+           "found ${opt_headers:-0}; the per-option assertions below are vacuous on an empty population"
 opt_ids=$( { grep -F 'data-feedback-kind="option"' "$DESIGN" || true; } \
     | { grep -coE 'data-feedback-id="opt-[^"]+"' || true; } )
 assert_eq "$opt_headers" "$opt_ids" "every option unit in §11 carries an opt- data-feedback-id"
@@ -181,7 +188,7 @@ assert_found 'data-feedback-note' "$CORE" "core's serializer reads a note field"
 # `|| true`: under `set -o pipefail` a zero match exits 1 and aborts the run here,
 # before the assertion below can report "0 option units". Same shape as the three
 # fixed in test-per-unit-series-contract.sh; pinned by test-guards-can-fire.sh
-# Detector C, which found this one.
+# Detector D, which found this one.
 option_units=$( { grep -cF 'data-feedback-kind="option"' "$DESIGN" || true; } )
 
 # Walks div depth from the unit's opening tag and counts a note only if it appears
