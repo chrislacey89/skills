@@ -26,7 +26,12 @@ blue-ink canvas, a single electric-violet accent, monospace-forward dense layout
 (when schema/API surfaces changed) → diagram → wireframes (when rendered UI changed) →
 annotated changes → before/after → review. Every semantic color is tuned for WCAG AA
 contrast against its surface in **both** themes — light is the `:root` default, dark flips
-on `[data-theme="dark"]`.
+on `[data-theme="dark"]` — with **one documented exception.** Three syntax tokens sit below
+the 4.5:1 body-text bar: `--sx-s`, `--sx-n`, and `--sx-c` in light, and `--sx-c` again in
+dark. They stay legible against every surface, but do not claim AA for them and do not put
+anything a reviewer must not miss in one. That exception list is exact and pinned by a
+contract test, so recoloring a token means editing this sentence — not quietly widening the
+claim back to "every."
 
 ---
 
