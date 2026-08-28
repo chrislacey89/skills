@@ -27,17 +27,15 @@
 # positive that must hit and a near-miss that must stay silent — because a
 # detector whose healthy state is zero hits needs a self-test, not a floor
 # (docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md
-# § Prevention). Detector 2 does not, and that gap is real: it is also the one
-# detector with a demonstrated false negative (below). It carries only a
-# `gate_count >= 2` floor, which is the substitute that rule names as
-# insufficient.
+# § Prevention). Detector 2 does not; it carries only a `gate_count >= 2`
+# floor, which is the substitute that rule names as insufficient.
 #
 # WHAT IS MECHANIZED AND WHAT IS HELD BY REVIEW. #293 §3 enumerated five
 # restated operatives in pre-merge/SKILL.md; §5 added by-number references;
 # the issue's comment thread added an undefined severity tier. This suite does
 # not cover all of them, and reading a green run as though it did is the
 # failure this header exists to prevent
-# (docs/solutions/architecture-decisions/prose-contract-tests-are-restated-claims-2026-08-27.md).
+# (docs/solutions/testing-patterns/prose-contract-tests-are-restated-claims-2026-08-27.md).
 #
 #   MECHANIZED
 #     - by-number dimension references, across the scanned population
@@ -53,7 +51,8 @@
 #       the fingerprint and passes green. Verified.
 #     - the review-size ladder (Detector 3): three or more distinct band
 #       thresholds in one file, or the Observation bound anywhere outside
-#       the canon. A TWO-threshold copy passes green. Verified.
+#       the canon. A copy carrying fewer thresholds and not the Observation
+#       bound passes green. Verified.
 #
 #   NOT MECHANIZED — held by review, and by nothing else
 #     - a dimension's verification procedure (#293 §3, docs/solutions/
@@ -63,10 +62,10 @@
 #     Both were restored verbatim-minus-the-numbers during review and the
 #     suite stayed green.
 #
-# So: two of #293 §3's five items are partially covered, two are not covered
-# at all, and the fifth (Boundary Map Contracts' gate) shares Detector 2's
-# verbatim limit. Widen this suite against a real miss rather than on
-# speculation — but do not read it as closing the class.
+# So: three of #293 §3's five items are covered only against verbatim or
+# near-complete copies, and two are not covered at all. Widen this suite
+# against a real miss rather than on speculation — but do not read it as
+# closing the class.
 #
 # WHAT IT DOES NOT HOLD, deliberately: whether SKILL.md's prose *instructs* a
 # reader correctly. That property's only competent oracle is a reader, and the
@@ -334,10 +333,10 @@ while IFS= read -r f; do
 "
 done < "$population_file"
 
-assert_eq "" "$numeric_hits" "no '[Dd]imensions?|Dim <N>' match in the $pop_count scanned files (misses 'Dim. 4', lowercase 'dim 8', spelled ordinals)"
-assert_eq "" "$gate_hits" "no VERBATIM 60-character gate prefix outside the canon ($gate_count gates extracted; a reworded gate is NOT reached)"
-assert_eq "" "$band_hits" "no file outside the canon carries 3+ of the $band_count band thresholds, nor the Observation bound $observation_bound (a TWO-threshold copy is NOT reached)"
-assert_eq "" "$label_hits" "every severity label on a '- **Name (Label):**' bullet is a tier the canon defines (that bullet shape only; inline classifications are NOT reached)"
+assert_eq "" "$numeric_hits" "no '[Dd]imensions?|Dim <N>' match in the $pop_count scanned files"
+assert_eq "" "$gate_hits" "no verbatim copy of a gate's first 60 characters outside the canon ($gate_count gates extracted)"
+assert_eq "" "$band_hits" "no file outside the canon carries 3+ of the $band_count band thresholds, nor the Observation bound $observation_bound"
+assert_eq "" "$label_hits" "every '- **Name (Label):**'-shaped severity label found is a tier the canon defines"
 
 printf '\n%d passed, %d failed  (bash %s)\n' "$pass" "$fail" "${BASH_VERSION%%(*}"
 [ "$fail" -eq 0 ]
