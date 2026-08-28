@@ -1059,8 +1059,10 @@ reviewer will actually do:
 - **Show-all is one keystroke.** `A` unhides every screen into one scrolling column — the deck
   collapses into the scroll. The reviewer who wants simultaneity is never trapped in sequence,
   which is the honest answer to Rule 1's residual.
-- **Browser find works.** `⌘F` searches the whole change, not the current screen. With an
-  `innerHTML` router, eight-ninths of the artifact is not in the DOM to find.
+- **Browser find can reach the whole change.** A `hidden` screen is `display:none`, which most
+  browsers' find skips — so `A` first, then `⌘F`, and the search covers everything. That is a
+  keystroke; with an `innerHTML` router eight-ninths of the artifact is not in the document at
+  all, and no keystroke recovers it.
 - **Print and PDF work**, because `@media print` can unhide everything.
 - **The §4 serializer sees every unit.** `querySelectorAll('[data-feedback-id]')` returns
   elements on hidden screens too, so feedback written on screen 2 still serializes from screen 9.
@@ -1095,7 +1097,7 @@ reviewer will actually do:
   @media print{.dk aside,.topbar{display:none} .screen[hidden]{display:block}}
 </style>
 
-<div class="dk" id="dk">
+<div class="dk" id="dk" data-theme="dark" style="min-height:100vh;background:var(--bg);color:var(--fg);font-family:var(--sans)">
   <aside>
     <div class="brand"><span class="mk">297</span><span class="tx">Change-by-change</span></div>
     <div class="brand-sub">PR #297 · closes #293 · 8 commits</div>
