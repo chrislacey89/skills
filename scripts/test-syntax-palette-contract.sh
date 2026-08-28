@@ -152,8 +152,22 @@ done
 # Repo-wide, not just the canonical file: --sx-t lived in three tracked files
 # (canonical + two bundled copies), so a canonical-only check would miss a
 # bundled copy that failed to sync.
-stragglers="$(git grep -l -- '--sx-t' -- '*' || true)"
-assert_eq "" "$stragglers" "no tracked file anywhere still mentions --sx-t"
+#
+# The matcher is deliberately NOT the bare name. Prose that *names* the deleted
+# token is what you want — this suite's own header explains why it went, and
+# CHANGELOG.md records it. A bare-name check reddens on its own documentation,
+# which trains the reader to stop writing the documentation. So it matches the
+# two shapes that would resurrect the token: a definition (`--sx-t:`) and an
+# application (`var(--sx-t)`). The label below states that reach rather than
+# claiming the broader property, per docs/restated-claims.md.
+#
+# This suite is excluded from its own scan: the comment above quotes both
+# matcher shapes to explain them, which is documentation, not a resurrection.
+# scripts/test-guards-can-fire.sh excludes itself for the same reason. The
+# exclusion is exactly one path, so it cannot quietly widen.
+self="scripts/test-syntax-palette-contract.sh"
+stragglers="$(git grep -lE -- '--sx-t:|var\(--sx-t\)' -- '*' | grep -v -x -- "$self" || true)"
+assert_eq "" "$stragglers" "no tracked file defines '--sx-t:' or applies 'var(--sx-t)' (prose naming the deleted token is fine)"
 
 # -----------------------------------------------------------------------------
 
