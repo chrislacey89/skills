@@ -66,7 +66,7 @@ The corpus is the second model, and it is free. It is sitting in the repository 
   - the **same session** authors both the check and the mutations that validate it; and
   - the corpus **already exists** and contains real instances of the input class.
 - **Inverts or does not apply when:**
-  - **The corpus is empty.** For a check written before any instance exists — a guard against a shape the repo has never had — there is nothing to draw from, and a composed fixture is the only option. Declare it synthetic in the test's comment; that is the honest form, not a defect.
+  - **The corpus is empty.** For a check written before any instance exists — a guard against a shape the repo has never had — there is no instance of the input class to perturb. Take the nearest real line the corpus does hold and adapt it; only compose from scratch when even that is unavailable. Either way, declare in the test's comment that the fixture is synthetic — that is the honest form, not a defect. (`/execute` Step 4 states the same fallback in the same order.)
   - **The check asserts one known value.** `assert_eq 4 "$(add 2 2)"` has no input class to be blind to, and `/tdd`'s red-bar rule already covers it.
   - **The mutation targets the fixture's oracle rather than the subject.** That is `mutate-the-oracle-not-only-the-subject`'s territory, and drawing from the corpus does not help there.
   - **A second, intent-blind reader writes the battery.** The active ingredient is the single model, not the authoring per se — the same person writing the battery a week later, having forgotten the drafts, is a weaker but real second model.
@@ -90,7 +90,7 @@ git symbolic-ref refs/remotes/origin/HEAD --short   # e.g. origin/main → main
 
 Clean, minimal, and unlike any prose in the repository. It goes red against a detector that is blind to the real shape.
 
-**After** — the fixture taken from the corpus, then perturbed. The realistic line is straddled by two spans, which is what actual paragraphs here look like:
+**After** — a fixture that a second model produced. Be precise about which escape this is: the line below was *composed by the review sub-agent*, which the Rule Scope files under the **inversion** clause ("a second, intent-blind reader writes the battery"), not under the rule this entry teaches. It is the weaker escape, and it is what actually happened. Drawing the line from the corpus is the stronger form and costs less — `sed -n '61p' execute/SKILL.md` would have produced a real straddled citation with a property the literal below does not have: it breaks when the corpus shape moves.
 
 ```bash
 # shellcheck disable=SC2016  # fixtures are literal markdown, not expansions
@@ -120,7 +120,7 @@ The file's own extractor documents this exact pipefail defect twenty lines above
 
 ## Prevention
 
-**Code-level.** Both detectors in the new census now carry a self-test — a fixture they MUST flag and a corrected fixture they MUST NOT — in the shape `scripts/test-guards-can-fire.sh` uses, and the flag-fixture is the corpus-drawn straddled line above. Blinding either detector, or making one reject its own corrected form, now aborts the run. This is `mechanism-generality-lags-the-pattern` Prevention #2 applied: *a detector whose healthy state is zero hits needs a self-test, not a floor.*
+**Code-level.** Both detectors in the new census now carry a self-test — a fixture they MUST flag and a corrected fixture they MUST NOT — in the shape `scripts/test-guards-can-fire.sh` uses. The flag-fixture is the straddled line above — composed by the review sub-agent, not drawn from the corpus, which is the inversion clause rather than the rule; extracting it at runtime from `execute/SKILL.md` would be the stronger form. Blinding either detector, or making one reject its own corrected form, now aborts the run. This is `mechanism-generality-lags-the-pattern` Prevention #2 applied: *a detector whose healthy state is zero hits needs a self-test, not a floor.*
 
 Also from the same pass, and the same idea one level up: a floor over a whole population is not a floor over any site in it. The census's `-ge 6` let a seventh claim planted anywhere mask the deletion of the one site the section exists for. It is now per-site over a derived list.
 
