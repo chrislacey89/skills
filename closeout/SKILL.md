@@ -81,7 +81,7 @@ gh pr view --json number,title,url,state,mergeable,mergeStateStatus,reviewDecisi
 Determine the base branch the PR targets — the repo's declared default, not an assumption:
 
 ```bash
-git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null   # e.g. origin/main → main; origin/prod → prod
+git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@'   # e.g. origin/main → main; origin/prod → prod
 ```
 
 This site wants the base branch **name**, not a ref — it feeds `git switch <base-branch>` at Step 4, and `git switch` rejects a remote-tracking ref outright (`fatal: a branch is expected, got remote branch 'origin/prod'`) — it wants the local base branch you are about to pull. It deliberately does *not* grow the `$BASE_REF` guard that `/pre-merge`, `/help`, `/walk-commits`, and `/visual-recap` carry; that guard exists only because those four use the base as a **range endpoint**, which this skill never does. Do not "fix" this to match them.

@@ -15,11 +15,12 @@
 # repository. A block that stops being a valid invocation fails this suite.
 #
 # Covered today: /triage-issue Step 2's regression-bisect block (all three of
-# its lines) and its "prior incident patterns" fix-commit grep (#236), and the
+# its lines) and its "prior incident patterns" fix-commit grep (#236), the
 # base-branch detection block that /pre-merge, /help, /walk-commits and
-# /visual-recap each carry (#298). Extend the suite when a skill documents
-# another runnable command; do not maintain a list of the commands in prose,
-# since that list is itself the thing that drifts.
+# /visual-recap each carry (#298), and every documented base-branch *name*
+# claim, including /closeout's bare one-liner (#310). Extend the suite when a
+# skill documents another runnable command; do not maintain a list of the
+# commands in prose, since that list is itself the thing that drifts.
 #
 # Highest-value next extension: /closeout, which documents 13 runnable git
 # invocations including `git worktree remove`, `git branch -d`, and
@@ -62,6 +63,30 @@
 #      `git diff`/`git log` range in every skill, and asserts it accounts for
 #      every `..HEAD` in those files so a range in an unparseable shape fails
 #      loudly instead of dropping out of the count.
+#   7. Generalize a census lesson to the claim's SHAPE, not just its instance.
+#      Lesson 6 was applied to *range* claims and stopped there. /closeout
+#      makes a base-branch **name** claim: it wants the name for `git switch`,
+#      so it documents no range and carries no `BASE_BRANCH=` assignment, and
+#      it therefore fell in no block of either population. Its line emitted
+#      `origin/prod` where its own inline comment claimed `prod` — wrong on
+#      every healthy repo, for as long as the line existed, and never executed
+#      by anything (#310). Two sub-lessons came out of building the fix:
+#        (a) Derive the population from the LOOSEST signal, then fail loudly on
+#            members the runner cannot execute. Deriving it from `git
+#            symbolic-ref` would rebuild the same trap one level up: a claim
+#            written as `git rev-parse --abbrev-ref origin/HEAD` (same wrong
+#            output, same defect) would simply not be in the population, and
+#            its absence would read as coverage.
+#        (b) An "accounting" assertion is only non-vacuous when two DIFFERENT
+#            patterns can disagree. The first draft here compared a partition
+#            against a raw count of the same literal — total by construction,
+#            and so a tautology wearing a non-vacuity label. Deleted rather
+#            than kept as reassurance.
+#        (c) The prose half of a partition needs a real discriminator too. The
+#            first draft asked whether an unfenced line still said something
+#            once its inline-code spans were removed — but a bare recipe has no
+#            code spans, so every bare recipe was waved through as prose. It
+#            now requires the signal to sit INSIDE an inline-code span.
 #
 # WHAT THIS SUITE DOES NOT HOLD, said plainly so a green run is not misread:
 # the cross-site equality checks (fallback candidate list, **Residual:**
@@ -1008,6 +1033,114 @@ done <<< "$range_hits"
 
 assert_eq 0 "$bad_endpoint" "every documented range endpoint is a ref, not a branch name"
 assert_eq 0 "$bad_operator" "every documented range uses the operator its verb requires"
+
+# -----------------------------------------------------------------------------
+
+section "every documented base-branch NAME claim produces the name it claims"
+
+# The census above enumerates by what a *range* claim does. It still cannot see
+# a **name** claim. /closeout wants the base branch's name — it feeds `git
+# switch` — so it documents no range and carries no `BASE_BRANCH=` assignment,
+# and it therefore fell in no block of either population: the extraction census
+# keyed on the assignment's wording, the range census on `..HEAD`. Nothing ran
+# its line. It emitted `origin/prod` where its own inline comment claimed
+# `prod`, on every healthy repo, for as long as the line has existed (#310).
+# Header lesson 6 was learned for range claims and never generalized; this
+# section is the generalization, and it is why lesson 7 exists.
+#
+# The population is derived from the LOOSE signal `origin/HEAD` — anything that
+# could be a base-branch name claim — not from the one command shape the runner
+# happens to know. Deriving it from `git symbolic-ref` would rebuild the same
+# trap one level up: a site that made the claim with `git rev-parse
+# --abbrev-ref origin/HEAD` (which also emits `origin/prod`, the same defect)
+# would not be in the population, and its absence would look like coverage.
+# Population membership is therefore total by construction, and there is
+# deliberately no "does the pattern account for everything" assertion here —
+# with one pattern building the population there is nothing for a second
+# pattern to disagree with, and such an assertion would be a tautology wearing
+# a non-vacuity label.
+name_signal='origin/HEAD'
+# The one shape the runner below knows how to execute. A fenced claim that does
+# NOT match this fails loudly rather than being skipped: extending the runner is
+# a deliberate act, and a silent skip is what this whole section exists to end.
+name_invocation='git symbolic-ref'
+
+# Partition every line carrying the signal into `fenced` (runnable, an agent
+# copies it) and `prose` (a citation of the mechanism inside a sentence).
+classify_name_claims() {
+    awk -v label="$2" -v signal="$3" '
+        /^[[:space:]]*```/ { infence = !infence; next }
+        index($0, signal) {
+            printf "%s\t%s\t%d\t%s\n", (infence ? "fenced" : "prose"), label, FNR, $0
+        }
+    ' "$1"
+}
+
+name_claims=""
+# shellcheck disable=SC2086
+for name_file in $scan_files; do
+    name_claims="$name_claims$(classify_name_claims "$repo_root/$name_file" "${name_file#./}" "$name_signal")"$'\n'
+done
+
+fenced_claims="$(printf '%s\n' "$name_claims" | grep -c "^fenced$(printf '\t')" || true)"
+
+# Derived floor, same reasoning as the detection-block floor above: a derivation
+# that returns nothing passes every loop below without running one. Six is what
+# the repo carries today — the five skills with the detection block, plus
+# /closeout's bare line. A new copier raises it; a drop below it means either
+# the partition broke or a site was quietly removed from the population.
+if [[ "$fenced_claims" -ge 6 ]]; then
+    printf '  ok   derived %s runnable base-branch name claims to execute\n' "$fenced_claims"
+    pass=$((pass + 1))
+else
+    printf '  FAIL derived only %s runnable base-branch name claims; the checks below are running on almost nothing\n' "$fenced_claims"
+    fail=$((fail + 1))
+fi
+
+# Run each one in the clone fixture, which has refs/remotes/origin/HEAD set and
+# a base branch named `prod`. Harvest the name the line produced whichever way
+# it produced it — printed to stdout, or left in $BASE_BRANCH — because *how*
+# the claim delivers the name is the wording this census refuses to key on.
+name_out="$base_sandbox/name-claim.out"
+while IFS="$(printf '\t')" read -r kind site lineno line; do
+    [[ "$kind" == "fenced" ]] || continue
+    if [[ "$line" != *"$name_invocation"* ]]; then
+        printf '  FAIL %s:%s makes a base-branch name claim in a shape this census cannot run (%q); teach the runner rather than letting it drop out\n' \
+            "$site" "$lineno" "$name_invocation"
+        fail=$((fail + 1))
+        continue
+    fi
+    resolved="$(
+        cd "$work" || exit 1
+        set +e
+        eval "$line" > "$name_out" 2>/dev/null
+        printed="$(cat "$name_out")"
+        printf '%s' "${printed:-${BASE_BRANCH:-}}"
+    )"
+    assert_eq prod "$resolved" "$site:$lineno produces the base branch NAME (not a remote-tracking ref)"
+done <<< "$name_claims"
+
+# The other half of the partition, and it needs a real discriminator or the
+# population has a back door: an unfenced line is only *prose* if it cites the
+# mechanism inside an inline-code span. A bare invocation sitting outside a
+# fence is a recipe an agent will copy, and it must be fenced — which puts it
+# in the population above and gets it RUN — not left as unrun text.
+#
+# The first draft asked whether the line still said something once its code
+# spans were removed. A bare command has no code spans, so nothing was removed
+# and every bare recipe was waved through as prose. Found by mutation (moving
+# /closeout's line out of its fence); it went green here and was caught only by
+# the count floor, which a *new* unfenced site would not have moved.
+while IFS="$(printf '\t')" read -r kind site lineno line; do
+    [[ "$kind" == "prose" ]] || continue
+    if printf '%s' "$line" | grep -q "\`[^\`]*${name_signal}[^\`]*\`"; then
+        printf '  ok   %s:%s cites the command inside a sentence, not as a runnable recipe\n' "$site" "$lineno"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s:%s documents a base-branch name command outside any fence and outside inline code; fence it so the census runs it\n' "$site" "$lineno"
+        fail=$((fail + 1))
+    fi
+done <<< "$name_claims"
 
 # /closeout resolves the same base branch and must NOT grow a BASE_REF: it feeds
 # the name to `git switch`, which rejects a remote-tracking ref outright. The
