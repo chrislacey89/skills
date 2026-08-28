@@ -103,7 +103,13 @@ The suite went from 28 assertions to 49. Twelve mutations, one per named row.
 
 ## Prevention
 
-**Code-level:** `scripts/test-guards-can-fire.sh` gains **Detector C** — a command substitution whose pipeline sends `grep` into a counter (`wc -l`/`wc -c`) without `|| true`, in a suite running `set -o pipefail`. That is root cause 7 made mechanical, and it is narrow on purpose: counting is the operation whose *zero* result is meaningful, so those are exactly the greps that must survive matching nothing. Verified against the real instances — reverting the three fixes in `test-per-unit-series-contract.sh` turns the row red and names both lines. It carries the suite's three-fixture self-test convention (plant, corrected form, and a no-`pipefail` near-miss that must stay silent).
+**Code-level:** `scripts/test-guards-can-fire.sh` gains **Detector C** — a `grep` feeding a counter (`wc`, or another `grep -c`) without `|| true`, or a bare `grep -c`, inside a command substitution in a suite running `set -o pipefail`. That is root cause 7 made mechanical, and it is narrow on purpose: counting is the operation whose *zero* result is meaningful, so those are exactly the greps that must survive matching nothing.
+
+Its first version was narrower than that principle: it required `$(`, `grep`, `|`, and `wc` on one physical line, which caught **one** of the four counting sites in the file that motivated it and none elsewhere in the tree — the syntax of the instance standing in for the class, which is the failure [`mechanism-generality-lags-the-pattern`](mechanism-generality-lags-the-pattern-2026-08-23.md) names. Review caught it. It now joins continuation lines, allows intermediate pipeline stages, and covers bare `grep -c`; reverting the three fixes in `test-per-unit-series-contract.sh` names all three, and it found a live unguarded instance in `test-options-comparison-contract.sh` that the first version reported clean.
+
+**What Detector C still does not catch,** stated so its coverage is not over-read: a counting command outside the `wc`/`grep -c` set, a non-`grep` command that exits non-zero in the same position, and a count assembled across two statements. Narrowed, not closed. It carries the suite's self-test convention — four hazardous fixtures that must be flagged, three safe ones that must not, and a no-`pipefail` near-miss.
+
+**A second review round found the repair had reproduced the class one level up**, at four more sites: two stop-rule self-tests that *re-typed* their needle instead of calling the detector (so typo-ing the operative regex left them green while a planted router shipped); a "behavioral" toggle detector that a rename to `old`/`new` plus `display:none` walked through; a census loop that redirected from a tracked-but-deleted path and so aborted 40 lines before the guard written to report it; and the sibling suite `test-options-comparison-contract.sh`, which carried root cause 1 verbatim and a live unguarded `grep -c` — because the structural-sibling search of Q4/Dimension 9 was never run. That round is the strongest evidence for the recipe below: the author had *just written this entry* and still aimed the second battery the same way.
 
 Root causes 1–6 are **not** mechanized, and the reason is worth stating rather than leaving as an omission: each is a property of what an assertion *means*, and deciding whether a needle is "too generic to die with its sentence" requires reading the sentence. Detector C exists because root cause 7 is the one shape in the set that is decidable by grep. The rest are carried by the battery recipe above and by review.
 
@@ -118,7 +124,7 @@ Root causes 1–6 are **not** mechanized, and the reason is worth stating rather
 ## Actuals Worth Reusing
 
 - **Comparable future work:** any slice satisfying `CLAUDE.md` rule (b) by adding a `scripts/test-*.sh` over prose.
-- **Reusable baseline:** a suite pinning one doc section landed at ~28 assertions, and the honest version of the same coverage was ~49 — roughly 1.75×. The extra 21 are floors, self-tests, and separated extracts, not new subject coverage.
+- **Reusable baseline:** a suite pinning one doc section landed at 28 assertions; making *that same coverage* honest took it to 40 — **1.43×**, and those 12 really are floors, self-tests, and separated extracts. A further 9 arrived with the drift sweep (gate surfaces, chip mapping, routing) and are new subject coverage, not hardening. Budget the two separately: a planner who reads one 1.75× figure will over-budget the hardening by the cost of a sweep that is a different job. A second review round then added 4 more, so the suite as merged is 53.
 
 ## Defect Classification
 

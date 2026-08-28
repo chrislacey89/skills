@@ -54,9 +54,11 @@
 #   3. §12 obeys §10's stop-rule — no <script>, no innerHTML assignment, and
 #      every unit a real <section>.
 #   4. Every §12 unit uses a `u-` id, registered in the core's §4 registry.
-#   5. The toggle subtraction stayed subtracted — detected by BEHAVIOR (any
-#      `ba-` panel id, any handler that hides one comparison side) rather than
-#      by the three literal names the deleted code happened to use.
+#   5. The toggle subtraction stayed subtracted — detected by SHAPE (a `ba-`
+#      panel id, `display:none`, or a `hidden`/`aria-hidden` attribute on an
+#      element whose id names a comparison side) rather than by the three literal
+#      names the deleted code happened to use. The detector carries its own WHAT
+#      THIS DOES NOT CATCH note: the class is narrowed, not closed.
 #   6. The prose bar is wired: manifest row AND pointer, per skill.
 #   7. The depth-vs-population distinction is stated in the core and the skill,
 #      each pinned on a needle specific enough to disappear with the sentence.
@@ -231,14 +233,27 @@ assert_eq "$unit_headers" "$scoped_notes" "every unit contains a note input as a
 # ---------------------------------------------------------------------------
 section "§12 obeys §10's stop-rule — sections, not a router"
 # ---------------------------------------------------------------------------
-# Read from $markup: §12's prose forbids a script and an innerHTML swap BY
-# NAME, so a needle run over the span matches the rule that forbids the shape.
-assert_absent "<script"          "$markup" "§12's skeleton ships no JavaScript"
-assert_absent "addEventListener" "$markup" "§12's skeleton installs no keyboard stepper"
-if grep -qE 'innerHTML[[:space:]]*=' "$markup"; then
-    bad "§12's skeleton contains no innerHTML assignment" "the router shape §10 forbids is present"
+# ONE detector, called by the assertion here AND by its self-tests below. The
+# first version re-typed each needle into its fixture, so typo-ing the operative
+# needle left all three self-tests green while a planted router shipped — a check
+# satisfied by a decorative copy of the thing it names, which is this file's own
+# subject arriving one level up. `detect_hidden_side` below already had the right
+# shape; these did not.
+#
+# Read from $markup, and strip HTML comments first: §12's skeleton carries the
+# comment "No stage, no innerHTML swap", and a detector that fires on the sentence
+# forbidding a shape is prose-satisfies-markup in reverse.
+detect_router() {   # stdin: markup. stdout: offending lines.
+    sed 's/<!--.*-->//g' \
+        | grep -nE '<script|addEventListener|innerHTML[[:space:]]*=' || true
+}
+
+router_hits="$(detect_router < "$markup")"
+if [ -n "$router_hits" ]; then
+    bad "§12's skeleton ships no router" \
+        "§10 forbids a script, a listener, and an innerHTML swap: $(printf '%s' "$router_hits" | tr '\n' ' ')"
 else
-    ok "§12's skeleton contains no innerHTML assignment"
+    ok "§12's skeleton ships no router (no <script>, no listener, no innerHTML assignment)"
 fi
 assert_found  "No framework" "$outside" "§10's stop-rule is still stated"
 
@@ -305,13 +320,39 @@ live_md="$( { git ls-files '*.md' 2>/dev/null || true; } \
 # So every form below is anchored to MARKUP: a `ba-` panel id, a `hidden`
 # attribute on an element whose id names a comparison side, or a DOM lookup of
 # such an element. Both false positives are pinned as self-tests below.
+#
+# WIDENED after review. The first version keyed on `before|after` naming plus a
+# `hidden` attribute, and a working toggle using `old`/`new` ids with
+# `style="display:none"` walked straight through it. Side names are arbitrary, so
+# the id half now covers the pairs an author actually reaches for, and the hiding
+# half covers the three ways to hide a node in a self-contained file.
+#
+# `display:none` is flagged UNCONDITIONALLY. These docs are a rendering skeleton
+# in which hiding a node IS the anti-pattern; there are zero legitimate uses
+# today, and the near-miss self-tests below pin the constructs that look similar
+# (`aria-hidden` on a decorative glyph, `classList` toggling an active state).
+#
+# WHAT THIS DOES NOT CATCH, stated so nobody over-trusts it: a side pair named
+# outside the list (`a`/`b`, `v1`/`v2`), hiding through a CSS class defined
+# elsewhere, `visibility:hidden`, `height:0`, or a `<details>` element. This
+# narrows the class; it does not close it — which is why the header above says
+# "detected by SHAPE" rather than "any handler that hides one comparison side".
+# Braced on every use: bare `$SIDE[` reads as array indexing to shellcheck (SC1087).
+SIDE='(before|after|old|new|left|right|prev|next)'
 detect_hidden_side() {   # stdin: file text. stdout: offending lines.
-    grep -nE 'id="ba-|getElementById\('"'"'[^'"'"']*(before|after)|id="[^"]*(before|after)[^"]*"[^>]*[[:space:]]hidden|[[:space:]]hidden[^>]*id="[^"]*(before|after)|toggle variant' || true
+    grep -nE "id=\"ba-|toggle variant|display:none|getElementById\('[^']*${SIDE}|id=\"[^\"]*${SIDE}[^\"]*\"[^>]*[[:space:]](hidden|aria-hidden)|[[:space:]](hidden|aria-hidden)[^>]*id=\"[^\"]*${SIDE}|classList\.[a-z]+\('hidden'" || true
 }
 
 toggle_hits=""
 while IFS= read -r f; do
     [ -n "$f" ] || continue
+    # `git ls-files` lists tracked-but-DELETED paths, and redirecting from one
+    # aborts the run right here — 40 lines before the writing-for-humans guard
+    # below that exists to report exactly that, with an actionable message.
+    # Third instance of the dead-guard shape in this file, and the one that
+    # arrives through a redirect rather than a pipeline, so Detector C in
+    # test-guards-can-fire.sh cannot see it either.
+    [ -f "$f" ] || continue
     hits="$(detect_hidden_side < "$f")"
     if [ -n "$hits" ]; then toggle_hits="$toggle_hits$f: $hits"$'\n'; fi
 done <<< "$live_md"
@@ -345,6 +386,15 @@ done <<'CHIPS'
 fixed|--add
 exempt|--risk
 CHIPS
+# Only the kinds the worked example RENDERS can be held to the table. `missed`,
+# `open`, and `mechanical` are normative in §12's prose and unpinnable until a
+# unit using one is added — stated rather than left to read as full coverage.
+assert_found "\`open\` | \`--flag-moved\`" "$span" "§12's chip table carries the open kind"
+# The sub-population rule came out of §12's first real use: the gate reads as
+# "is this DIFF a sweep", and the case that actually occurred was a sweep inside
+# a diff that was not one. Deleting the paragraph left the suite green.
+assert_found "sub-population" "$span" "§12 states that the sweep may be a sub-population of the diff"
+assert_found "must not share a token"          "$span" "§12 states why exempt and open cannot share a token"
 assert_eq "0" "$chip_violations" "every chip rendered in §12 matches the mapping its prose states"
 
 # ---------------------------------------------------------------------------
@@ -379,15 +429,8 @@ section "the zero-hit detectors still detect (self-test)"
 # state that rots silently. Plant the shape each exists to find and require a
 # hit; plant a near-miss and require silence.
 
-planted_toggle='<div id="ba-before"></div>
-<button onclick="showSide(and)">After</button>'
 clean_columns='<div style="display:grid;grid-template-columns:1fr 1fr">
 <div>Before</div><div>After</div></div>'
-if [ -n "$(printf '%s' "$planted_toggle" | detect_hidden_side)" ]; then
-    ok "the hide-one-side detector flags a renamed toggle"
-else
-    fatal "the hide-one-side detector no longer matches a reinstated toggle — its section above now passes everything."
-fi
 if [ -z "$(printf '%s' "$clean_columns" | detect_hidden_side)" ]; then
     ok "the hide-one-side detector leaves labeled columns alone"
 else
@@ -396,50 +439,69 @@ fi
 
 # The exact false positive the first run of this detector produced. Pinned so a
 # future widening of the regex cannot silently re-acquire it.
-serializer_reveal='ta.value = blob; ta.hidden = false; ta.select();'
-if [ -z "$(printf '%s' "$serializer_reveal" | detect_hidden_side)" ]; then
-    ok "the hide-one-side detector ignores the serializer revealing its fallback textarea"
-else
-    fatal "the hide-one-side detector flags \`ta.hidden = false\`, which REVEALS an element — the detector is matching the word, not the behavior."
-fi
 
-# The second false positive: ordinary English using both words. In a repo whose
-# product is prose, this near-miss is the one most likely to recur.
-english_prose='Probe hidden functions for stability failures — omissions that only surface after rollout.'
-if [ -z "$(printf '%s' "$english_prose" | detect_hidden_side)" ]; then
-    ok "the hide-one-side detector ignores English prose using \"hidden\" and \"after\""
-else
-    fatal "the hide-one-side detector flags ordinary prose — it is matching words, not markup, and every skill body is a false positive."
-fi
 
 # A toggle that renames the handler AND the ids still hides a comparison side
 # through the attribute form. This is the evasion the literal-name census missed.
-renamed_attr='<div id="cmp-after" hidden>after state</div>'
-if [ -n "$(printf '%s' "$renamed_attr" | detect_hidden_side)" ]; then
-    ok "the hide-one-side detector flags a hidden attribute on a comparison side"
-else
-    fatal "the hide-one-side detector misses the attribute form, which is the evasion the literal-name census already failed on."
-fi
+while IFS='|' read -r label fixture; do
+    [ -n "$label" ] || continue
+    if [ -n "$(printf '%s' "$fixture" | detect_hidden_side)" ]; then
+        ok "the hide-one-side detector flags $label"
+    else
+        fatal "the hide-one-side detector misses $label — an evasion review already demonstrated."
+    fi
+done <<'TOGGLES'
+a hidden attribute on a comparison side|<div id="cmp-after" hidden>after state</div>
+old/new naming with display:none|<div id="cmp-thumb-new" style="display:none">new</div>
+a left/right pair hidden by attribute|<div id="pane-right" hidden></div>
+a DOM lookup of a comparison side|document.getElementById('prev-state').hidden = true
+TOGGLES
 
-planted_script='<section id="unit-x"><script>var a = 1</script></section>'
-if printf '%s' "$planted_script" | grep -qF '<script'; then
-    ok "the no-JavaScript needle matches a planted script tag"
-else
-    fatal "the <script absence check cannot fire."
-fi
+# Four near-misses: the two false positives this detector produced while being
+# built, plus the two legitimate constructs the widening put at risk.
+while IFS='|' read -r label fixture; do
+    [ -n "$label" ] || continue
+    if [ -z "$(printf '%s' "$fixture" | detect_hidden_side)" ]; then
+        ok "the hide-one-side detector ignores $label"
+    else
+        fatal "the hide-one-side detector flags $label — it is matching a word or a legitimate construct, not the anti-pattern."
+    fi
+done <<'LEGIT'
+the serializer revealing its fallback textarea|ta.value = blob; ta.hidden = false; ta.select();
+English prose using hidden and after|Probe hidden functions for failures that only surface after rollout.
+aria-hidden on a decorative glyph|<span aria-hidden="true">lock</span>
+classList toggling the active state|el.classList.remove('is-active')
+LEGIT
 
-planted_ih='<div id="stage"></div>
-stage.innerHTML = units[i]'
-if printf '%s' "$planted_ih" | grep -qE 'innerHTML[[:space:]]*='; then
-    ok "the innerHTML-assignment regex matches a planted router"
-else
-    fatal "the innerHTML-assignment regex cannot fire."
-fi
-if printf '%s' 'the rule forbids an innerHTML swap' | grep -qE 'innerHTML[[:space:]]*='; then
-    fatal "the innerHTML-assignment regex matches PROSE mentioning innerHTML — it would fire on the rule that forbids the shape."
-else
-    ok "the innerHTML-assignment regex ignores prose that merely names innerHTML"
-fi
+# Every fixture goes through detect_router — the SAME function the assertion
+# above calls. Typo the operative regex and every row here reddens, which is the
+# whole point and was not true of the version these replaced.
+while IFS='|' read -r label fixture; do
+    [ -n "$label" ] || continue
+    if [ -n "$(printf '%s' "$fixture" | detect_router)" ]; then
+        ok "the router detector flags $label"
+    else
+        fatal "the router detector no longer matches $label — the stop-rule assertion above now passes everything."
+    fi
+done <<'ROUTERS'
+a planted script tag|<section id="unit-x"><script>var a = 1</script></section>
+a planted stage swap|stage.innerHTML = units[i]
+a planted keyboard stepper|document.addEventListener('keydown', next)
+ROUTERS
+
+# Near-misses. §12's skeleton really does carry a comment forbidding the swap, so
+# a detector that fires on it makes the doc unable to state its own rule.
+while IFS='|' read -r label fixture; do
+    [ -n "$label" ] || continue
+    if [ -z "$(printf '%s' "$fixture" | detect_router)" ]; then
+        ok "the router detector ignores $label"
+    else
+        fatal "the router detector flags $label — it is matching the rule rather than the violation."
+    fi
+done <<'NEARMISS'
+the comment forbidding a stage swap|<!-- One real section per unit. No stage, no innerHTML swap. -->
+prose that merely names innerHTML|the rule forbids an innerHTML swap
+NEARMISS
 
 # ---------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

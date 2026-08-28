@@ -237,13 +237,35 @@ detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending
 # being counted was absent, which is the mutation direction
 # docs/solutions/testing-patterns/
 # battery-that-only-perturbs-what-is-present-2026-08-28.md is about.
+#
+# WIDENED after review. The first version required `$(`, `grep`, `|`, and `wc` on
+# ONE physical line, which is a syntactic reading of a semantic rule. It caught
+# one of the four counting sites in the file that motivated it and none of the
+# instances elsewhere in the tree. Three additions:
+#
+#   * bare `grep -c` with no pipe at all — the most common counting form, and the
+#     one the declared principle ("counting is the operation whose zero result is
+#     meaningful") most obviously covers. A live unguarded instance sat in
+#     test-options-comparison-contract.sh while the first version reported clean.
+#   * continuation lines are joined before matching, because the house style
+#     wraps long pipelines and the first version was blind to every wrapped one.
+#   * `grep` into any counter, not only `wc` — `sed`/`awk` may sit between.
+#
+# WHAT THIS STILL DOES NOT CATCH: a counting command this list does not name, a
+# zero-exit command other than grep in the same position, and a count assembled
+# across two statements. Narrowed, not closed.
 detect_unguarded_count() {  # stdin: file text. stdout: offending lines.
     local text; text="$(cat)"
-    if printf '%s' "$text" | strip_comments | grep -q 'set -[a-z]*o pipefail\|set -o pipefail'; then
-        printf '%s' "$text" | strip_comments \
-            | grep -nE '\$\(.*grep[^|]*\|[[:space:]]*wc ' \
-            | grep -v '|| true' || true
-    fi
+    printf '%s' "$text" | strip_comments | grep -q 'set -[a-z]*o pipefail\|set -o pipefail' || return 0
+    # Join backslash-continuations so a wrapped pipeline is read as the one
+    # command it is. `=` keeps the original line number on the joined record.
+    printf '%s' "$text" | strip_comments \
+        | awk '{ if (buf != "") { line = buf $0; buf = "" } else { line = $0; ln = NR }
+                 if (line ~ /\\$/) { sub(/\\$/, "", line); buf = line; next }
+                 printf "%d:%s\n", ln, line }' \
+        | grep -E '\$\(|`' \
+        | grep -E 'grep.*\|.*(wc|grep[[:space:]]+-[a-zA-Z]*c)|grep[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]' \
+        | grep -v '|| true' || true
 }
 
 # ---------------------------------------------------------------------------
@@ -388,26 +410,52 @@ else
     fatal "detector B flags the CORRECTED form, so the fix it prescribes does not clear it."
 fi
 
+# Each hazardous shape must be flagged; each safe one must not. The wrapped and
+# bare-`grep -c` rows are the two review found the first version blind to.
 # shellcheck disable=SC2016  # literal fixture text
-bad_count='set -euo pipefail
-n="$(grep -oE "<section" "$f" | wc -l | tr -d " ")"'
+while IFS='~' read -r label fixture; do
+    [ -n "$label" ] || continue
+    if [ -n "$(printf 'set -euo pipefail\n%s\n' "$fixture" | detect_unguarded_count)" ]; then
+        ok "detector C flags $label"
+    else
+        fatal "detector C no longer matches $label — its section above now passes everything."
+    fi
+done <<'HAZARD'
+a single-line counting grep~n="$(grep -oE "<x" "$f" | wc -l)"
+a bare grep -c with no pipe~n=$(grep -cF "<x" "$f")
+a grep piped through sed into wc~n="$(grep -E "<x" "$f" | sed s/a/b/ | wc -l)"
+HAZARD
+
+# Tested outside the table: `read -r` consumes one line, so a wrapped fixture
+# cannot be a table row — and the wrapped form is exactly what the first version
+# of this detector was blind to, so it needs a real multi-line case.
 # shellcheck disable=SC2016  # literal fixture text
-good_count='set -euo pipefail
-n="$( { grep -oE "<section" "$f" || true; } | wc -l | tr -d " ")"'
+wrapped_count='set -euo pipefail
+n="$(grep -E "<x" "$f" \
+    | grep -oE "y" | wc -l)"'
+if [ -n "$(printf '%s' "$wrapped_count" | detect_unguarded_count)" ]; then
+    ok "detector C flags a counting pipeline wrapped across lines"
+else
+    fatal "detector C no longer joins continuation lines — every wrapped pipeline in the tree is invisible to it, which is the gap review found."
+fi
+
+# shellcheck disable=SC2016  # literal fixture text
+while IFS='~' read -r label fixture; do
+    [ -n "$label" ] || continue
+    if [ -z "$(printf 'set -euo pipefail\n%s\n' "$fixture" | detect_unguarded_count)" ]; then
+        ok "detector C leaves $label alone"
+    else
+        fatal "detector C flags $label, so the fix it prescribes does not clear it."
+    fi
+done <<'SAFE'
+the guarded single-line form~n="$( { grep -oE "<x" "$f" || true; } | wc -l)"
+the guarded bare form~n=$(grep -cF "<x" "$f" || true)
+a grep whose zero match is a real failure~grep -q "<x" "$f"
+SAFE
+
 # shellcheck disable=SC2016  # literal fixture text
 no_pipefail='set -eu
 n="$(grep -oE "<section" "$f" | wc -l)"'
-
-if [ -n "$(printf '%s' "$bad_count" | detect_unguarded_count)" ]; then
-    ok "detector C flags an unguarded counting grep under pipefail"
-else
-    fatal "detector C no longer matches the shape it is named for — its section above now passes everything."
-fi
-if [ -z "$(printf '%s' "$good_count" | detect_unguarded_count)" ]; then
-    ok "detector C leaves the guarded form alone"
-else
-    fatal "detector C flags the CORRECTED form, so the fix it prescribes does not clear it."
-fi
 if [ -z "$(printf '%s' "$no_pipefail" | detect_unguarded_count)" ]; then
     ok "detector C stays silent without pipefail, where the shape is harmless"
 else

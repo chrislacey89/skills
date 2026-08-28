@@ -940,6 +940,15 @@ below one root cause the sites are separate findings that belong in the file tre
 is deliberately high because the evidence behind this block is a single loved artifact — if
 it starts firing on diffs §3–§9 served fine, raise the threshold rather than living with it.
 
+**The sweep may be a *sub-population* of the diff, and usually is.** The gate asks whether
+one root cause repeats at four or more sites — **not** whether the whole diff is that sweep. A
+branch can carry six unrelated items and still contain a ten-site sweep inside one of them,
+and that is what the block's first real use hit: the diff as a whole was a verdict's worth of
+separate changes, while one file inside it held ten instances of a single defect. When that
+happens, render the default blocks (§3–§9) for the diff's shape **and** a per-unit series for
+the sweep inside it. The series is a *section* of the recap, not the whole recap. What the
+gate forbids is sampling a sweep; it never required the sweep to be everything.
+
 **What it is: §7 repeated under Constancy of Design — not a second comparison primitive.**
 Each unit *is* the §7 labeled-columns comparison, rendered in the same frame and at the same
 scale as every other unit, with a lede and the §6 typed note-pair attached. Nothing here
@@ -976,11 +985,24 @@ still governs *depth within* a unit; it never caps how many units the series ren
    comprehension and drops the round-trip is half a surface.
 
 **The chip strip is what carries the exception.** Each unit header shows one or two chips
-naming its kind. The four kinds map to fixed tokens, stated here because a chip strip whose
+naming its kind. The five kinds map to fixed tokens, stated here because a chip strip whose
 colors move between recaps stops being readable at a glance — which is the Constancy of Design
-property this block leans on: `fixed` → `--add`, `exempt` → `--risk`, `missed` → `--del`,
-`mechanical` → `--flag-mech`. Only `mechanical` comes from the file tree's `--flag-*` ramp; the
-other three carry diff and risk semantics, which is what they mean here. The chips are how a reader tells a documented exception from an
+property this block leans on:
+
+| chip | token | means |
+|---|---|---|
+| `fixed` | `--add` | the root cause was removed at this site |
+| `exempt` | `--risk` | this site deliberately keeps the old form, and the `good` note says why |
+| `missed` | `--del` | the sweep failed to reach this site |
+| `open` | `--flag-moved` | found and not yet repaired — still live at the reviewed SHA |
+| `mechanical` | `--flag-mech` | touched, but nothing about the root cause changed |
+
+Only `mechanical` comes from the file tree's `--flag-*` ramp; the rest carry diff and risk
+semantics, which is what they mean here. **`exempt` and `open` must not share a token**, and
+the first real use of this block gave them both `--risk` before catching it: one says *this
+site is correct as it stands* and the other says *this site is still broken*, which is the
+exact distinction a chip strip exists to make visible without prose. If a recap needs a kind
+outside this table, add it here with its own token rather than borrowing a neighbor's. The chips are how a reader tells a documented exception from an
 oversight without reading a word of prose, so an `exempt` unit **must** also carry the
 reason in its `good` note. An exempt unit with no stated reason is the oversight it is
 trying not to look like.

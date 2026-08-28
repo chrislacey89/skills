@@ -143,14 +143,26 @@ section "the opt- id shape agrees between its registry and its use"
 
 assert_found 'opt-<option-slug>' "$CORE" "core registers the opt- id shape"
 
+# The FLOOR is the point, and it was missing. `bad_ids` starts at 0 and rises only
+# for an id that is present and WRONG, so deleting every `data-feedback-id` from
+# §11 leaves an empty stream and the assertion passes on nothing. Verified: the
+# option handles would be inert and the round-trip §11's prose describes would be
+# fictional, under a green suite. This is root cause 1 of
+# docs/solutions/testing-patterns/battery-that-only-perturbs-what-is-present-2026-08-28.md,
+# which was fixed in the §12 suite and not carried across until review asked.
+opt_headers=$( { grep -cF 'data-feedback-kind="option"' "$DESIGN" || true; } )
+opt_ids=$( { grep -F 'data-feedback-kind="option"' "$DESIGN" || true; } \
+    | { grep -coE 'data-feedback-id="opt-[^"]+"' || true; } )
+assert_eq "$opt_headers" "$opt_ids" "every option unit in §11 carries an opt- data-feedback-id"
+
 bad_ids=0
 while IFS= read -r id; do
     case "$id" in
         opt-*) ;;
         *) bad_ids=$((bad_ids + 1)); printf '       non-conforming id: %s\n' "$id" ;;
     esac
-done < <(grep -F 'data-feedback-kind="option"' "$DESIGN" \
-         | grep -oE 'data-feedback-id="[^"]+"' | sed 's/.*"\(.*\)"/\1/')
+done < <( { grep -F 'data-feedback-kind="option"' "$DESIGN" || true; } \
+         | { grep -oE 'data-feedback-id="[^"]+"' || true; } | sed 's/.*"\(.*\)"/\1/')
 assert_eq "0" "$bad_ids" "every option unit in §11 uses an opt- id"
 
 # ---------------------------------------------------------------------------
@@ -166,7 +178,11 @@ assert_found 'data-feedback-note' "$CORE" "core's serializer reads a note field"
 # Scoped to the unit's own element, not merely its source line: the serializer calls
 # el.querySelector('[data-feedback-note]'), so an input that sits on the same line but
 # outside the unit's closing tag serializes nothing while a line-wise grep still passes.
-option_units=$(grep -cF 'data-feedback-kind="option"' "$DESIGN")
+# `|| true`: under `set -o pipefail` a zero match exits 1 and aborts the run here,
+# before the assertion below can report "0 option units". Same shape as the three
+# fixed in test-per-unit-series-contract.sh; pinned by test-guards-can-fire.sh
+# Detector C, which found this one.
+option_units=$( { grep -cF 'data-feedback-kind="option"' "$DESIGN" || true; } )
 
 # Walks div depth from the unit's opening tag and counts a note only if it appears
 # before the matching close. A line-wise grep would also pass on markup where the
