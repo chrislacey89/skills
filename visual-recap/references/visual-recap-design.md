@@ -1241,7 +1241,9 @@ words for them); the reader is told the arc up front on the first screen.
    the hook, the schema constraint. If a change has no mechanism, this group is where you say so
    in as many words, rather than leaving its absence to be inferred.
 4. **Aftermath** — what was fixed versus filed, what is deliberately still open, what the reviewer
-   is being asked to decide, and the lesson that rode along.
+   is being asked to decide, and the lesson that rode along. This is also where the **Copy
+   feedback** block goes when the deck is being handed off rather than walked through in the room
+   (`visual-rendering-core.md` §4) — one block, on the last screen, not a control on every screen.
 
 A deck missing group 3 or group 4 is usually a deck that should have been the scroll: without a
 mechanism and an aftermath there is no arc, only a list.
