@@ -170,6 +170,14 @@ jobs:
       - name: Run guards-can-fire contract suite
         run: bash scripts/test-guards-can-fire.sh
 
+      # The palette /visual-recap and /walk-commits copy is only copyable if it
+      # covers the code being rendered. Where it did not, an agent invented a
+      # token and repurposed another (#305) — while reading the rule forbidding
+      # exactly that. Pins membership, symmetry, and that every token is shown
+      # in use, which is the half a membership check alone would miss.
+      - name: Run syntax-palette contract suite
+        run: bash scripts/test-syntax-palette-contract.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

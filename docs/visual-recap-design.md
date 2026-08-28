@@ -75,12 +75,13 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --flag-load:hsl(28 84% 46%);
     --flag-mech:hsl(220 9% 50%);
     --flag-risky:hsl(356 66% 52%);
-    /* syntax tokens — tuned to never clash with add/del */
-    --sx-k:hsl(265 60% 52%);  /* keyword */
-    --sx-f:hsl(212 74% 44%);  /* function */
+    /* syntax tokens — language-agnostic roles (mapping table below the block),
+       tuned to never clash with add/del */
+    --sx-k:hsl(265 60% 52%);  /* keyword / command */
+    --sx-f:hsl(212 74% 44%);  /* callable / subcommand */
+    --sx-v:hsl(310 58% 42%);  /* variable / interpolation */
     --sx-s:hsl(160 60% 34%);  /* string */
-    --sx-n:hsl(28 80% 44%);   /* number */
-    --sx-t:hsl(32 72% 42%);   /* type */
+    --sx-n:hsl(28 80% 44%);   /* literal / flag */
     --sx-c:hsl(222 12% 56%);  /* comment */
     --shadow:0 1px 2px hsla(225 40% 20% / 0.04),0 8px 24px -12px hsla(225 40% 20% / 0.12);
   }
@@ -110,9 +111,9 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --flag-risky:hsl(2 82% 70%);
     --sx-k:hsl(266 86% 80%);
     --sx-f:hsl(212 94% 78%);
+    --sx-v:hsl(312 84% 78%);
     --sx-s:hsl(155 64% 64%);
     --sx-n:hsl(35 92% 70%);
-    --sx-t:hsl(35 88% 72%);
     --sx-c:hsl(222 12% 48%);
     --shadow:0 1px 2px hsla(0 0% 0% / 0.3),0 16px 40px -16px hsla(0 0% 0% / 0.6);
   }
@@ -158,6 +159,34 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
      already-rendered SVG full-width. */
   .mermaid svg{width:100%;max-width:100%;height:auto;display:block}
 </style>
+```
+
+**Syntax tokens name roles, not a language.** These six are the whole vocabulary. Do not
+invent a seventh and do not repurpose one whose name does not fit what you are coloring —
+that is the run-to-run drift §6's "keep the variable names" rule exists to prevent, and both
+failure modes have happened here (#305). The names abbreviate *roles*; the table maps each
+role onto the concrete thing it colors, in a C-family language and in shell.
+
+| Token | Role | C-family | Shell |
+|---|---|---|---|
+| `--sx-k` | keyword | `const`, `await`, `if` | command — `git`, `pnpm` |
+| `--sx-f` | callable | function or method name | subcommand — `rev-parse`, `add` |
+| `--sx-v` | variable / interpolation | a named binding at its use site | `$BASE_REF`, `${BASE_REF}` |
+| `--sx-s` | string | `"…"`, `'…'`, template text | `"…"`, `'…'`, heredoc body |
+| `--sx-n` | literal / modifier | number, `true`, `null` | flag — `--porcelain`, `-n` |
+| `--sx-c` | comment | `//`, `/* … */` | `# …` |
+
+A language outside the table maps onto the same six roles — a Python `def` is a keyword, a
+YAML key is a variable at its binding site. If a construct genuinely has no role here, color
+it `--fg` and move on: an unmodeled construct rendered plain is honest, one rendered in a
+borrowed color is a wrong answer the reviewer trusts (the Grounding Rule,
+`visual-rendering-core.md` §1).
+
+Applied — one shell hunk exercising all six, as it appears inside a diff row:
+
+```html
+<code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;color:var(--fg)"><span style="color:var(--sx-k)">git</span> <span style="color:var(--sx-f)">rev-parse</span> <span style="color:var(--sx-n)">--abbrev-ref</span> <span style="color:var(--sx-v)">$BASE_REF</span>   <span style="color:var(--sx-c)"># the ref, not the branch name (#298)</span>
+<span style="color:var(--sx-k)">echo</span> <span style="color:var(--sx-s)">"base is <span style="color:var(--sx-v)">$BASE_REF</span>"</span></code>
 ```
 
 **Type scale** (set inline where used; built with weight + tracking, not size inflation):
