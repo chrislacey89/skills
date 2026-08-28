@@ -122,21 +122,32 @@ detect_wrapped_anchor_match() {  # stdin: file text. stdout: offending lines.
 # The rule the fix follows: a helper that can abort the run returns a status and
 # sets a variable; the CALLER, in the main shell, calls fatal.
 #
-# WHAT IT DOES NOT CATCH. Only helpers defined in the same file, and only where
-# the call is textually inside `$( … )` on one line. An exiting helper reached
-# through a variable, a pipeline built across lines, or a function defined in a
-# sourced file all pass. This narrows the shape; it does not close the class.
-detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending lines.
-    local text; text="$(cat)"
-    local body; body="$(printf '%s' "$text" | strip_comments)"
-
-    # Helpers whose body reaches `exit` — either directly, or by calling fatal().
-    #
-    # The one-liner form is handled explicitly, not as an afterthought: most
-    # suites here define `fatal() { printf …; exit 2; }` on a single line, so an
-    # extractor that only walked multi-line bodies would skip the very helper
-    # this detector is named for. Its own self-test caught that on first run.
-    local exiters; exiters="$(printf '%s' "$body" | awk '
+# WHAT IT DOES NOT CATCH — and this list is the enforced boundary, not a
+# gesture at one. A reader who takes it as complete should be right, so it was
+# built by running the detector against each shape rather than by reasoning
+# about the regex:
+#
+#   - transitive aborts. The exiter set holds `fatal` and its DIRECT callers.
+#     `a() { fatal …; }; b() { a; }; x="$(b)"` passes — b is one hop too far.
+#   - a `)` anywhere between `$(` and the call: `x="$(printf '%s' "$(date)" && scan f)"`.
+#     The `[^)]*` cannot cross it.
+#   - `fatal` with a single-quoted first argument, or bare `fatal`. reaches()
+#     requires `"`, `$`, or a letter after the name.
+#   - a helper defined in a sourced file, or reached through a variable
+#     (`cmd=scan; x="$($cmd f)"`).
+#   - a call split across lines inside the substitution.
+#
+# Backtick substitution IS caught (see the call-site regex below) — it has the
+# same semantics and the same failure, so disclosing it as a gap would have been
+# the cheaper and worse choice.
+#
+# This narrows the shape; it does not close the class. Stated at this length
+# because the prose overclaiming what the matcher enforces is the exact defect
+# this branch exists to close (docs/solutions/testing-patterns/
+# mechanism-generality-lags-the-pattern-2026-08-23.md, Prevention #1: narrow the
+# prose to what is enforced, or widen the matcher — both honest, the gap is not).
+exiting_helpers() {  # stdin: file text. stdout: names of helpers that can abort the run.
+    strip_comments | awk '
         # Keyed on a `fatal` CALL, not on the bare word `exit`. This comment
         # deliberately avoids apostrophes: it sits inside a single-quoted awk
         # program, and one apostrophe here closes the shell string. That is not
@@ -161,15 +172,35 @@ detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending
         }
         /^[[:space:]]*[a-zA-Z_][a-zA-Z0-9_]*\(\)[[:space:]]*\{/ {
             name = $0; sub(/\(\).*/, "", name); gsub(/[[:space:]]/, "", name)
+            indent = $0; sub(/[^[:space:]].*$/, "", indent)
+            # fatal() is an exiter by definition, not by calling itself. Without
+            # this seed the set came out EMPTY across every suite in the repo,
+            # so the call-site scan below never ran on real code while its
+            # section still printed a universal ok. It also restores the
+            # shortest instance of the class: n="$(fatal "boom")".
+            if (name == "fatal") hit[name] = 1
             rest = $0; sub(/^[^{]*\{/, "", rest)
             if (rest ~ /\}/) { if (reaches(rest)) hit[name] = 1; cur = ""; next }
-            cur = name; if (reaches(rest)) hit[cur] = 1
+            cur = name; curind = indent; if (reaches(rest)) hit[cur] = 1
             next
         }
-        cur != "" && /^[[:space:]]*\}/ { cur = ""; next }
+        # Close on `}` at the indentation of the definition itself. Closing on
+        # the first `}` at any indent ended the body early at a nested brace —
+        # an embedded awk program, a { … } group, a heredoc line — so a
+        # `fatal` called after such a block was invisible. That miss landed on
+        # the very population the narrowing comment above names: the helpers
+        # that embed awk. (No apostrophes in this comment — see the note above.)
+        cur != "" && $0 ~ ("^" curind "\\}") { cur = ""; next }
         cur != "" && reaches($0) { hit[cur] = 1 }
         END { for (n in hit) print n }
-    ')"
+    '
+}
+
+detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending lines.
+    local text; text="$(cat)"
+    local body; body="$(printf '%s' "$text" | strip_comments)"
+
+    local exiters; exiters="$(printf '%s' "$text" | exiting_helpers)"
     [ -n "$exiters" ] || { printf ''; return 0; }
 
     # Any call to one of them textually inside $( … ).
@@ -181,7 +212,10 @@ detect_exiting_helper_in_substitution() {  # stdin: file text. stdout: offending
         # boundary character left for a mandatory `[^[:alnum:]_]` to match. The
         # first draft required one and silently matched nothing; its own
         # self-test is what caught that.
-        printf '%s' "$body" | grep -nE '\$\(([^)]*[^[:alnum:]_])?'"$n"'([[:space:]]|\||\)|;)' || true
+        # shellcheck disable=SC2016  # a literal regex over shell source, not an expansion
+        # Backticks too: `hits=\`scan foo\`` has identical semantics and an
+        # identical failure, and was a silent gap when only $( … ) was matched.
+        printf '%s' "$body" | grep -nE '(\$\(([^)]*[^[:alnum:]_])?|`([^`]*[^[:alnum:]_])?)'"$n"'([[:space:]]|\||\)|;|`)' || true
     done <<< "$exiters"
 }
 
@@ -233,15 +267,30 @@ done <<< "$suites"
 section "no run-aborting helper is called inside a command substitution"
 
 before_fail_c="$fail"
+# Count the helpers the detector actually examined, and SAY the number.
+#
+# The first version printed a bare "every run-aborting helper can actually abort
+# the run" — a universal over a set that was, measured across all 21 suites,
+# EMPTY: nothing seeded `fatal` itself, so no file had an exiter and the
+# call-site grep never ran on real code even once. The label was a claim about a
+# population the mechanism had not reached, which is the class this very suite
+# exists to close. Reporting the count makes a future drop from N to 0 visible,
+# where today it would print the same green.
+scanned_exiters=0
 while IFS= read -r f; do
     [ -n "$f" ] || continue
+    n_ex="$(exiting_helpers < "$f" | grep -c . || true)"
+    scanned_exiters=$((scanned_exiters + n_ex))
     hits="$(detect_exiting_helper_in_substitution < "$f")"
     if [ -n "$hits" ]; then
         bad "$f calls a fatal/exit helper inside \`\$( … )\`, where the exit kills only the subshell" \
             "the FATAL prints, the assignment yields empty, and the run reports a pass; return a status and let the caller abort: $(printf '%s' "$hits" | tr '\n' ' ')"
     fi
 done <<< "$suites"
-[ "$fail" -eq "$before_fail_c" ] && ok "every run-aborting helper can actually abort the run"
+[ "$scanned_exiters" -gt 0 ] \
+    || fatal "detector C found 0 run-aborting helpers across $suite_count suites, so its call-site scan ran against nothing and its ok below would be a universal over an empty set. Every suite here defines fatal(); finding none means the extractor is broken, not that the repo is clean."
+[ "$fail" -eq "$before_fail_c" ] \
+    && ok "$scanned_exiters run-aborting helper(s) across $suite_count suites, none called inside \`\$( … )\` or backticks"
 
 # ---------------------------------------------------------------------------
 section "the detectors still detect (self-test)"
