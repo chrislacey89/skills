@@ -118,6 +118,8 @@ Mark each commit 🟢 / 🟡 / 🔴:
 - 🟡 understood but carries an open question, a thin test, or a deliberate oddity worth confirming
 - 🔴 not yet understood, or the diff contradicts the stated intent — do not sign off
 
+**The prose bar for the card.** Every field below is authored prose — the one layer the shared rendering core leaves to you. Hold it to **`references/writing-for-humans.md`**: the revision bar (strip clutter, cut the warm-up, Bar/Beach Test, active verbs, concrete nouns, short-not-shallow) and the *what counts vs. what doesn't* test. **Intent** in particular must carry the mental model the diff cannot show; a narrativized restatement of the hunk fails the test even when every word is accurate. Write for someone who has worked in this project for a couple of weeks: they know the language and the repo's shape, and they do not know this commit — so gloss a domain term the commit introduces on first use. The doc's *shape* is written for issue and PR bodies; what carries over is the bar and the mental-model test.
+
 #### Per-commit card
 
 ```
