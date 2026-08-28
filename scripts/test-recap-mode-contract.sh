@@ -134,6 +134,8 @@ claude_line="$(grep -F '`/visual-recap` is an optional side-route' "$claude_md" 
 [ -n "$claude_line" ] || fatal "no /visual-recap inventory bullet in CLAUDE.md."
 overview_row="$(grep -F '| `/visual-recap` |' "$overview" || true)"
 [ -n "$overview_row" ] || fatal "no /visual-recap row in the SYSTEM-OVERVIEW handoff table."
+skill_produces="$(grep -F '**Produces:**' "$skill" || true)"
+[ -n "$skill_produces" ] || fatal "no **Produces:** line in $skill."
 overview_bullet="$(grep -F '`/visual-recap` is an optional side-route at the same' "$overview" || true)"
 [ -n "$overview_bullet" ] || fatal "no /visual-recap inventory bullet in SYSTEM-OVERVIEW.md."
 readme_row="$(grep -F '| [visual-recap](visual-recap/) |' "$readme" || true)"
@@ -303,9 +305,16 @@ assert_lacks "$skill_txt" 'invoke `/re-pitch`' "the skill never invokes /re-pitc
 section "9. The serializer's scope is stated in both halves, everywhere it is stated"
 
 # This claim was INTRODUCED by the change this suite guards, and it is restated
-# at four sites. Section 2 pins the diagram-default claim that way; without the
+# at five sites. Section 2 pins the diagram-default claim that way; without the
 # same treatment here the change would ship the exact drift shape it exists to
 # remove, one claim later.
+#
+# The fifth site (design §D5) was missed when this section was first written,
+# and the miss is diagnostic rather than careless: the four sites found were all
+# inventory-or-instruction prose, and the one missed is the design spec. That is
+# docs/restated-claims.md's second tell verbatim — "they all live in one kind of
+# file" — reproduced inside the commit written to close a census that had
+# stopped early. #312.
 #
 # The failure mode is not omission, it is HALF-restatement. "Required on
 # handoff" alone reads as unconditional and silently contradicts the canon; a
@@ -335,14 +344,44 @@ for pair in "canon (core §4)|$serializer_canon" \
     assert_has_re "$text" "$OPT_RE" "$label states the optional-in-the-room half"
 done
 
-# Written down rather than taken silently: SYSTEM-OVERVIEW's handoff-table row
-# (`| /visual-recap | … |`) says "copied back where the artifact is handed off"
-# and is deliberately NOT in the set above. That column describes what the skill
+# The fifth full statement: design §D5 (Aftermath). It states both halves in its
+# own grammar — "handed off rather than walked through in the room" — and cites
+# §4 in the same clause. Restate-plus-cite is not the sanctioned fallback:
+# docs/restated-claims.md § "The remedy, and its limit" asks for reference
+# *instead of* restating, and calls this shape "the dangerous middle — it reads
+# as a pointer and behaves as a copy". So it is pinned like any other full site.
+#
+# It gets its own patterns rather than joining the loop above. Widening REQ_RE
+# to reach §D5's phrasing would loosen the required-half check at all four sites
+# there, and a looser required-half pattern is exactly what lets a genuinely
+# weaker sentence score a pass. Newlines are squeezed first: the clause wraps
+# across two physical lines, and `**Copy\n   feedback**` splits inside the bold
+# marker, so a line-oriented match cannot see it.
+d5="$(printf '%s' "$part2" | extract /dev/stdin '^## §D5\. ' '^## §D6\.' \
+        | tr '\n' ' ' | tr -s '[:space:]' ' ')"
+[ -n "$d5" ] || fatal "§D5 extracted to 0 lines from $design — the heading moved."
+assert_has "$d5" 'block goes when the deck is being handed off' \
+    "design §D5 states the handed-off half"
+assert_has "$d5" 'rather than walked through in the room' \
+    "design §D5 states the in-the-room half"
+assert_has "$d5" '`visual-rendering-core.md` §4' \
+    "design §D5 cites the canon beside its restatement"
+
+# Written down rather than taken silently: two Produces-column sites say "copied
+# back where the artifact is handed off" and are deliberately NOT in the set
+# above — SYSTEM-OVERVIEW's handoff-table row (`| /visual-recap | … |`) and the
+# skill's own `**Produces:**` line. That column describes what the skill
 # *produces*, not when the mechanism is required, so it carries no obligation to
 # restate the optional half. Asserting both halves there would force a rule into
 # a cell that is answering a different question.
+#
+# Both are named because the exclusion was first written for the SYSTEM-OVERVIEW
+# row alone, leaving the skill's identical column neither pinned nor declared —
+# a reader could not tell whether that omission was reasoned or an oversight.
 assert_has "$overview_row" 'handed off' \
     "the handoff-table row names the handoff condition (produces-column, rule not required)"
+assert_has "$skill_produces" 'handed off' \
+    "the skill's Produces line names the handoff condition (produces-column, rule not required)"
 
 # ---------------------------------------------------------------------------
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
