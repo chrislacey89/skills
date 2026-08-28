@@ -966,7 +966,7 @@ assert_eq "$raw_ranges" "$range_count" \
 # A global floor has slack in it, and slack is where a real loss hides: with 11
 # ranges and a floor of 8, any three could be deleted silently — including all
 # three of /pre-merge's, one of which is the line telling a reviewer to cite the
-# diff-stat numbers in a Dimension 11 finding. So the floor is per-file and
+# diff-stat numbers in a Review-friendly Size finding. So the floor is per-file and
 # derived: every skill that carries the detection block must document at least
 # one range, and so must the review checklist that restates the command.
 for site in $base_sites pre-merge/review-checklist.md; do
