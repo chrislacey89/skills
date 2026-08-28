@@ -109,6 +109,9 @@ jobs:
       - name: Run review-dimension partition contract suite
         run: bash scripts/test-review-dimension-partition.sh
 
+      - name: Run restated review-operative contract suite
+        run: bash scripts/test-restated-review-operatives.sh
+
       - name: Run loop-ledger marker contract suite
         run: bash scripts/test-loop-ledger-markers.sh
 

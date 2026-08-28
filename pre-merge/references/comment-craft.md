@@ -39,7 +39,7 @@ Without Result, comments produce follow-up exchange after follow-up exchange bec
 **Example (Triple-R applied):**
 
 > **Request** — Can we move `authenticateUser` into `lib/auth/`? \
-> **Rationale** — Similar methods already live there; `pre-merge/review-checklist.md` Dimension 1 (Deep Modules) discourages export surface that grows without colocation, and PRs #134 and #147 set the precedent. \
+> **Rationale** — Similar methods already live there; `pre-merge/review-checklist.md`'s Deep Modules dimension discourages export surface that grows without colocation, and PRs #134 and #147 set the precedent. \
 > **Result** — `authenticateUser` is exported from `lib/auth/index.ts` and the call site here imports from there.
 
 ## Comment Signals — blocking semantics

@@ -175,7 +175,7 @@ Do not silently absorb the gap — leave a breadcrumb for the next slice.
 
 Skip this gate for one-off tasks, sibling slices still being planned, or issues without upstream `Consumes` entries.
 
-This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror check for *externally-resolvable* declarations — package names, public API symbols, and pinned versions against the research snapshot — runs at `/pre-merge` Dimension 4 under "Spec-reality check." Step 0 sees the registry at slice-start; `/pre-merge` sees it at merge time. Both windows are intentional; do not widen this gate to duplicate the review-time check.
+This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror check for *externally-resolvable* declarations — package names, public API symbols, and pinned versions against the research snapshot — runs at `/pre-merge`'s Boundary Map Contracts dimension under "Spec-reality check." Step 0 sees the registry at slice-start; `/pre-merge` sees it at merge time. Both windows are intentional; do not widen this gate to duplicate the review-time check.
 
 ### 1. Understand the Task
 

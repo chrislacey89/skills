@@ -39,6 +39,20 @@ full review pass between each round:
   each census scoped by the directory or file type where the previous
   instance happened to live.
 
+- **Round 3, after this entry existed (PR #297, same day).** The follow-up
+  branch corrected the labels to state reach — and stated it by enumerating
+  what each matcher *misses*. Every positive half held under probing ("no
+  verbatim copy of a gate's first 60 characters" — exact). Every negative
+  enumeration was wrong somewhere: "a TWO-threshold copy is NOT reached" was
+  false when one threshold was the Observation bound; "that bullet shape
+  only" missed that the shape's own regex excluded lowercase labels and
+  indented bullets; a miss-list for the by-number detector was incomplete
+  the day it was written. Seven defects across two corrective commits, all
+  in elaboration *around* mechanisms — a split copied into a second file, a
+  justification clause, an over-specified description of a command's output
+  — none in a mechanism itself. The converging commit was subtractive: net
+  −3 lines, every surviving claim probed red/green before commit.
+
 Each round's corrective hunk violated the rule it enforced. The review that
 caught them asked exactly the question
 `sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` prescribes.
@@ -125,11 +139,40 @@ corrective hunk against the rule it enforces.
 - A detector's assertion label states its mechanism's actual reach
   ("no match in N scanned files for pattern P"), never the property it
   approximates ("no restatement survives").
+- **State reach positively; never enumerate the negative space.** Round 3's
+  refinement of the rule above, learned by following it and still failing: a
+  positive reach statement ("no verbatim copy of a gate's first 60
+  characters") is closed and checkable against the matcher one line down. A
+  miss-enumeration ("a TWO-threshold copy is NOT reached") is an open-ended
+  claim about everything the matcher does not do, and it can never be
+  complete — on PR #297 every label error, all seven, sat in a negative
+  clause while every positive clause held. Say what the matcher is, and stop.
+- **Corrective rounds converge by subtraction, not by more careful prose.**
+  Each fix round adds sentences that make claims about mechanisms; some
+  roughly constant fraction of new falsifiable claims are wrong, so rounds
+  that elaborate do not converge. Delete the restated split instead of
+  correcting it; cut the justification clause instead of fixing it; and
+  probe — break once, watch it go red — every claim that survives the
+  subtraction, before the commit rather than after the review.
 - Mutation batteries aim at both regions: the assertions *and* the
   set-membership (which files, which spans, which allowlist).
 - For changes to a skill's operative prose, the review includes a
   reader-derivation pass: a fresh context executes the changed instructions
   and reports where it guessed.
+
+## Related
+
+- PR #297 (round 3, the negative-space refinement) — and its review trail:
+  chrislacey89/skills#300 (widen detectors against found misses),
+  chrislacey89/skills#301 (procedure/applicability restatements matched by
+  nothing — decide the shape before adding a grep).
+- Clustering judgment: round 3 is the *same* pattern as this entry, not a
+  sibling — hence this update instead of a third file. Mechanism for the
+  negative-space refinement: the closest candidate is a wording detector
+  over assertion labels, blocked because negative space can be phrased in
+  unboundedly many ways — the same open-endedness that makes those claims
+  wrong makes them undetectable. Per rule 3 above, the property is held by
+  review's reader-derivation pass.
 
 ## Shelf life
 

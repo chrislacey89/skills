@@ -10,7 +10,9 @@ Used by `/pre-merge` during Phase 3 in all three modes — author-mode, reviewer
 
 The themes are labels for two parallel review contexts. They are defined here only — the markers do not repeat them — and they are **not** statements about what a sub-agent may read; `/pre-merge` Phase 3's context contract is the only thing that says that, and it says the same thing to both.
 
-**A known unresolved question sits next to this, and it is not settled here.** Phase 3's context contract reads as a closed list ("Nothing else"), while several delegated dimensions have procedures that read slice issue bodies, the registry, or the merged tree. The controller bucket above does not depend on how that resolves. Tracked as #293.
+**What a sub-agent may read is settled in one place, and that place is not here.** Many dimensions below send the reviewer to state the diff does not contain — the merged tree, a slice or PRD issue body, the package registry, the research archive, an installed `.d.ts`. None of that conflicts with Phase 3's context contract, because the contract is a rule about *provenance*: it fixes what may be **handed** to a sub-agent, and requires everything else to be read at its source rather than accepted as the controller's account of it. Read the contract in `/pre-merge` Phase 3; this file does not restate it.
+
+**Cross-references here name dimensions by title, never by number.** The `## N.` numbering is an artifact of reading order, and inserting a dimension renumbers everything below it, silently retargeting every reference written by number. Titles survive renumbering. `scripts/test-review-dimension-partition.sh` already pins its own dimension by title for the same reason, and `scripts/test-restated-review-operatives.sh` fails on a by-number reference anywhere in the prose it scans. That population is not every tracked file — it excludes `CHANGELOG.md`, `docs/solutions/`, the generated `references/` copies, and the two suites that plant fixtures, all of which are dated or derived records where an old number is correct.
 
 `/pre-merge` Phase 3 **derives** its split from these markers rather than restating the roster. The marker is not decoration: it is the only place ownership is written down, so a dimension added here without one has no consumer and `scripts/test-review-dimension-partition.sh` fails. The script's header carries the incident that made it necessary.
 
@@ -108,26 +110,26 @@ For each `Consumes` entry referencing an already-closed upstream slice, run the 
 
 **For deletion orphan surfaces (only when the diff or any consumed upstream slice contains a `### Deletes` section):** Infer the deleted module's external consumer surfaces from the `Deletes` bullet notes or from `git show` of the deleted path. Grep the merged tree for each surface type across all source-text files — templates, source code, styles, config, docs. Zero matches required to pass. Non-zero matches: flag as Concern with the matched path and line. This mirrors the Tier 1 build-time check in `/execute`; its value here is catching surfaces the author missed at implementation time, now verified against the full merged tree.
 
-**Out of scope:** Whether the interfaces are well-designed or deep (Dimension 1 covers shallowness). Verifying that the upstream slice's *close state* was correct at merge time is handled by the Verification procedure above.
+**Out of scope:** Whether the interfaces are well-designed or deep (Deep Modules covers shallowness). Verifying that the upstream slice's *close state* was correct at merge time is handled by the Verification procedure above.
 
 ---
 
 ## 5. Coverage Matrix Reconciliation (multi-slice PRD PRs only)
 
-**Runs in:** the controller, in Phase 4 — not a sub-agent. The procedure below needs the PRD issue body, every slice issue, and the set of *merged* slices held together at once. Phase 1 assembles that cross-slice view in the controller and nowhere else, so a sub-agent reading this PR’s diff cannot reach it — it could only return a Blocker it has no way to substantiate, which is worse than not running the dimension at all.
+**Runs in:** the controller, in Phase 4 — not a sub-agent. The procedure below needs the PRD issue body, every slice issue, and the set of *merged* slices held together at once. Phase 1 assembles that cross-slice view in the controller and nowhere else, so a sub-agent reading this PR’s diff cannot reach it — it could only return this skill's strongest verdict on ground it has no way to substantiate, which is worse than not running the dimension at all.
 
 **Principle:** Every PRD Must-commitment should be covered by at least one shipped slice. Wants may be consciously cut. ~Tildes are already cut by definition.
 
 **Procedure.** If this PR closes the last slice in a multi-slice PRD, regenerate the Coverage Matrix: read the PRD issue body, classify each user story (Must / Want / ~Tilde), and check each slice issue's `User Stories Addressed` section to see which slice covers which commitment. Compare against the set of *merged* slices.
 
-This is a **reconciliation test, not a gate.** Block only on unmapped Musts. Warn on unmapped Wants. Accept unmapped ~Tildes silently.
+This is a **reconciliation test, not a gate** — `/pre-merge` is advisory in every mode and merges nothing itself. Escalate only on unmapped Musts. Warn on unmapped Wants. Accept unmapped ~Tildes silently.
 
 **Violation patterns:**
-- **Unmapped Must (Blocker):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. This blocks merge.
-- **Unmapped Want (Concern/Warning):** A Want-commitment in the PRD has no merged slice covering it. Surface as a warning — the scope hammer may have cut it consciously; confirm with the user and add a `Scope Notes` entry if so.
+- **Unmapped Must (Concern — with the withheld action named):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. Classify as **Concern** and state the action inside the finding: the branch should not merge until the Must is covered by a slice or consciously cut with a `Scope Notes` entry on the PRD body. Concern is the strongest tier this skill defines — there is no fourth — and naming the withheld action is how it carries that weight without claiming a gate `/pre-merge` does not own.
+- **Unmapped Want (Suggestion):** A Want-commitment in the PRD has no merged slice covering it. Surface it as a warning — the scope hammer may have cut it consciously; confirm with the user and add a `Scope Notes` entry if so.
 - **Renegotiation not recorded:** A commitment was consciously cut or added mid-cycle but the PRD issue body was not edited to reflect the new state. The matrix is a derived view; the PRD is the single source of truth. Flag for update.
 
-**Out of scope:** Single-slice PRDs (no matrix derived). Boundary-map contract checks (Dimension 4). Whether Musts were correctly classified during `/prd-to-issues` (that conversation happens there, not here).
+**Out of scope:** Single-slice PRDs (no matrix derived). Boundary-map contract checks (Boundary Map Contracts). Whether Musts were correctly classified during `/prd-to-issues` (that conversation happens there, not here).
 
 ---
 
@@ -186,7 +188,7 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 - Deploy-layout / absolute-asset divergence — the slice ships a published or static artifact, and a publish/copy step or asset reference resolves paths at deploy time that the test seam mocked away. Absolute-path `<link>`/`<script>`/`<img>` references (`/_astro/*`, `/assets/*`, fonts, favicon) that 404 from the deployed public root render the page unstyled even though the HTML returns 200 and the file-copy unit test (against a mocked filesystem) passed. **Verification procedure — not eyeballing.** Confirm every absolute sub-resource the deployed page requests exists at the deployed layout's public root, not just in the build output — load the real artifact and check the asset requests return 200, or grep the publish/copy step for each referenced asset root. Flag as Concern.
 - Mocked owned-seam blindness (root-fix pointer) — a unit passed only because the seam that would fail in production (a platform crypto API, the filesystem, the real deploy copy) was mocked. Per GOOS "only mock types you own," an external library/platform type should be wrapped in a thin owned adapter and integration-tested, not mocked at the call site. Name the over-mock as the upstream root fix; `/execute` Tier 2.7 (Production-Runtime Parity) is the safety net that catches the gap, the owned adapter is the cure. **Review-cadence note (parity patterns).** The three patterns above (test-runtime permissiveness, deploy-layout / absolute-asset divergence, mocked owned-seam blindness) were added on convergent grounds (Continuous Delivery, Twelve-Factor Factor X, Release It! "Design for Deployment", GOOS) plus one triggering incident (a downstream Cloudflare Workers repo's audit-publish slices, 2026-06-25 — both green, both broke only in the deployed workerd runtime). Same falsification rule: if after a reasonable sample of PRs they fire <10% of the time on diffs that had no other reported issue, remove them rather than leave them as ceremony.
 
-**Out of scope:** Whether the schema design is optimal (that's Dimension 1). Whether tests are sufficient (that's Dimension 6).
+**Out of scope:** Whether the schema design is optimal (that's Deep Modules). Whether tests are sufficient (that's Test Quality).
 
 ---
 
@@ -203,7 +205,7 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 - Missing regression test — a bug fix without a test that would have caught the original failure
 - Lone instance fix — the defect pattern exists in multiple locations but only one was fixed; search for structurally similar code
 
-**Out of scope:** Whether the fix is architecturally optimal (that's Dimension 1). Whether tests are well-written (that's Dimension 6).
+**Out of scope:** Whether the fix is architecturally optimal (that's Deep Modules). Whether tests are well-written (that's Test Quality).
 
 ---
 
@@ -215,7 +217,7 @@ This is a **reconciliation test, not a gate.** Block only on unmapped Musts. War
 
 Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two hats; never wear both at once, because if something breaks you can no longer attribute the cause. Hunt & Thomas (Pragmatic Programmer): each pass must have a single purpose — interleaving makes failures unattributable. The check belongs at review time because by then the diff exists and the question "does this hunk belong?" is concrete rather than aspirational.
 
-**Applies to every diff regardless of PRD status.** Boundary Map Contracts (Dimension 4) and Coverage Matrix Reconciliation (Dimension 5) check plan-vs-actual *between slices*, and only fire when a PRD exists. This dimension checks scope drift *inside a single diff* — drive-by reformatting, speculative additions, adjacent fixes that weren't asked for — and runs whether or not the work went through `/prd-to-issues`.
+**Applies to every diff regardless of PRD status.** Boundary Map Contracts and Coverage Matrix Reconciliation check plan-vs-actual *between slices*, and only fire when a PRD exists. This dimension checks scope drift *inside a single diff* — drive-by reformatting, speculative additions, adjacent fixes that weren't asked for — and runs whether or not the work went through `/prd-to-issues`.
 
 **Stated task source.** The "stated task" is, in priority order: the slice issue body, the PRD issue body, the bug issue or QA report, or — for one-off branches — the commit messages and branch name. If no stated task can be reconstructed, note that and skip the dimension; do not synthesize one.
 
@@ -228,7 +230,7 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 
 **Verification procedure — cited hunks, not yes/no.** A finding under this dimension must cite the file path and the hunk's starting line. *"Looks scope-creepy"* is not a finding; *"`utils/format.ts:42–58` adds type hints and renames `result` to `formatted` — neither is mentioned in the task statement"* is. If the dimension produces zero findings on a non-trivial diff, that is a real outcome — do not invent findings to fill the section, and do not rubber-stamp it (Meadows policy resistance: required sections that go unused get filled with filler; the cited-hunk requirement is the mitigation).
 
-**Out of scope:** Whether the diff is architecturally good (that's Dimension 1). Whether the scope of the *task itself* was right (that's `/shape` and `/write-a-prd`). Whether unmapped commitments exist between slices (that's Dimension 5).
+**Out of scope:** Whether the diff is architecturally good (that's Deep Modules). Whether the scope of the *task itself* was right (that's `/shape` and `/write-a-prd`). Whether unmapped commitments exist between slices (that's Coverage Matrix Reconciliation).
 
 **Review-cadence note.** This dimension was added without a triggering incident, on principle grounds (Beck, Hunt & Thomas). If after a reasonable sample of PRs it produces zero or one finding per PR on average, it is policy-resistant filler and should be removed rather than left as ceremony.
 
@@ -248,7 +250,7 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 - **Suggestion: >500 LOC OR >20 files.** Tacke's engagement threshold. Above either, reviewer focus tends to collapse into momentum approval. Recommend splitting into stacked PRs or scheduling reviewer attention across multiple sittings.
 - **Concern: >800 LOC AND multi-domain scope.** The catastrophic-engagement zone where all three sources agree review effectiveness degrades severely. "Multi-domain" means three or more conceptually independent areas in the same diff (e.g., schema + API + UI + migration; or backend handler + frontend component + infra config).
 
-**Distinct from Dimension 10 (Surgical Scope).** Dimension 10 asks whether each hunk traces to the task — its remedy is *trim*. Dimension 11 asks whether the diff is reviewable in one session — its remedy is *split into stacked PRs* or *chunk reviewer attention across multiple sittings*. A diff can be tightly scoped (no Dim 10 finding) and still oversize (Dim 11 fires); a diff can be small but scope-creepy (Dim 10 fires, Dim 11 silent). Both can fire on the same diff for different reasons.
+**Distinct from Surgical Scope.** Surgical Scope asks whether each hunk traces to the task — its remedy is *trim*. This dimension asks whether the diff is reviewable in one session — its remedy is *split into stacked PRs* or *chunk reviewer attention across multiple sittings*. A diff can be tightly scoped (no Surgical Scope finding) and still oversize (this one fires); a diff can be small but scope-creepy (Surgical Scope fires, this one silent). Both can fire on the same diff for different reasons.
 
 **Verification procedure — cited counts, not impressions:**
 
@@ -257,7 +259,7 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 3. If the Concern band may fire, enumerate the conceptual areas touched (e.g., "schema, API handler, React component, migration script") and confirm three or more independent areas before classifying as Concern. Two-domain >800 LOC diffs land at Suggestion, not Concern.
 4. If the slice is the tracer (per the issue body or PRD decomposition order), suppress the finding regardless of band; note in the findings output that the dimension was suppressed under the tracer exemption so the suppression is visible rather than silent.
 
-**Out of scope:** Whether the *task* was right-sized (that's `/shape` and `/write-a-prd`). Whether each hunk traces to the task (that's Dimension 10). Whether the slice was decomposed correctly upstream (that's `/prd-to-issues` Step 6, which carries the mirror size question at planning time). Defect-density metrics or per-reviewer pace tracking — Cohen explicitly warns against weaponizing review metrics for performance evaluation.
+**Out of scope:** Whether the *task* was right-sized (that's `/shape` and `/write-a-prd`). Whether each hunk traces to the task (that's Surgical Scope). Whether the slice was decomposed correctly upstream (that's `/prd-to-issues` Step 6, which carries the mirror size question at planning time). Defect-density metrics or per-reviewer pace tracking — Cohen explicitly warns against weaponizing review metrics for performance evaluation.
 
 **Review-cadence note.** Added on convergent empirical grounds (Cohen 2006, Tacke 2024, Rigby 2013), not from a triggering incident. Same falsification rule as Surgical Scope: if after a reasonable sample of PRs the signal fires <10% of the time on diffs that had no other reported review issue, it is policy-resistant filler and should be removed rather than left as ceremony.
 
@@ -269,4 +271,4 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 
 - **Suggestion:** A principle is partially stressed. Improvement is possible but the current code is defensible. Example: "Two test names describe implementation details ('calls API twice') — renaming to behavior descriptions would improve readability."
 
-- **Concern:** A clear principle violation with specific evidence from the diff. Cite the principle, show the code, explain why it matters. Example: "The `formatResponse` function in `utils/format.ts` is a pass-through that forwards its arguments to `buildResponse` with no transformation — this is a shallow wrapper (Dimension 1)."
+- **Concern:** A clear principle violation with specific evidence from the diff. Cite the principle, show the code, explain why it matters. Example: "The `formatResponse` function in `utils/format.ts` is a pass-through that forwards its arguments to `buildResponse` with no transformation — this is a shallow wrapper (Deep Modules)."
