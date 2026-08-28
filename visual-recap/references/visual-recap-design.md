@@ -9,7 +9,7 @@ forward-looking block, used by any skill that emits an N-way fork of options tha
 yet.
 
 **The document has two parts, and they are two rendering modes, not two layouts of one thing.**
-Everything numbered §1–§11 is **Part I — the scroll recap**: a single scrolling column for a
+Everything numbered §1–§12 is **Part I — the scroll recap**: a single scrolling column for a
 reviewer *auditing* a change. **Part II — the walkthrough deck** (§D1–§D9, at the end of this
 file) is a paged, one-idea-per-screen shell for a reviewer being *argued through* a change with a
 causal arc. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading
@@ -505,6 +505,38 @@ Stable ids per `visual-rendering-core.md` §4: callout cards and their markers s
 </section>
 ```
 
+**The typed note-pair.** A callout says what a line *does*. When the change also encodes a
+*rule* — the mechanism that broke, and the rule the fix now enforces — render the two as
+labeled halves beside each other instead of folding both into one sentence, so the reader
+can see which half is the diagnosis and which is the guarantee. Three labels, one token
+each: **`bad`** (`--del`) for the mechanism that failed, **`good`** (`--add`) for the rule
+the fix encodes, **`warn`** (`--risk`) for a caveat that survives the fix. Pure markup — no
+JavaScript and no new block; it nests inside the callout card above and inherits that
+callout's `data-feedback-id`, so the serializer needs no new id shape. Render one, two, or
+all three halves. A note-pair carrying only a `good` half is usually a callout — write it
+as one. **The exception is a §12 `exempt` unit**, whose whole content is the reason a site
+was deliberately left alone: there is no `bad` half because nothing broke there, and the
+`--add` framing is what distinguishes a documented exception from an oversight. Render
+that one as a lone `good` half.
+
+```html
+<!-- nests inside the .vr-callout card above, under its note line -->
+<div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke — one sentence, in the reader's own words.</span>
+  </div>
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The rule this line now encodes — what it makes impossible, not what it adds.</span>
+  </div>
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--risk)">warn</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">What the fix does not cover — the caveat that outlives it.</span>
+  </div>
+</div>
+```
+
 A secret-masked value renders as an inert chip, never the value (per
 `visual-rendering-core.md` §2): `<span style="…">••• masked</span>`.
 
@@ -520,12 +552,21 @@ share the same scale, padding, and density (small-multiples constancy), so the e
 Columns are the structured-comparison primitive: two states of a config, a schema shape, a
 rendered surface (§9), or a short code unit — read in one glance, no interaction required.
 
-**Decision rule (one line):** can both states be read side by side without crushing the
-content into unreadably narrow columns? → **columns** (default, below). Content too wide —
-long code lines, a dense full-width table → the **toggle variant** further down.
+**Too wide to halve?** Long code lines or a dense full-width table make columns crush.
+**Stack the two frames instead — `Before` above, `After` below, identical frame and scale,
+both fully visible.** Stacking costs eye travel; hiding one state costs the comparison
+itself, which is why there is no toggle here (Tufte: *"The viewer cannot compare what they
+cannot see at the same time. Memory is not vision."*). If even stacked frames are
+unreadable, the unit is too big — narrow the excerpt to the lines that actually differ.
+
+**One comparison or many — the ids carry a slug.** The section id is
+`sec-compare-<slug>`, where `<slug>` names the unit being compared (`sec-compare-closeout`,
+`sec-compare-session-ts`). A recap that compares two states of one thing renders one of
+these; a per-unit series (§12) renders one per unit, in the same frame, down the page. A
+singular hardcoded id would make the second case collide with the first.
 
 ```html
-<section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+<section id="sec-compare-<slug>" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
     <div>
@@ -544,41 +585,6 @@ long code lines, a dense full-width table → the **toggle variant** further dow
     </div>
   </div>
   <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same frame, same scale on both sides — only the content differs.</p>
-</section>
-```
-
-### Variant — the toggle (wide states only)
-
-When each state is too wide to halve — long code lines, a dense table — fall back to a
-segmented pill with a sliding accent thumb; both states render in an identical frame and
-scale so only the code differs. The comparison cost is real (the reviewer holds one state in
-memory while viewing the other), so take this variant only when columns would crush the
-content.
-
-```html
-<!-- replaces the columns grid inside the same <section> -->
-<section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s4);flex-wrap:wrap">
-    <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
-    <div style="position:relative;display:inline-flex;border:1px solid var(--border-strong);border-radius:999px;padding:3px;background:var(--bg-subtle)">
-      <button onclick="setSide('before')" style="position:relative;z-index:1;padding:5px 18px;border:none;border-radius:999px;background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;color:var(--fg)">Before</button>
-      <button onclick="setSide('after')" style="position:relative;z-index:1;padding:5px 18px;border:none;border-radius:999px;background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;color:var(--fg-muted)">After</button>
-      <span id="ba-thumb" style="position:absolute;top:3px;bottom:3px;width:calc(50% - 3px);border-radius:999px;background:var(--accent);left:3px;transition:left .28s cubic-bezier(.4,0,.2,1)"></span>
-    </div>
-  </div>
-  <!-- Both panels live here. setSide() (§10) toggles their `hidden` attribute; they MUST
-       carry exactly these ids. Render both in the same frame and scale — only the code differs. -->
-  <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);min-height:200px;padding:var(--s4) 0">
-    <div id="ba-before">
-      <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">let</span> currentToken = <span style="color:var(--sx-n)">null</span></code></div>
-      <!-- …rest of the BEFORE state, one row per line… -->
-    </div>
-    <div id="ba-after" hidden>
-      <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)</code></div>
-      <!-- …rest of the AFTER state, identical frame and scale… -->
-    </div>
-  </div>
-  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same frame, same scale on both sides — only the code differs.</p>
 </section>
 ```
 
@@ -774,10 +780,14 @@ Worked example — a share popover gaining a "Copy link" action, as a §7 column
 
 ## 10. The minimal vanilla interactions
 
-Three tiny handlers — theme toggle, callout active-state, before/after side. No framework,
+Three tiny handlers — theme toggle, callout active-state, review verdict. No framework,
 no state library; if this grows routing or a store it has become the app the surface exists
 to avoid (`visual-rendering-core.md` §4). The §4 `copyFeedback()` serializer is separate and
 unchanged.
+
+There is deliberately **no** handler that swaps which state is on screen. Every block here
+renders all of its states as real elements in the document, so comparison is a glance or a
+scroll — never a click that hides one side. That is also the rule §12 is built to respect.
 
 ```html
 <script>
@@ -794,11 +804,6 @@ unchanged.
     activeId = id;
     document.querySelectorAll('[data-feedback-id="'+id+'"]').forEach(el=>el.classList.add('is-active'));
     document.getElementById('line-'+id)?.classList.add('is-active');
-  }
-  function setSide(side){
-    document.getElementById('ba-thumb').style.left = side === 'after' ? 'calc(50% + 0px)' : '3px';
-    document.getElementById('ba-before').hidden = side === 'after';
-    document.getElementById('ba-after').hidden = side !== 'after';
   }
   function setVerdict(v){
     document.querySelectorAll('[data-verdict-chip]').forEach(el=>{
@@ -946,6 +951,166 @@ never committed.
 
 ---
 
+## 12. Block: per-unit series (one root cause, N sites)
+
+**Gate — this is not a default layout.** Render a per-unit series only when the change is
+**one root cause repeated across four or more near-identical sites**: one defect
+copy-pasted into six skills, one rename swept through nine call sites, one policy applied to
+every route. Below four sites the default block-type-major layout (§3–§9) reads faster, and
+below one root cause the sites are separate findings that belong in the file tree. The gate
+is deliberately high because the evidence behind this block is a single loved artifact — if
+it starts firing on diffs §3–§9 served fine, raise the threshold rather than living with it.
+
+**The sweep may be a *sub-population* of the diff, and usually is.** The gate asks whether
+one root cause repeats at four or more sites — **not** whether the whole diff is that sweep. A
+branch can carry six unrelated items and still contain a ten-site sweep inside one of them,
+and that is what the block's first real use hit: the diff as a whole was a verdict's worth of
+separate changes, while one file inside it held ten instances of a single defect. When that
+happens, render the default blocks (§3–§9) for the diff's shape **and** a per-unit series for
+the sweep inside it. The series is a *section* of the recap, not the whole recap. What the
+gate forbids is sampling a sweep; it never required the sweep to be everything.
+
+**What it is: §7 repeated under Constancy of Design — not a second comparison primitive.**
+Each unit *is* the §7 labeled-columns comparison, rendered in the same frame and at the same
+scale as every other unit, with a lede and the §6 typed note-pair attached. Nothing here
+introduces a new way to compare two states. If you find yourself designing one, stop: the
+doc already has it, and a second one destroys the constancy that makes the units comparable.
+
+**Why the axis, not just more sections.** Under §3–§9 a sweep renders as a file tree of
+near-identical rows, and the 3–8 budget then forces you to *sample* it. For a sweep the
+population **is** the finding — say, five sites fixed, one deliberately exempt, two nearly
+missed — and sampling destroys the one distinction that matters, because a documented
+exception becomes indistinguishable from an oversight. Cohen's rule for an oversized review
+has the same shape: split it into **complete** sessions, never sample one. The 3–8 budget
+still governs *depth within* a unit; it never caps how many units the series renders.
+
+**Three requirements, each load-bearing:**
+
+1. **Every unit is a real `<section>` in the document.** Navigate with §2's existing sticky
+   rail and `scroll-margin-top` — no store, no routing, no `innerHTML` swap, no keyboard
+   stepper. §10's stop-rule is not relaxed for this block; it is the reason the block is
+   shaped this way. With every unit present in the document, a unit-to-unit question is a
+   scroll rather than a memory test, which is also what keeps the series clear of Tufte's
+   sequential-display anti-pattern.
+2. **The all-units matrix is required, not optional.** Scrolling a series indexes *units*,
+   and a question asked across units — "which sites got the operator fix too?" — is exactly
+   the comparison a sequence cannot answer. So the series **opens** with a matrix (§11's
+   `.oc-matrix`, same CSS, no new palette): units are rows, the properties that vary are
+   columns. That is Tufte's Rule 4 — a matrix when two independent categorical variables are
+   present — and it is what turns the sweep's population into one eyespan. A series without
+   it is the anti-pattern with extra steps.
+3. **The feedback serializer is retained.** Each unit carries
+   `data-feedback-id="u-<unit-slug>"`, `data-feedback-kind="unit"`, and a
+   `[data-feedback-note]` input, and the page keeps §7's review block with its **Copy
+   feedback** button wired to the core §4 `copyFeedback()`. A surface that renders
+   comprehension and drops the round-trip is half a surface.
+
+**The chip strip is what carries the exception.** Each unit header shows one or two chips
+naming its kind. The five kinds map to fixed tokens, stated here because a chip strip whose
+colors move between recaps stops being readable at a glance — which is the Constancy of Design
+property this block leans on:
+
+| chip | token | means |
+|---|---|---|
+| `fixed` | `--add` | the root cause was removed at this site |
+| `exempt` | `--risk` | this site deliberately keeps the old form, and the `good` note says why |
+| `missed` | `--del` | the sweep failed to reach this site |
+| `open` | `--flag-moved` | found and not yet repaired — still live at the reviewed SHA |
+| `mechanical` | `--flag-mech` | touched, but nothing about the root cause changed |
+
+Only `mechanical` comes from the file tree's `--flag-*` ramp; the rest carry diff and risk
+semantics, which is what they mean here. **`exempt` and `open` must not share a token**, and
+the first real use of this block gave them both `--risk` before catching it: one says *this
+site is correct as it stands* and the other says *this site is still broken*, which is the
+exact distinction a chip strip exists to make visible without prose. If a recap needs a kind
+outside this table, add it here with its own token rather than borrowing a neighbor's. The chips are how a reader tells a documented exception from an
+oversight without reading a word of prose, so an `exempt` unit **must** also carry the
+reason in its `good` note. An exempt unit with no stated reason is the oversight it is
+trying not to look like.
+
+**Prose here is per-unit and short.** Each unit gets a one-sentence lede in the reader's own
+words plus the §6 note-pair; the length cap on the §3 overview does not reach it, and the
+bar that does is `writing-for-humans.md` — the revision bar and the mental-model test.
+
+```html
+<!-- The rail (§2) gains one nav entry per unit, in the same shape as its other
+     entries: <a href="#unit-closeout">…</a>. Nothing else about §2 changes. -->
+<section id="sec-units" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">07</span> &nbsp;All sites</div>
+
+  <!-- REQUIRED: the all-units matrix. Units are rows; the properties that vary are columns.
+       Reuses §11's .oc-* CSS verbatim — paste that style block alongside the §1 core. -->
+  <div class="oc-scroll">
+    <div class="oc-matrix" style="grid-template-columns:170px repeat(3, minmax(0,1fr))">
+      <div class="oc-rowlabel is-head">Site</div>
+      <div class="oc-cell is-head"><span class="oc-name">root fix</span></div>
+      <div class="oc-cell is-head"><span class="oc-name">operator fix</span></div>
+      <div class="oc-cell is-head"><span class="oc-name">note</span></div>
+
+      <div class="oc-rowlabel">execute</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell">—</div>
+
+      <div class="oc-rowlabel">closeout</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell"><span class="oc-chip is-asserted">exempt</span></div>
+      <div class="oc-cell">keeps the old form on purpose — see the unit below</div>
+    </div>
+  </div>
+  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Every site is a row — the population, not a sample. An empty cell is a gap, not an omission.</p>
+</section>
+
+<!-- One real <section> per unit. No stage, no innerHTML swap: the rail scrolls to these. -->
+<section id="unit-execute" data-feedback-id="u-execute" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
+    <span style="border:1px solid var(--add);color:var(--add);background:var(--add-bg);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">fixed</span>
+    <div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">execute/SKILL.md:118</div>
+      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">One-sentence lede, in the reader's own words — what this site did wrong and what it does now.</div>
+    </div>
+  </div>
+  <!-- the §7 comparison, unchanged: identical frame and scale in every unit -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the BEFORE state, one row per line, exactly as §7… --></div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the AFTER state, identical frame and scale… --></div>
+    </div>
+  </div>
+  <!-- the §6 typed note-pair, and the note input the §4 serializer reads -->
+  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke here.</span></div>
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The rule this site now encodes.</span></div>
+  </div>
+  <textarea data-feedback-note placeholder="Notes on this site…" style="width:100%;margin-top:var(--s3);min-height:52px;resize:vertical;padding:var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
+</section>
+
+<section id="unit-closeout" data-feedback-id="u-closeout" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
+    <span style="border:1px solid var(--risk);color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">exempt</span>
+    <div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">closeout/SKILL.md:64</div>
+      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">This site keeps the old form on purpose — the lede says why, so the reader never has to guess whether it was missed.</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start"><!-- …identical §7 comparison frame… --></div>
+  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The stated reason this site is exempt — required on every exempt unit.</span></div>
+  </div>
+  <textarea data-feedback-note placeholder="Notes on this site…" style="width:100%;margin-top:var(--s3);min-height:52px;resize:vertical;padding:var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
+</section>
+
+<!-- §7's review block still closes the page: verdict chips, notes, and the Copy feedback
+     button wired to the core §4 copyFeedback(). Each unit above serializes as
+     `unit#u-<slug>: "…"`. Nothing new is added to the serializer. -->
+```
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
@@ -954,7 +1119,8 @@ never committed.
   used sparingly.
 - **Don't** color syntax tokens with `--add` / `--del`; reserve those hues for diff
   semantics so meaning never blurs.
-- **Do** annotate only the changes that matter — 3–8 *key files/hunks*, each with a one-line
+- **Do** annotate only the changes that matter — 3–8 *key files/hunks* (a **depth** budget:
+  it bounds annotation within a unit and never caps how many units §12 renders), each with a one-line
   intent summary and a few high-signal callouts, focused excerpts of ~150 lines max (the
   core's reading budget: a ceiling *and* a floor).
 - **Don't** add decorative drop shadows or gradients beyond `--shadow`; separate with
@@ -1033,8 +1199,13 @@ the comparison is the payload, and the payload is never the thing you page away 
 **Rule 2 — never page a population.** When N sites are near-identical instances of one cause,
 the population *is* the finding, and N screens turn "five fixed, one deliberately exempt, two
 found late" into a memory test the reviewer cannot pass. A population belongs in one screen as a
-co-visible series or matrix, with per-unit before/afters inside it. Page *between* topics; never
-page *within* a set the reader is being asked to compare across.
+co-visible series or matrix, with per-unit before/afters inside it — which is exactly **§12's
+per-unit series**, dropped into a single deck screen rather than spread across N of them. Page
+*between* topics; never page *within* a set the reader is being asked to compare across.
+
+That is the seam between the two modes rather than a competition: §12 decides *how a population
+renders*, this rule decides *that it renders in one place*. A sweep of four or more
+near-identical sites takes §12's matrix whichever mode it lands in.
 
 Together the two rules say the same thing from opposite ends: **the deck pages arguments, not
 evidence.**

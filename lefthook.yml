@@ -48,6 +48,8 @@ pre-push:
       run: bash scripts/test-selection-idiom-consistency.sh
     options-comparison-contract-tests:
       run: bash scripts/test-options-comparison-contract.sh
+    per-unit-series-contract-tests:
+      run: bash scripts/test-per-unit-series-contract.sh
     documented-git-command-tests:
       run: bash scripts/test-documented-git-commands.sh
     compound-clustering-single-source-tests:
