@@ -124,6 +124,9 @@ jobs:
       - name: Run options-comparison contract suite
         run: bash scripts/test-options-comparison-contract.sh
 
+      - name: Run per-unit-series contract suite
+        run: bash scripts/test-per-unit-series-contract.sh
+
       - name: Run documented git command contract suite
         run: bash scripts/test-documented-git-commands.sh
 

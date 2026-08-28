@@ -118,6 +118,8 @@ Mark each commit 🟢 / 🟡 / 🔴:
 - 🟡 understood but carries an open question, a thin test, or a deliberate oddity worth confirming
 - 🔴 not yet understood, or the diff contradicts the stated intent — do not sign off
 
+**The prose bar for the card.** Every field below is authored prose — the one layer the shared rendering core leaves to you. Hold it to **`references/writing-for-humans.md`**: the revision bar (strip clutter, cut the warm-up, Bar/Beach Test, active verbs, concrete nouns, short-not-shallow) and the *what counts vs. what doesn't* test. **Intent** in particular must carry the mental model the diff cannot show; a narrativized restatement of the hunk fails the test even when every word is accurate. Write for someone who has worked in this project for a couple of weeks: they know the language and the repo's shape, and they do not know this commit — so gloss a domain term the commit introduces on first use. The doc's *shape* is written for issue and PR bodies; what carries over is the bar and the mental-model test.
+
 #### Per-commit card
 
 ```
@@ -135,6 +137,8 @@ Omit a line when it genuinely has nothing (e.g. "Looks odd on purpose:" on a bor
 #### Optional: render the commit as a line-anchored callout
 
 The card above is chat text by default, and for most commits that is the right altitude. But when a commit's riskiest line or deliberate oddity is hard to grasp *out of context* — a subtle change inside a long hunk, a multi-file commit whose pieces only make sense together — render that single commit as a focused, line-anchored callout using the shared **`references/visual-rendering-core.md`** rendering core (the same core `/visual-recap` authors against). The card's fields map straight onto the core's blocks: the **riskiest line** and **looks-odd-on-purpose** entries become `callout`s anchored to the real after-side lines of `git show <hash>`, and the **sign-off** becomes a `signoff-<short-hash>` unit.
+
+When a *commit sweeps one root cause across four or more near-identical sites*, the block is the **per-unit series** (`references/visual-recap-design.md` §12): one real `<section>` per site rather than three-to-eight sampled ones, opened by the required all-units matrix. For a sweep the population is the finding — sample it and a deliberately exempt site reads exactly like an oversight — so the 3–8 budget bounds depth within a unit, never the number of units.
 
 When a *choice* is what needs rendering rather than a change — three or more mutually exclusive options, each carrying three or more attributes, not orderable on one axis — the block is the **options-comparison** (`references/visual-recap-design.md` §11), and its threshold and its relationship to the `AskUserQuestion` menu live in `references/next-step-menu.md`. That block is forward-looking, so its grounding rule differs: each cell is cited with its source or visibly marked asserted (`references/visual-rendering-core.md` §1, *Forward-looking blocks*).
 
