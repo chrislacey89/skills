@@ -100,7 +100,7 @@ section "1. The canon states one diagram decision rule, and it is the new one"
 design_s5="$(extract "$design" '^## 5\. Block: diagram' '^## 6\.')"
 [ -n "$design_s5" ] || fatal "§5 extracted to 0 lines from $design — the heading moved."
 
-rule="$(printf '%s' "$design_s5" | grep -A6 -F '**Decision rule (one line):**' || true)"
+rule="$(grep -A6 -F '**Decision rule (one line):**' <<<"$design_s5" || true)"
 [ -n "$rule" ] || fatal "no 'Decision rule (one line):' paragraph in $design §5."
 printf 'decision rule (design §5):\n%s\n\n' "$rule"
 
@@ -214,7 +214,7 @@ arc="$(printf '%s' "$part2" | extract /dev/stdin '^## §D5\. ' '^## §D6\.')"
 [ -n "$arc" ] || fatal "§D5 (the arc) extracted to 0 lines."
 prev=0
 for stage in Premise 'The changes' 'The mechanism' Aftermath; do
-    n="$(printf '%s' "$arc" | grep -n -F "**$stage**" | head -1 | cut -d: -f1 || true)"
+    n="$(grep -n -F "**$stage**" <<<"$arc" | sed -n '1s/:.*//p')"
     if [ -z "$n" ]; then
         bad "§D5 names the arc stage '$stage'"
     elif [ "$n" -le "$prev" ]; then
@@ -251,6 +251,23 @@ assert_has "$part2" 'present in the markup from the start' \
     "§D3 requires every screen to be in the DOM from the start"
 assert_has "$part2" "querySelectorAll('[data-feedback-id]')" \
     "§D3 states why the serializer survives paging"
+
+# The rail must bind by id, not by array position. `data-to` shipped in the §D3
+# skeleton while §D8 bound `items.forEach((b, j) => show(j))` — an attribute that
+# looks load-bearing, is not read, and hides a real invariant: that the nav list
+# and the screen list stay the same length in the same order forever. Both halves
+# are asserted, because either one alone is the defect.
+assert_has "$part2_code" 'data-to=' "§D3's rail markup carries data-to on every .navitem"
+assert_has "$part2_code" 'b.dataset.to' "§D8's script actually reads data-to"
+assert_lacks "$part2_code" 'show(j)' "§D8 does not bind the rail by array position"
+
+nav_items="$(grep -c 'class="navitem"' <<<"$part2_code" || true)"
+nav_wired="$(grep -c 'class="navitem" data-to=' <<<"$part2_code" || true)"
+if [ "$nav_items" -gt 0 ] && [ "$nav_items" = "$nav_wired" ]; then
+    ok "every .navitem in the skeleton is wired ($nav_wired/$nav_items)"
+else
+    bad "§D3 has $nav_items .navitem(s) but only $nav_wired carry data-to"
+fi
 
 # ---------------------------------------------------------------------------
 section "8. The mode-selection rule is stated in the skill, not only the doc"

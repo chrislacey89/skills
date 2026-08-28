@@ -1104,7 +1104,10 @@ reviewer will actually do:
     <nav id="dk-nav">
       <div class="dk-grp">Start here</div>
       <button class="navitem" data-to="premise"><span class="nm">The premise</span><span class="sb">one disease, five instances</span></button>
-      <!-- …one .navitem per screen, in render order; a .dk-grp heads each new group -->
+      <button class="navitem" data-to="picture"><span class="nm">the picture</span><span class="sb">before/after, drawn</span></button>
+      <!-- …one .navitem per screen; `data-to` names that screen's id (§D8 resolves it,
+           so rail order is a reading choice, not a wiring constraint). A .dk-grp heads
+           each new arc group and is not a .navitem, so it never enters the count. -->
     </nav>
     <div class="keyhint">
       <kbd>J</kbd>/<kbd>&darr;</kbd> next &nbsp; <kbd>K</kbd>/<kbd>&uarr;</kbd> prev<br>
@@ -1308,13 +1311,14 @@ serializer is separate and unchanged.
   const dk = document.getElementById('dk');
   const screens = [...dk.querySelectorAll('.screen')];
   const items = [...dk.querySelectorAll('.navitem')];
+  const indexOf = id => screens.findIndex(s => s.id === id);
   let cur = 0;
 
   function show(i){
     cur = Math.max(0, Math.min(screens.length - 1, i));
     dk.classList.remove('all');
     screens.forEach((s, j) => { s.hidden = j !== cur; });
-    items.forEach((b, j) => b.classList.toggle('on', j === cur));
+    items.forEach(b => b.classList.toggle('on', b.dataset.to === screens[cur].id));
     document.getElementById('dk-bar').style.width = ((cur + 1) / screens.length * 100) + '%';
     document.getElementById('dk-cnt').textContent = (cur + 1) + ' / ' + screens.length;
     document.getElementById('dk-prev').disabled = cur === 0;
@@ -1327,7 +1331,7 @@ serializer is separate and unchanged.
     dk.classList.add('all');
     if (window.__mmd) { try { window.__mmd.run({ nodes: dk.querySelectorAll('.mermaid') }); } catch (e) {} }
   }
-  items.forEach((b, j) => b.addEventListener('click', () => show(j)));
+  items.forEach(b => b.addEventListener('click', () => show(indexOf(b.dataset.to))));
   document.getElementById('dk-prev').addEventListener('click', () => show(cur - 1));
   document.getElementById('dk-next').addEventListener('click', () => show(cur + 1));
   document.getElementById('dk-all').addEventListener('click', showAll);
@@ -1346,6 +1350,17 @@ serializer is separate and unchanged.
 
 The `INPUT|TEXTAREA` guard is not optional: without it, typing the letter `a` into a
 `[data-feedback-note]` field pages the deck out from under the reviewer mid-sentence.
+
+**The rail binds by `data-to`, never by position.** Each `.navitem` names the `id` of the
+screen it opens, and `indexOf` resolves it; the rail's `.dk-grp` headings sit between the
+buttons and are not `.navitem`s, so they never enter the count. The positional alternative —
+`items.forEach((b, j) => … show(j))` — reads fine and creates an invariant nothing states:
+that the two lists stay the same length in the same order forever. Add a rail entry for a
+screen you have not written yet, or reorder one list, and every button below the seam opens
+the wrong screen while the deck still looks correct. That is the failure this skeleton is
+supposed to be immune to, so it is bound out rather than warned about. An `id` in `data-to`
+that matches no screen is an authoring error and shows up immediately: the button opens
+screen 1 and never lights up.
 
 ---
 
