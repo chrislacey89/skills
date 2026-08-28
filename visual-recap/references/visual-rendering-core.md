@@ -63,7 +63,7 @@ Ten blocks cover the surface — nine for reviewing a finished change, plus one 
 | **file-tree + change-flags** | The topology — which files moved, each flagged | file list, ±LOC per file | per-file flag: `new` / `moved` / `load-bearing` / `mechanical` / `risky` |
 | **annotated-diff** | Split before/after for one hunk, callouts anchored to after-side lines, with a one-line intent summary above it | the hunk text, line numbers | the hunk `summary` (intent) and each callout `note` |
 | **callout** | A note anchored to a line range, rendered *at* that line | `lines: "42-47"` from the real hunk | the `note` |
-| **before/after** | Small-multiple comparison of two states of the same unit — labeled side-by-side columns by default; toggle variant only when the content is too wide to halve | both states' text | which difference matters |
+| **before/after** | Small-multiple comparison of two states of the same unit — labeled side-by-side columns; stacked frames when the content is too wide to halve, never a toggle that hides one side | both states' text | which difference matters |
 | **diagram** | Architecture / data-flow / sequence when topology needs a picture | — | CSS primitive for simple flow/sequence (default); Mermaid opt-in for complex graphs |
 | **data-model card** | The resulting schema shape of a changed entity, per-field change flags with struck-through `was:` prior types | the migration/schema diff text | the change-flag judgments and one compatibility sentence (breaking / risky / non-breaking, for whom) |
 | **api-endpoint card** | The resulting API contract of a changed route — method, path, changed params/responses flagged | the route/handler diff text | same as data-model card |

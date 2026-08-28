@@ -499,12 +499,21 @@ share the same scale, padding, and density (small-multiples constancy), so the e
 Columns are the structured-comparison primitive: two states of a config, a schema shape, a
 rendered surface (§9), or a short code unit — read in one glance, no interaction required.
 
-**Decision rule (one line):** can both states be read side by side without crushing the
-content into unreadably narrow columns? → **columns** (default, below). Content too wide —
-long code lines, a dense full-width table → the **toggle variant** further down.
+**Too wide to halve?** Long code lines or a dense full-width table make columns crush.
+**Stack the two frames instead — `Before` above, `After` below, identical frame and scale,
+both fully visible.** Stacking costs eye travel; hiding one state costs the comparison
+itself, which is why there is no toggle here (Tufte: *"The viewer cannot compare what they
+cannot see at the same time. Memory is not vision."*). If even stacked frames are
+unreadable, the unit is too big — narrow the excerpt to the lines that actually differ.
+
+**One comparison or many — the ids carry a slug.** The section id is
+`sec-compare-<slug>`, where `<slug>` names the unit being compared (`sec-compare-closeout`,
+`sec-compare-session-ts`). A recap that compares two states of one thing renders one of
+these; a per-unit series (§12) renders one per unit, in the same frame, down the page. A
+singular hardcoded id would make the second case collide with the first.
 
 ```html
-<section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+<section id="sec-compare-<slug>" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
     <div>
@@ -523,41 +532,6 @@ long code lines, a dense full-width table → the **toggle variant** further dow
     </div>
   </div>
   <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same frame, same scale on both sides — only the content differs.</p>
-</section>
-```
-
-### Variant — the toggle (wide states only)
-
-When each state is too wide to halve — long code lines, a dense table — fall back to a
-segmented pill with a sliding accent thumb; both states render in an identical frame and
-scale so only the code differs. The comparison cost is real (the reviewer holds one state in
-memory while viewing the other), so take this variant only when columns would crush the
-content.
-
-```html
-<!-- replaces the columns grid inside the same <section> -->
-<section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s4);flex-wrap:wrap">
-    <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
-    <div style="position:relative;display:inline-flex;border:1px solid var(--border-strong);border-radius:999px;padding:3px;background:var(--bg-subtle)">
-      <button onclick="setSide('before')" style="position:relative;z-index:1;padding:5px 18px;border:none;border-radius:999px;background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;color:var(--fg)">Before</button>
-      <button onclick="setSide('after')" style="position:relative;z-index:1;padding:5px 18px;border:none;border-radius:999px;background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;color:var(--fg-muted)">After</button>
-      <span id="ba-thumb" style="position:absolute;top:3px;bottom:3px;width:calc(50% - 3px);border-radius:999px;background:var(--accent);left:3px;transition:left .28s cubic-bezier(.4,0,.2,1)"></span>
-    </div>
-  </div>
-  <!-- Both panels live here. setSide() (§10) toggles their `hidden` attribute; they MUST
-       carry exactly these ids. Render both in the same frame and scale — only the code differs. -->
-  <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);min-height:200px;padding:var(--s4) 0">
-    <div id="ba-before">
-      <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">let</span> currentToken = <span style="color:var(--sx-n)">null</span></code></div>
-      <!-- …rest of the BEFORE state, one row per line… -->
-    </div>
-    <div id="ba-after" hidden>
-      <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)</code></div>
-      <!-- …rest of the AFTER state, identical frame and scale… -->
-    </div>
-  </div>
-  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same frame, same scale on both sides — only the code differs.</p>
 </section>
 ```
 
@@ -753,10 +727,14 @@ Worked example — a share popover gaining a "Copy link" action, as a §7 column
 
 ## 10. The minimal vanilla interactions
 
-Three tiny handlers — theme toggle, callout active-state, before/after side. No framework,
+Three tiny handlers — theme toggle, callout active-state, review verdict. No framework,
 no state library; if this grows routing or a store it has become the app the surface exists
 to avoid (`visual-rendering-core.md` §4). The §4 `copyFeedback()` serializer is separate and
 unchanged.
+
+There is deliberately **no** handler that swaps which state is on screen. Every block here
+renders all of its states as real elements in the document, so comparison is a glance or a
+scroll — never a click that hides one side. That is also the rule §12 is built to respect.
 
 ```html
 <script>
@@ -773,11 +751,6 @@ unchanged.
     activeId = id;
     document.querySelectorAll('[data-feedback-id="'+id+'"]').forEach(el=>el.classList.add('is-active'));
     document.getElementById('line-'+id)?.classList.add('is-active');
-  }
-  function setSide(side){
-    document.getElementById('ba-thumb').style.left = side === 'after' ? 'calc(50% + 0px)' : '3px';
-    document.getElementById('ba-before').hidden = side === 'after';
-    document.getElementById('ba-after').hidden = side !== 'after';
   }
   function setVerdict(v){
     document.querySelectorAll('[data-verdict-chip]').forEach(el=>{

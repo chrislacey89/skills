@@ -140,7 +140,7 @@ Author one `.html` file by copying the canonical skeleton in `references/visual-
 
 - Inline, themeable CSS is load-bearing — copy the skeleton's `:root`/`[data-theme="dark"]` token block verbatim (light default, dark flipped on `[data-theme]`) and keep the variable names. CDN libraries are enhancement-only and always have a no-CDN fallback. The file must read identically with the network off.
 - Line-anchored callouts are **direct labels** rendered at the line, not a separate legend (Tufte; Norman, *natural mapping*). Clicking a marker highlights the exact line — scope the highlight to the code cell, not the whole row.
-- Maximize data-ink: no chartjunk, no decorative shadows; small multiples + constancy of design for before/after comparisons — labeled side-by-side columns by default, identical scale and frame on both sides, the state named in the column header (never inside the frame); take the toggle variant only when the content is too wide to halve.
+- Maximize data-ink: no chartjunk, no decorative shadows; small multiples + constancy of design for before/after comparisons — labeled side-by-side columns by default, identical scale and frame on both sides, the state named in the column header (never inside the frame); when the content is too wide to halve, stack the two frames rather than hiding one behind a toggle.
 - Include the **Copy feedback** button and its layered-clipboard serializer with stable `data-feedback-id`s, exactly per the core's `recap-feedback v1` format.
 
 Write the file to a **transient** path — gitignored `.context/` or `mktemp` — never the tracked tree.
