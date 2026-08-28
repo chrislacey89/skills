@@ -1203,10 +1203,11 @@ One screen, whole:
 ```html
 <section class="screen" id="contract" hidden>
   <p class="ovl">CHANGE 1 OF 6 · THE CONTEXT CONTRACT</p>
-  <h1>&ldquo;Nothing else&rdquo; was false for five of eleven lenses.</h1>
+  <h1>&ldquo;Nothing else&rdquo; was false for several of the lenses.</h1>
   <div class="chips"><span class="chip fix">fixed</span><span class="chip keep">gate kept</span></div>
-  <p class="lede">A <b>lens</b> is one of the eleven review dimensions&hellip; 1&ndash;3 sentences, every
-     domain term glossed the first time it appears.</p>
+  <p class="lede">A <b>lens</b> is one of the review dimensions in
+     <code>review-checklist.md</code>&hellip; 1&ndash;3 sentences, every domain term glossed the
+     first time it appears.</p>
 
   <div class="panes">
     <div class="pane b"><div class="pane-hd"><span class="dot" style="background:var(--del)"></span>Before<span class="pane-path">pre-merge/SKILL.md:118</span></div>
@@ -1215,7 +1216,7 @@ One screen, whole:
       <pre class="code"><span class="ln a">Hand the sub-agent these four items, plus whatever</span><span class="ln a">its dimension's row in the checklist declares.</span></pre></div>
   </div>
 
-  <div class="note good"><span class="lbl">Why it matters</span>Five dimensions needed the repo, the
+  <div class="note good"><span class="lbl">Why it matters</span>Some dimensions needed the repo, the
     issue bodies, or npm &mdash; and the contract forbade all three.</div>
   <div class="keyline"><span class="lbl">The lesson</span>A contract that is cheaper to violate than to
     honor is not a contract.</div>
