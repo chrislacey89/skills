@@ -27,3 +27,4 @@ After TDD cycle, look for:
 - **Feature envy** → Move logic to where data lives
 - **Primitive obsession** → Introduce value objects — and when the primitive carries a precondition a downstream function depends on, make it unconstructable rather than merely validated ([interface-design.md](interface-design.md) § *Make an illegal input unconstructable, not merely detectable*)
 - **Existing code** the new code reveals as problematic
+- **Comment outlived its subject** → a comment block whose halves were written by different changes, so an explanation the code has moved past sits beside the one that replaced it. Merge the halves, or delete the stale one. Appending beside it is sediment: the block grows sideways, each author adds to prose no author owns, and it ends up read by nobody. The tell is a block covering two subjects that arrived at different times — check it against the history of the lines it sits above, not against its length

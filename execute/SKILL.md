@@ -275,7 +275,7 @@ After completing each logical unit:
 
 1. Run `pnpm run typecheck` and `pnpm run test` (or the project's equivalent). Fix any failures before committing.
 2. Stage only the files for that unit — do not stage unrelated changes.
-3. Commit with a message that says what this unit accomplished, not "WIP" or "progress".
+3. Commit with a message that says what this unit accomplished, not "WIP" or "progress". When the unit corrects earlier behavior, the message also carries the incident history — what the prior behavior was, which earlier attempt this supersedes, what you rejected on the way. That is the artifact a reader reaches for when asking why the code changed, so the source comment keeps only what explains the code as it now stands.
 
 If a unit touches both a test and its implementation, they belong in the same commit. If a refactor was triggered by the unit but is conceptually separate, commit the refactor separately.
 
