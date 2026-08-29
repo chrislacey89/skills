@@ -52,6 +52,10 @@ assert_found() {
     else bad "$label" "not found in $file: $needle"; fi
 }
 
+# Aborts the run. Used only by the oracle self-check, where continuing would
+# mean grading the subject with an instrument known to be wrong.
+fatal() { printf '  FATAL %s\n' "$1" >&2; exit 2; }
+
 # ---------------------------------------------------------------------------
 section "the threshold's three conditions agree wherever they are restated"
 # ---------------------------------------------------------------------------
@@ -245,11 +249,28 @@ assert_eq "0" "$singular" "no file still calls the wireframe the ONE model-autho
 # §3 table row whose Role cell marks it forward-looking.
 declared_word=$(grep -oE 'structured blocks are the exception, and there are (two|three|four|five)' "$CORE" \
     | grep -oE '(two|three|four|five)$' | head -1)
-case "$declared_word" in
-    two) declared_carveouts=2 ;; three) declared_carveouts=3 ;;
-    four) declared_carveouts=4 ;; five) declared_carveouts=5 ;;
-    *) declared_carveouts=-1 ;;
-esac
+# The word→integer map is a fixed lookup standing in as an independent oracle,
+# which docs/solutions/testing-patterns/partial-oracle-selfcheck-2026-08-22.md
+# names as a shape that rots silently: a wrong literal makes the comparison
+# below wrong in whichever direction the typo points, and nothing says so.
+# Self-check the table before trusting it.
+word_to_int() {
+    case "$1" in
+        two) echo 2 ;; three) echo 3 ;; four) echo 4 ;; five) echo 5 ;;
+        *) echo "" ;;
+    esac
+}
+
+# EVERY entry, not a sample — test-oracle-table-coverage.sh enforces that, and
+# its header records why: a loop over part of a table leaves the rest reachable,
+# and laundering an unpinned entry turns a real failure into a green run.
+for expect in two:2 three:3 four:4 five:5; do
+    if [ "$(word_to_int "${expect%%:*}")" != "${expect##*:}" ]; then
+        fatal "word_to_int(\"${expect%%:*}\") is not ${expect##*:} — the oracle's number table is wrong or no longer constant."
+    fi
+done
+
+declared_carveouts="$(word_to_int "$declared_word")"
 fl_rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{if (/forward-looking/) n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
 assert_eq "$((1 + fl_rows))" "$declared_carveouts" \
     "core §1's carve-out count equals the wireframe plus §3's forward-looking rows"

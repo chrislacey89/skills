@@ -229,9 +229,29 @@ done
 # ---------------------------------------------------------------------------
 section "the skill states the stricter skip gate for plans"
 # ---------------------------------------------------------------------------
+# A FOURTH DETECTOR, because polarity is the whole content of these two claims
+# and a bare substring check cannot carry it. The first draft asserted the words
+# 'stricter' and 'forecloses something' were present. Both survive their own
+# inversion — "the skip gate gets looser, not stricter" contains 'stricter', and
+# "a decision that never forecloses something" contains 'forecloses something' —
+# and the suite was verified GREEN at 30/30 against both mutations before this
+# replaced it. The keyword was present and the rule said the opposite.
+#
+# So each needle is anchored to the clause shape rather than to a word, and both
+# real inversions are fixtures below. This is the same discipline the three
+# detectors above already follow; these two assertions were the one place in the
+# file it had been skipped, which is where the defect landed.
+detect_gate_polarity_defect() {
+    local txt; txt="$(cat)"
+    has "$txt" 'skip gate gets stricter, not looser' \
+        || printf 'gate-direction claim absent or inverted\n'
+    has "$txt" 'only for a decision that forecloses something' \
+        || printf 'foreclosure gate absent or negated\n'
+}
+
 skill_txt="$(cat "$SKILL")"
-assert_has "$skill_txt" 'forecloses something' "the skill gates decision cards on foreclosure, not on 'when in doubt, include'"
-assert_has "$skill_txt" 'stricter' "the skill says the plan-side gate is stricter, not looser"
+polarity="$(printf '%s' "$skill_txt" | detect_gate_polarity_defect)"
+assert_eq "" "$polarity" "the skill's plan-side gate is stricter and keyed on foreclosure"
 
 # ---------------------------------------------------------------------------
 section "the zero-hit detectors still detect (self-test)"
@@ -312,6 +332,39 @@ if [ -z "$(printf '%s' "$real_card" | detect_split_violation)" ]; then
     ok "split detector passes: the real first card from §13"
 else
     bad "split detector FALSE-POSITIVES on the real first card"
+fi
+
+# The polarity detector, against the REAL sentence and its two REAL inversions.
+# These are not hypotheticals: both were run against the previous draft of this
+# section and both left the suite green at 30/30.
+gate_ok="$skill_txt"
+gate_looser="${skill_txt//skip gate gets stricter, not looser/skip gate gets looser, not stricter}"
+gate_negated="${skill_txt//only for a decision that forecloses something/only for a decision that never forecloses something}"
+[ "$gate_looser" != "$skill_txt" ]  || fatal "the 'stricter, not looser' clause is not in $SKILL — the fixture could not be built."
+[ "$gate_negated" != "$skill_txt" ] || fatal "the foreclosure clause is not in $SKILL — the fixture could not be built."
+
+# Checked directly rather than through a `read -r label|fixture` loop: these
+# fixtures are the whole SKILL.md, and a `|`-delimited here-doc splits a
+# multi-line fixture into one bogus case per line. The first draft of this
+# section did exactly that and reported 302 assertions, nearly all of them
+# "catches" verdicts on unrelated prose lines that happen to lack the clause —
+# a suite that looks thorough and is measuring nothing.
+if [ -n "$(printf '%s' "$gate_looser" | detect_gate_polarity_defect)" ]; then
+    ok "polarity detector catches: gate direction flipped to looser"
+else
+    bad "polarity detector MISSED: gate direction flipped to looser" "the gate could be documented backwards"
+fi
+
+if [ -n "$(printf '%s' "$gate_negated" | detect_gate_polarity_defect)" ]; then
+    ok "polarity detector catches: foreclosure condition negated"
+else
+    bad "polarity detector MISSED: foreclosure condition negated" "the gate could be documented backwards"
+fi
+
+if [ -z "$(printf '%s' "$gate_ok" | detect_gate_polarity_defect)" ]; then
+    ok "polarity detector passes: the real sentence from $SKILL"
+else
+    bad "polarity detector FALSE-POSITIVES on the real sentence"
 fi
 
 # ---------------------------------------------------------------------------
