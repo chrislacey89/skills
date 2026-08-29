@@ -2,11 +2,15 @@
 
 The fixed token system and per-block markup that Skill Kit's visual review surfaces copy
 from. It is the **canonical skeleton** referenced by `visual-rendering-core.md` §3 and §6,
-shared by `/visual-recap`, the `/walk-commits` per-commit callouts, and the future
-`/visual-plan`. §3–§9 are the blocks that render a change which already exists (§1, §2, and §10
-are the token core, the shell, and the interactions they all share); §11 is the one
-forward-looking block, used by any skill that emits an N-way fork of options that do not exist
-yet.
+shared by `/visual-recap` and the `/walk-commits` per-commit callouts. §3–§9 are the blocks
+that render a change which already exists (§1, §2, and §10 are the token core, the shell, and
+the interactions they all share); §11 is the one forward-looking block, used by any skill that
+emits an N-way fork of options that do not exist yet.
+
+**There is no `/visual-plan` skill, and none is coming.** An earlier draft of this header named
+one as future work; #317 ruled against it and withdrew the promise rather than leave it
+resolving to nothing. Forward-looking blocks live in this file and `/visual-recap` renders
+them.
 
 **The document has two parts, and they are two rendering modes, not two layouts of one thing.**
 Everything numbered §1–§12 is **Part I — the scroll recap**: a single scrolling column for a

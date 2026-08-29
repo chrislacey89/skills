@@ -43,7 +43,7 @@ Under those conditions, author **self-contained HTML directly** and treat any "r
 - The artifact is non-interactive (a static report) — then Markdown/terminal output is lighter and this is over-engineering.
 - The change is small or obvious — a few lines read faster as plain text; rendering HTML is filler (Norman *featuritis*). Both `/visual-recap` and the `/walk-commits` enhancement gate on this explicitly.
 
-- **Sibling docs:** none yet. Issue B (`/visual-plan`, the planning bookend) is designed to inherit this entry and `docs/visual-rendering-core.md`; cross-link when it lands.
+- **Sibling docs:** none yet. This entry was written expecting a sibling `/visual-plan` skill to inherit it. That skill was never built — #317 ruled that the planning bookend ships as forward-looking *blocks* in `docs/visual-recap-design.md` rather than as a second command, so what inherits this entry is `/visual-recap`'s forward-looking mode, not a new skill.
 
 ## Solution
 
@@ -74,7 +74,7 @@ Three artifacts, one shared quality bar (`docs/visual-rendering-core.md`, bundle
 
 - Issue #117 — the `/improve-pipeline` proposal and the FEASIBILITY spike verdict that grounds this decision
 - PR #123 — the implementation this entry rides
-- Sibling issue B (`/visual-plan`, planning bookend) — to be filed; inherits this entry and `docs/visual-rendering-core.md`
+- Issue #317 — the planning bookend, filed as sibling issue B and **resolved against a new skill**. The blocks land in `docs/visual-recap-design.md`; `/visual-recap` selects them. Read it before assuming this entry is waiting on a `/visual-plan` that never arrived
 - `docs/visual-rendering-core.md` — the shared vocabulary + quality bar this decision produced
 
 ## Shelf Life
