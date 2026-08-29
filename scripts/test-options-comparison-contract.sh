@@ -221,10 +221,37 @@ section "the block count in the core matches its own table"
 
 declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve) blocks' "$CORE" | head -1 | cut -d' ' -f1)
 rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
-case "$declared" in
-    Nine) declared_n=9 ;; Ten) declared_n=10 ;; Eleven) declared_n=11 ;; Twelve) declared_n=12 ;;
-    *) declared_n=-1 ;;
-esac
+# A named function, not a bare inline `case`, and self-checked before use. Both
+# properties are load-bearing and neither is stylistic.
+#
+# Self-checked, because this is a fixed table standing in as an independent
+# oracle: it holds the only value in this section not read out of the subject,
+# so it is the only thing that can disagree with the subject. Verified
+# exploitable before this fix — rewriting all four arms to `declared_n=$rows`
+# derives the oracle from the very value it grades, and the suite reported
+# 30 passed / 0 failed with §3's opening sentence saying "Nine" against a
+# twelve-row table. A check that cannot fail is not a check.
+#
+# Named, because `scripts/test-oracle-table-coverage.sh` — the meta-suite whose
+# whole job is finding lookup tables with no self-check — scans for `case` inside
+# a `fn() { … }` wrapper. A bare inline `case` is invisible to it, so this table
+# sat outside the detector built to catch exactly this. That is
+# docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md:
+# the sibling instance the first fix did not reach.
+block_word_to_int() {
+    case "$1" in
+        Nine) echo 9 ;; Ten) echo 10 ;; Eleven) echo 11 ;; Twelve) echo 12 ;;
+        *) echo "" ;;
+    esac
+}
+
+for expect in Nine:9 Ten:10 Eleven:11 Twelve:12; do
+    if [ "$(block_word_to_int "${expect%%:*}")" != "${expect##*:}" ]; then
+        fatal "block_word_to_int(\"${expect%%:*}\") is not ${expect##*:} — the oracle's block-count table is wrong or no longer constant."
+    fi
+done
+
+declared_n="$(block_word_to_int "$declared")"
 assert_eq "$declared_n" "$rows" "§3's declared block count matches its table rows"
 
 # ---------------------------------------------------------------------------
