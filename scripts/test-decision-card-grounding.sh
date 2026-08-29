@@ -156,15 +156,17 @@ section "every card carries a cited field, and its stated split is honest"
 # so healthy is empty for both.
 detect_floor_violation() {
     local card; card="$(cat)"
-    local cited; cited=$(grep -o 'class="oc-cited"' <<<"$card" | wc -l | tr -d ' ')
+    local cited; cited=$( { grep -o 'class="oc-cited"' <<<"$card" || true; } | wc -l | tr -d ' ')
     [ "$cited" -ge 1 ] || printf 'no cited field\n'
 }
 
 detect_split_violation() {
     local card; card="$(cat)"
     local cited asserted claimed
-    cited=$(grep -o 'class="oc-cited"' <<<"$card" | wc -l | tr -d ' ')
-    asserted=$(grep -o 'class="oc-asserted"' <<<"$card" | wc -l | tr -d ' ')
+    # Guarded: zero cited is the exact state the floor detector exists to
+    # report, and an unguarded grep would abort the run under pipefail instead.
+    cited=$( { grep -o 'class="oc-cited"' <<<"$card" || true; } | wc -l | tr -d ' ')
+    asserted=$( { grep -o 'class="oc-asserted"' <<<"$card" || true; } | wc -l | tr -d ' ')
     # The dc-split header states "<n> cited · <m> asserted". An absent header is
     # a violation too: an unstated split cannot be checked, and §1 requires each
     # option's split to be shown.
@@ -204,7 +206,7 @@ section "every card can actually serialize"
 # ---------------------------------------------------------------------------
 assert_has "$(cat "$CORE")" 'dc-<decision-slug>' "core §4 registers the dc- id shape"
 
-ids=$(grep -o 'data-feedback-id="dc-[a-z0-9-]*"' <<<"$s13_html" | wc -l | tr -d ' ')
+ids=$( { grep -o 'data-feedback-id="dc-[a-z0-9-]*"' <<<"$s13_html" || true; } | wc -l | tr -d ' ')
 assert_eq "$card_count" "$ids" "every card carries a dc- data-feedback-id"
 
 bad_ids=$(grep -oE 'data-feedback-id="[^"]*"' <<<"$s13_html" | grep -cv 'data-feedback-id="dc-' || true)
