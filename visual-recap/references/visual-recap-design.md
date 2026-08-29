@@ -1116,6 +1116,119 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
 
 ---
 
+## 13. Block: decision card (forward-looking)
+
+**Scope note — the second block that is not about a finished diff.** §11 renders options
+nobody has picked; this one renders the ones already picked. It is the forward-looking sibling
+of §8's contract cards, and the analogy is exact: a data-model card shows the *resulting
+schema* instead of the `ALTER TABLE` that produced it, and a decision card shows the
+**resulting commitment** instead of the paragraph that argued for it. The difference is where
+the grounding comes from — §8 derives from a real migration diff, and a plan has no diff at
+all.
+
+**The problem it solves.** A shaped plan states its decisions as prose — `/write-a-prd`'s
+`## Implementation Decisions` is a flat bullet list of modules, interfaces, schema changes,
+and architectural calls. That list is the part of a plan a reader skims, and skimming it is
+free: nothing marks which bullets are load-bearing, which are settled against a source, and
+which are the author thinking aloud. The card makes each decision a unit with a fixed shape,
+so a reader who was not in the shaping session can see the commitments in one eyespan rather
+than reconstructing them from paragraphs.
+
+**Read `visual-rendering-core.md` §1 "Forward-looking blocks" before rendering this.** It is
+the defining constraint, not background. Every field is either **cited** — quoted from the
+PRD or issue body, the research artifact, or current code at `file:line`, and showing that
+source — or visibly **asserted**, the model's judgment about a state that does not exist yet.
+**Every card carries at least one cited cell**; a decision grounded in nothing is not a
+commitment rendered at commitment weight, it is a proposal wearing one, and that is the
+finding to state rather than a card to draw. The two-thirds chip bar applies here too: a card
+with two-thirds or more of its fields asserted wears the `asserted` chip.
+
+**Why grounding matters more here than in §11.** An options matrix announces that nothing is
+settled — the reader arrives knowing they are looking at futures. A decision card announces
+the opposite, and Lovallo & Kahneman's finding is that inside-view plans read as authoritative
+*because* they are vivid and detailed. Rendering a plan's decisions crisply amplifies exactly
+that bias unless the render distinguishes settled-and-sourced from proposed. This is Lie
+Factor ≤ 1 applied to commitment rather than to magnitude.
+
+**Four fields, in this order, on every card** — Constancy of Design, the same reason §11's
+attributes run in the same order down every column:
+
+| Field | What it holds | Typical grounding |
+|---|---|---|
+| **decided** | The commitment, stated as a resulting shape | cited — the PRD/issue line that settles it |
+| **rules out** | What this decision now forecloses | cited when a no-go says so; asserted when it is a consequence nobody wrote down |
+| **reverses if** | The condition that would undo it | usually asserted — this is the Shelf Life question, asked at plan time |
+| **source** | Where the citation lives | always a real path, issue, or `file:line` |
+
+**When not to render one.** A decision with no consequence is a preference, and a card gives it
+weight it has not earned. Render a card for a decision that forecloses something; leave the rest
+as prose. A plan with one decision does not need the block at all — the sentence is already the
+eyespan.
+
+Cards carry a stable `data-feedback-id` (`dc-<decision-slug>`, `visual-rendering-core.md` §4)
+and a note field, so a reviewer's response to a specific decision serializes with everything
+else as `decision#dc-<slug>: "…"`.
+
+The card reuses §11's `.oc-cited` / `.oc-asserted` treatments verbatim rather than inventing a
+second visual language for the same distinction — paste §11's style block when rendering
+either forward-looking block. Only the wrapper below is new:
+
+```html
+<style>
+  /* decision-card primitives (§13) — same tokens, and §11's cited/asserted spines */
+  .dc-card{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);
+    box-shadow:var(--shadow);overflow:hidden;margin-top:var(--s4)}
+  .dc-head{display:flex;align-items:center;gap:var(--s3);padding:var(--s4);
+    border-bottom:1px solid var(--border)}
+  .dc-name{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)}
+  .dc-split{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--fg-muted)}
+  .dc-row{display:grid;grid-template-columns:104px minmax(0,1fr);gap:var(--s3);
+    align-items:baseline;padding:var(--s3) var(--s4);border-top:1px solid var(--border)}
+  .dc-row:first-child{border-top:none}
+  .dc-label{font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-faint)}
+  .dc-note{display:block;box-sizing:border-box;width:calc(100% - 2*var(--s4));
+    margin:0 var(--s4) var(--s4);padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px;outline:none}
+</style>
+```
+
+**Worked example (2 of the 3 decisions in #317)** — one cited-heavy, one carrying an asserted
+consequence. Render every decision that forecloses something, not a sample:
+
+```html
+<section id="sec-decisions" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;Decisions this plan commits to</div>
+
+  <div class="dc-card" data-feedback-id="dc-no-visual-plan-skill" data-feedback-kind="decision">
+    <div class="dc-head">
+      <span class="dc-name">No /visual-plan skill</span>
+      <span class="dc-split">3 cited · 1 asserted</span>
+    </div>
+    <div class="dc-row"><span class="dc-label">decided</span><span class="oc-cited">The planning bookend ships as forward-looking blocks in this file, rendered by <code>/visual-recap</code>.<span class="oc-src">#245 verdict: “Proceed narrowly — as a block in two existing docs, not a skill.”</span></span></div>
+    <div class="dc-row"><span class="dc-label">rules out</span><span class="oc-cited">A second command name, and the six inventory surfaces a new skill must appear in.<span class="oc-src">CLAUDE.md § Inventory-sync rule</span></span></div>
+    <div class="dc-row"><span class="dc-label">reverses if</span><span class="oc-asserted">The blocks are rendered often enough that users keep reaching for a separate entry point. The blocks are the expensive part, so a later split is cheap.</span></div>
+    <div class="dc-row"><span class="dc-label">source</span><span class="oc-cited">#317 Mediator verdict<span class="oc-src">github.com/chrislacey89/skills/issues/317</span></span></div>
+    <textarea class="dc-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+  </div>
+
+  <div class="dc-card" data-feedback-id="dc-drop-fidelity-gate" data-feedback-kind="decision">
+    <div class="dc-head">
+      <span class="dc-name">No render-time fidelity gate</span>
+      <span class="dc-split">2 cited · 2 asserted</span>
+    </div>
+    <div class="dc-row"><span class="dc-label">decided</span><span class="oc-cited">Shape Up’s low-fidelity ceiling governs UI panels, not architecture graphs or decision commitments — so dropping the breadboard and fat-marker blocks drops what the ceiling was aimed at.<span class="oc-src">Shape Up ch. 6: “High-fidelity mockups trigger premature design debates.”</span></span></div>
+    <div class="dc-row"><span class="dc-label">rules out</span><span class="oc-asserted">A UI-flow plan surface. If one is wanted later, ch. 4’s ceiling comes back with it.</span></div>
+    <div class="dc-row"><span class="dc-label">reverses if</span><span class="oc-asserted">A rendered plan is observed pulling a review into a UI debate.</span></div>
+    <div class="dc-row"><span class="dc-label">source</span><span class="oc-cited">#317 revision comment<span class="oc-src">issues/317#issuecomment-5464443853</span></span></div>
+    <textarea class="dc-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+  </div>
+</section>
+```
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
@@ -1140,6 +1253,10 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
   their support doesn't — an all-asserted column beside a mostly-cited one, drawn identically,
   is the Lie Factor the block exists to prevent. Mark every cell cited or asserted, show each
   option's split, and drop any option with nothing citable.
+- **Don't** draw a decision card (§13) for a decision that forecloses nothing — a preference
+  rendered at commitment weight is the same Lie Factor as an all-asserted options column, and a
+  card whose fields carry no source is a proposal wearing a commitment's shape. Cite or mark
+  every field, and state the ungrounded decision as prose instead of padding a card.
 - **Don't** turn this skeleton into a shipped/versioned/imported component library — it is a
   copyable reference, exactly like the §4 serializer. If you reach for an npm package, a
   build step, or a CDN runtime, pull it back.
