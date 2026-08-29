@@ -238,7 +238,31 @@ singular=$( { grep -rn --include='*.md' \
     | wc -l | tr -d ' ')
 assert_eq "0" "$singular" "no file still calls the wireframe the ONE model-authored block"
 
-assert_found "there are two" "$CORE" "core states the carve-out count"
+# The count is DERIVED, not pinned. An earlier version of this line asserted the
+# literal "there are two", which made the guard itself a restated claim — the
+# exact defect docs/restated-claims.md names, and it went stale the moment #317
+# added a third carve-out. The truth is computable: the wireframe, plus every
+# §3 table row whose Role cell marks it forward-looking.
+declared_word=$(grep -oE 'structured blocks are the exception, and there are (two|three|four|five)' "$CORE" \
+    | grep -oE '(two|three|four|five)$' | head -1)
+case "$declared_word" in
+    two) declared_carveouts=2 ;; three) declared_carveouts=3 ;;
+    four) declared_carveouts=4 ;; five) declared_carveouts=5 ;;
+    *) declared_carveouts=-1 ;;
+esac
+fl_rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{if (/forward-looking/) n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
+assert_eq "$((1 + fl_rows))" "$declared_carveouts" \
+    "core §1's carve-out count equals the wireframe plus §3's forward-looking rows"
+
+# And the count lives in exactly one place. Restating it beside a block is how
+# it drifted twice during #245's review and once more in #317.
+restated=$( { grep -rn --include='*.md' -E '(one of the )?(two|three|four) \*{0,2}model-authored' \
+    docs/ visual-recap/ walk-commits/ pre-merge/ 2>/dev/null || true; } \
+    | { grep -v '/references/' || true; } \
+    | { grep -v '^docs/solutions/' || true; } \
+    | { grep -v '^docs/visual-rendering-core.md' || true; } \
+    | wc -l | tr -d ' ')
+assert_eq "0" "$restated" "no file outside the core restates the model-authored carve-out count"
 
 # ---------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

@@ -694,10 +694,11 @@ model owns; the fields themselves stay mechanically derived.
 
 When the diff changes rendered UI — layout, controls, navigation, dialogs, visible states,
 design tokens — show the visual delta; code diffs are not a substitute for what the user
-will see. Wireframes are one of the two **model-authored** structured blocks (the Grounding
-Rule exceptions, `visual-rendering-core.md` §1; the other is the options-comparison, §11): every label, control, and state must come from
-diff-visible strings and component names, and when the layout is inferred rather than read
-from the diff, the caption says so ("layout inferred").
+will see. Wireframes are a **model-authored** structured block (the Grounding Rule carve-outs
+are enumerated once, in `visual-rendering-core.md` §1 — do not restate the count here): every
+label, control, and state must come from diff-visible strings and component names, and when
+the layout is inferred rather than read from the diff, the caption says so ("layout
+inferred").
 
 **Coverage:** show the **entry surface** where the change appears, the **interaction
 surface** that opens or changes (popover, dialog, tab, inline editor), and the **resulting
