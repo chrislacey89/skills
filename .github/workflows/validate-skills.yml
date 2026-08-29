@@ -187,6 +187,14 @@ jobs:
       - name: Run recap mode + diagram default contract suite
         run: bash scripts/test-recap-mode-contract.sh
 
+      # The decision card (#317) is the second forward-looking block, and the
+      # first one whose subject is a plan. Its grounding rule is weaker than
+      # every other block's by necessity — a plan has no diff, so "derived by
+      # tooling" is replaced by "cited or visibly asserted" — and a weaker rule
+      # that goes unenforced degrades to no rule while still looking confident.
+      - name: Run decision card grounding contract suite
+        run: bash scripts/test-decision-card-grounding.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

@@ -1138,10 +1138,10 @@ than reconstructing them from paragraphs.
 the defining constraint, not background. Every field is either **cited** — quoted from the
 PRD or issue body, the research artifact, or current code at `file:line`, and showing that
 source — or visibly **asserted**, the model's judgment about a state that does not exist yet.
-**Every card carries at least one cited cell**; a decision grounded in nothing is not a
-commitment rendered at commitment weight, it is a proposal wearing one, and that is the
-finding to state rather than a card to draw. The two-thirds chip bar applies here too: a card
-with two-thirds or more of its fields asserted wears the `asserted` chip.
+**Every card carries at least one cited cell** — a card's fields are its cells — and a decision
+grounded in nothing is not a commitment rendered at commitment weight, it is a proposal wearing
+one. That is the finding to state rather than a card to draw. The chip bar carries over
+unchanged: a card with **two-thirds or more of its cells asserted** wears the `asserted` chip.
 
 **Why grounding matters more here than in §11.** An options matrix announces that nothing is
 settled — the reader arrives knowing they are looking at futures. A decision card announces
