@@ -260,6 +260,8 @@ Do not write all tests upfront — write one, make it pass, then move to the nex
 
 **[TypeScript projects] Library callback returns.** When a logical unit implements a callback the library asks the application to provide (agent hooks, middleware, proxy, tool handlers, render props, lifecycle methods), anchor the returned value to the library's declared return type with `satisfies LibraryReturnType`, a fresh object literal, or a derived type (`ReturnType<typeof …>`). Never return a typed local variable — TypeScript's excess-property check does not run on returns of typed values, so fields the library's signature does not declare are silently dropped at runtime. See `/tdd` Refactor step for the full rationale; if the research artifact (archive file or spike issue) carries a Library Callback Contracts snapshot (`/research` Phase 1.25), use its accepted-fields list as the pinned source.
 
+**Comment the code, not the incident.** A comment you write here carries the *current* why — what this code does, and why it is shaped this way. The incident that led you here goes to the commit message and the PR body instead: what the prior behavior was, which earlier attempt this supersedes, what you rejected on the way. Before committing a unit, reread the comments you added to it and move any sentence that explains history rather than code.
+
 #### Commit after each logical unit
 
 Do not accumulate all changes into one commit. Commit after each self-contained unit of progress. A logical unit is the smallest change that leaves the codebase in a working state — typecheck passes, tests pass, nothing is half-wired. Examples:
@@ -275,7 +277,7 @@ After completing each logical unit:
 
 1. Run `pnpm run typecheck` and `pnpm run test` (or the project's equivalent). Fix any failures before committing.
 2. Stage only the files for that unit — do not stage unrelated changes.
-3. Commit with a message that says what this unit accomplished, not "WIP" or "progress".
+3. Commit with a message that says what this unit accomplished, not "WIP" or "progress". When the unit corrects earlier behavior, write the incident history the paragraph above routes here — and put it in the PR body as well, not the commit message alone. A squash merge collapses these per-unit messages into one, and `/closeout` treats squash as the common convention, so the commit message alone is not a durable destination. The PR body is the copy that survives intact for a reader running `git blame` months later.
 
 If a unit touches both a test and its implementation, they belong in the same commit. If a refactor was triggered by the unit but is conceptually separate, commit the refactor separately.
 
