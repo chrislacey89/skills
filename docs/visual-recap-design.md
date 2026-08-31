@@ -1153,12 +1153,12 @@ matrix, then the card the chosen column turns into — and a plan that renders b
 decision's before and after, not duplicating it.
 
 That has one mechanical consequence, and it is the reason to state the relationship at all:
-**the winning option's slug carries into the card's id.** `opt-refuse-to-assemble` becomes
-`dc-refuse-to-assemble`. Deriving the id this way is what keeps it stable, which
-`visual-rendering-core.md` §4 requires of every feedback id — *"never a random or positional
-id."* The failure it prevents is specific and silent: number the decisions instead (`d-1`,
-`d-2`, `d-3`), insert or reorder one, regenerate, and every note the reviewer already pasted
-back now attaches to a different decision, with nothing reporting the swap.
+**the winning option's slug carries into the card's id.** The derivation and its worked example
+live once, in `visual-rendering-core.md` §4's id registry — ids are what that section is for, and
+a second copy here would be a restated operative claim (`restated-claims.md`). What belongs here
+is the failure it prevents, which is specific and silent: number the decisions instead (`d-1`,
+`d-2`, `d-3`), insert or reorder one, regenerate, and every note the reviewer already pasted back
+now attaches to a different decision, with nothing reporting the swap.
 
 **The problem it solves.** A shaped plan states its decisions as prose — `/write-a-prd`'s
 `## Implementation Decisions` is a flat bullet list of modules, interfaces, schema changes,

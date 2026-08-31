@@ -375,6 +375,29 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "the slug-pairing example lives in exactly one authored file"
+# ---------------------------------------------------------------------------
+# The §11-to-§13 id derivation is an operative claim: an agent generating a
+# decision card reads it to learn how to derive the card's id. It was written
+# into three authored files at once — the design doc, the core's registry, and
+# the skill — each with the same worked example and nothing keeping them in
+# agreement. That is the restated-operative-claim class (docs/restated-claims.md),
+# and the review that caught it noted the obvious remedy: state it once.
+#
+# The registry in core §4 is canonical, because ids are what that section is for.
+# Generated references/ copies are excluded (sync covers those), as is CHANGELOG,
+# which records history rather than instructing anyone.
+example_sites="$( { grep -rln --include='*.md' -- 'opt-refuse-to-assemble' docs/ visual-recap/ walk-commits/ pre-merge/ 2>/dev/null || true; } \
+    | { grep -v '/references/' || true; } | sort)"
+site_count=$(printf '%s' "$example_sites" | grep -c . || true)
+assert_eq "1" "$site_count" "the opt-/dc- worked example appears in exactly one authored file"
+if [ "$site_count" = "1" ]; then
+    assert_eq "docs/visual-rendering-core.md" "$example_sites" "and that file is the id registry"
+else
+    printf '       sites: %s\n' "$(printf '%s' "$example_sites" | tr '\n' ' ')"
+fi
+
+# ---------------------------------------------------------------------------
 section "§14's open question is a question, not a graded claim"
 # ---------------------------------------------------------------------------
 # §14 exists because the core registered an id shape with no block behind it.
@@ -384,17 +407,38 @@ s14="$(extract "$DESIGN" '^## 14\. Block: open question' "^## Do's and Don'ts")"
 s14_html="$(printf '%s\n' "$s14" | awk '/^```/ { fence = !fence; next } fence { print }')"
 [ -n "$s14_html" ] || fatal "§14 contains no fenced code blocks."
 
+# TWO MORE DETECTORS, defined once and shared with their self-tests below. The
+# first draft wrote both as bare inline greps, and one of them was blind in a way
+# a fixture would have caught immediately — see detect_graded_question.
+detect_positional_qid() {
+    grep -oE 'data-feedback-id="q-[0-9]+"' || true
+}
+
+# A class attribute holds a LIST of tokens, so the mark must be matched as a
+# token and not as the whole attribute value. The first draft matched
+# `class="oc-(cited|asserted)"` — anchored to the full value — which caught a
+# standalone <span class="oc-cited"> and sailed straight past
+# <div class="oq-q oc-cited">. That combined form is the *likelier* accidental
+# edit, because it is how a second class gets added to an element that already
+# has one. Verified: the combined mutation reported 36 passed, 0 failed.
+detect_graded_question() {
+    grep -oE 'class="[^"]*"' \
+        | sed -e 's/^class="//' -e 's/"$//' \
+        | tr ' ' '\n' \
+        | grep -xE 'oc-(cited|asserted)' || true
+}
+
 # 1. Ids are content-derived. The whole point of the block's id paragraph.
 q_ids=$( { grep -oE 'data-feedback-id="q-[a-z0-9-]+"' <<<"$s14_html" || true; } | wc -l | tr -d ' ')
 [ "$q_ids" -ge 1 ] || fatal "§14's example carries no q- id."
-positional=$( { grep -cE 'data-feedback-id="q-[0-9]+"' <<<"$s14_html" || true; } | tr -d ' ')
-assert_eq "0" "$positional" "§14's example uses a content-derived q- id, never q-<n>"
+positional="$(printf '%s\n' "$s14_html" | detect_positional_qid)"
+assert_eq "" "$positional" "§14's example uses a content-derived q- id, never q-<n>"
 
 # 2. A question asserts nothing, so it carries NO cited/asserted mark. If one
 #    appears, the block has drifted into the forward-looking class and core §1's
 #    derived carve-out count silently becomes wrong.
-graded=$( { grep -cE 'class="oc-(cited|asserted)"' <<<"$s14_html" || true; } | tr -d ' ')
-assert_eq "0" "$graded" "§14's example grades nothing — a question makes no claim"
+graded="$(printf '%s\n' "$s14_html" | detect_graded_question)"
+assert_eq "" "$graded" "§14's example grades nothing — a question makes no claim"
 
 # 3. It serializes, like every other annotatable unit.
 assert_has "$s14_html" 'data-feedback-note' "§14's question carries a note field the §4 serializer reads"
@@ -402,6 +446,48 @@ assert_has "$s14_html" 'data-feedback-note' "§14's question carries a note fiel
 # 4. Core §1 says why it is outside the class — the sentence the derived
 #    carve-out count depends on.
 assert_has "$(cat "$CORE")" 'asks rather than claims' "core §1 states why a question is not in the forward-looking class"
+
+# §14's two detectors are healthy at zero hits like the three above, and the
+# file's own header commits every such detector to a fixture battery. The first
+# draft exempted these two and shipped one blind. Fixtures are perturbations of
+# the REAL §14 markup, including the combined-class form that slipped through.
+real_q="$(grep -oE '<div class="oq-q">.*' <<<"$s14_html" | head -1)"
+[ -n "$real_q" ] || fatal "could not lift §14's real question line to build fixtures."
+q_standalone="${real_q/<div class=\"oq-q\">/<span class=\"oc-cited\">x</span><div class=\"oq-q\">}"
+q_combined="${real_q/class=\"oq-q\"/class=\"oq-q oc-cited\"}"
+q_asserted="${real_q/class=\"oq-q\"/class=\"oq-q oc-asserted\"}"
+[ "$q_combined" != "$real_q" ] || fatal "could not build the combined-class fixture."
+
+while IFS='|' read -r label fixture; do
+    [ -n "$label" ] || continue
+    if [ -n "$(printf '%s' "$fixture" | detect_graded_question)" ]; then
+        ok "grading detector catches: $label"
+    else
+        bad "grading detector MISSED: $label" "§14 could drift into the forward-looking class silently"
+    fi
+done <<EOF
+a standalone grading mark|$q_standalone
+a grading mark combined with a structural class|$q_combined
+an asserted mark combined with a structural class|$q_asserted
+EOF
+
+if [ -z "$(printf '%s' "$real_q" | detect_graded_question)" ]; then
+    ok "grading detector passes: §14's real question line"
+else
+    bad "grading detector FALSE-POSITIVES on §14's real markup"
+fi
+
+real_id="$(grep -oE 'data-feedback-id="q-[a-z0-9-]+"' <<<"$s14_html" | head -1)"
+if [ -n "$(printf '%s' "${real_id//q-blocked-run-ok/q-1}" | detect_positional_qid)" ]; then
+    ok "id detector catches: a positional q-<n>"
+else
+    bad "id detector MISSED: a positional q-<n>"
+fi
+if [ -z "$(printf '%s' "$real_id" | detect_positional_qid)" ]; then
+    ok "id detector passes: §14's real content-derived id"
+else
+    bad "id detector FALSE-POSITIVES on §14's real id"
+fi
 
 # ---------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
