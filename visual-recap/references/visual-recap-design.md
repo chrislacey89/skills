@@ -1295,8 +1295,11 @@ pasted-back answer shifts by one. Prefer the slug; treat `q-<n>` as legacy.
     border-radius:0 var(--r3) var(--r3) 0;background:var(--bg-elev);padding:var(--s4)}
   .oq-q{font-size:13.5px;font-weight:650;color:var(--fg);margin-bottom:var(--s2);line-height:1.45}
   .oq-ctx{font-size:12.5px;color:var(--fg-muted);line-height:1.6;margin-bottom:var(--s3)}
-  .oq-def{font-size:11.5px;color:var(--fg-faint);margin-bottom:var(--s3)}
-  .oq-def b{color:var(--fg-muted);font-weight:600}
+  /* --fg-muted, not --fg-faint: this line says what happens if nobody answers,
+     which is the consequence the reader most needs and the one they are most
+     likely to skip. Measured 2.85:1 on --fg-faint (below AA) and 5.77:1 here. */
+  .oq-def{font-size:11.5px;color:var(--fg-muted);margin-bottom:var(--s3)}
+  .oq-def b{color:var(--fg);font-weight:600}
   .oq-note{display:block;width:100%;box-sizing:border-box;padding:4px 7px;border-radius:var(--r1);
     border:1px solid var(--border);background:var(--bg);color:var(--fg);
     font-family:var(--sans);font-size:11.5px;outline:none}
