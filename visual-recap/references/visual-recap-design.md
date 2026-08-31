@@ -843,6 +843,24 @@ each carrying three or more attributes, not orderable on one axis — lives in
 `next-step-menu.md`, along with the rule that the comparison *shows* and
 `AskUserQuestion` *commits*.
 
+**The block may recommend, and a recommendation must show its work.** §11 shows the comparison;
+the `AskUserQuestion` menu after it takes the choice (`next-step-menu.md`). Without a way to mark
+which column the analysis favors, that recommendation travels in the menu label alone, stripped of
+every cell that produced it — so the reader gets N evenly-weighted panels and then a first option
+they cannot audit. Mark it with `oc-chip is-rec`.
+
+One condition, and it is not optional: **a recommendation names the attribute rows that carry it.**
+Write `recommended — rows 2 and 4 dominate`, never a bare `recommended`. A recommendation is the
+single most consequential asserted claim in the block, and an unsourced one is precisely the
+unevidenced weight the cited/asserted split exists to prevent — Lie Factor applied to the
+conclusion instead of to a cell. **At most one option per matrix carries it.** Two recommendations
+are no recommendation, and if the analysis genuinely cannot separate two columns, that tie is the
+finding to state in prose.
+
+**The `is-dominated` chip may carry a short qualifier**, because "strictly worse" and "worse but
+still viable" lead to different calls and the bare word collapses them: `dominated — still
+delivers` reads correctly where `dominated` alone reads as *rule it out*.
+
 **The shape is a matrix, not N independent cards.** Attributes are rows, options are columns,
 and the row label is written once on the left instead of repeated inside every card (Tufte:
 direct labeling, and less redundant ink). Cells in one band are grid siblings, so they stretch
@@ -876,6 +894,8 @@ Paste this style block alongside the §1 core only when rendering an options com
     background:color-mix(in srgb,var(--risk) 12%,transparent)}
   .oc-chip.is-dominated{border:1px solid var(--del);color:var(--del);
     background:color-mix(in srgb,var(--del) 12%,transparent)}
+  .oc-chip.is-rec{border:1px solid var(--accent);color:var(--accent);
+    background:var(--accent-dim)}
   /* the support asymmetry, made visual: cited reads normally on a solid neutral spine;
      asserted is muted, italic, and on a dashed --risk spine. Emphasis marks what is NOT
      evidenced, which is what the reader needs to notice. Diff hues stay out of it. */
@@ -1126,6 +1146,20 @@ schema* instead of the `ALTER TABLE` that produced it, and a decision card shows
 the grounding comes from — §8 derives from a real migration diff, and a plan has no diff at
 all.
 
+**A decision card is what an options-comparison becomes once someone picks.** The two blocks are
+one decision at two times, not two unrelated blocks: §11 renders the fork while it is open, §13
+renders the same decision after it closes. On a live decision surface they sit adjacent — the
+matrix, then the card the chosen column turns into — and a plan that renders both is showing a
+decision's before and after, not duplicating it.
+
+That has one mechanical consequence, and it is the reason to state the relationship at all:
+**the winning option's slug carries into the card's id.** `opt-refuse-to-assemble` becomes
+`dc-refuse-to-assemble`. Deriving the id this way is what keeps it stable, which
+`visual-rendering-core.md` §4 requires of every feedback id — *"never a random or positional
+id."* The failure it prevents is specific and silent: number the decisions instead (`d-1`,
+`d-2`, `d-3`), insert or reorder one, regenerate, and every note the reviewer already pasted
+back now attaches to a different decision, with nothing reporting the swap.
+
 **The problem it solves.** A shaped plan states its decisions as prose — `/write-a-prd`'s
 `## Implementation Decisions` is a flat bullet list of modules, interfaces, schema changes,
 and architectural calls. That list is the part of a plan a reader skims, and skimming it is
@@ -1226,6 +1260,67 @@ consequence. Render every decision that forecloses something, not a sample:
   </div>
 </section>
 ```
+
+---
+
+## 14. Block: open question
+
+**Scope note — this block existed as an id with no markup.** `visual-rendering-core.md` §4 has
+registered `q-<…>` since the core was written, and nothing anywhere defined what an open question
+looks like. A surface that renders decisions needs somewhere to put the ones it *cannot* render:
+§11 compares options you already know, §13 records a choice already made, and neither holds "we
+have not worked this out yet." The field built one anyway, which is how the gap surfaced.
+
+**It carries no cited/asserted mark, and that is the point.** The forward-looking rule in
+`visual-rendering-core.md` §1 grades *claims* — does this assertion have a source, and does the
+render say so. A question asserts nothing, so there is nothing to ground and no mark to apply.
+That is why the open question is **not** a member of the forward-looking class despite being about
+the future, and why §1's carve-out list does not grow when this block lands.
+
+What a question does owe the reader is the **context that makes it answerable** — what is already
+known, what hangs on the answer, and a default if one exists. A bare question is a prompt; a
+question with its stakes attached is a decision waiting to happen.
+
+**Ids are content-derived, like every other unit.** Use `q-<question-slug>` — `q-blocked-run-ok`,
+not `q-1`. The core registered `q-<n>` first and that positional form is the one shape in the
+registry that violates the registry's own rule (*"never a random or positional id, so the same
+unit keeps the same id if the artifact is regenerated"*). Insert a question, regenerate, and every
+pasted-back answer shifts by one. Prefer the slug; treat `q-<n>` as legacy.
+
+```html
+<style>
+  /* open-question primitives (§14) — same tokens, no new palette */
+  .oq{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s3)}
+  .oq-card{border:1px solid var(--border);border-left:3px solid var(--risk);
+    border-radius:0 var(--r3) var(--r3) 0;background:var(--bg-elev);padding:var(--s4)}
+  .oq-q{font-size:13.5px;font-weight:650;color:var(--fg);margin-bottom:var(--s2);line-height:1.45}
+  .oq-ctx{font-size:12.5px;color:var(--fg-muted);line-height:1.6;margin-bottom:var(--s3)}
+  .oq-def{font-size:11.5px;color:var(--fg-faint);margin-bottom:var(--s3)}
+  .oq-def b{color:var(--fg-muted);font-weight:600}
+  .oq-note{display:block;width:100%;box-sizing:border-box;padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px;outline:none}
+</style>
+```
+
+```html
+<section id="sec-open" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Still open</div>
+  <div class="oq">
+    <div class="oq-card" data-feedback-id="q-blocked-run-ok" data-feedback-kind="question">
+      <div class="oq-q">Is a blocked run acceptable at all?</div>
+      <div class="oq-ctx">Runs that succeed today will fail after this lands. Whether that is a
+        regression or the intended gate decides which of the three options above is even eligible.</div>
+      <div class="oq-def"><b>If unanswered:</b> assume yes, and gate behind the existing flag.</div>
+      <textarea class="oq-note" data-feedback-note placeholder="Your answer…"></textarea>
+    </div>
+  </div>
+</section>
+```
+
+**When not to render one.** A question you can answer by reading the code is not open — answer it.
+A question with no consequence is trivia. Render the ones where the answer changes what gets built,
+and say what happens if nobody answers.
 
 ---
 

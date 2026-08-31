@@ -35,7 +35,7 @@ Two blocks are in the class, and everything below governs both:
 - the **options-comparison** (`visual-recap-design.md` §11) — N mutually exclusive futures, none of them built
 - the **decision card** (`visual-recap-design.md` §13) — a commitment a plan has already made, rendered as its resulting shape rather than as the prose that argued for it
 
-Read *cell* below as "cell or field" and *option* as "option or card," according to which member you are rendering. The rule was written for the options-comparison first and generalized in #317; if a future forward-looking block does not fit these words, widen them here rather than restating them beside the new block.
+Read *cell* below as "cell or field" and *option* as "option or card," according to which member you are rendering. **A block that asks rather than claims is not in the class** — the open question (`visual-recap-design.md` §14) is about the future too, and it grades nothing, because there is no assertion to source. Membership turns on making a claim, not on facing forward. The rule was written for the options-comparison first and generalized in #317; if a future forward-looking block does not fit these words, widen them here rather than restating them beside the new block.
 
 - **Cited** — the cell is quoted from, or directly derived from, something that already exists: the current text at `file:line`, an issue or PR body, a research-archive entry, test output, a published spec. The cell renders normally and **shows its source**.
 - **Asserted** — the cell is the model's judgment about a state that does not exist yet: a projected cost, a claimed benefit, drafted replacement text. The cell renders with a visible `asserted` treatment and never carries a cited cell's weight.
@@ -62,7 +62,7 @@ If redaction removed anything, say so once in the overview ("N value(s) masked")
 
 ## 3. Component vocabulary
 
-Twelve blocks cover the surface — ten for reviewing a finished change, plus two forward-looking blocks for rendering what does not exist yet: options nobody has built, and decisions a plan has committed to. Each is a *semantic role* with a canonical shape: **copy the per-block markup from the canonical skeleton (`visual-recap-design.md`), fill the grounded data and prose, and deviate only where the change genuinely needs it.** Keep it minimal, and only render the blocks the change actually needs. The skeleton is a copyable reference you inline (exactly like the §4 serializer), not a shipped widget — copying it instead of re-deriving the markup each run is what keeps two recaps of similar changes recognizably the same surface, so the reviewer reads the diff instead of re-learning the layout.
+Thirteen blocks cover the surface — ten for reviewing a finished change, two forward-looking blocks for rendering what does not exist yet (options nobody has built, and decisions a plan has committed to), and one for the questions a plan has not answered. Each is a *semantic role* with a canonical shape: **copy the per-block markup from the canonical skeleton (`visual-recap-design.md`), fill the grounded data and prose, and deviate only where the change genuinely needs it.** Keep it minimal, and only render the blocks the change actually needs. The skeleton is a copyable reference you inline (exactly like the §4 serializer), not a shipped widget — copying it instead of re-deriving the markup each run is what keeps two recaps of similar changes recognizably the same surface, so the reviewer reads the diff instead of re-learning the layout.
 
 | Block | Role | Grounded inputs (tooling) | Authored (prose) |
 |---|---|---|---|
@@ -78,6 +78,7 @@ Twelve blocks cover the surface — ten for reviewing a finished change, plus tw
 | **per-unit series** | One root cause at four or more near-identical sites, rendered as one real `<section>` per site — each an identical §7 comparison with a lede and typed notes — opened by a required all-units matrix so the population is visible in one eyespan | every site's before/after text, and which sites the diff touched | each unit's lede, its typed `bad`/`good`/`warn` notes, and its kind chip (`fixed` / `exempt` / `missed` / `mechanical`) |
 | **options-comparison** | N mutually exclusive options as identical panels in one eyespan — same attributes, same order, down every column (forward-looking; no diff exists yet) | the **cited** cells: current text at `file:line`, issue/PR bodies, research entries, test output | the **asserted** cells — projected costs, benefits, drafted resulting text — each marked `asserted` and each option's cited/asserted split shown (§1) |
 | **decision card** | A commitment a plan has already made, rendered as its resulting shape — what was decided, what it now rules out, what would reverse it — the way §8's contract cards render a resulting contract instead of the migration that produced it (forward-looking; no diff exists yet) | the **cited** fields: the PRD or issue body, the research artifact, current code at `file:line` | the **asserted** fields — a projected consequence, a reversal condition nobody has written down — each marked `asserted`, with the card's split shown (§1) |
+| **open question** | A question the plan has not answered, with the context that makes it answerable and the default if nobody does — §11 compares known options, §13 records a settled choice, and neither holds an unresolved one | — (a question asserts nothing, so no cell is graded) | the question, its stakes, and the if-unanswered default |
 
 **Pick the diagram form by what the picture has to say.** A **trivial spine** — one straight flow, a short sequence, no labeled edges, no branches — takes the pure-CSS primitive (`.fc-*`, `visual-recap-design.md` §1/§5): it renders identically offline, needs no CDN, and has no parse grammar. Anything **multi-stage or behavioral** — labeled edges, fan-outs, guards, failure states, a before/after pair of graphs, a dense DAG, ER, or class diagram — takes **Mermaid via CDN** (authored through `/mermaid`), because those are the pictures that carry comprehension and the CSS spine cannot express them. Every Mermaid figure carries a visible per-figure degrade note (§6), and #129's render-confirm gate still applies (§7). When the review context is known to be offline, take the CSS primitive regardless and say so in the caption. This reverses #131 on field evidence; the reasoning and the reopened fence are in `visual-recap-design.md` §5. Issue #83 is a different context — **GitHub-bound markdown** renders `mermaid` fences natively with no CDN — and is untouched. The rendering core owns callouts and diffs, not graph layout.
 
@@ -109,7 +110,8 @@ The artifact has no server, so the reviewer's answers travel by clipboard and th
 Every annotatable unit carries a stable, diff-derived `data-feedback-id` — never a random or positional id, so the same callout keeps the same id if the artifact is regenerated:
 
 - callout → `c-<file-slug>-L<line>` (e.g. `c-auth-ts-L42`)
-- open-question field → `q-<n>`
+- open question → `q-<question-slug>` (e.g. `q-blocked-run-ok`), rendered per `visual-recap-design.md` §14
+  - `q-<n>` is the legacy positional form and is the one shape here that breaks this section's own rule; prefer the slug so an inserted question does not shift every answer pasted back
 - per-commit sign-off → `signoff-<short-hash>`
 - per-finding response → `r-<file-slug>-L<line>`
 - data-model card → `dm-<entity-slug>` (e.g. `dm-sessions`)
@@ -117,6 +119,7 @@ Every annotatable unit carries a stable, diff-derived `data-feedback-id` — nev
 - wireframe → `wf-<slug>` (e.g. `wf-share-popover`)
 - options-comparison option → `opt-<option-slug>` (e.g. `opt-reconcile-182-now`)
 - decision card → `dc-<decision-slug>` (e.g. `dc-session-storage`)
+  - **When a card records the outcome of an options-comparison, reuse the winning option's slug** — `opt-refuse-to-assemble` → `dc-refuse-to-assemble` (`visual-recap-design.md` §13). The pairing is what makes the id derived rather than invented, and a surface that renders a decision open and then closed keeps one handle across both states.
 - per-unit series unit → `u-<unit-slug>` (e.g. `u-closeout`)
 
 ### The Copy-feedback button (a forcing function)

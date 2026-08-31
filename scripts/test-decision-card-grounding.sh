@@ -91,8 +91,15 @@ extract() {
         | awk -v e="$3" 'NR>1 && $0 ~ e {exit} {print}'
 }
 
-s13="$(extract "$DESIGN" '^## 13\. Block: decision card' "^## Do's and Don'ts")"
+# The end anchor is the NEXT heading, not the Do's-and-Don'ts section. §13 was
+# last in the file when this was written, so "^## Do's" happened to bound it —
+# and when §14 landed between them the span silently swallowed §14's markup,
+# reporting a non-dc- id and a third note field. An anchor that is correct only
+# because nothing follows is a latent widening; this suite caught its own.
+s13="$(extract "$DESIGN" '^## 13\. Block: decision card' '^## 14\. ')"
 [ -n "$s13" ] || fatal "§13 extracted to 0 lines from $DESIGN — the heading moved."
+grep -qF 'data-feedback-kind="decision"' <<<"$s13" || fatal "§13's span carries no decision card — the extraction bounds are wrong."
+grep -qF 'data-feedback-kind="question"' <<<"$s13" && fatal "§13's span reaches into §14 — the end anchor is too far."
 
 # ---------------------------------------------------------------------------
 section "§13 states its four fields, in order, with the floor and the chip bar"
@@ -366,6 +373,35 @@ if [ -z "$(printf '%s' "$gate_ok" | detect_gate_polarity_defect)" ]; then
 else
     bad "polarity detector FALSE-POSITIVES on the real sentence"
 fi
+
+# ---------------------------------------------------------------------------
+section "§14's open question is a question, not a graded claim"
+# ---------------------------------------------------------------------------
+# §14 exists because the core registered an id shape with no block behind it.
+# Two claims it makes are checkable and both are easy to reverse by accident.
+s14="$(extract "$DESIGN" '^## 14\. Block: open question' "^## Do's and Don'ts")"
+[ -n "$s14" ] || fatal "§14 extracted to 0 lines from $DESIGN — the heading moved."
+s14_html="$(printf '%s\n' "$s14" | awk '/^```/ { fence = !fence; next } fence { print }')"
+[ -n "$s14_html" ] || fatal "§14 contains no fenced code blocks."
+
+# 1. Ids are content-derived. The whole point of the block's id paragraph.
+q_ids=$( { grep -oE 'data-feedback-id="q-[a-z0-9-]+"' <<<"$s14_html" || true; } | wc -l | tr -d ' ')
+[ "$q_ids" -ge 1 ] || fatal "§14's example carries no q- id."
+positional=$( { grep -cE 'data-feedback-id="q-[0-9]+"' <<<"$s14_html" || true; } | tr -d ' ')
+assert_eq "0" "$positional" "§14's example uses a content-derived q- id, never q-<n>"
+
+# 2. A question asserts nothing, so it carries NO cited/asserted mark. If one
+#    appears, the block has drifted into the forward-looking class and core §1's
+#    derived carve-out count silently becomes wrong.
+graded=$( { grep -cE 'class="oc-(cited|asserted)"' <<<"$s14_html" || true; } | tr -d ' ')
+assert_eq "0" "$graded" "§14's example grades nothing — a question makes no claim"
+
+# 3. It serializes, like every other annotatable unit.
+assert_has "$s14_html" 'data-feedback-note' "§14's question carries a note field the §4 serializer reads"
+
+# 4. Core §1 says why it is outside the class — the sentence the derived
+#    carve-out count depends on.
+assert_has "$(cat "$CORE")" 'asks rather than claims' "core §1 states why a question is not in the forward-looking class"
 
 # ---------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

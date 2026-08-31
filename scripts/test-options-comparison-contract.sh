@@ -219,7 +219,7 @@ section "the block count in the core matches its own table"
 # §3 asserts a countable number of blocks. It said "Nine" against a ten-row
 # table for one commit of #245's review.
 
-declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve) blocks' "$CORE" | head -1 | cut -d' ' -f1)
+declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve|Thirteen) blocks' "$CORE" | head -1 | cut -d' ' -f1)
 rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
 # A named function, not a bare inline `case`, and self-checked before use. Both
 # properties are load-bearing and neither is stylistic.
@@ -240,12 +240,12 @@ rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{n++} t&&
 # the sibling instance the first fix did not reach.
 block_word_to_int() {
     case "$1" in
-        Nine) echo 9 ;; Ten) echo 10 ;; Eleven) echo 11 ;; Twelve) echo 12 ;;
+        Nine) echo 9 ;; Ten) echo 10 ;; Eleven) echo 11 ;; Twelve) echo 12 ;; Thirteen) echo 13 ;;
         *) echo "" ;;
     esac
 }
 
-for expect in Nine:9 Ten:10 Eleven:11 Twelve:12; do
+for expect in Nine:9 Ten:10 Eleven:11 Twelve:12 Thirteen:13; do
     if [ "$(block_word_to_int "${expect%%:*}")" != "${expect##*:}" ]; then
         fatal "block_word_to_int(\"${expect%%:*}\") is not ${expect##*:} — the oracle's block-count table is wrong or no longer constant."
     fi

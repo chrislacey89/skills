@@ -394,12 +394,15 @@ section "the block count §3 restates is unchanged"
 # SYSTEM-OVERVIEW, CLAUDE.md, and the skills describe the blocks without
 # counting them, and CHANGELOG entries are historical and not scanned. So the
 # sweep is one line, and this pin moves with it.
+#
+# #317 follow-up added the open question (§14) and ran the sweep again: still
+# one live surface, so the pin moves Twelve -> Thirteen.
 block_sentence="$(grep -o 'blocks cover the surface' "$core" || true)"
 [[ -n "$block_sentence" ]] || fatal "the '… blocks cover the surface' sentence is gone from $core — §3's opening moved; update this suite with it."
 
 count_word="$(grep -o '[A-Z][a-z]* blocks cover the surface' "$core" || true)"
 count_word="$(printf '%s' "$count_word" | head -1 | awk '{print $1}')"
-assert_eq "Twelve" "$count_word" "§3 still opens 'Twelve blocks cover the surface'"
+assert_eq "Thirteen" "$count_word" "§3 still opens 'Thirteen blocks cover the surface'"
 
 # -----------------------------------------------------------------------------
 #
