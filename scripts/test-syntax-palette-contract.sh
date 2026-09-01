@@ -388,12 +388,21 @@ section "the block count §3 restates is unchanged"
 # change. test-options-comparison-contract.sh separately derives the count from
 # §3's own table rows, so the two checks disagree loudly if a block lands
 # without its sweep.
+#
+# #317 added the decision card (§13) and ran the sweep again. The only live
+# surface restating the count is §3's own opening sentence — README,
+# SYSTEM-OVERVIEW, CLAUDE.md, and the skills describe the blocks without
+# counting them, and CHANGELOG entries are historical and not scanned. So the
+# sweep is one line, and this pin moves with it.
+#
+# #317 follow-up added the open question (§14) and ran the sweep again: still
+# one live surface, so the pin moves Twelve -> Thirteen.
 block_sentence="$(grep -o 'blocks cover the surface' "$core" || true)"
 [[ -n "$block_sentence" ]] || fatal "the '… blocks cover the surface' sentence is gone from $core — §3's opening moved; update this suite with it."
 
 count_word="$(grep -o '[A-Z][a-z]* blocks cover the surface' "$core" || true)"
 count_word="$(printf '%s' "$count_word" | head -1 | awk '{print $1}')"
-assert_eq "Eleven" "$count_word" "§3 still opens 'Eleven blocks cover the surface'"
+assert_eq "Thirteen" "$count_word" "§3 still opens 'Thirteen blocks cover the surface'"
 
 # -----------------------------------------------------------------------------
 #

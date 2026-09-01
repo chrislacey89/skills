@@ -2,11 +2,15 @@
 
 The fixed token system and per-block markup that Skill Kit's visual review surfaces copy
 from. It is the **canonical skeleton** referenced by `visual-rendering-core.md` §3 and §6,
-shared by `/visual-recap`, the `/walk-commits` per-commit callouts, and the future
-`/visual-plan`. §3–§9 are the blocks that render a change which already exists (§1, §2, and §10
-are the token core, the shell, and the interactions they all share); §11 is the one
-forward-looking block, used by any skill that emits an N-way fork of options that do not exist
-yet.
+shared by `/visual-recap` and the `/walk-commits` per-commit callouts. §3–§9 are the blocks
+that render a change which already exists (§1, §2, and §10 are the token core, the shell, and
+the interactions they all share); §11 is the one forward-looking block, used by any skill that
+emits an N-way fork of options that do not exist yet.
+
+**There is no `/visual-plan` skill, and none is coming.** An earlier draft of this header named
+one as future work; #317 ruled against it and withdrew the promise rather than leave it
+resolving to nothing. Forward-looking blocks live in this file and `/visual-recap` renders
+them.
 
 **The document has two parts, and they are two rendering modes, not two layouts of one thing.**
 Everything numbered §1–§12 is **Part I — the scroll recap**: a single scrolling column for a
@@ -690,10 +694,11 @@ model owns; the fields themselves stay mechanically derived.
 
 When the diff changes rendered UI — layout, controls, navigation, dialogs, visible states,
 design tokens — show the visual delta; code diffs are not a substitute for what the user
-will see. Wireframes are one of the two **model-authored** structured blocks (the Grounding
-Rule exceptions, `visual-rendering-core.md` §1; the other is the options-comparison, §11): every label, control, and state must come from
-diff-visible strings and component names, and when the layout is inferred rather than read
-from the diff, the caption says so ("layout inferred").
+will see. Wireframes are a **model-authored** structured block (the Grounding Rule carve-outs
+are enumerated once, in `visual-rendering-core.md` §1 — do not restate the count here): every
+label, control, and state must come from diff-visible strings and component names, and when
+the layout is inferred rather than read from the diff, the caption says so ("layout
+inferred").
 
 **Coverage:** show the **entry surface** where the change appears, the **interaction
 surface** that opens or changes (popover, dialog, tab, inline editor), and the **resulting
@@ -838,6 +843,24 @@ each carrying three or more attributes, not orderable on one axis — lives in
 `next-step-menu.md`, along with the rule that the comparison *shows* and
 `AskUserQuestion` *commits*.
 
+**The block may recommend, and a recommendation must show its work.** §11 shows the comparison;
+the `AskUserQuestion` menu after it takes the choice (`next-step-menu.md`). Without a way to mark
+which column the analysis favors, that recommendation travels in the menu label alone, stripped of
+every cell that produced it — so the reader gets N evenly-weighted panels and then a first option
+they cannot audit. Mark it with `oc-chip is-rec`.
+
+One condition, and it is not optional: **a recommendation names the attribute rows that carry it.**
+Write `recommended — rows 2 and 4 dominate`, never a bare `recommended`. A recommendation is the
+single most consequential asserted claim in the block, and an unsourced one is precisely the
+unevidenced weight the cited/asserted split exists to prevent — Lie Factor applied to the
+conclusion instead of to a cell. **At most one option per matrix carries it.** Two recommendations
+are no recommendation, and if the analysis genuinely cannot separate two columns, that tie is the
+finding to state in prose.
+
+**The `is-dominated` chip may carry a short qualifier**, because "strictly worse" and "worse but
+still viable" lead to different calls and the bare word collapses them: `dominated — still
+delivers` reads correctly where `dominated` alone reads as *rule it out*.
+
 **The shape is a matrix, not N independent cards.** Attributes are rows, options are columns,
 and the row label is written once on the left instead of repeated inside every card (Tufte:
 direct labeling, and less redundant ink). Cells in one band are grid siblings, so they stretch
@@ -871,6 +894,8 @@ Paste this style block alongside the §1 core only when rendering an options com
     background:color-mix(in srgb,var(--risk) 12%,transparent)}
   .oc-chip.is-dominated{border:1px solid var(--del);color:var(--del);
     background:color-mix(in srgb,var(--del) 12%,transparent)}
+  .oc-chip.is-rec{border:1px solid var(--accent);color:var(--accent);
+    background:var(--accent-dim)}
   /* the support asymmetry, made visual: cited reads normally on a solid neutral spine;
      asserted is muted, italic, and on a dashed --risk spine. Emphasis marks what is NOT
      evidenced, which is what the reader needs to notice. Diff hues stay out of it. */
@@ -1111,6 +1136,197 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
 
 ---
 
+## 13. Block: decision card (forward-looking)
+
+**Scope note — the second block that is not about a finished diff.** §11 renders options
+nobody has picked; this one renders the ones already picked. It is the forward-looking sibling
+of §8's contract cards, and the analogy is exact: a data-model card shows the *resulting
+schema* instead of the `ALTER TABLE` that produced it, and a decision card shows the
+**resulting commitment** instead of the paragraph that argued for it. The difference is where
+the grounding comes from — §8 derives from a real migration diff, and a plan has no diff at
+all.
+
+**A decision card is what an options-comparison becomes once someone picks.** The two blocks are
+one decision at two times, not two unrelated blocks: §11 renders the fork while it is open, §13
+renders the same decision after it closes. On a live decision surface they sit adjacent — the
+matrix, then the card the chosen column turns into — and a plan that renders both is showing a
+decision's before and after, not duplicating it.
+
+That has one mechanical consequence, and it is the reason to state the relationship at all:
+**the winning option's slug carries into the card's id.** The derivation and its worked example
+live once, in `visual-rendering-core.md` §4's id registry — ids are what that section is for, and
+a second copy here would be a restated operative claim (`restated-claims.md`). What belongs here
+is the failure it prevents, which is specific and silent: number the decisions instead (`d-1`,
+`d-2`, `d-3`), insert or reorder one, regenerate, and every note the reviewer already pasted back
+now attaches to a different decision, with nothing reporting the swap.
+
+**The problem it solves.** A shaped plan states its decisions as prose — `/write-a-prd`'s
+`## Implementation Decisions` is a flat bullet list of modules, interfaces, schema changes,
+and architectural calls. That list is the part of a plan a reader skims, and skimming it is
+free: nothing marks which bullets are load-bearing, which are settled against a source, and
+which are the author thinking aloud. The card makes each decision a unit with a fixed shape,
+so a reader who was not in the shaping session can see the commitments in one eyespan rather
+than reconstructing them from paragraphs.
+
+**Read `visual-rendering-core.md` §1 "Forward-looking blocks" before rendering this.** It is
+the defining constraint, not background. Every field is either **cited** — quoted from the
+PRD or issue body, the research artifact, or current code at `file:line`, and showing that
+source — or visibly **asserted**, the model's judgment about a state that does not exist yet.
+**Every card carries at least one cited cell** — a card's fields are its cells — and a decision
+grounded in nothing is not a commitment rendered at commitment weight, it is a proposal wearing
+one. That is the finding to state rather than a card to draw. The chip bar carries over
+unchanged: a card with **two-thirds or more of its cells asserted** wears the `asserted` chip.
+
+**Why grounding matters more here than in §11.** An options matrix announces that nothing is
+settled — the reader arrives knowing they are looking at futures. A decision card announces
+the opposite, and Lovallo & Kahneman's finding is that inside-view plans read as authoritative
+*because* they are vivid and detailed. Rendering a plan's decisions crisply amplifies exactly
+that bias unless the render distinguishes settled-and-sourced from proposed. This is Lie
+Factor ≤ 1 applied to commitment rather than to magnitude.
+
+**Four fields, in this order, on every card** — Constancy of Design, the same reason §11's
+attributes run in the same order down every column:
+
+| Field | What it holds | Typical grounding |
+|---|---|---|
+| **decided** | The commitment, stated as a resulting shape | cited — the PRD/issue line that settles it |
+| **rules out** | What this decision now forecloses | cited when a no-go says so; asserted when it is a consequence nobody wrote down |
+| **reverses if** | The condition that would undo it | usually asserted — this is the Shelf Life question, asked at plan time |
+| **source** | Where the citation lives | always a real path, issue, or `file:line` |
+
+**When not to render one.** A decision with no consequence is a preference, and a card gives it
+weight it has not earned. Render a card for a decision that forecloses something; leave the rest
+as prose. A plan with one decision does not need the block at all — the sentence is already the
+eyespan.
+
+Cards carry a stable `data-feedback-id` (`dc-<decision-slug>`, `visual-rendering-core.md` §4)
+and a note field, so a reviewer's response to a specific decision serializes with everything
+else as `decision#dc-<slug>: "…"`.
+
+The card reuses §11's `.oc-cited` / `.oc-asserted` treatments verbatim rather than inventing a
+second visual language for the same distinction — paste §11's style block when rendering
+either forward-looking block. Only the wrapper below is new:
+
+```html
+<style>
+  /* decision-card primitives (§13) — same tokens, and §11's cited/asserted spines */
+  .dc-card{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);
+    box-shadow:var(--shadow);overflow:hidden;margin-top:var(--s4)}
+  .dc-head{display:flex;align-items:center;gap:var(--s3);padding:var(--s4);
+    border-bottom:1px solid var(--border)}
+  .dc-name{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)}
+  .dc-split{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--fg-muted)}
+  .dc-row{display:grid;grid-template-columns:104px minmax(0,1fr);gap:var(--s3);
+    align-items:baseline;padding:var(--s3) var(--s4);border-top:1px solid var(--border)}
+  .dc-row:first-child{border-top:none}
+  .dc-label{font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-faint)}
+  .dc-note{display:block;box-sizing:border-box;width:calc(100% - 2*var(--s4));
+    margin:0 var(--s4) var(--s4);padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px;outline:none}
+</style>
+```
+
+**Worked example (2 of the 3 decisions in #317)** — one cited-heavy, one carrying an asserted
+consequence. Render every decision that forecloses something, not a sample:
+
+```html
+<section id="sec-decisions" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;Decisions this plan commits to</div>
+
+  <div class="dc-card" data-feedback-id="dc-no-visual-plan-skill" data-feedback-kind="decision">
+    <div class="dc-head">
+      <span class="dc-name">No /visual-plan skill</span>
+      <span class="dc-split">3 cited · 1 asserted</span>
+    </div>
+    <div class="dc-row"><span class="dc-label">decided</span><span class="oc-cited">The planning bookend ships as forward-looking blocks in this file, rendered by <code>/visual-recap</code>.<span class="oc-src">#245 verdict: “Proceed narrowly — as a block in two existing docs, not a skill.”</span></span></div>
+    <div class="dc-row"><span class="dc-label">rules out</span><span class="oc-cited">A second command name, and the six inventory surfaces a new skill must appear in.<span class="oc-src">CLAUDE.md § Inventory-sync rule</span></span></div>
+    <div class="dc-row"><span class="dc-label">reverses if</span><span class="oc-asserted">The blocks are rendered often enough that users keep reaching for a separate entry point. The blocks are the expensive part, so a later split is cheap.</span></div>
+    <div class="dc-row"><span class="dc-label">source</span><span class="oc-cited">#317 Mediator verdict<span class="oc-src">github.com/chrislacey89/skills/issues/317</span></span></div>
+    <textarea class="dc-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+  </div>
+
+  <div class="dc-card" data-feedback-id="dc-drop-fidelity-gate" data-feedback-kind="decision">
+    <div class="dc-head">
+      <span class="dc-name">No render-time fidelity gate</span>
+      <span class="dc-split">2 cited · 2 asserted</span>
+    </div>
+    <div class="dc-row"><span class="dc-label">decided</span><span class="oc-cited">Shape Up’s low-fidelity ceiling governs UI panels, not architecture graphs or decision commitments — so dropping the breadboard and fat-marker blocks drops what the ceiling was aimed at.<span class="oc-src">Shape Up ch. 6: “High-fidelity mockups trigger premature design debates.”</span></span></div>
+    <div class="dc-row"><span class="dc-label">rules out</span><span class="oc-asserted">A UI-flow plan surface. If one is wanted later, ch. 4’s ceiling comes back with it.</span></div>
+    <div class="dc-row"><span class="dc-label">reverses if</span><span class="oc-asserted">A rendered plan is observed pulling a review into a UI debate.</span></div>
+    <div class="dc-row"><span class="dc-label">source</span><span class="oc-cited">#317 revision comment<span class="oc-src">issues/317#issuecomment-5464443853</span></span></div>
+    <textarea class="dc-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+  </div>
+</section>
+```
+
+---
+
+## 14. Block: open question
+
+**Scope note — this block existed as an id with no markup.** `visual-rendering-core.md` §4 has
+registered `q-<…>` since the core was written, and nothing anywhere defined what an open question
+looks like. A surface that renders decisions needs somewhere to put the ones it *cannot* render:
+§11 compares options you already know, §13 records a choice already made, and neither holds "we
+have not worked this out yet." The field built one anyway, which is how the gap surfaced.
+
+**It carries no cited/asserted mark, and that is the point.** The forward-looking rule in
+`visual-rendering-core.md` §1 grades *claims* — does this assertion have a source, and does the
+render say so. A question asserts nothing, so there is nothing to ground and no mark to apply.
+That is why the open question is **not** a member of the forward-looking class despite being about
+the future, and why §1's carve-out list does not grow when this block lands.
+
+What a question does owe the reader is the **context that makes it answerable** — what is already
+known, what hangs on the answer, and a default if one exists. A bare question is a prompt; a
+question with its stakes attached is a decision waiting to happen.
+
+**Ids are content-derived, like every other unit.** Use `q-<question-slug>` — `q-blocked-run-ok`,
+not `q-1`. The core registered `q-<n>` first and that positional form is the one shape in the
+registry that violates the registry's own rule (*"never a random or positional id, so the same
+unit keeps the same id if the artifact is regenerated"*). Insert a question, regenerate, and every
+pasted-back answer shifts by one. Prefer the slug; treat `q-<n>` as legacy.
+
+```html
+<style>
+  /* open-question primitives (§14) — same tokens, no new palette */
+  .oq{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s3)}
+  .oq-card{border:1px solid var(--border);border-left:3px solid var(--risk);
+    border-radius:0 var(--r3) var(--r3) 0;background:var(--bg-elev);padding:var(--s4)}
+  .oq-q{font-size:13.5px;font-weight:650;color:var(--fg);margin-bottom:var(--s2);line-height:1.45}
+  .oq-ctx{font-size:12.5px;color:var(--fg-muted);line-height:1.6;margin-bottom:var(--s3)}
+  /* --fg-muted, not --fg-faint: this line says what happens if nobody answers,
+     which is the consequence the reader most needs and the one they are most
+     likely to skip. Measured 2.85:1 on --fg-faint (below AA) and 5.77:1 here. */
+  .oq-def{font-size:11.5px;color:var(--fg-muted);margin-bottom:var(--s3)}
+  .oq-def b{color:var(--fg);font-weight:600}
+  .oq-note{display:block;width:100%;box-sizing:border-box;padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px;outline:none}
+</style>
+```
+
+```html
+<section id="sec-open" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Still open</div>
+  <div class="oq">
+    <div class="oq-card" data-feedback-id="q-blocked-run-ok" data-feedback-kind="question">
+      <div class="oq-q">Is a blocked run acceptable at all?</div>
+      <div class="oq-ctx">Runs that succeed today will fail after this lands. Whether that is a
+        regression or the intended gate decides which of the three options above is even eligible.</div>
+      <div class="oq-def"><b>If unanswered:</b> assume yes, and gate behind the existing flag.</div>
+      <textarea class="oq-note" data-feedback-note placeholder="Your answer…"></textarea>
+    </div>
+  </div>
+</section>
+```
+
+**When not to render one.** A question you can answer by reading the code is not open — answer it.
+A question with no consequence is trivia. Render the ones where the answer changes what gets built,
+and say what happens if nobody answers.
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
@@ -1135,6 +1351,10 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
   their support doesn't — an all-asserted column beside a mostly-cited one, drawn identically,
   is the Lie Factor the block exists to prevent. Mark every cell cited or asserted, show each
   option's split, and drop any option with nothing citable.
+- **Don't** draw a decision card (§13) for a decision that forecloses nothing — a preference
+  rendered at commitment weight is the same Lie Factor as an all-asserted options column, and a
+  card whose fields carry no source is a proposal wearing a commitment's shape. Cite or mark
+  every field, and state the ungrounded decision as prose instead of padding a card.
 - **Don't** turn this skeleton into a shipped/versioned/imported component library — it is a
   copyable reference, exactly like the §4 serializer. If you reach for an npm package, a
   build step, or a CDN runtime, pull it back.
