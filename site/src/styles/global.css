@@ -68,16 +68,6 @@ a:hover {
 }
 
 /* ── Animations ────────────────────────────────────────────────── */
-@keyframes bookArrive {
-	from {
-		opacity: 0;
-		transform: translateY(30px) scale(0.94);
-	}
-	to {
-		opacity: 1;
-		transform: none;
-	}
-}
 @keyframes pageOpen {
 	from {
 		transform: rotateY(-92deg);
@@ -97,14 +87,42 @@ a:hover {
 		opacity: 1;
 	}
 }
-@keyframes spineRise {
+/* `translate`, NOT `transform`. This runs with `animation-fill-mode: both`, and
+   an animation's value beats a plain declaration for as long as the fill holds —
+   so animating `transform` here left every volume pinned at `transform: none`
+   after the reveal, and the bookcase's "pull the book off" lift (`.volume:hover`
+   and `.volume[aria-pressed="true"]`, both a `translateY`/`scale` pair) silently
+   did nothing. `translate` is its own property and composes with `transform`, so
+   the reveal can hold its end state without owning the hover. Only
+   `Shelf.astro` uses these three keyframes. */
+@keyframes coverRise {
 	from {
 		opacity: 0;
-		transform: translateY(46px);
+		translate: 0 26px;
 	}
 	to {
 		opacity: 1;
-		transform: none;
+		translate: 0 0;
+	}
+}
+@keyframes veilIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes bookLift {
+	from {
+		opacity: 0;
+		translate: 0 22px;
+		scale: 0.94;
+	}
+	to {
+		opacity: 1;
+		translate: 0 0;
+		scale: 1;
 	}
 }
 

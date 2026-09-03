@@ -20,6 +20,8 @@ docs/writing-for-humans.md      prd-to-issues
 docs/writing-for-humans.md      qa
 docs/writing-for-humans.md      improve-pipeline
 docs/writing-for-humans.md      handoff
+docs/writing-for-humans.md      visual-recap
+docs/writing-for-humans.md      walk-commits
 docs/destination-check.md       qa
 docs/destination-check.md       triage-issue
 docs/skill-anatomy.md           improve-pipeline
@@ -34,3 +36,6 @@ docs/visual-rendering-core.md   visual-recap
 docs/visual-rendering-core.md   walk-commits
 docs/visual-recap-design.md     visual-recap
 docs/visual-recap-design.md     walk-commits
+docs/restated-claims.md         tdd
+docs/restated-claims.md         pre-merge
+docs/restated-claims.md         execute

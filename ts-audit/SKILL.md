@@ -1,6 +1,13 @@
 ---
 name: ts-audit
-description: Audit TypeScript and React code against expert-level best practices from 9 Total TypeScript library references. Use when the user wants to review, audit, check, or improve TypeScript code quality — including requests like "audit this file", "review my types", "check my TypeScript", "what's wrong with this code", "improve my TS", "type review", or any request to evaluate TypeScript code against modern patterns. Also use when the user mentions type safety, generics review, or React TypeScript patterns. Covers type safety, generics, narrowing, branded types, discriminated unions, React TypeScript patterns, type transformations, testing patterns, and mocking techniques.
+description: Audit TypeScript and React code against expert-level best practices from 9 TypeScript library references. Use when the user wants to review, audit, check, or improve TypeScript code quality — including requests like "audit this file", "review my types", "check my TypeScript", "what's wrong with this code", "improve my TS", "type review", or any request to evaluate TypeScript code against modern patterns. Also use when the user mentions type safety, generics review, or React TypeScript patterns. Covers type safety, generics, narrowing, branded types, discriminated unions, React TypeScript patterns, type transformations, testing patterns, and mocking techniques.
+sources:
+  primary:
+    - "Total TypeScript — Matt Pocock"
+  secondary:
+    - "Testing Fundamentals — Kent C. Dodds"
+    - "Advanced Vitest Patterns — Epic Web Dev"
+    - "Mocking Techniques in Vitest — Epic Web Dev"
 ---
 
 # TypeScript Audit
@@ -19,11 +26,11 @@ The user provides a target: a file path, directory, or glob pattern. Examples:
 
 This is a side-route skill for TypeScript code quality auditing, not a default pipeline step.
 
-Use `/ts-audit` when you want to audit TypeScript or React code against expert-level patterns from the Total TypeScript library references — whether on a single file, a directory, or a glob of changed files.
+Use `/ts-audit` when you want to audit TypeScript or React code against expert-level patterns from the bundled TypeScript library references — whether on a single file, a directory, or a glob of changed files.
 
 Do not use it as a substitute for `/pre-merge` architectural review (which checks structural principles) or `/tdd` (which enforces red-green-refactor). It complements both by focusing specifically on type-safety gaps and TypeScript idiom improvements.
 
-For TypeScript projects, `/ts-audit` pairs naturally with `/pre-merge` Phase 3 (Architectural Review) — running it on changed files provides type-safety analysis that complements the seven structural dimensions.
+For TypeScript projects, `/ts-audit` pairs naturally with `/pre-merge` Phase 3 (Architectural Review) — running it on changed files provides type-safety analysis that complements the structural review dimensions defined in `pre-merge/review-checklist.md`.
 
 ## Step 1: Read the target code
 
@@ -245,6 +252,6 @@ If no findings at all:
 ## Handoff
 
 - **Expected input:** a file path, directory, or glob pattern pointing to TypeScript or React code to audit
-- **Produces:** a structured markdown audit report with findings grouped by category, each grounded in specific Total TypeScript library references
+- **Produces:** a structured markdown audit report with findings grouped by category, each grounded in a specific bundled library reference
 - **May feed into:** `/execute` when findings warrant code changes, or `/pre-merge` when the audit informs the architectural review conversation
 - **What comes next:** return to the workflow that invoked the audit — the user decides which findings to act on

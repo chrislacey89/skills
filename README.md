@@ -75,7 +75,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [triage-issue](triage-issue/) | Deep bug diagnosis + root cause + TDD fix plan (invoked from `/qa` per issue) |
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
-| [ts-audit](ts-audit/) | Audit TypeScript code against Total TypeScript best practices |
+| [ts-audit](ts-audit/) | Audit TypeScript code against 9 bundled TypeScript library references |
 
 ### Tooling & Setup
 
@@ -92,7 +92,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [qa](qa/) | Single entry point for bug conversations; files lightweight issues and delegates per-issue to `/triage-issue` for deep diagnosis |
 | [pre-merge](pre-merge/) | Author-mode: create the PR and run an architectural review before merge. Reviewer-mode (`--pr <n>`): review someone else's PR and draft comment text. Loop-mode (`--loop`, or auto-entered on an AFK `/execute` handoff): records every finding in a durable ledger on the PR with the evidence for or against it, so findings survive the session — makes no commits and no decisions; the operator settles each row |
 | [walk-commits](walk-commits/) | Interactive commit-by-commit comprehension walkthrough before merge — intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off (optional, recommended by `/pre-merge`; can render per-commit callouts via the shared visual-rendering core) |
-| [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML recap — file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes, before/after columns, CSS-first diagrams (Mermaid opt-in), copy-text feedback loop (optional, never auto-invoked, transient artifact) |
+| [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML artifact in one of two modes — a scrolling recap (file-tree + change flags, annotated split diffs with line-anchored callouts, contract cards, UI wireframes, before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a walkthrough deck (premise → changes → mechanism → aftermath, one idea per screen); CSS-spine diagrams for trivial flows, Mermaid-via-CDN for multi-stage graphs, copy-text feedback loop (optional, never auto-invoked, transient artifact) |
 | [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR before `/closeout` merges (default), or post-merge as the fallback |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
@@ -104,6 +104,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [help](help/) | Read repo state and recommend the next pipeline step |
 | [correct-course](correct-course/) | Diagnose stale artifacts and walk the cleanup before backtracking |
 | [handoff](handoff/) | Compact the current session into a transient handoff doc when no pipeline artifact fits |
+| [re-pitch](re-pitch/) | Re-state an explanation that did not land — diagnose the confusion, rewrite in controlled technical English, gloss every domain term on first use |
 
 ## Repo guide
 

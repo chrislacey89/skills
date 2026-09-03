@@ -1,0 +1,13 @@
+# Git's built-in `markdown` userdiff driver supplies an xfuncname, so hunk
+# headers name the enclosing heading — `@@ -4,3 +4,3 @@ ## Pre-merge` instead of
+# a bare line range. In a repo whose product is prose that is the difference
+# between knowing which section a hunk lands in and not.
+#
+# What this driver does NOT supply, and why `git diff --word-diff` is a separate
+# thing that needs no attribute at all, is stated once in CLAUDE.md
+# § "Reading a prose diff" and pinned by scripts/test-markdown-diff-attribute.sh.
+# Deliberately not restated here: that suite greps CLAUDE.md, so a second copy
+# in this file would be an unpinned claim about third-party behavior sitting in
+# the file that configures it — which is how a correction reaches one site and
+# leaves the other asserting the opposite.
+*.md diff=markdown

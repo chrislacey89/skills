@@ -45,7 +45,7 @@ Resolve the provisioning mode from `.claude/settings.json` `worktree.provisionin
   - a host environment variable is present — `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`. This is the cheapest, primary discriminator: the pipeline's only detection mechanism is Bash, and these vars are visible in the agent's shell. (Do **not** detect via a `.conductor` directory in the cwd — Conductor keeps it under `$CONDUCTOR_ROOT_PATH`, not the workspace.)
   - the current working tree is not the repo's primary working tree — `git rev-parse --show-toplevel` differs from the first path in `git worktree list --porcelain`.
 
-When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. Continue to the issue-shape gate.
+When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so most of the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. **Its git-hooks item is the exception and still applies.** Hosts provision *tracked* files plus dependencies; git hooks live in `.git/hooks`, which is per-worktree and untracked, so a host-provisioned workspace characteristically has none. Check that item even when standing down. Continue to the issue-shape gate.
 
 This stand-down is deliberately *asymmetric* with `/closeout`'s teardown check. Inflow only needs to answer *"am I already isolated?"* — generic detection (toplevel ≠ primary) and the env-var hint each settle that. The outflow question — *"who owns teardown?"* — is stricter and cannot rely on the generic heuristic alone, because a pipeline-made worktree also satisfies toplevel ≠ primary; `/closeout` keys off the explicit setting or host env var only.
 
@@ -58,7 +58,7 @@ This stand-down is deliberately *asymmetric* with `/closeout`'s teardown check. 
 - **Worktrunk** (if `wt` is available): `wt switch --create <branch-name>` — creates a new worktree + branch from the appropriate base and switches to it, giving full filesystem isolation. Use the `/worktrunk` skill for guidance.
 - **Plain git**: `git checkout <base> && git checkout -b <branch-name>` — creates a new branch from the appropriate base in the current working directory.
 
-The **appropriate base** is the repo's own base branch by default — whatever the repo declares (`git symbolic-ref refs/remotes/origin/HEAD`). Do not assume `main`. For a slice with an unmerged `Consumes from #N` dependency that produces symbols this slice imports, branch from that sibling slice's branch instead so the stacked PR can target the sibling's PR (Hammant *Trunk-Based Development* Ch. 13: multiple PRs per story; the sibling's PR must still merge to the repo's base branch within 2 days).
+The **appropriate base** is the repo's own base branch by default — whatever the repo declares (`git symbolic-ref refs/remotes/origin/HEAD --short | sed 's@^origin/@@'`). Do not assume `main`. For a slice with an unmerged `Consumes from #N` dependency that produces symbols this slice imports, branch from that sibling slice's branch instead so the stacked PR can target the sibling's PR (Hammant *Trunk-Based Development* Ch. 13: multiple PRs per story; the sibling's PR must still merge to the repo's base branch within 2 days).
 
 Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
 
@@ -96,6 +96,7 @@ install = "pnpm install"
 - [ ] Dependencies installed — install command (`pnpm install`, `npm ci`, etc.) ran without error in the worktree
 - [ ] Session is inside the worktree — `pwd` reports the worktree path because you entered it via `EnterWorktree { path }` (not the project root). In the AFK/headless fallback only, this item instead means the `cd <absolute-worktree-path> &&` prefix is being applied to every Bash call
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
+- [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] TDD marker absent — `.claude/.tdd-active` and `.claude/.tdd-skipped` do not exist in the worktree (fresh slate; Step 3 creates them)
 
 **Issue-shape detection gate.** If the task is a GitHub issue, verify it is a slice (implementation-ready), not an undecomposed PRD. Run `gh issue view <n> --comments` and check for a comment matching `^Decomposed into: #\d+`.
@@ -174,7 +175,7 @@ Do not silently absorb the gap — leave a breadcrumb for the next slice.
 
 Skip this gate for one-off tasks, sibling slices still being planned, or issues without upstream `Consumes` entries.
 
-This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror check for *externally-resolvable* declarations — package names, public API symbols, and pinned versions against the research snapshot — runs at `/pre-merge` Dimension 4 under "Spec-reality check." Step 0 sees the registry at slice-start; `/pre-merge` sees it at merge time. Both windows are intentional; do not widen this gate to duplicate the review-time check.
+This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror check for *externally-resolvable* declarations — package names, public API symbols, and pinned versions against the research snapshot — runs at `/pre-merge`'s Boundary Map Contracts dimension under "Spec-reality check." Step 0 sees the registry at slice-start; `/pre-merge` sees it at merge time. Both windows are intentional; do not widen this gate to duplicate the review-time check.
 
 ### 1. Understand the Task
 
@@ -259,6 +260,8 @@ Do not write all tests upfront — write one, make it pass, then move to the nex
 
 **[TypeScript projects] Library callback returns.** When a logical unit implements a callback the library asks the application to provide (agent hooks, middleware, proxy, tool handlers, render props, lifecycle methods), anchor the returned value to the library's declared return type with `satisfies LibraryReturnType`, a fresh object literal, or a derived type (`ReturnType<typeof …>`). Never return a typed local variable — TypeScript's excess-property check does not run on returns of typed values, so fields the library's signature does not declare are silently dropped at runtime. See `/tdd` Refactor step for the full rationale; if the research artifact (archive file or spike issue) carries a Library Callback Contracts snapshot (`/research` Phase 1.25), use its accepted-fields list as the pinned source.
 
+**Comment the code, not the incident.** A comment you write here carries the *current* why — what this code does, and why it is shaped this way. The incident that led you here goes to the commit message and the PR body instead: what the prior behavior was, which earlier attempt this supersedes, what you rejected on the way. Before committing a unit, reread the comments you added to it and move any sentence that explains history rather than code.
+
 #### Commit after each logical unit
 
 Do not accumulate all changes into one commit. Commit after each self-contained unit of progress. A logical unit is the smallest change that leaves the codebase in a working state — typecheck passes, tests pass, nothing is half-wired. Examples:
@@ -274,7 +277,7 @@ After completing each logical unit:
 
 1. Run `pnpm run typecheck` and `pnpm run test` (or the project's equivalent). Fix any failures before committing.
 2. Stage only the files for that unit — do not stage unrelated changes.
-3. Commit with a message that says what this unit accomplished, not "WIP" or "progress".
+3. Commit with a message that says what this unit accomplished, not "WIP" or "progress". When the unit corrects earlier behavior, write the incident history the paragraph above routes here — and put it in the PR body as well, not the commit message alone. A squash merge collapses these per-unit messages into one, and `/closeout` treats squash as the common convention, so the commit message alone is not a durable destination. The PR body is the copy that survives intact for a reader running `git blame` months later.
 
 If a unit touches both a test and its implementation, they belong in the same commit. If a refactor was triggered by the unit but is conceptually separate, commit the refactor separately.
 
@@ -301,7 +304,31 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - Imports between modules are wired correctly (not importing from a path that doesn't resolve)
 - Implementation is substantive (not stubs, not console.log placeholders, not TODO comments where real code should be)
 
-**Deletion Completeness (only when the slice body contains a `### Deletes` section).** For each deleted module, enumerate its external consumer surfaces — the symbolic names callers were taught to emit for it to consume, beyond its exports. Typical surfaces:
+**Deletion Completeness (when this slice's diff deletes or renames a module).** Read the trigger off the diff, which you already have, rather than off a section header nothing in the pipeline writes:
+
+```bash
+BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
+if [ -z "$BASE_BRANCH" ]; then
+  for candidate in main master prod develop trunk; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
+  done
+fi
+# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
+# $BASE_REF points at it, and is the only thing safe as a range endpoint.
+if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  BASE_REF="origin/$BASE_BRANCH"
+else
+  BASE_REF="$BASE_BRANCH"
+  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
+fi
+git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
+```
+
+**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+
+Deleted paths print as `D<TAB><path>`, renames as `R<score><TAB><old><TAB><new>`. Any output at all fires the rung; empty output skips it. Gate on the output, not the exit status — the command exits 0 either way. A `### Deletes` section in the slice body is an optional hint that names which surfaces to sweep; it is not the trigger.
+
+For each deleted or renamed module, enumerate its external consumer surfaces — the symbolic names callers were taught to emit for it to consume, beyond its exports. Typical surfaces:
 
 - DOM data-attributes the module read (`data-*`)
 - CSS class names and selectors the module applied or queried
@@ -309,7 +336,7 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - `window`, `localStorage`, or `sessionStorage` keys
 - Route names, config keys, or feature-flag names the module owned
 
-Infer surfaces from the module body as it existed before deletion (git show, or the `Deletes` bullet's accompanying notes). Grep the merged tree for each surface across every source-text file type the project uses — templates, source code, styles, config, docs. Do not restrict to a fixed extension list; the relevant surfaces depend on the stack (`.py`/`.rb`/`.go`/`.rs` for imports, `.vue`/`.svelte`/`.astro`/`.tsx` for templates, `.css`/`.scss`/`.sass`/`.less`/`.styl` for styles, `.yml`/`.toml`/`.json` for config, `.md`/`.mdx` for docs that ship). Zero matches required to pass. Non-zero matches: restore the module, migrate the consumers, or declare them as intentionally inert and track the cleanup as a follow-up slice. Imports alone are the narrowest possible definition of "consumer"; the surface may be wider.
+Infer surfaces from the module body as it existed before deletion (`git show <base>:<path>`, or the `Deletes` hint notes when the slice body happens to carry them). Grep the merged tree for each surface across every source-text file type the project uses — templates, source code, styles, config, docs. Do not restrict to a fixed extension list; the relevant surfaces depend on the stack (`.py`/`.rb`/`.go`/`.rs` for imports, `.vue`/`.svelte`/`.astro`/`.tsx` for templates, `.css`/`.scss`/`.sass`/`.less`/`.styl` for styles, `.yml`/`.toml`/`.json` for config, `.md`/`.mdx` for docs that ship). Zero matches required to pass. Non-zero matches: restore the module, migrate the consumers, or declare them as intentionally inert and track the cleanup as a follow-up slice. Imports alone are the narrowest possible definition of "consumer"; the surface may be wider.
 
 **Upstream shape sweep.** After the consumer-surface sweep above, list each export touched on a shared module in this slice (context fields, builder return-type fields, interface or type members, schema fields, exported map or record entries). For each such export, grep the post-delete tree for non-self-reference reads. Zero matches required to pass. Non-zero matches: confirm the readers are live and intentional. Zero matches: drop the export in the same PR — the migration window closes the moment the legacy consumer is deleted, and a retained-but-unread export widens the import contract so a future cleanup becomes a breaking change rather than a silent removal. Dead-export linters (`knip`, `ts-prune`, TypeScript `noUnusedLocals`) cover many shapes of this but not exported context, interface, or schema fields — those are read by the type itself and look live to the tool, so the targeted post-delete grep is doing work the linter cannot.
 
@@ -368,7 +395,7 @@ This is a silent-degradation check: if an operator ran this without `--dry-run`,
 
 The deeper fix usually lives upstream in `/tdd`: a seam that had to be mocked to stay green (a platform crypto API, the filesystem, the deploy copy) is exactly the seam GOOS says you should *not* mock — wrap external types you don't own in a thin adapter and integration-test the adapter. This rung catches the parity gap; owned adapters plus a faithful test runtime keep it from recurring.
 
-**Review-cadence note.** Added on convergent grounds (Continuous Delivery's smoke-against-production-like-environment, Twelve-Factor Factor X, Release It! "Design for Deployment", the GOOS walking skeleton) plus one triggering incident (mimir audit-publish slices #8/#9, 2026-06-25 — both green under the test suite, both broke only in the workerd/deployed runtime). If after a reasonable sample of slices this rung fires <10% of the time on diffs that had no other issue, demote it to advisory or remove it rather than leave it as ceremony.
+**Review-cadence note.** Added on convergent grounds (Continuous Delivery's smoke-against-production-like-environment, Twelve-Factor Factor X, Release It! "Design for Deployment", the GOOS walking skeleton) plus one triggering incident (a downstream Cloudflare Workers repo's audit-publish slices, 2026-06-25 — both green under the test suite, both broke only in the workerd/deployed runtime). If after a reasonable sample of slices this rung fires <10% of the time on diffs that had no other issue, demote it to advisory or remove it rather than leave it as ceremony.
 
 #### Tier 3: Behavioral Verification
 - API endpoints return the expected responses (use curl or httpie to verify)
@@ -381,6 +408,12 @@ The deeper fix usually lives upstream in `/tdd`: a seam that had to be mocked to
 - Never use human verification as a substitute for Tiers 1-3
 
 **If verification reveals gaps**, fix them and commit the fix as its own commit. Do not amend a prior commit — the history should show what was built and what was corrected.
+
+**Scope check on set-claims.** Before writing any sentence that quantifies over a set, name the set, the enumeration that produced it, and the members not covered. If every member found shares one wording or one kind of file, the enumeration stopped early — see [references/restated-claims.md](references/restated-claims.md).
+
+**Then mutate at the point of consumption (only when this slice ships a test that claims to hold a property).** Skip it when the slice ships no such test — prose, config, and styling work have nothing for it to act on. A census enumerates occurrences of the **symbol** the test is written in terms of. It cannot enumerate the ways the **property** — the behavior the test exists to hold — can be broken, because a property is breakable at call sites where its symbol never appears. So name the property, produce the cheapest single edit that would revert it, and confirm a named test fails. If that edit lands at a site the census did not list, the census was over the wrong set. This is narrower than `/tdd`'s red-bar rule (§ *The operational check, at RED*), which mutates the value a test names; this one asks whether the test names the right thing.
+
+**Draw that edit from the corpus, not from your model of the failure.** A mutation you compose yourself is generated by the same model that generated the check — so it can only plant the shapes you already imagined, and it goes red on every one of them. That red is not evidence the check is general; it is evidence the check and the mutation agree, which they were always going to. The operative move is mechanical: take a **real line from the tree the check will run against**, perturb it minimally into a violation, and use that. Where the corpus holds no instance yet, take the nearest real line and say in the test's comment that the fixture is synthetic — a declared narrowness is checkable, and an undeclared one reads as coverage. The tell that you skipped this: every fixture in your battery is one you wrote, and each is simpler than anything the corpus actually contains.
 
 #### Bug-Fix Verification (when the task is a fix, not a feature)
 
@@ -490,6 +523,9 @@ Hand it to the reviewer instead, as a `## Review Notes` block in the PR body. Gi
 | `pnpm run typecheck` | 0 | 2 |
 | `pnpm run test` | 0 | 2 |
 | `curl -s -o /dev/null -w '%{http_code}' localhost:3000/reports` → `200` | 0 | 2.5 |
+| `shellcheck --version` → `0.9.0` (matches `.shellcheck-version`); `shellcheck scripts/*.sh` | 0 | 2 |
+
+**Name the version whenever the repo pins the tool, and say whether local gates ran.** A bare "lint clean" is a claim about *whichever* binary happened to be on `PATH`, and linters disagree across releases in both directions — so the reviewer cannot tell whether it describes the merge gate or a different instrument. Two lines close it: give the version beside any pinned tool's row, and state once whether the repo's own pre-commit/pre-push hooks were active for this branch. A branch whose hooks never ran is not disqualified; it is *differently evidenced*, and the reviewer needs to know which they are reading.
 
 **Verification skipped, and why**
 - Tier 2.7 — not applicable: test runtime and deploy runtime are both Node 22.

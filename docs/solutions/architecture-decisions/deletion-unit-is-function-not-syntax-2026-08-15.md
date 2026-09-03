@@ -107,12 +107,12 @@ Two cheap tells that make this affordable enough to run every time:
 
 Note the direction, because it is what the existing sweep gets backward for this defect class: the author's dangling-reference sweep searched for **the deleted text's name** and found nothing. The right search is for **the things the deleted text talked about**.
 
-**Process-level — an `/improve-pipeline` candidate, not yet filed.** `/execute` § Verify has a Deletion Completeness rung, and it does not reach this case on two counts, both checkable at `execute/SKILL.md:304–310`:
+**Process-level — filed as #326, half shipped.** `/execute` § Verify has a Deletion Completeness rung, and it did not reach this case on two counts:
 
-1. It fires **only when the slice body contains a `### Deletes` section**. `[improve-pipeline]` issues never carry one — #231 did not — so the rung was structurally unreachable for this entire class of change.
-2. Its five listed surfaces are all *code* surfaces: DOM data-attributes, CSS class names, event names, storage keys, route/config/feature-flag names. All answer *"what symbols did callers emit at this module?"* None answers *"what did this text declare that other text relies on?"*
+1. It fired **only when the slice body contained a `### Deletes` section**. `[improve-pipeline]` issues never carry one — #231 did not — so the rung was structurally unreachable for this entire class of change. **Fixed by #326:** the rung now reads the trigger off the diff (`git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"`), and the header survives only as an optional hint. #326 measured the same unreachability independently.
+2. Its five listed surfaces are all *code* surfaces: DOM data-attributes, CSS class names, event names, storage keys, route/config/feature-flag names. All answer *"what symbols did callers emit at this module?"* None answers *"what did this text declare that other text relies on?"* **Still open.** #326's Mediator bounded its change set to the trigger and declined to widen the surface list, so this half is unshipped and the Prevention section below still carries it.
 
-The proposal: fire the rung on any net-subtractive diff rather than on a section header, and add **sole-site declarations and exemptions** to the surface list. A second, smaller one for `/improve-pipeline` itself: its Mediator should treat a quoted deletion as *the proposer's decomposition*, not as a scope oracle — the same move `advisory-to-executed-rule-promotion-2026-08-07.md` already prescribes for admitted evidence gaps.
+What remains of the proposal: add **sole-site declarations and exemptions** to the surface list, so a net-subtractive *prose* diff is swept for what the deleted text declared and not only for the modules it deleted. A second, smaller one for `/improve-pipeline` itself: its Mediator should treat a quoted deletion as *the proposer's decomposition*, not as a scope oracle — the same move `advisory-to-executed-rule-promotion-2026-08-07.md` already prescribes for admitted evidence gaps.
 
 ## Planning / Calibration Notes
 
@@ -146,6 +146,6 @@ The proposal: fire the rung on any net-subtractive diff rather than on a section
 
 ## Shelf Life
 
-**The instance retires** when `/execute`'s Deletion Completeness rung fires on any net-subtractive diff and lists sole-site declarations among its consumer surfaces. At that point the Prevention section here is superseded by the pipeline and should be cut to a pointer.
+**The instance retires** when `/execute`'s Deletion Completeness rung fires on any net-subtractive diff and lists sole-site declarations among its consumer surfaces. At that point the Prevention section here is superseded by the pipeline and should be cut to a pointer. **Status after #326: first half met, second half not.** The rung now fires on a diff that deletes or renames a module — which is narrower than *net-subtractive*, so a prose diff that removes a declaration without removing a file still does not trigger it — and the surface list is unchanged. The entry stays.
 
 **The general rule outlives that fix and should migrate rather than be deleted:** a deletion's unit of review is function, not syntax — and an approved change set that quotes a syntactic unit has priced the proposer's decomposition of it, not necessarily a complete one. That rule and its sibling in `self-review-blind-to-composition-2026-08-13.md` are two faces of one structure and belong together in whatever consolidated form these entries eventually take.

@@ -1,9 +1,47 @@
 ---
-import { repoUrl, installCommand, fullInstallCommand } from "../lib/data";
+import { repoUrl, installCommand, fullInstallCommand, catalog } from "../lib/data";
+import { canon } from "../lib/canon.generated";
+
+// The book count is derived, not written. It read "Eight books" until #273 —
+// correct when the shelf was a hand-picked eight, and quietly wrong from the
+// moment the canon started coming from `sources:` frontmatter. This is the one
+// line on the page that advertises the section, so a stale number here is the
+// drift #273 closed, surviving in the copy that points at it.
+// `scripts/test-canon-coverage.sh` compares this against the canon in the
+// BUILT page, so the derivation cannot be undone without a check going red.
+//
+// AND IT COUNTS THE TWO OBJECT TYPES SEPARATELY (issue #274). Deriving the
+// number fixed only half of it: the line went on saying "45 books" while three
+// of the forty-five were conference papers, so the page's own headline called a
+// paper a book — the thing #274 asked the section below to stop doing. The
+// papers clause is conditional because a canon with no papers should not
+// advertise "0 papers"; the contract suite grades each count against its own
+// population and their sum against the whole canon.
+// THE SKILL COUNT IS DERIVED FOR THE SAME REASON THE BOOK COUNT IS. It read
+// "Thirty skills" as spelled-out prose, correct on the day it was written and
+// wrong on the next skill added — the drift above, one noun to the left, with no
+// check behind it because nothing related the word to the catalog. `catalog` is
+// the collection section's own source, so the eyebrow now counts the thing the
+// page renders instead of asserting a number beside it.
+const skills = catalog.reduce((n, c) => n + c.skills.length, 0);
+const books = canon.filter((w) => w.type === "book").length;
+const papers = canon.length - books;
 ---
 
 <header class="hero wrap">
-	<div class="eyebrow">Thirty skills · Eight books · One pipeline</div>
+	{/* ONE SOURCE LINE, DELIBERATELY. The suite's reader is line-based; breaking
+	    this element across lines puts a newline between the marker and the counts
+	    and the reader comes back empty, which reports as "the eyebrow no longer
+	    advertises a count".
+
+	    `data-canon-counts` IS THE READER'S ANCHOR, and it is here rather than in
+	    the suite because four elements on this page carry `class="eyebrow"` — the
+	    hero's, and the section headers for the canon, the practice table, and the
+	    collection. Anchoring on the class meant "the first eyebrow that mentions
+	    the noun", which is the hero only by accident of document order. The
+	    section header most likely to gain a count is the canon's, which is the
+	    heading of the very thing being graded. */}
+	<div class="eyebrow" data-canon-counts>{skills} skills · {books} books{papers > 0 ? ` · ${papers} papers` : ""} · One pipeline</div>
 	<h1>Fifty years of software wisdom, <em>finally executable.</em></h1>
 	<p class="sub">
 		Install a delivery pipeline your coding agent actually follows — shape,
@@ -13,7 +51,7 @@ import { repoUrl, installCommand, fullInstallCommand } from "../lib/data";
 	</p>
 	<div class="cta-row">
 		<a class="btn-primary" href={`${repoUrl}#installation`}>Install the pack</a>
-		<a class="btn-ghost" href="#canon">Browse the shelf</a>
+		<a class="btn-ghost" href="#canon">Browse the bookcase</a>
 	</div>
 
 	<button

@@ -26,8 +26,18 @@ sources:
     - "Book Title — Author"
   secondary:
     - "Book Title — Author"
+  papers:
+    - "Paper Title — Author"
 ---
 ```
+
+`papers:` is optional and rarely needed. It is a *type marker*, not a third tier:
+each entry must also appear under `primary:` or `secondary:`, and a check fails
+if it does not. Use it only when a work is a paper rather than a book **and its
+author field carries no citation convention to read** — no `et al.`, no trailing
+`(Venue Year)`. Papers cited the normal way are detected without it. The landing
+page renders papers as a different object than books, so the marker is what stops
+a paper being shelved as a bound volume.
 
 ## Frontmatter rules
 
@@ -164,6 +174,7 @@ Structure keeps skills consistent; steering keeps them *effective*. Every senten
 - **Prompt the positive, not the negative.** Naming a forbidden behavior makes it *more* available to the model, not less — the words are now in the window. Replace "do not do X" with a concrete statement of the behavior you want. Reserve explicit prohibitions for genuine, high-cost failure modes where positive framing alone is not enough.
 - **Leading words.** Anchor behavior with pretrained concepts the model already carries — *seam*, *frontier*, *tracer bullet*, *deep module*, *sediment*. One right word invokes a whole schema in a few tokens; a paragraph explaining the same idea from scratch spends more and lands softer.
 - **Checkable, exhaustive completion criteria.** Every step that produces or verifies something must end on a criterion the model can *check* — a file exists, a command exits 0, a grep returns zero matches, an issue is created — not a vague "done when it looks right." Where the check must cover a set (all consumer surfaces, all deleted exports), say the set is exhaustive so the model does not stop at the first hit.
+- **Every field names its reader.** A field a skill writes into an issue or PR body — a section, a checklist, an HTML-comment stamp — names the later step that *branches on it or writes it back*, by skill and step: `/closeout` Step 2 refuses to merge past `/pre-merge`'s review-currency stamp; `/execute` Step 5 ticks the acceptance-criteria boxes `/prd-to-issues` wrote. Where no such step exists, the field is **informational** and says whose eyes it is for — a human reader is a reader, and `Blocked by` and `User Stories Addressed` are the worked examples. A field that is a **forcing function**, one a later step refuses to proceed without, also names its `scripts/test-*.sh` pin; that is `CLAUDE.md` § Commands a skill documents applied to the fields skills write for each other rather than to third-party tool claims. One question settles it: *what later step reads this, and what does it do when it does?* A valid answer names a step and the act it takes — *`/closeout` Step 2, refuses the merge* — or names the human audience. The `### Deletes` gate is the incident behind the rule (#326): it had readers that branched and no step that wrote it, so the rung it guarded waited on a field nothing produced.
 - **Single source of truth per meaning.** Each concept lives in exactly one canonical place; other skills link to it rather than restating it. Two copies of a rule drift, and the drift stays silent until they contradict each other.
 
 **Named failure modes to edit against:**
@@ -216,4 +227,5 @@ Before considering a skill revision done, check:
 - [ ] optional sections like `Common Rationalizations`, `Red Flags`, or `Verification` are included when they would prevent likely agent failure
 - [ ] the skill does not duplicate large amounts of repo-level philosophy that belongs in `SYSTEM-OVERVIEW.md`
 - [ ] each step that produces or verifies something ends on a checkable completion criterion (see `Prose economy and steering`)
+- [ ] every field this skill writes into an issue or PR body names its reader — the later step that branches on it or writes it back, or an explicit human audience (see `Prose economy and steering`)
 - [ ] the no-op hunt was run on changed prose — every added or edited sentence changes model behavior, or it was deleted

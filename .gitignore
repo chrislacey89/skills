@@ -4,3 +4,12 @@ node_modules/
 plans/
 *.png
 .context/
+.impeccable/
+
+# /execute's TDD classification markers. Step 3 creates one, Step 6 deletes it —
+# they never outlive a commit. One was tracked into this repo by a `git add -A`
+# during a dogfooding run and sat at HEAD until a /pre-merge review found it.
+# Scoped to the two markers rather than all of `.claude/`, so committing real
+# settings or hooks here stays possible.
+.claude/.tdd-active
+.claude/.tdd-skipped

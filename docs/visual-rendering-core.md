@@ -4,7 +4,7 @@ The shared rendering vocabulary and quality bar for Skill Kit's visual review su
 
 > **Why a shared core at all.** Two skills render line-anchored callouts over a diff. Without one quality bar they drift — two callout shapes, two copy formats, two dark-mode palettes, and "renderer" quietly grows into an app. This file is the single bar both author against. If you are tempted to ship reusable JavaScript instead of describing what the agent should hand-author, stop: that is the lock-in this whole surface exists to avoid (Norman, *featuritis*; the artifact must stay knowledge-in-the-world, not a maintained component library).
 >
-> **A copyable skeleton is not a runtime library.** The canonical token-and-markup skeleton in `visual-recap-design.md` (§3, §6) is a *reference the agent inlines* into a still-self-contained, still-hand-authored file — the same status as the §4 `recap-feedback v1` serializer. That is allowed and is the cure for run-to-run drift. What stays forbidden is a *runtime dependency*: a package, a build step, a server, a CDN call, or versioned JavaScript the artifact imports. The test is unchanged — open the file with the network off; if it still reads, you copied a skeleton, not shipped a library.
+> **A copyable skeleton is not a runtime library.** The canonical token-and-markup skeleton in `visual-recap-design.md` (§3, §6) is a *reference the agent inlines* into a still-self-contained, still-hand-authored file — the same status as the §4 `recap-feedback v1` serializer. That is allowed and is the cure for run-to-run drift. What stays forbidden is a *runtime dependency for the artifact's core*: a package, a build step, a server, or versioned JavaScript the core blocks import. The single licensed CDN call is Mermaid, for a multi-stage or behavioral **diagram figure**, and it is licensed on exactly one condition — the figure degrades visibly and nothing but the picture is lost (§6). The test, restated for that scope: open the file with the network off; every core block still reads, and the only thing missing is a figure that already said it would be. If a *finding* went missing, you shipped a dependency, not a skeleton.
 
 ---
 
@@ -22,13 +22,20 @@ Concrete consequences:
 - A callout's `lines` attribute must name lines that exist in the real hunk. If you cannot point at a real line, you have an observation, not a callout — write it as overview prose instead.
 - **Lie Factor ≤ 1** (Tufte, *graphical integrity*): visual emphasis must not exceed the real change. Do not render a one-line tweak with the same weight as a 200-line rewrite; do not flag a file as "high-risk, load-bearing" when the diff is a rename. The visual restatement of this rule *is* the Grounding Rule — emphasis tracks the diff, never the narrative you wish the diff told.
 - If a derived value and your prose disagree, the derived value wins and the prose is wrong. Fix the prose.
-- Model-*authored* structured blocks are the exception, and there are two. The first is the **UI wireframe** (`visual-recap-design.md` §9). Its labels, controls, and states must still come from diff-visible strings and component names — never invented copy — and when the layout is inferred rather than read from the diff, the caption must say "layout inferred." The second is the **options-comparison**, below.
+- Model-*authored* structured blocks are the exception, and there are three. The first is the **UI wireframe** (`visual-recap-design.md` §9). Its labels, controls, and states must still come from diff-visible strings and component names — never invented copy — and when the layout is inferred rather than read from the diff, the caption must say "layout inferred." The second and third are the **forward-looking blocks** below — the **options-comparison** and the **decision card**.
 
 A recap that violates grounding is worse than no recap. When in doubt, show less and assert less.
 
 ### Forward-looking blocks: cited or visibly asserted
 
-The **options-comparison** block (`visual-recap-design.md` §11) compares futures that have not been built. Most of its cells therefore have no diff to derive from, which makes it a *categorically wider* carve-out than the wireframe's — the wireframe is still bounded to diff-visible strings, and this one has no diff at all. Grounding cannot mean "derived by tooling" here, so it shifts to a question the block can actually answer: **does this claim have a source, and does the render say so?**
+**This is a rule about a class, not about one block.** A forward-looking block renders something that does not exist yet, so it has no diff to derive from — a *categorically wider* carve-out than the wireframe's, which is still bounded to diff-visible strings. Grounding cannot mean "derived by tooling" here, so it shifts to a question the block can actually answer: **does this claim have a source, and does the render say so?**
+
+Two blocks are in the class, and everything below governs both:
+
+- the **options-comparison** (`visual-recap-design.md` §11) — N mutually exclusive futures, none of them built
+- the **decision card** (`visual-recap-design.md` §13) — a commitment a plan has already made, rendered as its resulting shape rather than as the prose that argued for it
+
+Read *cell* below as "cell or field" and *option* as "option or card," according to which member you are rendering. **A block that asks rather than claims is not in the class** — the open question (`visual-recap-design.md` §14) is about the future too, and it grades nothing, because there is no assertion to source. Membership turns on making a claim, not on facing forward. The rule was written for the options-comparison first and generalized in #317; if a future forward-looking block does not fit these words, widen them here rather than restating them beside the new block.
 
 - **Cited** — the cell is quoted from, or directly derived from, something that already exists: the current text at `file:line`, an issue or PR body, a research-archive entry, test output, a published spec. The cell renders normally and **shows its source**.
 - **Asserted** — the cell is the model's judgment about a state that does not exist yet: a projected cost, a claimed benefit, drafted replacement text. The cell renders with a visible `asserted` treatment and never carries a cited cell's weight.
@@ -55,7 +62,7 @@ If redaction removed anything, say so once in the overview ("N value(s) masked")
 
 ## 3. Component vocabulary
 
-Ten blocks cover the surface — nine for reviewing a finished change, plus one forward-looking block for comparing options that do not exist yet. Each is a *semantic role* with a canonical shape: **copy the per-block markup from the canonical skeleton (`visual-recap-design.md`), fill the grounded data and prose, and deviate only where the change genuinely needs it.** Keep it minimal, and only render the blocks the change actually needs. The skeleton is a copyable reference you inline (exactly like the §4 serializer), not a shipped widget — copying it instead of re-deriving the markup each run is what keeps two recaps of similar changes recognizably the same surface, so the reviewer reads the diff instead of re-learning the layout.
+Thirteen blocks cover the surface — ten for reviewing a finished change, two forward-looking blocks for rendering what does not exist yet (options nobody has built, and decisions a plan has committed to), and one for the questions a plan has not answered. Each is a *semantic role* with a canonical shape: **copy the per-block markup from the canonical skeleton (`visual-recap-design.md`), fill the grounded data and prose, and deviate only where the change genuinely needs it.** Keep it minimal, and only render the blocks the change actually needs. The skeleton is a copyable reference you inline (exactly like the §4 serializer), not a shipped widget — copying it instead of re-deriving the markup each run is what keeps two recaps of similar changes recognizably the same surface, so the reviewer reads the diff instead of re-learning the layout.
 
 | Block | Role | Grounded inputs (tooling) | Authored (prose) |
 |---|---|---|---|
@@ -63,14 +70,17 @@ Ten blocks cover the surface — nine for reviewing a finished change, plus one 
 | **file-tree + change-flags** | The topology — which files moved, each flagged | file list, ±LOC per file | per-file flag: `new` / `moved` / `load-bearing` / `mechanical` / `risky` |
 | **annotated-diff** | Split before/after for one hunk, callouts anchored to after-side lines, with a one-line intent summary above it | the hunk text, line numbers | the hunk `summary` (intent) and each callout `note` |
 | **callout** | A note anchored to a line range, rendered *at* that line | `lines: "42-47"` from the real hunk | the `note` |
-| **before/after** | Small-multiple comparison of two states of the same unit — labeled side-by-side columns by default; toggle variant only when the content is too wide to halve | both states' text | which difference matters |
-| **diagram** | Architecture / data-flow / sequence when topology needs a picture | — | CSS primitive for simple flow/sequence (default); Mermaid opt-in for complex graphs |
+| **before/after** | Small-multiple comparison of two states of the same unit — labeled side-by-side columns; stacked frames when the content is too wide to halve, never a toggle that hides one side | both states' text | which difference matters |
+| **diagram** | Architecture / data-flow / sequence when topology needs a picture | — | CSS primitive for a trivial spine; Mermaid-via-CDN (with a per-figure degrade note) for anything multi-stage or behavioral |
 | **data-model card** | The resulting schema shape of a changed entity, per-field change flags with struck-through `was:` prior types | the migration/schema diff text | the change-flag judgments and one compatibility sentence (breaking / risky / non-breaking, for whom) |
 | **api-endpoint card** | The resulting API contract of a changed route — method, path, changed params/responses flagged | the route/handler diff text | same as data-model card |
-| **wireframe** | The visible UI delta when the diff changes rendered UI: entry surface → interaction surface → resulting state (+ role variants when permissions changed) | diff-visible labels, strings, component names | the wireframe HTML itself (one of the two model-authored exceptions, §1) — mark inferred layout as inferred |
-| **options-comparison** | N mutually exclusive options as identical panels in one eyespan — same attributes, same order, down every column (the forward-looking block; no diff exists yet) | the **cited** cells: current text at `file:line`, issue/PR bodies, research entries, test output | the **asserted** cells — projected costs, benefits, drafted resulting text — each marked `asserted` and each option's cited/asserted split shown (§1) |
+| **wireframe** | The visible UI delta when the diff changes rendered UI: entry surface → interaction surface → resulting state (+ role variants when permissions changed) | diff-visible labels, strings, component names | the wireframe HTML itself (a model-authored block — see §1 for the carve-out list) — mark inferred layout as inferred |
+| **per-unit series** | One root cause at four or more near-identical sites, rendered as one real `<section>` per site — each an identical §7 comparison with a lede and typed notes — opened by a required all-units matrix so the population is visible in one eyespan | every site's before/after text, and which sites the diff touched | each unit's lede, its typed `bad`/`good`/`warn` notes, and its kind chip (`fixed` / `exempt` / `missed` / `mechanical`) |
+| **options-comparison** | N mutually exclusive options as identical panels in one eyespan — same attributes, same order, down every column (forward-looking; no diff exists yet) | the **cited** cells: current text at `file:line`, issue/PR bodies, research entries, test output | the **asserted** cells — projected costs, benefits, drafted resulting text — each marked `asserted` and each option's cited/asserted split shown (§1) |
+| **decision card** | A commitment a plan has already made, rendered as its resulting shape — what was decided, what it now rules out, what would reverse it — the way §8's contract cards render a resulting contract instead of the migration that produced it (forward-looking; no diff exists yet) | the **cited** fields: the PRD or issue body, the research artifact, current code at `file:line` | the **asserted** fields — a projected consequence, a reversal condition nobody has written down — each marked `asserted`, with the card's split shown (§1) |
+| **open question** | A question the plan has not answered, with the context that makes it answerable and the default if nobody does — §11 compares known options, §13 records a settled choice, and neither holds an unresolved one | — (a question asserts nothing, so no cell is graded) | the question, its stakes, and the if-unanswered default |
 
-**CSS-first diagrams; Mermaid for complex graphs.** A recap's diagrams are almost always a simple flow or short sequence — these have no layout problem to solve, so the default is the pure-CSS diagram primitive (`.fc-*`, `visual-recap-design.md` §1/§5): it renders identically offline, needs no CDN, and has no parse grammar. Reach for embedded Mermaid (via `/mermaid`) **only** for genuinely complex graphs — a dense DAG, ER, or class diagram — that need real auto-layout; that is the case the "do not hand-roll graph layout" rule still guards. This is a different context from issue #83, which chose Mermaid for **GitHub-bound markdown** (rendered natively, no CDN) — that decision stands. The boundary: GitHub-rendered markdown → Mermaid; self-contained offline HTML → CSS-first. The rendering core owns callouts and diffs, not graph layout.
+**Pick the diagram form by what the picture has to say.** A **trivial spine** — one straight flow, a short sequence, no labeled edges, no branches — takes the pure-CSS primitive (`.fc-*`, `visual-recap-design.md` §1/§5): it renders identically offline, needs no CDN, and has no parse grammar. Anything **multi-stage or behavioral** — labeled edges, fan-outs, guards, failure states, a before/after pair of graphs, a dense DAG, ER, or class diagram — takes **Mermaid via CDN** (authored through `/mermaid`), because those are the pictures that carry comprehension and the CSS spine cannot express them. Every Mermaid figure carries a visible per-figure degrade note (§6), and #129's render-confirm gate still applies (§7). When the review context is known to be offline, take the CSS primitive regardless and say so in the caption. This reverses #131 on field evidence; the reasoning and the reopened fence are in `visual-recap-design.md` §5. Issue #83 is a different context — **GitHub-bound markdown** renders `mermaid` fences natively with no CDN — and is untouched. The rendering core owns callouts and diffs, not graph layout.
 
 **Contract changes headline as cards, not source.** When the diff changes a schema or an API
 surface, the reviewer wants the *resulting contract* — "`sessions` gained `refresh_token_id`,
@@ -78,6 +88,8 @@ surface, the reviewer wants the *resulting contract* — "`sessions` gained `ref
 hunk. Render it as a data-model / api-endpoint card (`visual-recap-design.md` §8), grounded
 field-by-field in the real diff; keep the literal SQL/handler excerpt for when the exact
 statement still matters.
+
+**When the finding is a command's observed output, render the transcript, not prose.** Some changes are about what a command *does* rather than what its source says — the class `CLAUDE.md` § "Commands a skill documents" exists for, where a wrong exit code or flag behavior ships silently and no diff line shows it. Render those in the **annotated-diff** or **before/after** row with executed output as the grounded input: the exact invocation, then the real captured output, using the same `--add` / `--del` washes and margin markers those rows already use. §1 already admits test output as a *cited* grounded input for the forward-looking block; this is the retrospective placement of the same thing, so the output is copied from a real run and never retyped from memory — an invented transcript is the Grounding Rule's worst case, a fabrication wearing the costume of evidence. This is not an eleventh block: it is the existing rows with a different grounded input.
 
 **Options compare as panels, never as sequence.** When a skill has generated N mutually exclusive options, prose describes them one after another — and Tufte names that as the comparison anti-pattern outright: *"The viewer cannot compare what they cannot see at the same time. Memory is not vision."* Constancy of Design is what makes panels comparable, so every option carries the same attributes in the same order, and only the content differs. Two things are visible in panels and invisible in prose by construction: **domination** (one option paying a cost while closing no question — a relation *between* options, which sequence never shows two of at once) and **a missing option**, which the empty space in a matrix makes obvious. The threshold that triggers this block, and its relationship to the `AskUserQuestion` menu that takes the choice afterward, live in `next-step-menu.md`; the markup lives in `visual-recap-design.md` §11.
 
@@ -89,6 +101,8 @@ statement still matters.
 
 ## 4. The copy-text feedback loop (the backend-free `get-plan-feedback`)
 
+**Scope — required for handoff, optional in the room.** The loop exists because an artifact that leaves the author's session has no other way back: a reviewer opens it alone, writes verdicts, and the clipboard is the only channel. So it is **required whenever the artifact is handed off** — mailed, attached, opened in a different session, or read asynchronously. When the author is present and the reviewer is answering out loud, the round-trip is already happening in the conversation and the button is ceremony; render it as a **single optional final-screen block** (deck mode, `visual-recap-design.md` §D5 *Aftermath*) or omit it. Two synchronous field sessions never exercised the async case, which is an argument about *those sessions*, not about the mechanism — do not read it as evidence the loop is dead. When you are unsure which case you are in, include it: an unused button costs a few lines, and a missing one costs the reviewer's answers.
+
 The artifact has no server, so the reviewer's answers travel by clipboard and the human is the courier. **Stable element ids are the one load-bearing implementation detail** — they are the anchors the agent parses the feedback back against (mirroring Builder.io's `anchorDetails` / `consumedCommentIds`, without their backend).
 
 ### Stable ids
@@ -96,13 +110,17 @@ The artifact has no server, so the reviewer's answers travel by clipboard and th
 Every annotatable unit carries a stable, diff-derived `data-feedback-id` — never a random or positional id, so the same callout keeps the same id if the artifact is regenerated:
 
 - callout → `c-<file-slug>-L<line>` (e.g. `c-auth-ts-L42`)
-- open-question field → `q-<n>`
+- open question → `q-<question-slug>` (e.g. `q-blocked-run-ok`), rendered per `visual-recap-design.md` §14
+  - `q-<n>` is the legacy positional form and is the one shape here that breaks this section's own rule; prefer the slug so an inserted question does not shift every answer pasted back
 - per-commit sign-off → `signoff-<short-hash>`
 - per-finding response → `r-<file-slug>-L<line>`
 - data-model card → `dm-<entity-slug>` (e.g. `dm-sessions`)
 - api-endpoint card → `ep-<method>-<path-slug>` (e.g. `ep-post-api-auth-refresh`)
 - wireframe → `wf-<slug>` (e.g. `wf-share-popover`)
 - options-comparison option → `opt-<option-slug>` (e.g. `opt-reconcile-182-now`)
+- decision card → `dc-<decision-slug>` (e.g. `dc-session-storage`)
+  - **When a card records the outcome of an options-comparison, reuse the winning option's slug** — `opt-refuse-to-assemble` → `dc-refuse-to-assemble` (`visual-recap-design.md` §13). The pairing is what makes the id derived rather than invented, and a surface that renders a decision open and then closed keeps one handle across both states.
+- per-unit series unit → `u-<unit-slug>` (e.g. `u-closeout`)
 
 ### The Copy-feedback button (a forcing function)
 
@@ -115,6 +133,8 @@ A persistent **Copy feedback** button runs a small vanilla-JS serializer that re
 3. always also render the blob into a **visible, pre-selected `<textarea>`** so the reviewer can copy by hand even if both APIs are blocked.
 
 The visible textarea is the guarantee, not a nicety — keep it.
+
+**In deck mode the serializer sees every screen, including hidden ones.** `querySelectorAll('[data-feedback-id]')` returns elements inside a `hidden` `<section>`, so a note written on screen 2 still serializes from screen 9. This is only true because the deck pages by toggling `hidden` over sections that are all in the DOM (`visual-recap-design.md` §D3); a stage that swaps `innerHTML` from a template store discards the reviewer's answers the moment they page away.
 
 ### The serialized format (`recap-feedback v1`)
 
@@ -139,7 +159,7 @@ A minimal serializer (hand-roll per artifact; this is the shape, not a shipped l
     const lines = ['## recap-feedback v1  (recap: ' + RECAP_SLUG + ')'];
     document.querySelectorAll('[data-feedback-id]').forEach(el => {
       const id = el.dataset.feedbackId;
-      const kind = el.dataset.feedbackKind;     // callout | question | signoff
+      const kind = el.dataset.feedbackKind;     // any kind registered in §4 above
       const verdict = el.dataset.verdict || ''; // e.g. needs-change, 🟡
       const note = (el.querySelector('[data-feedback-note]')?.value || '').trim();
       if (!verdict && !note) return;            // skip untouched units
@@ -172,29 +192,40 @@ The diff and its callouts are the data; everything else recedes.
 - **Small multiples + constancy of design** for before/after and per-file panels: identical scale, identical frame on both sides, so the eye reads the *difference*, not a layout change. Never restyle the after-side relative to the before-side.
 - **Subtraction of weight (1 + 1 = 3).** Adjacent heavy borders create phantom third shapes that read as content. Prefer whitespace and a single light rule to separate panels; delete every border that is not doing work.
 - **Value-scale semantic color, checked for simultaneous contrast in both themes.** Add/remove and risk colors must hold their meaning and contrast on light *and* GitHub-dark backgrounds — flip the palette on `[data-theme]`, and verify red/green stay legible against each other and the background (the principled answer to the #94 dark-mode contrast concern: a value scale, not a one-off patch).
-- **A diagram fills its frame.** The default CSS primitive (`.fc-*`, §1/§5) is full-width by construction. If you take the Mermaid opt-in for a complex graph, never render its SVG at intrinsic size — size it to the column width (`.mermaid svg{width:100%;height:auto}`, per the `visual-recap-design.md` §1/§5 skeleton). A tiny centered diagram starves the data-ink the section exists to show.
+- **A diagram fills its frame.** The CSS primitive (`.fc-*`, §1/§5) is full-width by construction. When the picture is multi-stage or behavioral and you take Mermaid, never render its SVG at intrinsic size — size it to the column width (`.mermaid svg{width:100%;height:auto}`, per the `visual-recap-design.md` §1/§5 skeleton). A tiny centered diagram starves the data-ink the section exists to show.
 - **Respect the reading budget — it is a ceiling *and* a floor** (Cohen / Rigby: ~100–300 LOC, 30–60 min, <400–500 LOC/hr). The recap is *author preparation*, so it must itself stay inside the budget: **3–8 key files/hunks, each with a one-line intent summary and a few high-signal callouts** — focused excerpts (~150 lines max each), not every hunk. A recap that reproduces the whole diff has rebuilt the thing the reviewer was already going to scroll. But the budget is also a floor: a surface that was worth rendering at all owes the reviewer substantially more than a file list — a sparse three-block recap of a 40-file change forces them back into the raw diff, which under-serves them exactly as much as a wall over-serves them. If the change is too big for one budget, say so and recommend chunking — do not render a wall, and do not render a stub.
+- **The budget measures depth, not population.** "3–8 key files/hunks" bounds how much you annotate *within* a unit; it is not a cap on how many units exist. For one root cause repeated across N near-identical sites the population *is* the finding — sample it and a documented exception becomes indistinguishable from an oversight — so the per-unit series (`visual-recap-design.md` §12) renders every site and spends the budget on depth inside each. Cohen's rule for an oversized review is the same: split it into complete sessions, never sample one.
 
 ---
 
-## 6. Inline CSS is load-bearing; CDN libraries are enhancement-only
+## 6. Inline CSS is load-bearing; the offline invariant is scoped to core blocks
 
-The artifact must read *identically* with no network. Proven by spike: a real recap used **zero** Tailwind utility classes — it was 100% inline CSS and degraded to an identical file offline.
+**Core blocks must read *identically* with no network. A diagram figure may degrade, and must say so on its own face.** Proven by spike: a real recap used **zero** Tailwind utility classes — it was 100% inline CSS and degraded to an identical file offline. That still holds for everything that carries the change itself: prose, panes, split diffs, contract cards, wireframes, the file tree, and the feedback loop. None of them may depend on a network.
+
+The one carve-out is the **diagram figure**, and it is a scoping of this invariant rather than a deletion of it. #131 made CSS the global default because a Mermaid figure with no network degrades to unparsed source text; the field evidence that reversed it (§3, `visual-recap-design.md` §5) is that the pictures carrying the most comprehension — labeled edges, fan-outs, guards, failure states, before/after graph pairs — are exactly the ones the CSS spine cannot draw. So the trade is taken explicitly and paid visibly:
+
+- A Mermaid figure carries a **visible degrade note beside the figure**, not once in a footer: *"Best rendered with an active internet connection — this figure loads Mermaid from a CDN and shows its source text offline. The rest of this file reads identically either way."* A reader who jumps straight to that figure has to see it there.
+- **Losing the figure never loses the finding.** Anything a diagram is the sole carrier of has to also exist as prose or as a block that survives offline. The picture may be the fastest route to the point; it may not be the only one.
+- **When the review context is known to be offline** — a plane, an air-gapped sandbox, a CI log — take the CSS primitive regardless of the picture's complexity, with the caption saying that is what happened.
+
+Everything else about the load-bearing layer is unchanged:
 
 - **Copy the canonical token core** from `visual-recap-design.md` §1 — a fixed `:root`/`[data-theme="dark"]` block of named CSS variables (`--bg`, `--fg`, `--add`, `--del`, `--risk`, the `--flag-*` and `--sx-*` ramps, a base-16 spacing scale, …), with light as the default and dark flipped on `[data-theme]`. Keep the variable names; do not re-derive a fresh palette per run. This is the load-bearing layer; it must not depend on any CDN.
 - **Forcing function — confirm the token core is canonical before presenting.** The artifact's `:root`/`[data-theme]` block must be the canonical `visual-recap-design.md` §1 set (canonical variable names and values), **not** a palette, font stack, or chrome re-derived from the app under review. A review instrument stays visually independent of its subject; the temptation to theme the recap in a well-designed app's own aesthetic is the deviation most likely to occur and most harmful when it does. This is a checked step, not stated hope — verify it (Norman: *knowledge in the world, not the head*; Gawande: the killer-item an expert skips under load).
-- **Reach for a CDN library only where it earns its place** — e.g. highlight.js for syntax coloring — and **always with a no-CDN fallback** so the artifact still reads when the CDN is blocked. Tailwind-via-CDN works but is not needed; do not make the artifact depend on it.
-- The test: open the file with the network off. If it still reads, you built it right.
+- **Reach for a CDN library only where it earns its place** — e.g. highlight.js for syntax coloring — and **always with a no-CDN fallback** so the artifact still reads when the CDN is blocked. Name that fallback rather than gesturing at one: it is `visual-recap-design.md` §1's `--sx-*` tokens, applied by hand at authoring time against that section's role table. Tailwind-via-CDN works but is not needed; do not make the artifact depend on it.
+- **Do not hand-roll a tokenizer.** A regex lexer written into the artifact looks safe because it is easy to gate on losslessness — rendered `textContent` equal to the source — and losslessness is the wrong measurement: it proves no character was dropped, not that any token was typed correctly. Measured against 13 adversarial one-liners (#305), all 13 passed the losslessness gate and **11 were mis-colored** — `pnpm add zod` colored `add` as a git subcommand, `docs/log/README.md` colored `log`, `a=b#c` became a comment, a heredoc body of markdown tokenized as shell. Under the Grounding Rule a plausible wrong color is worse than no color, because the reviewer trusts it and skips the line it got wrong. You are reading the diff and you know its language: apply the §1 tokens by hand, or take highlight.js with the fallback above — either one carries the language context a bare-word regex list does not.
+- The test: open the file with the network off. Every core block still reads, and each degraded diagram figure is the one you already labeled as such. If a *finding* disappeared rather than a picture, you put load on the CDN that does not belong there.
 
 ---
 
 ## 7. Open / serve guidance the skill should emit
 
-**Confirm a Mermaid diagram renders before presenting (DO-CONFIRM).** The default CSS diagram
-primitive (§5) needs no such check — it has no parse grammar and no CDN, so it is correct the
-moment it is written. This gate applies **only when you took the Mermaid opt-in** for a complex
-graph: verify it renders without a parse error before handing the artifact to the reviewer — a
-quick load, or a re-check against the `visual-recap-design.md` §5 label-safety rules. The
+**Confirm a Mermaid diagram renders before presenting (DO-CONFIRM).** This gate is unchanged by
+the §3/§6 default flip — it now fires *more* often, not less. The CSS diagram primitive (§5)
+needs no such check: it has no parse grammar and no CDN, so it is correct the moment it is
+written. **Every Mermaid figure** gets the check: verify it renders without a parse error before
+handing the artifact to the reviewer — a quick load, or a re-check against the
+`visual-recap-design.md` §5 label-safety rules. The
 `<pre class="mermaid">` source fallback is *not* a substitute: it shows the source text, which
 is exactly what fails to parse. This is a lightweight verification, not a build dependency — it
 must not mandate a headless browser or erode the offline-first ethos (§6). Authoring the

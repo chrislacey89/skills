@@ -46,9 +46,11 @@ Key interactions between skills:
 - `/pre-merge` creates the PR with PRD lineage and verifies boundary map contracts from `/prd-to-issues` against actual code
 - `/closeout` owns the `merge`/`cleanup` git-hygiene tail after `/pre-merge`: confirm → merge the reviewed PR → re-anchor the shell to the base checkout *before* removing the worktree → prune the merged branch → pull base → verify a clean end state. It is HITL-confirmed (never auto-merges), orchestrates existing tools (`gh pr merge`, `wt remove`/`git worktree remove`, `commit-commands:clean_gone`), introduces no filesystem state, and defers lesson capture to `/compound` and issue-closing + research-artifact hygiene to SYSTEM-OVERVIEW Step 9. When isolation is host-owned (`worktree.provisioning: host`, or a host env var like `CONDUCTOR_WORKSPACE_PATH`/`CODESPACES`), `/closeout` still merges but cedes worktree teardown and branch pruning to the host; symmetrically, `/execute` Step 0 stands down rather than provisioning a worktree the host already created
 - `/compound` captures lessons into `docs/solutions/` — by default onto the open PR before `/closeout` merges (so the lesson is reviewed and merged with the code that taught it), or post-merge as the fallback for lessons that surface at/after merge; this is the compounding loop, and it may also capture tranche-level lessons when a milestone closes
-- `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about Skill Kit itself rather than the downstream project; `/improve-pipeline` files a GitHub issue in `chrislacey89/skills` and is advisory until the user approves follow-on implementation
+- `/compound` and `/pre-merge` may recommend `/improve-pipeline` when the main lesson is about Skill Kit itself rather than the downstream project; `/improve-pipeline` files a GitHub issue in `chrislacey89/skills` and is advisory until the user approves follow-on implementation. Separately, `/compound` Phase 4 may file a proposal stub in `chrislacey89/skills` itself, as the fifth of its permitted mechanisms — available only when the preventing change belongs to the pack rather than to the downstream repo, and not as a substitute for a downstream mechanism that is merely hard to build
 - When backtracking to an earlier skill, stale artifacts (research archive entries, PRD issues, slice issues) must be explicitly updated or superseded before proceeding forward — `/correct-course` is the invocable front door for this, and the canonical rules live in SYSTEM-OVERVIEW.md "Pipeline Recovery". Archive entries are superseded by a new dated file, not deleted.
-- `/visual-recap` is an optional side-route at the `/pre-merge` → merge boundary (like `/walk-commits`): it renders a finished diff/PR/branch as a transient, self-contained interactive HTML recap so a reviewer who didn't author the change can grasp its shape before reading lines. It is never auto-invoked, skips small/obvious diffs, defaults to a CSS diagram primitive for simple flow/sequence pictures and uses `/mermaid` only for complex graphs that need auto-layout, and produces a transient artifact (gitignored `.context/` or `mktemp`, never committed). Defect-finding stays in `/pre-merge`; free-form diagramming stays in `/excalidraw-diagram`. It shares `docs/visual-rendering-core.md` (rendering vocabulary, copy-text feedback serializer, Grounding Rule, secret-redaction, Tufte quality bar) with `/walk-commits` — bundled into both via `scripts/skill-references.manifest`
+- `/visual-recap` is an optional side-route at the `/pre-merge` → merge boundary (like `/walk-commits`): it renders a finished diff/PR/branch as a transient, self-contained interactive HTML artifact so a reviewer who didn't author the change can grasp its shape before reading lines. It renders in one of **two canonical modes**, selected in Step 1 against a one-line rule (*is there one story the screens advance? deck; is the reviewer auditing parallel hunks? scroll*) — the **scrolling recap** (`docs/visual-recap-design.md` Part I) or the **walkthrough deck** (Part II, premise → changes → mechanism → aftermath, one idea per screen, paged by toggling `hidden` over sections rather than swapping `innerHTML`). Diagrams take the CSS `.fc-*` spine when trivial and Mermaid-via-CDN when multi-stage or behavioral, each Mermaid figure carrying a visible degrade note; the offline invariant is scoped to core blocks, so a figure may degrade but a finding may not. It is never auto-invoked, skips small/obvious diffs, and produces a transient artifact (gitignored `.context/` or `mktemp`, never committed). It may *recommend* `/re-pitch` when the change feels abstract to the audience, and never invokes it. Defect-finding stays in `/pre-merge`; free-form diagramming stays in `/excalidraw-diagram`. It shares `docs/visual-rendering-core.md` (rendering vocabulary, copy-text feedback serializer — required on handoff, optional when the author is in the room — Grounding Rule, secret-redaction, Tufte quality bar) with `/walk-commits` — bundled into both via `scripts/skill-references.manifest`
+- `/re-pitch` is the comprehension-repair side-route: it fires when an explanation did not land, diagnoses whether the reader is missing a term, missing the situation, or was given too much at once, and re-states the same content under a checkable rule set with every domain term glossed on first use. It rewrites an existing answer rather than producing new work, never runs against a wrong answer (correct that instead), writes nothing to disk, and returns control to whatever was in flight. It reads `UBIQUITOUS_LANGUAGE.md` when present and may recommend `/ubiquitous-language` when the same terms keep needing glosses — but never invokes it
+- `/tdd`, `/pre-merge`, and `/execute` share `docs/restated-claims.md` — the single statement of the restated-claim-in-unchecked-prose class (what a prose contract and an operative site are, the census move, the limit of the literal-count assertion, and the fallback when interpolation is unavailable). `/tdd` § 4 Refactor points at it for the author-time move; `/pre-merge`'s Deep Modules dimension points at it for the review-time detector; `/execute` Step 4 points at it for the scope check on set-claims, the author-path rung that keeps an existential measurement from being written up as a universal claim. None restates it — bundled into all three via `scripts/skill-references.manifest`, and `scripts/test-bundled-pointer-resolution.sh` pins that the pointers resolve
 - `/help` is the orientation skill — it reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next pipeline skill with a one-line reason. It is advisory only and never invokes the recommended skill itself.
 
 ## Invocation Roles
@@ -57,7 +59,7 @@ Use these categories consistently across the repo:
 
 - **Primary pipeline skills** — direct-entry steps in the default delivery path, plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/closeout`, `/compound`
 - **Invoked helper skills** — usually not top-level entry points for a feature, but delegated when a narrower decision is unresolved: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`
-- **Side-route skills** — valid alternate or supporting paths beside the main pipeline: `/qa`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`
+- **Side-route skills** — valid alternate or supporting paths beside the main pipeline: `/qa`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`, `/re-pitch`
 - **Infrastructure skills** — project setup or safety tooling, not normal delivery steps: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 Each skill should make its role obvious.
@@ -128,6 +130,8 @@ sources:
     - "Book Title — Author"
   secondary:
     - "Book Title — Author"
+  papers:
+    - "Paper Title — Author"      # optional type marker; see docs/skill-anatomy.md
 ---
 ```
 
@@ -142,6 +146,7 @@ When modifying a skill:
 - `sources` is an optional repo-local field, but expected for skills making substantive methodological claims
 - `primary` means core lineage — the skill is fundamentally built on this work
 - `secondary` means a supporting influence — a specific technique or check drawn from this work
+- `papers` is an optional type marker, not a third tier — every entry must also appear under `primary` or `secondary`, and `scripts/test-canon-coverage.sh` fails if it does not. Use it only for a work that is a paper rather than a book *and* whose author field carries no citation convention to read (no `et al.`, no trailing `(Venue Year)`); papers cited the normal way are typed without it. It exists because the landing page's canon section is derived from these blocks and renders papers as a different object than books
 - Do not put provenance into `description`; keep it optimized for triggering
 - Only claim a source if the skill body clearly operationalizes it
 - Prefer short source lists over comprehensive ones
@@ -158,7 +163,8 @@ When modifying a skill:
 - the skill tables in `README.md`
 - the Handoff Table and the role lists in `SYSTEM-OVERVIEW.md`
 - the role lists in this file (`CLAUDE.md` § Invocation Roles)
-- the classification ladder in `help/SKILL.md` Step 2
+- the classification ladder in `help/SKILL.md` Step 2 (state-driven rows only — a skill with no repo-state signal, like `/re-pitch`, correctly has no row)
+- the `catalog` array in `site/src/lib/data.ts`, which the landing page's collection section renders and both spelled-out skill counts are now derived from
 
 A stale surface routes agents and users to a skill that no longer exists, or under a role it no longer holds — the drift #143 reconciled once by hand. Keeping the surfaces in lockstep with the change that causes the drift makes that reconciliation standing rather than after-the-fact, and puts the inventory knowledge in the world instead of the maintainer's head.
 
@@ -190,6 +196,18 @@ Install Lefthook (`brew install lefthook` or see <https://github.com/evilmartian
 - **Pre-push** — runs every `scripts/test-*.sh` suite plus `shellcheck` across all scripts. The list is not repeated here; `lefthook.yml` and `.github/workflows/validate-skills.yml` are the two places a new suite must be registered.
 
 Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The repo intentionally has no `package.json` — no JS/TS to tend — so Biome and other Node-ecosystem linters are out of scope until that changes.
+
+### Reading a prose diff
+
+Paragraphs here are single physical lines, routinely past 400 characters — `SYSTEM-OVERVIEW.md:207` is 1,051 and `pre-merge/review-checklist.md` tops out near 2,800. Git's unit is the line, so a paragraph edit renders as the whole paragraph deleted and a near-identical paragraph re-added, with nothing marking where the two diverge, and a large share of what the reviewer re-reads never changed. (#295 quantified that share; the figure is not restated here, because a count over "the last 60 markdown commits" is a sliding window that moves with every commit and nothing checks it. The two line lengths above are fixed and greppable.)
+
+**Use `git diff --word-diff`.** It renders the same change as `[-old-]{+new+}` word-runs instead of two walls of text. It is a display flag on git's own diff ([git-diff docs](https://git-scm.com/docs/git-diff)) and needs no repo configuration. Worth an alias once per machine:
+
+```
+git config --global alias.wd 'diff --word-diff'
+```
+
+**`.gitattributes` does a different job — do not confuse the two.** `*.md diff=markdown` selects git's built-in `markdown` userdiff driver, which supplies an `xfuncname`: hunk headers become `@@ -4,3 +4,3 @@ ## Pre-merge` rather than a bare line range, so a reviewer can see which section a hunk lands in. It supplies **no** `wordRegex`, and `--word-diff` output is byte-identical with and without it. That negative is easy to get backwards and was gotten backwards in #295's own proposal, so it is pinned by `scripts/test-markdown-diff-attribute.sh` against the installed git rather than trusted here.
 
 ## Post-merge install verification
 

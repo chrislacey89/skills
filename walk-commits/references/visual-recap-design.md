@@ -2,11 +2,24 @@
 
 The fixed token system and per-block markup that Skill Kit's visual review surfaces copy
 from. It is the **canonical skeleton** referenced by `visual-rendering-core.md` §3 and §6,
-shared by `/visual-recap`, the `/walk-commits` per-commit callouts, and the future
-`/visual-plan`. §3–§9 are the blocks that render a change which already exists (§1, §2, and §10
-are the token core, the shell, and the interactions they all share); §11 is the one
-forward-looking block, used by any skill that emits an N-way fork of options that do not exist
-yet.
+shared by `/visual-recap` and the `/walk-commits` per-commit callouts. §3–§9 are the blocks
+that render a change which already exists (§1, §2, and §10 are the token core, the shell, and
+the interactions they all share); §11 is the one forward-looking block, used by any skill that
+emits an N-way fork of options that do not exist yet.
+
+**There is no `/visual-plan` skill, and none is coming.** An earlier draft of this header named
+one as future work; #317 ruled against it and withdrew the promise rather than leave it
+resolving to nothing. Forward-looking blocks live in this file and `/visual-recap` renders
+them.
+
+**The document has two parts, and they are two rendering modes, not two layouts of one thing.**
+Everything numbered §1–§12 is **Part I — the scroll recap**: a single scrolling column for a
+reviewer *auditing* a change. **Part II — the walkthrough deck** (§D1–§D9, at the end of this
+file) is a paged, one-idea-per-screen shell for a reviewer being *argued through* a change with a
+causal arc. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading
+budget, and the transient-artifact rule; they differ in shell and reading order only. The
+selection rule is one line and lives in §D1: **is there one story the screens advance? deck. Is
+the reviewer auditing parallel hunks? scroll.**
 
 > **This is a reference you inline, not a library you ship.** Exactly like the
 > `recap-feedback v1` serializer in `visual-rendering-core.md` §4: copy the token core and
@@ -26,7 +39,12 @@ blue-ink canvas, a single electric-violet accent, monospace-forward dense layout
 (when schema/API surfaces changed) → diagram → wireframes (when rendered UI changed) →
 annotated changes → before/after → review. Every semantic color is tuned for WCAG AA
 contrast against its surface in **both** themes — light is the `:root` default, dark flips
-on `[data-theme="dark"]`.
+on `[data-theme="dark"]` — with **one documented exception.** Three syntax tokens sit below
+the 4.5:1 body-text bar: `--sx-s`, `--sx-n`, and `--sx-c` in light, and `--sx-c` again in
+dark. They stay legible against every surface, but do not claim AA for them and do not put
+anything a reviewer must not miss in one. That exception list is exact and pinned by a
+contract test, so recoloring a token means editing this sentence — not quietly widening the
+claim back to "every."
 
 ---
 
@@ -75,12 +93,13 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --flag-load:hsl(28 84% 46%);
     --flag-mech:hsl(220 9% 50%);
     --flag-risky:hsl(356 66% 52%);
-    /* syntax tokens — tuned to never clash with add/del */
-    --sx-k:hsl(265 60% 52%);  /* keyword */
-    --sx-f:hsl(212 74% 44%);  /* function */
+    /* syntax tokens — language-agnostic roles (mapping table below the block),
+       tuned to never clash with add/del */
+    --sx-k:hsl(265 60% 52%);  /* keyword / command */
+    --sx-f:hsl(212 74% 44%);  /* callable / subcommand */
+    --sx-v:hsl(310 58% 42%);  /* variable / interpolation */
     --sx-s:hsl(160 60% 34%);  /* string */
-    --sx-n:hsl(28 80% 44%);   /* number */
-    --sx-t:hsl(32 72% 42%);   /* type */
+    --sx-n:hsl(28 80% 44%);   /* literal / flag */
     --sx-c:hsl(222 12% 56%);  /* comment */
     --shadow:0 1px 2px hsla(225 40% 20% / 0.04),0 8px 24px -12px hsla(225 40% 20% / 0.12);
   }
@@ -110,9 +129,9 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --flag-risky:hsl(2 82% 70%);
     --sx-k:hsl(266 86% 80%);
     --sx-f:hsl(212 94% 78%);
+    --sx-v:hsl(312 84% 78%);
     --sx-s:hsl(155 64% 64%);
     --sx-n:hsl(35 92% 70%);
-    --sx-t:hsl(35 88% 72%);
     --sx-c:hsl(222 12% 48%);
     --shadow:0 1px 2px hsla(0 0% 0% / 0.3),0 16px 40px -16px hsla(0 0% 0% / 0.6);
   }
@@ -158,6 +177,34 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
      already-rendered SVG full-width. */
   .mermaid svg{width:100%;max-width:100%;height:auto;display:block}
 </style>
+```
+
+**Syntax tokens name roles, not a language.** These six are the whole vocabulary. Do not
+invent a seventh and do not repurpose one whose name does not fit what you are coloring —
+that is the run-to-run drift §6's "keep the variable names" rule exists to prevent, and both
+failure modes have happened here (#305). The names abbreviate *roles*; the table maps each
+role onto the concrete thing it colors, in a C-family language and in shell.
+
+| Token | Role | C-family | Shell |
+|---|---|---|---|
+| `--sx-k` | keyword | `const`, `await`, `if` | command — `git`, `pnpm` |
+| `--sx-f` | callable | function or method name | subcommand — `rev-parse`, `add` |
+| `--sx-v` | variable / interpolation | a named binding at its use site | `$BASE_REF`, `${BASE_REF}` |
+| `--sx-s` | string | `"…"`, `'…'`, template text | `"…"`, `'…'`, heredoc body |
+| `--sx-n` | literal / modifier | number, `true`, `null` | flag — `--porcelain`, `-n` |
+| `--sx-c` | comment | `//`, `/* … */` | `# …` |
+
+A language outside the table maps onto the same six roles — a Python `def` is a keyword, a
+YAML key is a variable at its binding site. If a construct genuinely has no role here, color
+it `--fg` and move on: an unmodeled construct rendered plain is honest, one rendered in a
+borrowed color is a wrong answer the reviewer trusts (the Grounding Rule,
+`visual-rendering-core.md` §1).
+
+Applied — one shell hunk exercising all six, as it appears inside a diff row:
+
+```html
+<code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;color:var(--fg)"><span style="color:var(--sx-k)">git</span> <span style="color:var(--sx-f)">rev-parse</span> <span style="color:var(--sx-n)">--abbrev-ref</span> <span style="color:var(--sx-v)">$BASE_REF</span>   <span style="color:var(--sx-c)"># the ref, not the branch name (#298)</span>
+<span style="color:var(--sx-k)">echo</span> <span style="color:var(--sx-s)">"base is <span style="color:var(--sx-v)">$BASE_REF</span>"</span></code>
 ```
 
 **Type scale** (set inline where used; built with weight + tracking, not size inflation):
@@ -277,31 +324,43 @@ links to its hunk in §6. The five flag hues are fixed: `new` `moved` `load-bear
 
 ## 5. Block: diagram
 
-A recap's diagrams are almost always a **simple flow or short sequence** — "where the code
-moved," "data flows A → B → C," "step 1 then step 2." These have no graph-layout problem to
-solve, so the default is a **pure-CSS diagram primitive** (the `.fc-*` classes in §1): a
-vertical spine of node cards joined by connectors, with `.fc-fan` for a parallel row of
-children. It renders identically online and offline, needs no CDN, has no label grammar to
-escape, and fills its frame by construction — so none of the Mermaid guards in the opt-in
-below apply to it.
+Two diagram forms, and the split is by what the picture has to say — not by a global
+preference for one technology.
 
-**Decision rule (one line):** simple flow / sequence / step-spine → the **CSS primitive**
-(default, below). Genuinely complex graph — a dense DAG, an ER or class diagram, anything
-that needs real auto-layout → the **Mermaid opt-in** further down. When unsure, start with
-CSS; reach for Mermaid only when CSS would force you to hand-position a graph (which is the
-layout problem the "don't hand-roll graph layout" rule exists to prevent — it still holds for
-that case).
+**Decision rule (one line):** a **trivial spine** — one straight flow, a short sequence, "step 1
+then step 2," no labeled edges, no branches — takes the **CSS primitive** (`.fc-*`, §1).
+Anything **multi-stage or behavioral** — labeled edges, fan-outs, guards, failure states, a
+before/after pair of graphs, a dense DAG, an ER or class diagram — takes **Mermaid via CDN**.
+When the review context is known to be offline (a plane, an air-gapped sandbox, a CI log), take
+the CSS primitive regardless and say in the caption that you did.
 
-**Why CSS is the default here, and why this does not contradict #83.** The surface's
-load-bearing invariant is "reads identically with the network off" (core §6). A self-contained
-recap opened from `file://` has no native Mermaid renderer, so Mermaid needs a CDN — and its
-offline fallback is unparsed source text, which is not a diagram (the exact failure that
-recurred across #128, #129, and #131). The CSS primitive has no such failure mode. This is a
-**different context** from #83, which chose Mermaid for **GitHub-bound markdown** (issues, PR
-bodies) where GitHub renders `mermaid` fences natively with no CDN — that decision stands. The
-boundary: **GitHub-rendered markdown → Mermaid; self-contained offline HTML → CSS-first.**
+**This reverses #131, and the fence it reopens is named rather than stepped over.** #128/#129/
+#131 made CSS the default because a Mermaid figure with no network degrades to unparsed source
+text, and the surface's invariant was "reads identically with the network off." That failure
+mode is real and has not gone away. What changed is evidence about the other side of the trade:
+the diagrams that carried the most comprehension in the field — a before/after of a mechanism,
+with labeled edges, fan-outs, and styled failure and guard nodes — are exactly the ones the CSS
+spine cannot express, and the pack was teaching authors away from them. So §6's invariant is
+**scoped rather than deleted**: core blocks — prose, panes, diffs, cards, the feedback loop —
+must still read identically offline; a **diagram figure** may degrade, and must say so on its
+own face. #129's render-confirm gate is retained unchanged (core §7).
 
-### Default — the CSS diagram primitive
+**Every Mermaid figure carries a visible degrade note.** Not once in a footer — beside the
+figure, where a reader who jumped straight to it will see it:
+
+```html
+<div class="mmd-note" style="font-size:11px;color:var(--fg-faint);margin-top:var(--s2)">
+  Best rendered with an active internet connection — this figure loads Mermaid from a CDN and
+  shows its source text offline. The rest of this file reads identically either way.
+</div>
+```
+
+**Neither half of this contradicts #83.** #83 chose Mermaid for **GitHub-bound markdown**
+(issues, PR bodies), which GitHub renders natively with no CDN at all; that decision stands and
+is untouched. The boundary that changed is only inside self-contained HTML, and it is now drawn
+by *what the graph needs* rather than by *how it is delivered*.
+
+### Trivial spines — the CSS diagram primitive
 
 A spine of `.fc-node`s separated by `.fc-conn` connectors (add `.fc-lbl` for an edge label,
 `.is-dashed` for a derived/handoff edge). Nest a `.fc-fan` inside a node for a parallel row of
@@ -335,19 +394,19 @@ dashed), `.is-muted` (context).
 ```
 
 The container is a **full-width block** (not flex-centered); the spine centers itself and each
-node stretches to `max-width`. No script, no CDN, no render-confirm step — it is correct the
-moment it is written.
+node stretches to `max-width`. No script, no CDN, no render-confirm step, and no degrade note to
+write — it is correct the moment it is written, which is why it stays the answer whenever the
+picture is simple enough to be drawn this way and the required answer when the review context is
+known to be offline.
 
-### Opt-in — embedded Mermaid (complex graphs only)
+### Multi-stage and behavioral graphs — embedded Mermaid (the default for this case)
 
-Use this **only** when the decision rule above sends you here. When topology genuinely needs
-auto-layout, author the source via `/mermaid` (which verifies its own render, #94) and embed
-it in the same full-width frame; the `.mermaid svg` rule from §1 sizes it. The
-`<pre class="mermaid">` carries the source, which Mermaid replaces with an SVG when the CDN
-loads. **Be honest about the offline state:** with no network the `<pre>` shows source text,
-not a diagram — a degraded fallback, *not* an offline-equivalent render (that is precisely why
-the CSS primitive is the default). If you embed Mermaid, **confirm it renders before
-presenting** (core §7).
+Author the source via `/mermaid` (which verifies its own render, #94) and embed it in the same
+full-width frame; the `.mermaid svg` rule from §1 sizes it. The `<pre class="mermaid">` carries
+the source, which Mermaid replaces with an SVG when the CDN loads. **Be honest about the offline
+state:** with no network the `<pre>` shows source text, not a diagram — a degraded fallback,
+*not* an offline-equivalent render, which is why the degrade note above is required rather than
+recommended. **Confirm it renders before presenting** (core §7).
 
 ```html
 <!-- embed inside the same <section>/<figure>/full-width <div> frame the default example shows -->
@@ -450,6 +509,38 @@ Stable ids per `visual-rendering-core.md` §4: callout cards and their markers s
 </section>
 ```
 
+**The typed note-pair.** A callout says what a line *does*. When the change also encodes a
+*rule* — the mechanism that broke, and the rule the fix now enforces — render the two as
+labeled halves beside each other instead of folding both into one sentence, so the reader
+can see which half is the diagnosis and which is the guarantee. Three labels, one token
+each: **`bad`** (`--del`) for the mechanism that failed, **`good`** (`--add`) for the rule
+the fix encodes, **`warn`** (`--risk`) for a caveat that survives the fix. Pure markup — no
+JavaScript and no new block; it nests inside the callout card above and inherits that
+callout's `data-feedback-id`, so the serializer needs no new id shape. Render one, two, or
+all three halves. A note-pair carrying only a `good` half is usually a callout — write it
+as one. **The exception is a §12 `exempt` unit**, whose whole content is the reason a site
+was deliberately left alone: there is no `bad` half because nothing broke there, and the
+`--add` framing is what distinguishes a documented exception from an oversight. Render
+that one as a lone `good` half.
+
+```html
+<!-- nests inside the .vr-callout card above, under its note line -->
+<div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke — one sentence, in the reader's own words.</span>
+  </div>
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The rule this line now encodes — what it makes impossible, not what it adds.</span>
+  </div>
+  <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
+    <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--risk)">warn</span>
+    <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">What the fix does not cover — the caveat that outlives it.</span>
+  </div>
+</div>
+```
+
 A secret-masked value renders as an inert chip, never the value (per
 `visual-rendering-core.md` §2): `<span style="…">••• masked</span>`.
 
@@ -465,12 +556,21 @@ share the same scale, padding, and density (small-multiples constancy), so the e
 Columns are the structured-comparison primitive: two states of a config, a schema shape, a
 rendered surface (§9), or a short code unit — read in one glance, no interaction required.
 
-**Decision rule (one line):** can both states be read side by side without crushing the
-content into unreadably narrow columns? → **columns** (default, below). Content too wide —
-long code lines, a dense full-width table → the **toggle variant** further down.
+**Too wide to halve?** Long code lines or a dense full-width table make columns crush.
+**Stack the two frames instead — `Before` above, `After` below, identical frame and scale,
+both fully visible.** Stacking costs eye travel; hiding one state costs the comparison
+itself, which is why there is no toggle here (Tufte: *"The viewer cannot compare what they
+cannot see at the same time. Memory is not vision."*). If even stacked frames are
+unreadable, the unit is too big — narrow the excerpt to the lines that actually differ.
+
+**One comparison or many — the ids carry a slug.** The section id is
+`sec-compare-<slug>`, where `<slug>` names the unit being compared (`sec-compare-closeout`,
+`sec-compare-session-ts`). A recap that compares two states of one thing renders one of
+these; a per-unit series (§12) renders one per unit, in the same frame, down the page. A
+singular hardcoded id would make the second case collide with the first.
 
 ```html
-<section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+<section id="sec-compare-<slug>" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
     <div>
@@ -489,41 +589,6 @@ long code lines, a dense full-width table → the **toggle variant** further dow
     </div>
   </div>
   <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same frame, same scale on both sides — only the content differs.</p>
-</section>
-```
-
-### Variant — the toggle (wide states only)
-
-When each state is too wide to halve — long code lines, a dense table — fall back to a
-segmented pill with a sliding accent thumb; both states render in an identical frame and
-scale so only the code differs. The comparison cost is real (the reviewer holds one state in
-memory while viewing the other), so take this variant only when columns would crush the
-content.
-
-```html
-<!-- replaces the columns grid inside the same <section> -->
-<section id="sec-compare" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--s4);margin-bottom:var(--s4);flex-wrap:wrap">
-    <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
-    <div style="position:relative;display:inline-flex;border:1px solid var(--border-strong);border-radius:999px;padding:3px;background:var(--bg-subtle)">
-      <button onclick="setSide('before')" style="position:relative;z-index:1;padding:5px 18px;border:none;border-radius:999px;background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;color:var(--fg)">Before</button>
-      <button onclick="setSide('after')" style="position:relative;z-index:1;padding:5px 18px;border:none;border-radius:999px;background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;cursor:pointer;color:var(--fg-muted)">After</button>
-      <span id="ba-thumb" style="position:absolute;top:3px;bottom:3px;width:calc(50% - 3px);border-radius:999px;background:var(--accent);left:3px;transition:left .28s cubic-bezier(.4,0,.2,1)"></span>
-    </div>
-  </div>
-  <!-- Both panels live here. setSide() (§10) toggles their `hidden` attribute; they MUST
-       carry exactly these ids. Render both in the same frame and scale — only the code differs. -->
-  <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);min-height:200px;padding:var(--s4) 0">
-    <div id="ba-before">
-      <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">let</span> currentToken = <span style="color:var(--sx-n)">null</span></code></div>
-      <!-- …rest of the BEFORE state, one row per line… -->
-    </div>
-    <div id="ba-after" hidden>
-      <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)</code></div>
-      <!-- …rest of the AFTER state, identical frame and scale… -->
-    </div>
-  </div>
-  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Same frame, same scale on both sides — only the code differs.</p>
 </section>
 ```
 
@@ -629,10 +694,11 @@ model owns; the fields themselves stay mechanically derived.
 
 When the diff changes rendered UI — layout, controls, navigation, dialogs, visible states,
 design tokens — show the visual delta; code diffs are not a substitute for what the user
-will see. Wireframes are one of the two **model-authored** structured blocks (the Grounding
-Rule exceptions, `visual-rendering-core.md` §1; the other is the options-comparison, §11): every label, control, and state must come from
-diff-visible strings and component names, and when the layout is inferred rather than read
-from the diff, the caption says so ("layout inferred").
+will see. Wireframes are a **model-authored** structured block (the Grounding Rule carve-outs
+are enumerated once, in `visual-rendering-core.md` §1 — do not restate the count here): every
+label, control, and state must come from diff-visible strings and component names, and when
+the layout is inferred rather than read from the diff, the caption says so ("layout
+inferred").
 
 **Coverage:** show the **entry surface** where the change appears, the **interaction
 surface** that opens or changes (popover, dialog, tab, inline editor), and the **resulting
@@ -719,10 +785,14 @@ Worked example — a share popover gaining a "Copy link" action, as a §7 column
 
 ## 10. The minimal vanilla interactions
 
-Three tiny handlers — theme toggle, callout active-state, before/after side. No framework,
+Three tiny handlers — theme toggle, callout active-state, review verdict. No framework,
 no state library; if this grows routing or a store it has become the app the surface exists
 to avoid (`visual-rendering-core.md` §4). The §4 `copyFeedback()` serializer is separate and
 unchanged.
+
+There is deliberately **no** handler that swaps which state is on screen. Every block here
+renders all of its states as real elements in the document, so comparison is a glance or a
+scroll — never a click that hides one side. That is also the rule §12 is built to respect.
 
 ```html
 <script>
@@ -739,11 +809,6 @@ unchanged.
     activeId = id;
     document.querySelectorAll('[data-feedback-id="'+id+'"]').forEach(el=>el.classList.add('is-active'));
     document.getElementById('line-'+id)?.classList.add('is-active');
-  }
-  function setSide(side){
-    document.getElementById('ba-thumb').style.left = side === 'after' ? 'calc(50% + 0px)' : '3px';
-    document.getElementById('ba-before').hidden = side === 'after';
-    document.getElementById('ba-after').hidden = side !== 'after';
   }
   function setVerdict(v){
     document.querySelectorAll('[data-verdict-chip]').forEach(el=>{
@@ -778,6 +843,24 @@ each carrying three or more attributes, not orderable on one axis — lives in
 `next-step-menu.md`, along with the rule that the comparison *shows* and
 `AskUserQuestion` *commits*.
 
+**The block may recommend, and a recommendation must show its work.** §11 shows the comparison;
+the `AskUserQuestion` menu after it takes the choice (`next-step-menu.md`). Without a way to mark
+which column the analysis favors, that recommendation travels in the menu label alone, stripped of
+every cell that produced it — so the reader gets N evenly-weighted panels and then a first option
+they cannot audit. Mark it with `oc-chip is-rec`.
+
+One condition, and it is not optional: **a recommendation names the attribute rows that carry it.**
+Write `recommended — rows 2 and 4 dominate`, never a bare `recommended`. A recommendation is the
+single most consequential asserted claim in the block, and an unsourced one is precisely the
+unevidenced weight the cited/asserted split exists to prevent — Lie Factor applied to the
+conclusion instead of to a cell. **At most one option per matrix carries it.** Two recommendations
+are no recommendation, and if the analysis genuinely cannot separate two columns, that tie is the
+finding to state in prose.
+
+**The `is-dominated` chip may carry a short qualifier**, because "strictly worse" and "worse but
+still viable" lead to different calls and the bare word collapses them: `dominated — still
+delivers` reads correctly where `dominated` alone reads as *rule it out*.
+
 **The shape is a matrix, not N independent cards.** Attributes are rows, options are columns,
 and the row label is written once on the left instead of repeated inside every card (Tufte:
 direct labeling, and less redundant ink). Cells in one band are grid siblings, so they stretch
@@ -811,6 +894,8 @@ Paste this style block alongside the §1 core only when rendering an options com
     background:color-mix(in srgb,var(--risk) 12%,transparent)}
   .oc-chip.is-dominated{border:1px solid var(--del);color:var(--del);
     background:color-mix(in srgb,var(--del) 12%,transparent)}
+  .oc-chip.is-rec{border:1px solid var(--accent);color:var(--accent);
+    background:var(--accent-dim)}
   /* the support asymmetry, made visual: cited reads normally on a solid neutral spine;
      asserted is muted, italic, and on a dashed --risk spine. Emphasis marks what is NOT
      evidenced, which is what the reader needs to notice. Diff hues stay out of it. */
@@ -891,6 +976,357 @@ never committed.
 
 ---
 
+## 12. Block: per-unit series (one root cause, N sites)
+
+**Gate — this is not a default layout.** Render a per-unit series only when the change is
+**one root cause repeated across four or more near-identical sites**: one defect
+copy-pasted into six skills, one rename swept through nine call sites, one policy applied to
+every route. Below four sites the default block-type-major layout (§3–§9) reads faster, and
+below one root cause the sites are separate findings that belong in the file tree. The gate
+is deliberately high because the evidence behind this block is a single loved artifact — if
+it starts firing on diffs §3–§9 served fine, raise the threshold rather than living with it.
+
+**The sweep may be a *sub-population* of the diff, and usually is.** The gate asks whether
+one root cause repeats at four or more sites — **not** whether the whole diff is that sweep. A
+branch can carry six unrelated items and still contain a ten-site sweep inside one of them,
+and that is what the block's first real use hit: the diff as a whole was a verdict's worth of
+separate changes, while one file inside it held ten instances of a single defect. When that
+happens, render the default blocks (§3–§9) for the diff's shape **and** a per-unit series for
+the sweep inside it. The series is a *section* of the recap, not the whole recap. What the
+gate forbids is sampling a sweep; it never required the sweep to be everything.
+
+**What it is: §7 repeated under Constancy of Design — not a second comparison primitive.**
+Each unit *is* the §7 labeled-columns comparison, rendered in the same frame and at the same
+scale as every other unit, with a lede and the §6 typed note-pair attached. Nothing here
+introduces a new way to compare two states. If you find yourself designing one, stop: the
+doc already has it, and a second one destroys the constancy that makes the units comparable.
+
+**Why the axis, not just more sections.** Under §3–§9 a sweep renders as a file tree of
+near-identical rows, and the 3–8 budget then forces you to *sample* it. For a sweep the
+population **is** the finding — say, five sites fixed, one deliberately exempt, two nearly
+missed — and sampling destroys the one distinction that matters, because a documented
+exception becomes indistinguishable from an oversight. Cohen's rule for an oversized review
+has the same shape: split it into **complete** sessions, never sample one. The 3–8 budget
+still governs *depth within* a unit; it never caps how many units the series renders.
+
+**Three requirements, each load-bearing:**
+
+1. **Every unit is a real `<section>` in the document.** Navigate with §2's existing sticky
+   rail and `scroll-margin-top` — no store, no routing, no `innerHTML` swap, no keyboard
+   stepper. §10's stop-rule is not relaxed for this block; it is the reason the block is
+   shaped this way. With every unit present in the document, a unit-to-unit question is a
+   scroll rather than a memory test, which is also what keeps the series clear of Tufte's
+   sequential-display anti-pattern.
+2. **The all-units matrix is required, not optional.** Scrolling a series indexes *units*,
+   and a question asked across units — "which sites got the operator fix too?" — is exactly
+   the comparison a sequence cannot answer. So the series **opens** with a matrix (§11's
+   `.oc-matrix`, same CSS, no new palette): units are rows, the properties that vary are
+   columns. That is Tufte's Rule 4 — a matrix when two independent categorical variables are
+   present — and it is what turns the sweep's population into one eyespan. A series without
+   it is the anti-pattern with extra steps.
+3. **The feedback serializer is retained.** Each unit carries
+   `data-feedback-id="u-<unit-slug>"`, `data-feedback-kind="unit"`, and a
+   `[data-feedback-note]` input, and the page keeps §7's review block with its **Copy
+   feedback** button wired to the core §4 `copyFeedback()`. A surface that renders
+   comprehension and drops the round-trip is half a surface.
+
+**The chip strip is what carries the exception.** Each unit header shows one or two chips
+naming its kind. The five kinds map to fixed tokens, stated here because a chip strip whose
+colors move between recaps stops being readable at a glance — which is the Constancy of Design
+property this block leans on:
+
+| chip | token | means |
+|---|---|---|
+| `fixed` | `--add` | the root cause was removed at this site |
+| `exempt` | `--risk` | this site deliberately keeps the old form, and the `good` note says why |
+| `missed` | `--del` | the sweep failed to reach this site |
+| `open` | `--flag-moved` | found and not yet repaired — still live at the reviewed SHA |
+| `mechanical` | `--flag-mech` | touched, but nothing about the root cause changed |
+
+Only `mechanical` comes from the file tree's `--flag-*` ramp; the rest carry diff and risk
+semantics, which is what they mean here. **`exempt` and `open` must not share a token**, and
+the first real use of this block gave them both `--risk` before catching it: one says *this
+site is correct as it stands* and the other says *this site is still broken*, which is the
+exact distinction a chip strip exists to make visible without prose. If a recap needs a kind
+outside this table, add it here with its own token rather than borrowing a neighbor's. The chips are how a reader tells a documented exception from an
+oversight without reading a word of prose, so an `exempt` unit **must** also carry the
+reason in its `good` note. An exempt unit with no stated reason is the oversight it is
+trying not to look like.
+
+**Prose here is per-unit and short.** Each unit gets a one-sentence lede in the reader's own
+words plus the §6 note-pair; the length cap on the §3 overview does not reach it, and the
+bar that does is `writing-for-humans.md` — the revision bar and the mental-model test.
+
+```html
+<!-- The rail (§2) gains one nav entry per unit, in the same shape as its other
+     entries: <a href="#unit-closeout">…</a>. Nothing else about §2 changes. -->
+<section id="sec-units" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">07</span> &nbsp;All sites</div>
+
+  <!-- REQUIRED: the all-units matrix. Units are rows; the properties that vary are columns.
+       Reuses §11's .oc-* CSS verbatim — paste that style block alongside the §1 core. -->
+  <div class="oc-scroll">
+    <div class="oc-matrix" style="grid-template-columns:170px repeat(3, minmax(0,1fr))">
+      <div class="oc-rowlabel is-head">Site</div>
+      <div class="oc-cell is-head"><span class="oc-name">root fix</span></div>
+      <div class="oc-cell is-head"><span class="oc-name">operator fix</span></div>
+      <div class="oc-cell is-head"><span class="oc-name">note</span></div>
+
+      <div class="oc-rowlabel">execute</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell">—</div>
+
+      <div class="oc-rowlabel">closeout</div>
+      <div class="oc-cell">applied</div>
+      <div class="oc-cell"><span class="oc-chip is-asserted">exempt</span></div>
+      <div class="oc-cell">keeps the old form on purpose — see the unit below</div>
+    </div>
+  </div>
+  <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Every site is a row — the population, not a sample. An empty cell is a gap, not an omission.</p>
+</section>
+
+<!-- One real <section> per unit. No stage, no innerHTML swap: the rail scrolls to these. -->
+<section id="unit-execute" data-feedback-id="u-execute" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
+    <span style="border:1px solid var(--add);color:var(--add);background:var(--add-bg);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">fixed</span>
+    <div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">execute/SKILL.md:118</div>
+      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">One-sentence lede, in the reader's own words — what this site did wrong and what it does now.</div>
+    </div>
+  </div>
+  <!-- the §7 comparison, unchanged: identical frame and scale in every unit -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the BEFORE state, one row per line, exactly as §7… --></div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
+      <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the AFTER state, identical frame and scale… --></div>
+    </div>
+  </div>
+  <!-- the §6 typed note-pair, and the note input the §4 serializer reads -->
+  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke here.</span></div>
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The rule this site now encodes.</span></div>
+  </div>
+  <textarea data-feedback-note placeholder="Notes on this site…" style="width:100%;margin-top:var(--s3);min-height:52px;resize:vertical;padding:var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
+</section>
+
+<section id="unit-closeout" data-feedback-id="u-closeout" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
+    <span style="border:1px solid var(--risk);color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">exempt</span>
+    <div>
+      <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">closeout/SKILL.md:64</div>
+      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">This site keeps the old form on purpose — the lede says why, so the reader never has to guess whether it was missed.</div>
+    </div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start"><!-- …identical §7 comparison frame… --></div>
+  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+    <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The stated reason this site is exempt — required on every exempt unit.</span></div>
+  </div>
+  <textarea data-feedback-note placeholder="Notes on this site…" style="width:100%;margin-top:var(--s3);min-height:52px;resize:vertical;padding:var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
+</section>
+
+<!-- §7's review block still closes the page: verdict chips, notes, and the Copy feedback
+     button wired to the core §4 copyFeedback(). Each unit above serializes as
+     `unit#u-<slug>: "…"`. Nothing new is added to the serializer. -->
+```
+
+---
+
+## 13. Block: decision card (forward-looking)
+
+**Scope note — the second block that is not about a finished diff.** §11 renders options
+nobody has picked; this one renders the ones already picked. It is the forward-looking sibling
+of §8's contract cards, and the analogy is exact: a data-model card shows the *resulting
+schema* instead of the `ALTER TABLE` that produced it, and a decision card shows the
+**resulting commitment** instead of the paragraph that argued for it. The difference is where
+the grounding comes from — §8 derives from a real migration diff, and a plan has no diff at
+all.
+
+**A decision card is what an options-comparison becomes once someone picks.** The two blocks are
+one decision at two times, not two unrelated blocks: §11 renders the fork while it is open, §13
+renders the same decision after it closes. On a live decision surface they sit adjacent — the
+matrix, then the card the chosen column turns into — and a plan that renders both is showing a
+decision's before and after, not duplicating it.
+
+That has one mechanical consequence, and it is the reason to state the relationship at all:
+**the winning option's slug carries into the card's id.** The derivation and its worked example
+live once, in `visual-rendering-core.md` §4's id registry — ids are what that section is for, and
+a second copy here would be a restated operative claim (`restated-claims.md`). What belongs here
+is the failure it prevents, which is specific and silent: number the decisions instead (`d-1`,
+`d-2`, `d-3`), insert or reorder one, regenerate, and every note the reviewer already pasted back
+now attaches to a different decision, with nothing reporting the swap.
+
+**The problem it solves.** A shaped plan states its decisions as prose — `/write-a-prd`'s
+`## Implementation Decisions` is a flat bullet list of modules, interfaces, schema changes,
+and architectural calls. That list is the part of a plan a reader skims, and skimming it is
+free: nothing marks which bullets are load-bearing, which are settled against a source, and
+which are the author thinking aloud. The card makes each decision a unit with a fixed shape,
+so a reader who was not in the shaping session can see the commitments in one eyespan rather
+than reconstructing them from paragraphs.
+
+**Read `visual-rendering-core.md` §1 "Forward-looking blocks" before rendering this.** It is
+the defining constraint, not background. Every field is either **cited** — quoted from the
+PRD or issue body, the research artifact, or current code at `file:line`, and showing that
+source — or visibly **asserted**, the model's judgment about a state that does not exist yet.
+**Every card carries at least one cited cell** — a card's fields are its cells — and a decision
+grounded in nothing is not a commitment rendered at commitment weight, it is a proposal wearing
+one. That is the finding to state rather than a card to draw. The chip bar carries over
+unchanged: a card with **two-thirds or more of its cells asserted** wears the `asserted` chip.
+
+**Why grounding matters more here than in §11.** An options matrix announces that nothing is
+settled — the reader arrives knowing they are looking at futures. A decision card announces
+the opposite, and Lovallo & Kahneman's finding is that inside-view plans read as authoritative
+*because* they are vivid and detailed. Rendering a plan's decisions crisply amplifies exactly
+that bias unless the render distinguishes settled-and-sourced from proposed. This is Lie
+Factor ≤ 1 applied to commitment rather than to magnitude.
+
+**Four fields, in this order, on every card** — Constancy of Design, the same reason §11's
+attributes run in the same order down every column:
+
+| Field | What it holds | Typical grounding |
+|---|---|---|
+| **decided** | The commitment, stated as a resulting shape | cited — the PRD/issue line that settles it |
+| **rules out** | What this decision now forecloses | cited when a no-go says so; asserted when it is a consequence nobody wrote down |
+| **reverses if** | The condition that would undo it | usually asserted — this is the Shelf Life question, asked at plan time |
+| **source** | Where the citation lives | always a real path, issue, or `file:line` |
+
+**When not to render one.** A decision with no consequence is a preference, and a card gives it
+weight it has not earned. Render a card for a decision that forecloses something; leave the rest
+as prose. A plan with one decision does not need the block at all — the sentence is already the
+eyespan.
+
+Cards carry a stable `data-feedback-id` (`dc-<decision-slug>`, `visual-rendering-core.md` §4)
+and a note field, so a reviewer's response to a specific decision serializes with everything
+else as `decision#dc-<slug>: "…"`.
+
+The card reuses §11's `.oc-cited` / `.oc-asserted` treatments verbatim rather than inventing a
+second visual language for the same distinction — paste §11's style block when rendering
+either forward-looking block. Only the wrapper below is new:
+
+```html
+<style>
+  /* decision-card primitives (§13) — same tokens, and §11's cited/asserted spines */
+  .dc-card{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);
+    box-shadow:var(--shadow);overflow:hidden;margin-top:var(--s4)}
+  .dc-head{display:flex;align-items:center;gap:var(--s3);padding:var(--s4);
+    border-bottom:1px solid var(--border)}
+  .dc-name{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)}
+  .dc-split{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--fg-muted)}
+  .dc-row{display:grid;grid-template-columns:104px minmax(0,1fr);gap:var(--s3);
+    align-items:baseline;padding:var(--s3) var(--s4);border-top:1px solid var(--border)}
+  .dc-row:first-child{border-top:none}
+  .dc-label{font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--fg-faint)}
+  .dc-note{display:block;box-sizing:border-box;width:calc(100% - 2*var(--s4));
+    margin:0 var(--s4) var(--s4);padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px;outline:none}
+</style>
+```
+
+**Worked example (2 of the 3 decisions in #317)** — one cited-heavy, one carrying an asserted
+consequence. Render every decision that forecloses something, not a sample:
+
+```html
+<section id="sec-decisions" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;Decisions this plan commits to</div>
+
+  <div class="dc-card" data-feedback-id="dc-no-visual-plan-skill" data-feedback-kind="decision">
+    <div class="dc-head">
+      <span class="dc-name">No /visual-plan skill</span>
+      <span class="dc-split">3 cited · 1 asserted</span>
+    </div>
+    <div class="dc-row"><span class="dc-label">decided</span><span class="oc-cited">The planning bookend ships as forward-looking blocks in this file, rendered by <code>/visual-recap</code>.<span class="oc-src">#245 verdict: “Proceed narrowly — as a block in two existing docs, not a skill.”</span></span></div>
+    <div class="dc-row"><span class="dc-label">rules out</span><span class="oc-cited">A second command name, and the six inventory surfaces a new skill must appear in.<span class="oc-src">CLAUDE.md § Inventory-sync rule</span></span></div>
+    <div class="dc-row"><span class="dc-label">reverses if</span><span class="oc-asserted">The blocks are rendered often enough that users keep reaching for a separate entry point. The blocks are the expensive part, so a later split is cheap.</span></div>
+    <div class="dc-row"><span class="dc-label">source</span><span class="oc-cited">#317 Mediator verdict<span class="oc-src">github.com/chrislacey89/skills/issues/317</span></span></div>
+    <textarea class="dc-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+  </div>
+
+  <div class="dc-card" data-feedback-id="dc-drop-fidelity-gate" data-feedback-kind="decision">
+    <div class="dc-head">
+      <span class="dc-name">No render-time fidelity gate</span>
+      <span class="dc-split">2 cited · 2 asserted</span>
+    </div>
+    <div class="dc-row"><span class="dc-label">decided</span><span class="oc-cited">Shape Up’s low-fidelity ceiling governs UI panels, not architecture graphs or decision commitments — so dropping the breadboard and fat-marker blocks drops what the ceiling was aimed at.<span class="oc-src">Shape Up ch. 6: “High-fidelity mockups trigger premature design debates.”</span></span></div>
+    <div class="dc-row"><span class="dc-label">rules out</span><span class="oc-asserted">A UI-flow plan surface. If one is wanted later, ch. 4’s ceiling comes back with it.</span></div>
+    <div class="dc-row"><span class="dc-label">reverses if</span><span class="oc-asserted">A rendered plan is observed pulling a review into a UI debate.</span></div>
+    <div class="dc-row"><span class="dc-label">source</span><span class="oc-cited">#317 revision comment<span class="oc-src">issues/317#issuecomment-5464443853</span></span></div>
+    <textarea class="dc-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+  </div>
+</section>
+```
+
+---
+
+## 14. Block: open question
+
+**Scope note — this block existed as an id with no markup.** `visual-rendering-core.md` §4 has
+registered `q-<…>` since the core was written, and nothing anywhere defined what an open question
+looks like. A surface that renders decisions needs somewhere to put the ones it *cannot* render:
+§11 compares options you already know, §13 records a choice already made, and neither holds "we
+have not worked this out yet." The field built one anyway, which is how the gap surfaced.
+
+**It carries no cited/asserted mark, and that is the point.** The forward-looking rule in
+`visual-rendering-core.md` §1 grades *claims* — does this assertion have a source, and does the
+render say so. A question asserts nothing, so there is nothing to ground and no mark to apply.
+That is why the open question is **not** a member of the forward-looking class despite being about
+the future, and why §1's carve-out list does not grow when this block lands.
+
+What a question does owe the reader is the **context that makes it answerable** — what is already
+known, what hangs on the answer, and a default if one exists. A bare question is a prompt; a
+question with its stakes attached is a decision waiting to happen.
+
+**Ids are content-derived, like every other unit.** Use `q-<question-slug>` — `q-blocked-run-ok`,
+not `q-1`. The core registered `q-<n>` first and that positional form is the one shape in the
+registry that violates the registry's own rule (*"never a random or positional id, so the same
+unit keeps the same id if the artifact is regenerated"*). Insert a question, regenerate, and every
+pasted-back answer shifts by one. Prefer the slug; treat `q-<n>` as legacy.
+
+```html
+<style>
+  /* open-question primitives (§14) — same tokens, no new palette */
+  .oq{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:var(--s3)}
+  .oq-card{border:1px solid var(--border);border-left:3px solid var(--risk);
+    border-radius:0 var(--r3) var(--r3) 0;background:var(--bg-elev);padding:var(--s4)}
+  .oq-q{font-size:13.5px;font-weight:650;color:var(--fg);margin-bottom:var(--s2);line-height:1.45}
+  .oq-ctx{font-size:12.5px;color:var(--fg-muted);line-height:1.6;margin-bottom:var(--s3)}
+  /* --fg-muted, not --fg-faint: this line says what happens if nobody answers,
+     which is the consequence the reader most needs and the one they are most
+     likely to skip. Measured 2.85:1 on --fg-faint (below AA) and 5.77:1 here. */
+  .oq-def{font-size:11.5px;color:var(--fg-muted);margin-bottom:var(--s3)}
+  .oq-def b{color:var(--fg);font-weight:600}
+  .oq-note{display:block;width:100%;box-sizing:border-box;padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px;outline:none}
+</style>
+```
+
+```html
+<section id="sec-open" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Still open</div>
+  <div class="oq">
+    <div class="oq-card" data-feedback-id="q-blocked-run-ok" data-feedback-kind="question">
+      <div class="oq-q">Is a blocked run acceptable at all?</div>
+      <div class="oq-ctx">Runs that succeed today will fail after this lands. Whether that is a
+        regression or the intended gate decides which of the three options above is even eligible.</div>
+      <div class="oq-def"><b>If unanswered:</b> assume yes, and gate behind the existing flag.</div>
+      <textarea class="oq-note" data-feedback-note placeholder="Your answer…"></textarea>
+    </div>
+  </div>
+</section>
+```
+
+**When not to render one.** A question you can answer by reading the code is not open — answer it.
+A question with no consequence is trivia. Render the ones where the answer changes what gets built,
+and say what happens if nobody answers.
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
@@ -899,7 +1335,8 @@ never committed.
   used sparingly.
 - **Don't** color syntax tokens with `--add` / `--del`; reserve those hues for diff
   semantics so meaning never blurs.
-- **Do** annotate only the changes that matter — 3–8 *key files/hunks*, each with a one-line
+- **Do** annotate only the changes that matter — 3–8 *key files/hunks* (a **depth** budget:
+  it bounds annotation within a unit and never caps how many units §12 renders), each with a one-line
   intent summary and a few high-signal callouts, focused excerpts of ~150 lines max (the
   core's reading budget: a ceiling *and* a floor).
 - **Don't** add decorative drop shadows or gradients beyond `--shadow`; separate with
@@ -914,6 +1351,421 @@ never committed.
   their support doesn't — an all-asserted column beside a mostly-cited one, drawn identically,
   is the Lie Factor the block exists to prevent. Mark every cell cited or asserted, show each
   option's split, and drop any option with nothing citable.
+- **Don't** draw a decision card (§13) for a decision that forecloses nothing — a preference
+  rendered at commitment weight is the same Lie Factor as an all-asserted options column, and a
+  card whose fields carry no source is a proposal wearing a commitment's shape. Cite or mark
+  every field, and state the ungrounded decision as prose instead of padding a card.
 - **Don't** turn this skeleton into a shipped/versioned/imported component library — it is a
   copyable reference, exactly like the §4 serializer. If you reach for an npm package, a
   build step, or a CDN runtime, pull it back.
+
+---
+
+# Part II — the walkthrough deck (narrative mode)
+
+Everything above renders a change the reviewer will **audit**: parallel hunks, contract cards,
+line-anchored callouts, a topology to check against. This part specifies the second canonical
+mode — a **paged walkthrough deck** for a change the reviewer has to be **argued through**: one
+causal arc, one idea per screen, the before/after pair inside the screen.
+
+It is here because the field built it twice without being asked to. On PR #299 an agent produced
+a paged deck unprompted; on PR #297 an agent rendered the canonical scroll first, was shown
+#299's deck, and rebuilt to match. Two independent sessions, no coordination, the same override.
+A format arrived at twice that the canon does not describe is a gap in the canon, not an
+authoring lapse — so the deck is specified rather than re-derived per run, which is the argument
+that produced this document in the first place (#126/#127).
+
+The deck **inherits everything and changes two things.** It inherits the §1 token core verbatim,
+the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. It
+changes the **shell** and the **reading order**. It introduces no new palette, no new block
+semantics, and no runtime dependency.
+
+---
+
+## §D1. Mode selection (answer this before rendering anything)
+
+**Is there one story the screens advance? → deck. Is the reviewer auditing parallel hunks? →
+scroll.**
+
+| Take the **deck** when | Take the **scroll** when |
+|---|---|
+| The change has a causal arc — a premise, a sequence of moves that depend on each other, a mechanism that pins them, an aftermath | The reviewer's job is to check a topology — which files moved, which contracts changed, which hunks are load-bearing |
+| A reviewer needs the *why* before any hunk means anything | A reviewer already holds the why and needs the *where* |
+| The change is a sweep with one thesis, or a review's own story | The change is a set of independent edits with no single thesis |
+| The prose is doing the work and the code excerpts are evidence for it | The code is doing the work and the prose is a label on it |
+
+When both fit, take the scroll — it is the cheaper artifact and the reviewer can always be
+walked through it in chat. When neither fits because the diff is small or obvious, render
+nothing; the skip gate outranks both modes.
+
+**The deck does not replace the scroll for narrative-shaped code audits.** A deck screen still
+carries the scroll's blocks — the same panes, the same cards, the same callouts. What differs is
+that they arrive one argument at a time instead of all at once.
+
+---
+
+## §D2. The two rules that bound paging
+
+Paging buys sequence and costs simultaneity, and Tufte names the cost by name: *"The viewer
+cannot compare what they cannot see at the same time. Memory is not vision."* Both rules below
+exist to keep the deck from spending what it cannot afford. They are not style preferences —
+a deck that breaks either one is worse than the scroll it replaced.
+
+**Rule 1 — no comparison may span screens.** Any before/after pair, any A-vs-B, any
+option-comparison shares a single screen. Paging separates **topics**; it never separates the
+halves of a comparison. This is why `.panes` (§D5) is a side-by-side grid rather than a toggle:
+the comparison is the payload, and the payload is never the thing you page away from.
+
+**Rule 2 — never page a population.** When N sites are near-identical instances of one cause,
+the population *is* the finding, and N screens turn "five fixed, one deliberately exempt, two
+found late" into a memory test the reviewer cannot pass. A population belongs in one screen as a
+co-visible series or matrix, with per-unit before/afters inside it — which is exactly **§12's
+per-unit series**, dropped into a single deck screen rather than spread across N of them. Page
+*between* topics; never page *within* a set the reader is being asked to compare across.
+
+That is the seam between the two modes rather than a competition: §12 decides *how a population
+renders*, this rule decides *that it renders in one place*. A sweep of four or more
+near-identical sites takes §12's matrix whichever mode it lands in.
+
+Together the two rules say the same thing from opposite ends: **the deck pages arguments, not
+evidence.**
+
+---
+
+## §D3. The shell (rail + stage), and paging without a router
+
+The deck shell is a grouped sticky rail beside a single stage. The rail carries brand, one
+`.navitem` per screen with a subtitle, and the key hints; the stage carries a progress bar,
+prev/next, a counter, and the current screen.
+
+**Every screen is a real `<section>` in the document, present in the markup from the start.**
+Paging shows one and hides the rest by toggling `hidden`. There is no template array, no
+`innerHTML` assignment, and no render function that rebuilds the stage — a store plus routing is
+the app this whole surface exists to avoid (`visual-rendering-core.md` §4), and it is what §12
+refuses. The single integer `cur` is a *view* index over a document that is entirely there.
+
+That distinction is load-bearing for four separate reasons, and every one of them is a thing a
+reviewer will actually do:
+
+- **Show-all is one keystroke.** `A` unhides every screen into one scrolling column — the deck
+  collapses into the scroll. The reviewer who wants simultaneity is never trapped in sequence,
+  which is the honest answer to Rule 1's residual.
+- **Browser find can reach the whole change.** A `hidden` screen is `display:none`, which most
+  browsers' find skips — so `A` first, then `⌘F`, and the search covers everything. That is a
+  keystroke; with an `innerHTML` router eight-ninths of the artifact is not in the document at
+  all, and no keystroke recovers it.
+- **Print and PDF work**, because `@media print` can unhide everything.
+- **The §4 serializer sees every unit.** `querySelectorAll('[data-feedback-id]')` returns
+  elements on hidden screens too, so feedback written on screen 2 still serializes from screen 9.
+  A router loses it the moment you page away.
+
+```html
+<style>
+  /* deck shell (§D3) — same §1 tokens, no new palette */
+  .dk{display:grid;grid-template-columns:290px minmax(0,1fr);align-items:start;max-width:1500px;margin:0 auto}
+  @media (max-width:960px){.dk{grid-template-columns:1fr} .dk aside{position:static;height:auto}}
+  .dk aside{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--border);background:var(--bg-subtle);padding:var(--s5) var(--s4)}
+  .dk main{padding:var(--s7) var(--s7) var(--s8);min-width:0}
+  .dk-grp{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin:var(--s5) 0 var(--s2);padding-left:var(--s2)}
+  .dk-grp:first-of-type{margin-top:0}
+  .navitem{display:block;width:100%;text-align:left;border:1px solid transparent;background:none;color:var(--fg-muted);font-family:var(--sans);font-size:13px;padding:var(--s2) var(--s3);border-radius:var(--r2);cursor:pointer;margin-bottom:2px;line-height:1.35}
+  .navitem:hover{background:var(--bg-inset);color:var(--fg)}
+  .navitem.on{background:var(--accent-dim);border-color:var(--accent);color:var(--fg)}
+  .navitem .nm{font-family:var(--mono);font-size:12.5px;font-weight:600;display:block}
+  .navitem .sb{font-size:11px;color:var(--fg-faint);display:block;margin-top:2px}
+  .keyhint{margin-top:var(--s6);font-size:11px;color:var(--fg-faint);line-height:1.7;border-top:1px solid var(--border);padding-top:var(--s4)}
+  kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:4px;padding:1px 5px;background:var(--bg-inset);color:var(--fg-muted)}
+  .topbar{display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s6);flex-wrap:wrap}
+  .prog{flex:1;height:3px;background:var(--bg-inset);border-radius:999px;overflow:hidden;min-width:120px}
+  .prog i{display:block;height:100%;background:var(--accent);transition:width .25s ease}
+  .pgbtn{border:1px solid var(--border-strong);background:var(--bg-elev);color:var(--fg-muted);border-radius:var(--r2);padding:var(--s2) var(--s3);font-size:12px;cursor:pointer;font-family:var(--sans)}
+  .pgbtn:hover:not(:disabled){color:var(--fg);border-color:var(--accent)}
+  .pgbtn:disabled{opacity:.35;cursor:default}
+  .count{font-family:var(--mono);font-size:11px;color:var(--fg-faint);letter-spacing:.06em}
+  /* show-all: the deck collapsing back into the scroll */
+  .dk.all .screen[hidden]{display:block}
+  .dk.all .screen{margin-bottom:var(--s8);border-bottom:1px solid var(--border);padding-bottom:var(--s8)}
+  @media print{.dk aside,.topbar{display:none} .screen[hidden]{display:block}}
+</style>
+
+<div class="dk" id="dk" data-theme="dark" style="min-height:100vh;background:var(--bg);color:var(--fg);font-family:var(--sans)">
+  <aside>
+    <div class="brand"><span class="mk">297</span><span class="tx">Change-by-change</span></div>
+    <div class="brand-sub">PR #297 · closes #293 · 8 commits</div>
+    <nav id="dk-nav">
+      <div class="dk-grp">Start here</div>
+      <button class="navitem" data-to="premise"><span class="nm">The premise</span><span class="sb">one disease, five instances</span></button>
+      <button class="navitem" data-to="picture"><span class="nm">the picture</span><span class="sb">before/after, drawn</span></button>
+      <!-- …one .navitem per screen; `data-to` names that screen's id (§D8 resolves it,
+           so rail order is a reading choice, not a wiring constraint). A .dk-grp heads
+           each new arc group and is not a .navitem, so it never enters the count. -->
+    </nav>
+    <div class="keyhint">
+      <kbd>J</kbd>/<kbd>&darr;</kbd> next &nbsp; <kbd>K</kbd>/<kbd>&uarr;</kbd> prev<br>
+      <kbd>1</kbd>&ndash;<kbd>9</kbd> jump &nbsp; <kbd>A</kbd> show all<br><kbd>T</kbd> light / dark
+    </div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <button class="pgbtn" id="dk-prev">&larr; Prev</button>
+      <button class="pgbtn" id="dk-next">Next &rarr;</button>
+      <div class="prog"><i id="dk-bar"></i></div>
+      <span class="count" id="dk-cnt"></span>
+      <button class="pgbtn" id="dk-all">Show all</button>
+    </div>
+
+    <!-- every screen is here from the start; paging only toggles [hidden] -->
+    <section class="screen" id="premise"> … </section>
+    <section class="screen" id="picture" hidden> … </section>
+    <!-- … -->
+
+    <footer id="dk-foot"></footer>
+  </main>
+</div>
+```
+
+---
+
+## §D4. The screen model
+
+One screen is one idea. Its slots are fixed so two decks read the same way; render only the
+slots the screen needs, in this order.
+
+| Slot | Markup | What it carries | Grounded or authored |
+|---|---|---|---|
+| `id` | `<section id>` | stable, kebab-case, the paging and deep-link handle | authored (stable across regenerations) |
+| group | `.dk-grp` in the rail | the arc stage this screen belongs to (§D5) | authored |
+| nav label + subtitle | `.navitem .nm` / `.sb` | the rail's two-line entry; the subtitle is what puts "where am I in this argument" in the artifact rather than the reader's head (Norman, *knowledge in the world*) | authored |
+| `kind` | `.ovl` overline | the screen's register — `CONTEXT · ISSUE #293`, `CHANGE 3 OF 6`, `MECHANISM` | mixed: the number is derived, the label authored |
+| headline | `<h1>` | one sentence, the claim this screen proves | authored |
+| lede | `.lede` | 1–3 sentences; **every domain term glossed on first use** (§D6) | authored |
+| chips | `.chip` | 2–4 status pills — `fix` / `op` / `keep` / `miss` | authored flags over derived facts |
+| panes | `.panes` | the before/after pair, side by side, in this screen (Rule 1) | hunk text derived; pane headers authored |
+| blocks | `.mmd-wrap` / `.term` / `.defs` / any §3–§12 block | diagram, terminal transcript, definition table, contract card, per-unit series | per the block's own rule |
+| notes | `.note` + `.good`/`.warn`/`.bad` | a typed aside — what to notice, what nearly went wrong | authored |
+| keyline | `.keyline` | **one sentence**, the lesson this screen leaves behind. At most one per screen, and not on every screen | authored |
+| stats | `.stat` | 3–5 tabular figures — files, net diff, commits, checks | derived (`git diff --stat`, CI) |
+
+**The keyline is rationed on purpose.** It is the accent-bordered box, and a deck where every
+screen has one has no emphasis at all — the same subtraction-of-weight rule the scroll applies to
+borders (`visual-rendering-core.md` §5). Use it where the screen genuinely leaves a portable
+lesson.
+
+```html
+<style>
+  /* screen primitives (§D4) — see §1 for every color used here */
+  .ovl{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 var(--s2)}
+  .screen h1{font-size:31px;font-weight:600;letter-spacing:-0.022em;margin:0 0 var(--s3);line-height:1.15}
+  .lede{color:var(--fg-muted);font-size:15.5px;line-height:1.65;margin:0 0 var(--s5);max-width:74ch;text-wrap:pretty}
+  .lede b{color:var(--fg)}
+  .chips{display:flex;gap:var(--s2);flex-wrap:wrap;margin-bottom:var(--s4)}
+  .chip{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--fg-muted);background:var(--bg-elev)}
+  .chip.fix{color:var(--add);border-color:var(--add);background:var(--add-bg)}
+  .chip.op{color:var(--risk);border-color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent)}
+  .chip.keep{color:var(--accent);border-color:var(--accent);background:var(--accent-dim)}
+  .chip.miss{color:var(--del);border-color:var(--del);background:var(--del-bg)}
+  .panes{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
+  @media (max-width:1180px){.panes{grid-template-columns:1fr}}
+  .pane{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden;box-shadow:var(--shadow);min-width:0}
+  .pane-hd{display:flex;align-items:center;gap:var(--s2);padding:var(--s3) var(--s4);border-bottom:1px solid var(--border);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:var(--bg-subtle)}
+  .pane.b .pane-hd{color:var(--del)} .pane.a .pane-hd{color:var(--add)}
+  .pane-path{margin-left:auto;font-family:var(--mono);font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--fg-faint)}
+  .note{border-left:3px solid var(--accent);background:var(--bg-subtle);padding:var(--s3) var(--s4);border-radius:0 var(--r2) var(--r2) 0;font-size:13.5px;line-height:1.65;color:var(--fg-muted);margin-top:var(--s4);text-wrap:pretty}
+  .note.warn{border-left-color:var(--risk)} .note.bad{border-left-color:var(--del)} .note.good{border-left-color:var(--add)}
+  .note .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s1)}
+  .note.warn .lbl{color:var(--risk)} .note.bad .lbl{color:var(--del)} .note.good .lbl{color:var(--add)}
+  .keyline{font-size:15px;line-height:1.6;color:var(--fg);border:1px solid var(--accent);background:var(--accent-dim);border-radius:var(--r3);padding:var(--s4) var(--s5);margin-top:var(--s5);text-wrap:pretty}
+  .keyline .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s2)}
+  .stats{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:var(--s4)}
+  .stat{flex:1 1 130px;border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev);padding:var(--s3) var(--s4)}
+  .stat .v{font-size:20px;font-weight:680;font-variant-numeric:tabular-nums;letter-spacing:-0.01em}
+  .stat .k{font-size:11px;color:var(--fg-muted);margin-top:2px}
+  .stat.bad .v{color:var(--del)} .stat.good .v{color:var(--add)}
+  .term{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden;box-shadow:var(--shadow);margin:var(--s4) 0}
+  .term-hd{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4);border-bottom:1px solid var(--border);background:var(--bg-subtle);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted)}
+  .term pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.9;padding:var(--s3) 0;overflow-x:auto}
+  .term .tl{display:block;padding:0 var(--s4);white-space:pre;color:var(--fg-muted)}
+  .term .tl.cmd{color:var(--fg);font-weight:500}
+  .term .tl.cmd::before{content:"$ ";color:var(--accent);font-weight:700}
+  .term .tl.ok{background:var(--add-bg)} .term .tl.no{background:var(--del-bg)}
+  .term .tl.ok .an{color:var(--add);font-weight:600;padding-left:var(--s2)}
+  .term .tl.no .an{color:var(--del);font-weight:600;padding-left:var(--s2)}
+</style>
+```
+
+One screen, whole:
+
+```html
+<section class="screen" id="contract" hidden>
+  <p class="ovl">CHANGE 1 OF 6 · THE CONTEXT CONTRACT</p>
+  <h1>&ldquo;Nothing else&rdquo; was false for several of the lenses.</h1>
+  <div class="chips"><span class="chip fix">fixed</span><span class="chip keep">gate kept</span></div>
+  <p class="lede">A <b>lens</b> is one of the review dimensions in
+     <code>review-checklist.md</code>&hellip; 1&ndash;3 sentences, every domain term glossed the
+     first time it appears.</p>
+
+  <div class="panes">
+    <div class="pane b"><div class="pane-hd"><span class="dot" style="background:var(--del)"></span>Before<span class="pane-path">pre-merge/SKILL.md:118</span></div>
+      <pre class="code"><span class="ln d">Hand the sub-agent these four items. Nothing else.</span></pre></div>
+    <div class="pane a"><div class="pane-hd"><span class="dot" style="background:var(--add)"></span>After<span class="pane-path">pre-merge/SKILL.md:118</span></div>
+      <pre class="code"><span class="ln a">Hand the sub-agent these four items, plus whatever</span><span class="ln a">its dimension's row in the checklist declares.</span></pre></div>
+  </div>
+
+  <div class="note good"><span class="lbl">Why it matters</span>Some dimensions needed the repo, the
+    issue bodies, or npm &mdash; and the contract forbade all three.</div>
+  <div class="keyline"><span class="lbl">The lesson</span>A contract that is cheaper to violate than to
+    honor is not a contract.</div>
+</section>
+```
+
+---
+
+## §D5. The arc
+
+Four groups, in this order. The rail's `.dk-grp` headings are these names (or the change's own
+words for them); the reader is told the arc up front on the first screen.
+
+1. **Premise** — *why any of this matters*, before a single hunk. One or two screens: the
+   situation, and optionally the same story as a picture (§D7). Nothing here is a change; this is
+   the ground the changes stand on. This screen is the one most likely to be authored badly, so
+   §D6 gives it a rule set.
+2. **The changes** — one screen per move, in the order the moves depend on each other, **not** the
+   order the commits landed. Each screen: what was true, what is true now, why the second is
+   better. This is where `.panes` earns the deck.
+3. **The mechanism** — what pins the changes so they cannot silently regress: the contract test,
+   the hook, the schema constraint. If a change has no mechanism, this group is where you say so
+   in as many words, rather than leaving its absence to be inferred.
+4. **Aftermath** — what was fixed versus filed, what is deliberately still open, what the reviewer
+   is being asked to decide, and the lesson that rode along. This is also where the **Copy
+   feedback** block goes when the deck is being handed off rather than walked through in the room
+   (`visual-rendering-core.md` §4) — one block, on the last screen, not a control on every screen.
+
+A deck missing group 3 or group 4 is usually a deck that should have been the scroll: without a
+mechanism and an aftermath there is no arc, only a list.
+
+---
+
+## §D6. The premise screen, and its `/re-pitch` pairing
+
+The premise screen is a **retelling for a reader who does not hold the context** — which is the
+job `/re-pitch` does in chat. The two are the same move in two media, and the field evidence for
+this is direct: on PR #297 a `/re-pitch` was run mid-session and its framing became the deck's
+opening screen.
+
+Write the premise screen under `/re-pitch`'s rule set:
+
+- **One anchor sentence first** — the whole change in a sentence a reader can carry.
+- **Every domain term glossed on first use**, in the sentence that uses it. Not a glossary block
+  the reader has to cross-reference; that is the legend the callout rule already forbids.
+- **Sentences capped.** A premise screen that runs long has become the thing it exists to
+  replace.
+- **No forward references.** Nothing on the premise screen may depend on a screen the reader has
+  not reached.
+
+`SKILL.md` may **recommend** `/re-pitch` when the audience signals the change feels abstract. It
+never invokes it — same rule as every other cross-skill seam in the pack.
+
+---
+
+## §D7. Diagrams in a deck
+
+Deck diagrams are usually the picture of *the whole mechanism before and after* — labeled edges,
+fan-outs, styled failure and guard nodes, two graphs the reader compares. That is the
+multi-stage/behavioral case, so the default is **Mermaid via CDN with the visible degrade note**
+(`visual-rendering-core.md` §5, §6; markup and label-safety in §5 above). The `.fc-*` primitive
+stays the right answer for a trivial spine, and is the *recommended* answer when the review
+context is known to be offline.
+
+Under Rule 1 a before/after diagram pair is a comparison, so both graphs live on one screen —
+`.mmd-wrap` twice inside the same `<section>`, each with its own caption.
+
+Two deck-specific consequences of the CDN opt-in:
+
+- **The degrade note is per figure and on its face**, not once in a footer. A reader who pages
+  straight to screen 6 must see it there.
+- **Re-run Mermaid when a screen becomes visible**, because a diagram inside a `hidden` section
+  has no layout box and renders at zero size. Initialize with `startOnLoad:false` and call
+  `run({nodes})` for the screen you just revealed — see §D8.
+
+---
+
+## §D8. The interactions (the whole script)
+
+Prev/next, rail jump, number keys, show-all, theme, and the Mermaid re-run. That is all of it. If
+this grows a store, a router, or an `innerHTML` assignment, it has become the app this surface
+exists to avoid (`visual-rendering-core.md` §4) — pull it back. The §4 `copyFeedback()`
+serializer is separate and unchanged.
+
+```html
+<script>
+  const dk = document.getElementById('dk');
+  const screens = [...dk.querySelectorAll('.screen')];
+  const items = [...dk.querySelectorAll('.navitem')];
+  const indexOf = id => screens.findIndex(s => s.id === id);
+  let cur = 0;
+
+  function show(i){
+    cur = Math.max(0, Math.min(screens.length - 1, i));
+    dk.classList.remove('all');
+    screens.forEach((s, j) => { s.hidden = j !== cur; });
+    items.forEach(b => b.classList.toggle('on', b.dataset.to === screens[cur].id));
+    document.getElementById('dk-bar').style.width = ((cur + 1) / screens.length * 100) + '%';
+    document.getElementById('dk-cnt').textContent = (cur + 1) + ' / ' + screens.length;
+    document.getElementById('dk-prev').disabled = cur === 0;
+    document.getElementById('dk-next').disabled = cur === screens.length - 1;
+    // a diagram inside a hidden section has no layout box, so lay it out on reveal
+    if (window.__mmd) { try { window.__mmd.run({ nodes: screens[cur].querySelectorAll('.mermaid') }); } catch (e) {} }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  function showAll(){
+    dk.classList.add('all');
+    if (window.__mmd) { try { window.__mmd.run({ nodes: dk.querySelectorAll('.mermaid') }); } catch (e) {} }
+  }
+  items.forEach(b => b.addEventListener('click', () => show(indexOf(b.dataset.to))));
+  document.getElementById('dk-prev').addEventListener('click', () => show(cur - 1));
+  document.getElementById('dk-next').addEventListener('click', () => show(cur + 1));
+  document.getElementById('dk-all').addEventListener('click', showAll);
+  addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === 'j' || e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); show(cur + 1); }
+    else if (k === 'k' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); show(cur - 1); }
+    else if (k === 'a') showAll();
+    else if (k === 't') dk.dataset.theme = dk.dataset.theme === 'light' ? 'dark' : 'light';
+    else if (/^[1-9]$/.test(k) && +k - 1 < screens.length) show(+k - 1);
+  });
+  show(0);
+</script>
+```
+
+The `INPUT|TEXTAREA` guard is not optional: without it, typing the letter `a` into a
+`[data-feedback-note]` field pages the deck out from under the reviewer mid-sentence.
+
+**The rail binds by `data-to`, never by position.** Each `.navitem` names the `id` of the
+screen it opens, and `indexOf` resolves it; the rail's `.dk-grp` headings sit between the
+buttons and are not `.navitem`s, so they never enter the count. The positional alternative —
+`items.forEach((b, j) => … show(j))` — reads fine and creates an invariant nothing states:
+that the two lists stay the same length in the same order forever. Add a rail entry for a
+screen you have not written yet, or reorder one list, and every button below the seam opens
+the wrong screen while the deck still looks correct. That is the failure this skeleton is
+supposed to be immune to, so it is bound out rather than warned about. An `id` in `data-to`
+that matches no screen is an authoring error and shows up immediately: the button opens
+screen 1 and never lights up.
+
+---
+
+## §D9. Deck Do's and Don'ts
+
+- **Do** put the whole arc in the rail before the reader starts — group headings and per-item
+  subtitles. A deck whose rail is a flat list of nine identical labels has spent the paging cost
+  and bought nothing.
+- **Don't** page a comparison or a population (§D2). If you catch yourself writing "screen 4 vs
+  screen 5," you have written the anti-pattern.
+- **Do** keep every screen in the DOM and page by `hidden`. Show-all, browser find, print, and
+  the feedback serializer all depend on it.
+- **Don't** give every screen a keyline; the box means nothing when everything wears it.
+- **Do** order the change screens by dependency, not by commit date — the deck is an argument,
+  and an argument has an order the history does not.
+- **Don't** let the deck outgrow the reading budget (`visual-rendering-core.md` §5). More screens
+  is not more coverage; ~8–12 screens is a walkthrough, 30 is a document nobody finishes.

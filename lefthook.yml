@@ -12,19 +12,34 @@ pre-commit:
   commands:
     sync-references-check:
       run: bash scripts/sync-skill-references.sh --check
+    shellcheck-version:
+      run: bash scripts/check-shellcheck-version.sh
     shellcheck:
       glob: "**/*.sh"
       run: shellcheck {staged_files}
+    # Cheap (<1s) and catches the one-file case at the moment it happens: a
+    # SKILL.md's sources: block changed and site/src/lib/canon.generated.ts was
+    # not regenerated. The full canon suite runs on pre-push and in CI.
+    canon-freshness:
+      run: bash scripts/generate-canon.sh --check
 
 pre-push:
   parallel: true
   commands:
     sync-script-tests:
       run: bash scripts/test-sync-references.sh
+
+    bundled-pointer-resolution:
+      run: bash scripts/test-bundled-pointer-resolution.sh
+
     verify-install-script-tests:
       run: bash scripts/test-verify-install.sh
     review-currency-marker-tests:
       run: bash scripts/test-review-currency-marker.sh
+    review-dimension-partition-tests:
+      run: bash scripts/test-review-dimension-partition.sh
+    restated-review-operative-tests:
+      run: bash scripts/test-restated-review-operatives.sh
     loop-ledger-marker-tests:
       run: bash scripts/test-loop-ledger-markers.sh
     context-block-contract-tests:
@@ -33,9 +48,40 @@ pre-push:
       run: bash scripts/test-selection-idiom-consistency.sh
     options-comparison-contract-tests:
       run: bash scripts/test-options-comparison-contract.sh
+    per-unit-series-contract-tests:
+      run: bash scripts/test-per-unit-series-contract.sh
     documented-git-command-tests:
       run: bash scripts/test-documented-git-commands.sh
     git-guardrail-tests:
       run: bash scripts/test-git-guardrails.sh
+    compound-clustering-single-source-tests:
+      run: bash scripts/test-compound-clustering-single-source.sh
+    q4-mechanism-name-tests:
+      run: bash scripts/test-q4-mechanism-names.sh
+    oracle-table-coverage-tests:
+      run: bash scripts/test-oracle-table-coverage.sh
+    duplicate-guard-program-tests:
+      run: bash scripts/test-duplicate-guard-programs.sh
+    widened-domain-tell-tests:
+      run: bash scripts/test-widened-domain-tell.sh
+    canon-coverage-tests:
+      run: bash scripts/test-canon-coverage.sh
+    absent-local-gate-tell-tests:
+      run: bash scripts/test-absent-local-gate-tells.sh
+    shellcheck-version-parity-tests:
+      run: bash scripts/test-shellcheck-version-parity.sh
+    markdown-diff-attribute-tests:
+      run: bash scripts/test-markdown-diff-attribute.sh
+    guards-can-fire-tests:
+      run: bash scripts/test-guards-can-fire.sh
+    syntax-palette-contract-tests:
+      run: bash scripts/test-syntax-palette-contract.sh
+    recap-mode-contract-tests:
+      run: bash scripts/test-recap-mode-contract.sh
+    decision-card-grounding-tests:
+      run: bash scripts/test-decision-card-grounding.sh
     shellcheck-all:
-      run: shellcheck $(git ls-files "*.sh")
+      # Runs the *pinned* shellcheck (cached download on first use), because a
+      # PATH shellcheck of a different version is a different instrument — the
+      # warner announces that; this actually closes it. See the script header.
+      run: bash scripts/shellcheck-pinned.sh

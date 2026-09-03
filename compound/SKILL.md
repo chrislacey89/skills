@@ -9,6 +9,7 @@ sources:
     - "Software Estimation — Steve McConnell"
     - "Thinking in Bets — Annie Duke"
     - "The Fifth Discipline — Peter Senge"
+    - "The Checklist Manifesto — Atul Gawande"
 ---
 
 # Compound
@@ -58,18 +59,42 @@ Without this step, you've done traditional engineering with AI assistance. The f
 
 ### Phase 1: Identify What to Capture
 
-On the in-PR default path the work under review is the open PR branch, so the commands below read it directly (`git log` and `git diff main...HEAD` against the still-unmerged branch). On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, `git diff main...HEAD` is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work. Look at:
+On the in-PR default path the work under review is the open PR branch, so the commands below read it directly — a `git log` and a `git diff` of the branch against the base it will merge into, while it is still unmerged. On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, that diff is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work.
+
+Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. `/pre-merge`, `/help`, `/walk-commits` and `/visual-recap` carry this same block for the same reason.
+
+```bash
+BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
+if [ -z "$BASE_BRANCH" ]; then
+  for candidate in main master prod develop trunk; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
+  done
+fi
+# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
+# $BASE_REF points at it, and is the only thing safe as a range endpoint.
+if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  BASE_REF="origin/$BASE_BRANCH"
+else
+  BASE_REF="$BASE_BRANCH"
+  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
+fi
+```
+
+**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+
+Look at:
 
 1. **Git log** — What commits were made? What changed?
    ```bash
-   git log --oneline -20
+   git log --oneline "$BASE_REF..HEAD"
    ```
+   Base-relative, not `-20`: a fixed count reads the base's own history as "the work under review" on any branch shorter than it. Two-dot here is correct — these are the commits on this branch and not on the base. (The `git diff` below is three-dot for the mirror reason: it diffs from the merge base rather than subtracting base-side work.) On the post-merge fallback path the branch is gone, so use `gh pr diff <n>` as above.
 
 2. **Issue thread** — What was the original problem? What was discussed?
 
 3. **The diff** — What files changed? What patterns emerged?
    ```bash
-   git diff main...HEAD --stat
+   git diff --stat "$BASE_REF...HEAD"
    ```
 
 Ask the user: "What was the most important thing you learned or the trickiest part of this feature?" Their answer often reveals the highest-value lesson to capture.
@@ -82,12 +107,61 @@ Before writing, classify the lesson at the right level:
 
 Prefer capturing the highest level you can support with evidence. If the lesson is structural, name the feedback loop, missing feedback, or delayed effect that made the outcome likely.
 
-**Before proceeding, consider three questions** (guidance, not a gate — if the answer is unclear, proceed and let the writing process clarify):
+**Before proceeding, answer four questions:**
 
 1. **Is this genuinely novel?** Check official library docs and existing `docs/solutions/` files. If the lesson is already well-documented elsewhere, skip it or link to the existing source.
 2. **Will this still be accurate in 3 months?** If the lesson is tightly coupled to a dependency version or a temporary workaround, note that — it affects the `volatility` classification below.
-3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision. If the lesson can be fully captured in a higher-fidelity artifact, do that instead of (or in addition to) writing prose.
-4. **Was the process fixed?** (Bug-fix compounds only.) Was the fix a correction (removed the defect) or a workaround (suppressed the failure)? Were structurally similar patterns elsewhere in the codebase found and addressed? What process change would prevent this defect class from entering the codebase again — a stronger test, a linter rule, an assertion, a planning checklist item? If the answer is "nothing," the mechanism that produced this defect is still active.
+3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision — bounded to the *current* why, the reason a reader needs to understand the code as it now stands. The incident that discovered it belongs in the commit message and the PR body, where a reader reconstructing history already looks; `/execute` Step 3 states that routing at the moment the comment is written, and this question is the retrospective check on it. If the lesson can be captured in a higher-fidelity artifact, do that instead of writing prose. This is about *carrying the lesson* — Phase 4's clustering check asks a different question, whether a mechanism should *catch the next instance*, and a recurrence can require one even though the lesson itself needed prose.
+4. **Was the process fixed?** (Bug-fix compounds only.) Was the fix a correction (removed the defect) or a workaround (suppressed the failure)? Were structurally similar patterns elsewhere in the codebase found and addressed? What process change would prevent this defect class from entering the codebase again — a stronger test, a linter rule, an assertion, a planning checklist item, or a filed issue in `chrislacey89/skills` (see *Filing against the pack* below)? If the answer is "nothing," the mechanism that produced this defect is still active.
+
+#### Filing against the pack — the fifth mechanism
+
+**This subsection is not gated to bug fixes.** Q4 above is (its heading says so), but both Q4 and Phase 4's promote-to-mechanism rule cite the rules below, and Phase 4 is not bug-fix-gated. The incident this mechanism exists for was a *feature* compound. A procedure reachable only from the path its own incident did not take is the defect being fixed, one level down — so the rules are declared here, once, and both phases point at them.
+
+**The fifth name is scoped by ownership, not by difficulty.** The first four are artifacts of *this* codebase; the fifth exists because some preventing changes are not — they are changes to a skill's prose, gate, handoff, or contract test in `chrislacey89/skills`, which no downstream artifact can carry at all. That, and only that, is when the fifth name qualifies. It does **not** qualify because the first four are hard, expensive, or unclear here: that is the compliance exit #257 deliberately left closed, and "I could not build one" still resolves the way it always did — by naming in the entry which of the four came closest and what blocked it.
+
+##### Filing-owner gate (DO-CONFIRM — check before writing anything outbound)
+
+**Filing moves words out of the repo you are standing in, into a public one.** That is a different act from every other mechanism in the list — a test, a linter rule, an assertion, and a checklist item all stay put. So before composing a body, confirm the current repo's owner is one you are permitted to file *from*:
+
+```bash
+git remote get-url origin | sed -E 's#(git@[^:]+:|https://[^/]+/)([^/]+)/.*#\2#'
+```
+
+Compare it against the allowlist below. **The allowlist is the whole gate — an owner that is not on it is not permitted, including an owner you do not recognize.** Do not invert this into "block the owners I know are work": a client org that was onboarded last week is on nobody's list yet, so a denylist admits exactly the repo with the least-known confidentiality posture. Fail closed on unknown.
+
+<!-- filing-allowlist:start -->
+```text
+chrislacey89
+```
+<!-- filing-allowlist:end -->
+
+The markers around that fence are load-bearing: this subsection contains several fenced blocks, so "the list is the code block below" is ambiguous to anything reading mechanically — a reader that guesses wrong extracts prose and every owner then fails the check. Match the markers, not the position.
+
+Add an owner to that list only as a deliberate, reviewed edit — one line, offline, greppable. A public repo you contribute to qualifies once you name it; it does **not** qualify merely for being public. Visibility is a mutable remote property, a public fork can front a private parent, and — the reason that matters here — *what gets filed is a narrative about the work, not the repo's code*. Public source and a confidential engagement around it is an ordinary combination, and "we hit this while building X for Y" leaks the relationship even when every line is world-readable.
+
+**When the owner is not on the allowlist, the fifth name is unavailable.** Fall back to the behavior that predates this mechanism: record the prescription in the entry's Prevention → Process-level slot, recommend `/improve-pipeline`, and let a human carry it across. The lesson is not lost; it just does not travel automatically.
+
+##### Composing and filing
+
+When both the ownership guard and the filing-owner gate pass, **filing is the mechanism, and `/compound` files it** — the prescription reaching this repo is the artifact, not a sentence recommending that someone carry it there. First check for overlap and comment on the existing issue rather than filing a new one; a new outbound channel into a backlog is only worth having if it does not fill with restatements.
+
+```bash
+gh issue list -R chrislacey89/skills --state all --search "<pipeline area> <failure-mode keywords>"
+gh issue create -R chrislacey89/skills --title "[improve-pipeline] <pipeline area> — <prescription>" --body-file <file>
+```
+
+`--title` and `--body*` are required, not stylistic: `gh issue create` with neither errors out under any non-interactive runner, which is every AFK path this mechanism is meant to survive.
+
+**Write the body anonymized, and treat that as part of the contract rather than good manners.** The gate above decides *whether* you may file; this decides *what crosses*. Describe the incident's shape, not its subject:
+
+- **Name** the pack file the change targets, the pipeline step that missed it, and what it should have done instead.
+- **Do not name** the downstream repo, its owner, its client, its paths, its identifiers, or its issue and PR numbers. Characterize it — *"a downstream TypeScript web/page-analysis repo"* — the way #266 did, which is the worked example: it opens `Triggering repo: anonymized` and records that the source was *deliberately stripped of identifiers*.
+- **Do not cite this entry's path as the evidence.** A `docs/solutions/…` path is a filename from a repo the reader may have no access to, so it proves nothing to them and identifies the work to everyone else. Carry the reasoning across instead; the entry stays home.
+
+The pack file and the failure shape are what make a proposal actionable here. Everything the anonymization rule strips is detail that was only ever legible in the repo it came from.
+
+Keep it short. This is a proposal stub, not a worked proposal — `/improve-pipeline` is what develops one, and the `/improve-pipeline` recommendation later in this phase still stands: recommend it, do not invoke it. **Cite the issue number in the entry.** An uncited filing is prose again: the entry names `#N`, or the fifth name was not used.
 
 **Rabbit Hole review.** If a PRD issue exists for this feature, read its Rabbit Holes section. For each one, check: did the pre-decided resolution hold, or did it need to be revised during implementation? Rabbit Holes that bit — required a different resolution than planned, or surfaced late despite being named — are high-value compound targets. Capture the risk pattern and the *actual* resolution in `docs/solutions/` so future `/write-a-prd` sessions surface them during the completeness scan. Rabbit Holes that held as planned are less valuable to document unless the risk pattern is likely to recur in unrelated features.
 
@@ -267,7 +341,13 @@ If a related solution already exists:
 - **If it's a related but distinct problem:** Create the new file and add cross-references in both documents.
 - **If the existing solution is now outdated:** Update or supersede it. Never silently let stale solutions persist.
 
-**Defect clustering check.** When compounding a bug fix, search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` has 3+ entries in the same category with the same root-cause pattern, that pattern is a systemic issue worth noting in the solution (e.g., "all three auth integration bugs were specification errors — the PRD never addresses token refresh"). This feeds back into `/write-a-prd`'s omitted activities scan and `/shape`'s probing.
+**Defect clustering check (DO-CONFIRM — verify before committing the entry).** Search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. For a worked pair, this repo's own `staleness-gate-intermediate-writers` (`problem_type: staleness gate invalidated by an unenumerated intermediate writer`) and `by-construction-claims-need-a-mechanism` (`problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it`) share not one word. The second entry names them as the same pattern anyway — *"a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism"* — which is the judgment this check is asking you to make, and which no string match would ever reach.
+
+This entry ships with a mechanism that would catch the next instance — one of the five Q4 names: a test, a linter rule, an assertion, a planning checklist item, or a filed issue in `chrislacey89/skills`. The fifth is available only under the ownership guard in Phase 1's *Filing against the pack* subsection — the preventing change belongs to the pipeline rather than to this codebase — and is not an exit for the first four being hard. That subsection carries the filing procedure too, and it is not bug-fix-gated; the enumeration is likewise borrowed from Q4 independently of Q4's own bug-fix flag, since this check is not gated to bug fixes. If none of the five can be built here, the entry states in one line which came closest and what blocked it. A third prose-only entry on the same pattern is not a valid outcome.
+
+Record the judgment either way. Deciding that an existing entry names a *different* pattern is also an exit from this check, and it is the cheaper one — so it leaves a line too: name the nearest entry and say why it is not the same pattern. An escape that has to be written down is one a reader can argue with; an escape taken silently is the shape this whole check exists to close.
+
+Name the pattern in the entry as well (e.g., "both auth integration bugs were specification errors — the PRD never addresses token refresh"). This feeds back into `/write-a-prd`'s omitted activities scan and `/shape`'s probing.
 
 ### Phase 5: Commit
 
@@ -275,9 +355,20 @@ If a related solution already exists:
 
 ```bash
 git add docs/solutions/<category>/<filename>.md
+git add <path/to/mechanism>   # Phase 4's mechanism — omit when Phase 4 did not fire, or recorded that none could be built
 git commit -m "docs: compound — <brief description of what was learned>"
 git push        # in-PR path: push so the entry joins the open PR for review
 ```
+
+An entry claiming a mechanism, committed while that mechanism sits unstaged, is the unenforced-claim shape Phase 4 exists to close.
+
+**Pack-level filing check (DO-CONFIRM — verify before committing the entry).** The fifth Q4 name has nothing to stage — it lives in another repo. Its equivalent of staging is that the issue is **already filed** and its number is cited in the entry before this commit. Committing an entry that says a pack-level issue will be filed is the same unenforced claim with a longer fuse, so confirm the issue exists rather than asserting it:
+
+```bash
+gh issue view -R chrislacey89/skills <n> --json number,title,state
+```
+
+A non-zero exit means the entry cites an issue that is not there — do not commit it. This is weaker than a contract test and deliberately so: the citation lives in a downstream repo's `docs/solutions/` file, which this repo's CI cannot read, so there is nothing for a `scripts/test-*.sh` to assert against. What the suite *can* pin is that this command is still here, and `scripts/test-q4-mechanism-names.sh` does — the check runs where the claim is made, and the pin stops the check itself from being quietly dropped.
 
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
 
@@ -289,6 +380,7 @@ Tell the user what was captured, then print the closing block that matches the p
 
 ```
 Compounded onto PR #<n>: docs/solutions/<category>/<filename>.md
+Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
 
 Key lesson: [One sentence summary of the most important takeaway]
 
@@ -302,6 +394,7 @@ This rides the PR — reviewed and merged with the code that taught it — and w
 
 ```
 Compounded: docs/solutions/<category>/<filename>.md
+Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
 
 Key lesson: [One sentence summary of the most important takeaway]
 

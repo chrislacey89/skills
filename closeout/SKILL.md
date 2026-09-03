@@ -3,11 +3,11 @@ name: closeout
 description: "Primary pipeline tail step after /pre-merge, when a reviewed PR is ready to land and you want the workspace back to a clean base. Use to merge, switch off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. Triggers on 'close out', 'merge and clean up', 'get back to a clean main/base', 'tear down the worktree'. Not for capturing lessons (that's /compound) or closing PRD/slice issues and research-artifact hygiene (that's the cleanup prose in SYSTEM-OVERVIEW Step 9)."
 sources:
   primary:
-    - "Thinking in Systems — Donella H. Meadows"
-    - "The Design of Everyday Things — Donald A. Norman"
+    - "Thinking in Systems — Donella Meadows"
+    - "The Design of Everyday Things — Don Norman"
   secondary:
     - "The Checklist Manifesto — Atul Gawande"
-    - "Continuous Delivery — Jez Humble, David Farley"
+    - "Continuous Delivery — Jez Humble & David Farley"
 ---
 
 # Closeout
@@ -81,8 +81,10 @@ gh pr view --json number,title,url,state,mergeable,mergeStateStatus,reviewDecisi
 Determine the base branch the PR targets — the repo's declared default, not an assumption:
 
 ```bash
-git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null   # e.g. origin/main → main; origin/prod → prod
+git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@'   # e.g. origin/main → main; origin/prod → prod
 ```
+
+This site wants the base branch **name**, not a ref — it feeds `git switch <base-branch>` at Step 4, and `git switch` rejects a remote-tracking ref outright (`fatal: a branch is expected, got remote branch 'origin/prod'`) — it wants the local base branch you are about to pull. It deliberately does *not* grow the `$BASE_REF` guard that `/pre-merge`, `/help`, `/walk-commits`, `/visual-recap`, and `/compound` carry; that guard exists only because those five use the base as a **range endpoint**, which this skill never does. Do not "fix" this to match them.
 
 Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
 

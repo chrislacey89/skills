@@ -1,0 +1,2250 @@
+#!/usr/bin/env bash
+# test-canon-coverage.sh — the landing page's canon and the skills' `sources:`
+# frontmatter must name the same works, and every attribution the page renders
+# must be one the named skill actually makes.
+#
+# THE DRIFT CLASS. The canon section is a router pointing at provenance: it
+# shelves a set of works and tells the reader "each SKILL.md names its sources
+# in frontmatter." For as long as that set was hand-written, nothing related the
+# two, and they drifted in both directions in silence — a spine could be added
+# with nothing behind it, and a `sources:` entry could be added and never reach
+# the page. Neither failure emits a signal. The page builds, the spine renders,
+# the book opens.
+#
+# THE TWO INCIDENTS.
+#   #272 (2026-08-23) — the shelf carried *Total TypeScript — Matt Pocock* and
+#     pointed it at `/ts-audit`, whose frontmatter held only `name` and
+#     `description`. Every other spine traced to a real entry; that one traced to
+#     nothing, and had done so for as long as the page existed.
+#   #273 (2026-08-24) — the same shelf held 8 of the 45 works the skills
+#     actually cite. 34 declared works never reached the page, and four works
+#     were declared under two author spellings each, so even a naive automated
+#     extraction would have double-counted them.
+#
+# THE FIX FOR #273 CHANGED WHAT THIS SUITE HAS TO WATCH. The canon is now
+# derived: `scripts/generate-canon.sh` reads the frontmatter and writes
+# `site/src/lib/canon.generated.ts`, and `Shelf.astro` renders that. So the
+# hand-written array this suite used to parse is gone, and with it the checks
+# that guarded it. That is not a loss of coverage — #272's property (a shelved
+# work must be declared by the skill the page attributes it to) is now checked on
+# EVERY citation edge rather than on the one skill a hand-written entry named,
+# which is strictly stronger. What replaces the old checks is the set of
+# properties a derivation can still get wrong.
+#
+# WHAT IT PINS, every side extracted from the real files rather than restated:
+#   1. Every quoted entry under a `sources:` key in every skill's frontmatter,
+#      bounded to the frontmatter and terminated at the first non-indented line.
+#   2. No title is declared under two different author spellings anywhere in the
+#      repo.
+#   3. The committed canon module is byte-for-byte what the generator produces
+#      from the frontmatter as it stands right now.
+#   4. The canon and the frontmatter name the same set of works, in both
+#      directions — no declared work missing, no shelved work undeclared.
+#   5. Every entry is typed `book` or `paper`, and the set typed `paper` equals
+#      EXPECTED_PAPERS — a list written by hand in this file, because an oracle
+#      recomputed from the subject's own input cannot disagree with it. The
+#      earlier version did recompute it, and shipped a paper typed `book`.
+#   5b. Every `papers:` marker names a work the same skill declares under a tier.
+#   6. Every citation edge resolves to a skill that declares that work at that
+#      tier, AND every declaration in the frontmatter appears as an edge.
+#   7. `data.ts` names a declared work only as a `lessons` key, and every
+#      `lessons` key is a work some skill declares.
+#   8. The BUILT page renders exactly the canon — no work missing, no spine with
+#      nothing behind it.
+#   9. Every `mappings` row's cited book is declared by every stage the row names.
+#
+# WHY 6 IS CHECKED IN BOTH DIRECTIONS. The forward edge catches an invented
+# citation. The reverse catches a dropped one — and a dropped citation is the
+# quiet failure, because the work stays shelved by its other citers and nothing
+# looks broken. Only the citation count is understated, and #274 renders that
+# count as spine height.
+#
+# WHY 8 IS THE ONE THAT ACTUALLY HOLDS THE PROPERTY. Every other check reads
+# source files and reasons about what they would produce. Check 8 reads what was
+# produced. The difference is the gap between "the component imports the canon"
+# and "the reader can see all 45 works", and #273 is a bug report about the
+# second. It needs `site/dist/index.html`, so it SKIPS locally unless the site
+# has been built, and CI's `canon-render` job builds before invoking this suite
+# so it always runs there. The narrowing tripwire beside it (`grep` for
+# `.slice(`/`.filter(`) keys on a language construct, which
+# `mechanism-generality-lags-the-pattern-2026-08-23.md` is explicit is the weaker
+# kind of detector; it is a fast local hint, not the mechanism.
+#
+# ONE WORK, ONE SPELLING (check 2), AND WHY IT IS A FAILURE RATHER THAN A
+# TOLERANCE. Grouping is by the whole declared string, so a second spelling of
+# one author splits one work into two entries — the canon over-counts and each
+# half's citation count is wrong. #273 normalized the four live pairs at the
+# source and this check keeps them normalized. The alternative was an alias table
+# beside the extractor, rejected because a table is itself a hand-maintained
+# canon list, which is the defect under repair. The `mappings` matcher one
+# section down stays deliberately looser — it compares bare titles, because a
+# `mappings` row cites no author at all.
+#
+# WHY THE POPULATIONS ARE DERIVED AND NOT FLOORED. A floor guards against total
+# blindness; it cannot notice the loss of one item, which is the granularity this
+# drift arrives at. Against the old shelf, `MIN_CANON_WORKS=5` let three spines
+# go unparsed, and a spine written `full: '…'` — single quotes, which no
+# formatter in this repo forbids — passed as a shrunken shelf, fully green, while
+# the page rendered nine. So `canon_slots` reads the array's element count by
+# brace depth alone, knowing no field name, and is required to equal what
+# `canon_rows` parses. That is `partial-oracle-selfcheck-2026-08-22.md`
+# Prevention #2 ("derive the coverage instead of restating it") applied to the
+# population where restating it actually bit, and it closes the recurrence of
+# `mechanism-generality-lags-the-pattern-2026-08-23.md`: a detector keying on a
+# language construct rather than on the property. The floors that remain guard
+# only the blunt case where a reading returns nothing at all.
+#
+# WHAT IT DELIBERATELY DOES NOT PIN. `lessons` is hand-written prose and nothing
+# here checks its content or its coverage. That is load-bearing rather than an
+# oversight: the lessons are an OPTIONAL enrichment layer keyed by canonical
+# work, so a work with no lesson opens to its derived spread instead of being
+# kept off the page. A coverage check over the lessons would make curation
+# mandatory and put the maintenance burden back exactly where #273 removed it
+# from. What IS pinned about them is check 7 — a lesson keyed to a work nobody
+# declares is dead prose, which is #272's shape one layer in.
+#
+# The self-tests at the bottom run every extractor and every detector against
+# synthetic fixtures in both directions, because a detector that has stopped
+# detecting reports the same full green as a clean repo.
+
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+data_ts="$repo_root/site/src/lib/data.ts"
+canon_ts="$repo_root/site/src/lib/canon.generated.ts"
+
+pass=0
+fail=0
+
+section() { printf '\n=== %s ===\n' "$1"; }
+ok() { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
+bad() {
+    printf '  FAIL %s\n' "$1"
+    if [ "$#" -gt 1 ]; then printf '       %s\n' "$2"; fi
+    fail=$((fail + 1))
+}
+fatal() { printf '\nFATAL: %s\n' "$1" >&2; exit 2; }
+
+# --- Everything below is derived from a real file; nothing is restated --------
+
+# mapping_rows <data.ts> — "<source title>\t<skill list>" per row of the
+# `mappings` array, which Practice.astro renders under "Each stage
+# operationalizes a named discipline from the literature". Same provenance claim
+# as the shelf, five lines down in the same file, and unpinned until review
+# pointed a row at a book nothing declares and got a full green.
+mapping_rows() {
+    awk '
+        /^export const mappings/ { inmap = 1; next }
+        inmap && /^\];/          { inmap = 0; next }
+        inmap && /source:/ && /skill:/ {
+            s = ""; k = ""
+            if (match($0, /source: "[^"]*"/)) s = substr($0, RSTART + 9, RLENGTH - 10)
+            if (match($0, /skill: "[^"]*"/))  k = substr($0, RSTART + 8, RLENGTH - 9)
+            if (s != "" && k != "") print s "\t" k
+        }
+    ' "$1"
+}
+
+# declared_works <skill.md>... — every quoted source string under a `sources:`
+# key in each named skill's frontmatter.
+#
+# Frontmatter only, and terminated at the first non-indented line. Both bounds
+# are load-bearing. A SKILL.md body routinely quotes book titles and shows
+# example `sources:` blocks, and harvesting those would let the page's claim be
+# backed by a skill merely *talking about* a book. Dropping the terminator is
+# worse: every quoted string in the rest of the frontmatter becomes a declared
+# work, so a `description:` could back a shelf claim. Both bounds have a fixture
+# below — the terminator's was missing on the first draft, and deleting the rule
+# left this suite at 11 passed / 0 failed.
+declared_works() {
+    local skill
+    for skill in "$@"; do
+        [ -f "$skill" ] || continue
+        awk '
+            /^---[[:space:]]*$/       { fm++; next }
+            fm != 1                   { next }
+            /^sources:[[:space:]]*$/  { ins = 1; inp = 0; next }
+            ins && /^[^[:space:]]/    { ins = 0 }
+            !ins                      { next }
+            # `papers:` is a type marker, not a declaration. Its entries name a
+            # work already listed under a tier, so harvesting them here would be
+            # harmless only by luck — `sort -u` collapses the duplicate. A marker
+            # naming an undeclared work would enter the population as a phantom.
+            # The dedicated check below is what reports that, with a message that
+            # says what actually went wrong.
+            /^[[:space:]]+papers:[[:space:]]*$/  { inp = 1; next }
+            /^[[:space:]]+primary:[[:space:]]*$/    { inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/  { inp = 0; next }
+            inp                       { next }
+            match($0, /"[^"]+"/) {
+                print substr($0, RSTART + 1, RLENGTH - 2)
+            }
+        ' "$skill"
+    done
+}
+
+# alias_collisions <skill.md>... — every title declared under more than one
+# author spelling, as "<title>\t<variant> | <variant>". Empty output is the
+# passing state.
+#
+# WHY THIS IS A DEFECT AND NOT A STYLE NIT. Any derivation over the frontmatter
+# groups by work, and the only key available is the string. Two spellings of one
+# author split one work into two entries — the canon over-counts, the citation
+# count under-counts on both halves, and nothing renders wrong enough to notice.
+# #273 found four live pairs: *Thinking in Systems* (8 skills vs 1), *The Design
+# of Everyday Things* (3 vs 2), *The Pragmatic Programmer* (1 vs 1) and
+# *Continuous Delivery* (2 vs 1), with `/closeout` alone carrying three of the
+# four minority spellings.
+#
+# SPLIT ON THE FIRST SEPARATOR, VIA match() AND NOT length(). A title may
+# legitimately contain an em dash; an author spelling is whatever follows the
+# first " — ". RSTART/RLENGTH are self-consistent inside one awk regardless of
+# whether that awk counts bytes or characters, which arithmetic over length()
+# of a multi-byte separator is not.
+alias_collisions() {
+    declared_works "$@" | sort -u | awk '
+        match($0, / — /) {
+            title  = substr($0, 1, RSTART - 1)
+            author = substr($0, RSTART + RLENGTH)
+            if (title in seen) { seen[title] = seen[title] " | " author }
+            else               { seen[title] = author; order[++n] = title }
+            count[title]++
+        }
+        END {
+            for (i = 1; i <= n; i++)
+                if (count[order[i]] > 1) print order[i] "\t" seen[order[i]]
+        }
+    '
+}
+
+# canon_rows <canon.generated.ts> — one "<full>\t<title>\t<author>\t<type>" per
+# entry of the generated canon, delimited by brace depth so a reflow cannot
+# shrink the population the way it once shrank the shelf's.
+canon_rows() {
+    awk '
+        /^export const canon/ { incanon = 1; next }
+        incanon && /^\];/     { incanon = 0; next }
+        incanon {
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (c == "{") { depth++; if (depth == 1) rec = ""; continue }
+                if (c == "}") {
+                    depth--
+                    if (depth == 0) {
+                        f = ""; t = ""; a = ""; y = ""
+                        if (match(rec, /full: "[^"]*"/))   f = substr(rec, RSTART + 7,  RLENGTH - 8)
+                        if (match(rec, /title: "[^"]*"/))  t = substr(rec, RSTART + 8,  RLENGTH - 9)
+                        if (match(rec, /author: "[^"]*"/)) a = substr(rec, RSTART + 9,  RLENGTH - 10)
+                        if (match(rec, /type: "[^"]*"/))   y = substr(rec, RSTART + 7,  RLENGTH - 8)
+                        if (f != "" && y != "") print f "\t" t "\t" a "\t" y
+                        rec = ""
+                    }
+                    continue
+                }
+                if (depth >= 1) rec = rec c
+            }
+            if (depth >= 1) rec = rec " "
+        }
+    ' "$1"
+}
+
+# canon_slots <canon.generated.ts> — how many TOP-LEVEL records the array holds,
+# counted by brace depth and knowing no field name. Nested citation objects sit
+# at depth 2 and are not counted, which is what makes this reading capable of
+# disagreeing with canon_rows above.
+canon_slots() {
+    awk '
+        /^export const canon/ { incanon = 1; next }
+        incanon && /^\];/     { incanon = 0; next }
+        incanon {
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (c == "{") { if (depth == 0) n++; depth++ }
+                else if (c == "}") depth--
+            }
+        }
+        END { print n + 0 }
+    ' "$1"
+}
+
+# canon_citation_rows <canon.generated.ts> — "<full>\t<skill>\t<tier>" per
+# declared citation.
+#
+# LINE-BASED, AND THAT IS SAFE HERE ONLY BECAUSE OF THE FRESHNESS CHECK. Keying
+# on a language construct rather than on the property is the recurrence
+# `mechanism-generality-lags-the-pattern-2026-08-23.md` warns about, and it is
+# why the two readings above are record-based. This one is exempt for a reason
+# that has to hold: the file is generated, and the section below diffs it
+# byte-for-byte against a fresh run of the generator. A reflow that would break
+# this parser cannot reach the tree without turning that check red first. If the
+# freshness check is ever weakened, this parser has to be rewritten with it.
+canon_citation_rows() {
+    awk '
+        /^export const canon/ { incanon = 1; next }
+        incanon && /^\];/     { incanon = 0; next }
+        !incanon              { next }
+        match($0, /full: "[^"]*"/) { cur = substr($0, RSTART + 7, RLENGTH - 8); next }
+        cur != "" && match($0, /skill: "[^"]*"/) {
+            s = substr($0, RSTART + 8, RLENGTH - 9)
+            if (match($0, /tier: "[^"]*"/)) {
+                print cur "\t" s "\t" substr($0, RSTART + 7, RLENGTH - 8)
+            }
+        }
+    ' "$1"
+}
+
+# flagship_order <data.ts> — the hand-written top board, in file order, one
+# `full` string per line. Empty output is a legitimate state: delete the array
+# and the shelf falls back to the derived order alone.
+#
+# READ OUT OF `data.ts`, WHICH IS THE POINT. The component and this suite must
+# take the same list from the same file, or the "named order" half of the
+# ordering claim is checked against itself. Bounded to the array so the lessons
+# map and the mappings rows one screen away cannot leak into it.
+flagship_order() {
+    awk '
+        /^export const flagships/ { inf = 1; next }
+        inf && /^\];/            { inf = 0; next }
+        !inf                     { next }
+        match($0, /"[^"]+"/)     { print substr($0, RSTART + 1, RLENGTH - 2) }
+    ' "$1"
+}
+
+# shelf_order <canon.generated.ts> <data.ts> — the volume order the canon
+# section is required to render, one `full` string per line, top-left to
+# bottom-right: the named flagships in their listed order, then everything else
+# by CORE LINEAGE, then breadth of citation, then the declared string.
+#
+# THE TOP BOARD IS NAMED AND THE TAIL IS DERIVED, and this reader has to hold
+# both halves. The derived order answers "what is the pipeline built on"; it is
+# the wrong first impression for a shelf of software engineering practice, which
+# is why a short hand-written list now decides the front of the case. What the
+# list may not do is subtract: the coverage checks above still require all 45
+# works on the page, so a name dropped from the array demotes a book rather than
+# deleting one.
+#
+# WHY THIS IS THE ORDERING (issue #274). The shelf's height already carries
+# citation count, and #274 named the trade that leaves open: raw count measures
+# breadth of reuse across the pipeline, not centrality to it, and a bookcase
+# sorted by count alone buries the books the pipeline is most recognizably built
+# on — *TDD By Example* sat 37th of 45, *Shape Up* 19th, *Refactoring* 18th,
+# *Domain-Driven Design* 17th. The signal that fixes it is already in the
+# frontmatter and was going unread: CLAUDE.md defines `primary` as "core lineage
+# — the skill is fundamentally built on this work" against `secondary`'s
+# "supporting influence". Ranking on the primary count lifts all four flagships
+# (37→14, 19→4, 18→10, 17→9) and costs nothing to maintain, where the other
+# option #274 weighed — a hand-ordered top board — would be a second
+# hand-maintained canon list, which is the defect #273 exists to remove.
+#
+# READ OFF THE GENERATED FILE, NEVER OFF Shelf.astro. Re-deriving the
+# component's comparator from the component would be two readings of one rule:
+# they cannot disagree, so the check would pass by construction while a
+# consistently wrong order shipped. That is the failure
+# `docs/solutions/testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md`
+# records, and the same one `unrenderable_types` above was rewritten to escape.
+#
+# BYTE ORDER ON `full`, MATCHING THE COMPONENT'S COMPARATOR. `localeCompare`
+# would put this reader at the mercy of the build machine's ICU collation —
+# whether `-` in "Domain-Driven Design" is ignorable decides three spines'
+# order — so `Shelf.astro` compares code units and so does this.
+shelf_order() {
+    local flags derived
+    flags="$(flagship_order "$2")"
+    derived="$(canon_citation_rows "$1" | awk -F"$(printf '\t')" '
+        { total[$1]++; if ($3 == "primary") prim[$1]++ }
+        END { for (f in total) printf "%d\t%d\t%s\n", prim[f] + 0, total[f], f }
+    ' | LC_ALL=C sort -t"$(printf '\t')" -k1,1nr -k2,2nr -k3,3 | cut -f3-)"
+    # The flagships first, in FILE order — not sorted, because the array's
+    # sequence is the claim — then the derived order with those works removed.
+    printf '%s\n' "$flags" | grep -v '^$' || true
+    printf '%s\n' "$derived" | grep -vxF -f <(printf '%s\n' "$flags"; echo '__none__') || true
+}
+
+# papers_typed <canon.generated.ts> — the works the canon types `paper`, sorted.
+# A function rather than an inline pipeline so the self-tests can exercise it;
+# `partial-oracle-selfcheck-2026-08-22.md` is about exactly the check that only
+# ever runs against a clean tree.
+papers_typed() {
+    canon_rows "$1" | awk -F"$(printf '\t')" '$4 == "paper" { print $1 }' | LC_ALL=C sort
+}
+
+# paper_markers <skill.md>... — every work declared under a `papers:` sub-key.
+# Read independently of `scripts/generate-canon.sh`'s reader of the same key.
+paper_markers() {
+    local skill
+    for skill in "$@"; do
+        [ -f "$skill" ] || continue
+        awk -v skill="$skill" '
+            /^---[[:space:]]*$/       { fm++; next }
+            fm != 1                   { next }
+            /^sources:[[:space:]]*$/  { ins = 1; inp = 0; next }
+            ins && /^[^[:space:]]/    { ins = 0 }
+            !ins                      { next }
+            /^[[:space:]]+papers:[[:space:]]*$/     { inp = 1; next }
+            /^[[:space:]]+primary:[[:space:]]*$/    { inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/  { inp = 0; next }
+            inp && match($0, /"[^"]+"/) { print substr($0, RSTART + 1, RLENGTH - 2) "\t" skill }
+        ' "$skill"
+    done
+}
+
+# unrenderable_types <canon.generated.ts> — every entry whose `type` is not one
+# of the two the page can render, as "<full>\t<why>". Empty output passes.
+#
+# THIS NO LONGER JUDGES WHETHER A TYPE IS CORRECT, AND THAT IS THE FIX. The
+# previous version re-implemented the generator's classification rule — `paper`
+# iff the author carries `et al.` or a trailing year — over the generator's own
+# input, and called the result "the property, not the rule". It was the rule.
+# Two readings of one predicate cannot disagree, so it passed by construction and
+# a consistently wrong classification stayed green.
+#
+# It was not hypothetical. Review found a live instance: *Peer Review on
+# Open-Source Software Projects — Peter C. Rigby*, a research paper, typed
+# `book`, shipping, with the spread labeling it "From the book" — and this check
+# green, because the author field carries no tell and both sides read the same
+# field the same way. Correctness now comes from EXPECTED_PAPERS below, which is
+# written by hand and therefore capable of disagreeing.
+unrenderable_types() {
+    local full type
+    while IFS="$(printf '\t')" read -r full _title _author type; do
+        [ -n "$full" ] || continue
+        case "$type" in
+            book|paper) ;;
+            *) printf '%s\tit carries type "%s"; the only types the page can render are book and paper\n' "$full" "$type" ;;
+        esac
+    done <<EOF
+$(canon_rows "$1")
+EOF
+}
+
+# unresolved_citations <canon.generated.ts> <root> — every citation edge that
+# does not resolve to a skill declaring that exact work at that exact tier.
+unresolved_citations() {
+    local canon="$1" root="$2" full skill tier
+    while IFS="$(printf '\t')" read -r full skill tier; do
+        [ -n "$full" ] || continue
+        if [ ! -f "$root/$skill/SKILL.md" ]; then
+            printf '%s\tthe canon says it is cited by /%s, which is not a skill in this repo\n' "$full" "$skill"
+            continue
+        fi
+        declares_work_at_tier "$root/$skill/SKILL.md" "$full" "$tier" \
+            || printf '%s\tthe canon says /%s cites it as %s, and that file'"'"'s frontmatter does not\n' "$full" "$skill" "$tier"
+    done <<EOF
+$(canon_citation_rows "$canon")
+EOF
+}
+
+# declared_edges <root> — "<full>\t<skill>\t<tier>" for every declaration in the
+# frontmatter, which is the citation set read from the other side.
+declared_edges() {
+    local skill_md name
+    for skill_md in "$1"/*/SKILL.md; do
+        [ -f "$skill_md" ] || continue
+        name="$(basename "$(dirname "$skill_md")")"
+        awk -v skill="$name" '
+            /^---[[:space:]]*$/       { fm++; next }
+            fm != 1                   { next }
+            /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; inp = 0; next }
+            ins && /^[^[:space:]]/    { ins = 0 }
+            !ins                      { next }
+            /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   inp = 0; next }
+            /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; inp = 0; next }
+            /^[[:space:]]+papers:[[:space:]]*$/    { inp = 1; next }
+            inp                       { next }
+            match($0, /"[^"]+"/) { print substr($0, RSTART + 1, RLENGTH - 2) "\t" skill "\t" cur }
+        ' "$skill_md"
+    done | LC_ALL=C sort -u
+}
+
+# dropped_citations <canon.generated.ts> <root> — declarations the frontmatter
+# makes that the canon does not record. The work stays shelved by its other
+# citers, so nothing looks broken; only the citation count is understated, and
+# #274 renders that count as spine height.
+dropped_citations() {
+    comm -23 <(declared_edges "$2") <(canon_citation_rows "$1" | LC_ALL=C sort -u)
+}
+
+# WHY THE HERO'S COUNTS ARE PINNED AND THE REST OF THE COPY IS NOT. That one
+# line is the page's advertisement for the canon section — the button beneath it
+# links to `#canon`. It read "Eight books" through the whole of #273's
+# implementation: correct while the shelf was a hand-picked eight, wrong from the
+# moment the canon became derived, and shipped to production. That is the
+# checklist's lone instance fix — the hand-maintained-canon-count pattern lived in
+# two places and only one was repaired. Deriving it makes the two agree; the
+# checks below are what make them *stay* agreed, because "it is derived now" is a
+# claim about the current source and not a mechanism.
+#
+# The reader is `hero_count`, defined further down with the other readers of the
+# built page. A `hero_book_count() { hero_count "$1" books; }` wrapper stood here
+# until review: a pass-through whose whole justification was that three self-tests
+# named it, which left this file calling two differently-named functions to read
+# two nouns off one element, and two cross-references pointing the wrong way down
+# the file.
+
+# declares_work_at_tier <skill.md> <"Title — Author"> <tier> — does that skill
+# declare that exact string under that exact `sources:` sub-key? Exact, not
+# surname-tolerant: both sides are now the same string read from the same file,
+# so any difference is drift rather than formatting.
+declares_work_at_tier() {
+    awk -v want="$2" -v tier="$3" '
+        /^---[[:space:]]*$/       { fm++; next }
+        fm != 1                   { next }
+        /^sources:[[:space:]]*$/  { ins = 1; cur = "primary"; inp = 0; next }
+        ins && /^[^[:space:]]/    { ins = 0 }
+        !ins                      { next }
+        /^[[:space:]]+primary:[[:space:]]*$/   { cur = "primary";   inp = 0; next }
+        /^[[:space:]]+secondary:[[:space:]]*$/ { cur = "secondary"; inp = 0; next }
+        # `papers:` is a type marker, not a tier. Skipping it is what makes the
+        # dangling-marker check able to fire at all: without this the marker
+        # matches itself, every marker looks tier-declared, and a marker naming
+        # a work nothing cites passes. Caught by that check'"'"'s own fixture.
+        /^[[:space:]]+papers:[[:space:]]*$/    { inp = 1; next }
+        inp                       { next }
+        match($0, /"[^"]+"/) {
+            if (substr($0, RSTART + 1, RLENGTH - 2) == want && cur == tier) { found = 1; exit }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$1"
+}
+
+# lesson_keys <data.ts> — every key of the `lessons` object.
+#
+# The keys are verbatim `sources:` strings, so a key naming a work no skill
+# declares is dead prose: it never renders, and nothing else in the page would
+# say so. That is issue #272's shape surviving into the enrichment layer.
+lesson_keys() {
+    awk '
+        /^export const lessons/ { inl = 1; next }
+        inl && /^\};/           { inl = 0; next }
+        inl && match($0, /^[[:space:]]*"[^"]+"[[:space:]]*:/) {
+            s = substr($0, RSTART, RLENGTH)
+            if (match(s, /"[^"]+"/)) print substr(s, RSTART + 1, RLENGTH - 2)
+        }
+    ' "$1"
+}
+
+# stray_work_mentions <data.ts> <root> — every declared work named in data.ts
+# OUTSIDE the `export const lessons` and `export const flagships` blocks, as
+# "<work>\t<line>: <text>".
+#
+# TWO SANCTIONED BLOCKS, AND THE SECOND ONE EARNED IT. `flagships` is a
+# hand-written list of works in a file whose whole point is that it no longer
+# holds one, so the exemption needs a reason narrower than "we added it". The
+# reason is what the two lists can do: #273's array DEFINED the population, so a
+# work missing from it was a work the reader never saw; `flagships` only
+# PERMUTES one, and the coverage checks below — both set directions, plus the
+# built page — still require all 45 works on the shelf. A name dropped from the
+# array demotes a book; it cannot delete one. The dedicated check further down
+# closes the other half, that every name in it is a work some skill declares.
+#
+# THIS IS THE REGRESSION CHECK FOR #273. The canon used to be a hand-written
+# array in this very file, and re-introducing one is how the derivation gets
+# quietly bypassed — a second list would render beside the generated one and
+# nothing else here would notice. `lessons` is the single sanctioned place in
+# data.ts to name a work, and it is sanctioned precisely because the suite
+# asserts nothing about its completeness.
+#
+# SCOPED BY POSITION, NOT BY MEMBERSHIP. A first draft asked whether each work
+# named in data.ts was also a `lessons` key, and a fixture proved that vacuous:
+# the eight hand-written lessons are exactly the eight works the old shelf held,
+# so restoring that array verbatim named only works that were already keys, and
+# the check went green on the precise regression it exists to catch. Asking
+# WHERE the string appears rather than WHETHER it appears elsewhere has no such
+# hole — a second array is outside the block no matter which works it lists.
+stray_work_mentions() {
+    local data="$1" root="$2" work outside hit
+    outside="$(awk '
+        /^export const lessons/    { inl = 1 }
+        inl && /^\};/              { inl = 0; next }
+        /^export const flagships/  { inf = 1 }
+        inf && /^\];/              { inf = 0; next }
+        !inl && !inf               { print NR ": " $0 }
+    ' "$data")"
+    while IFS= read -r work; do
+        [ -n "$work" ] || continue
+        # `|| true`: no match is the passing case, and this runs under set -e.
+        # printf rather than a sed replacement, because `&` is the whole-match
+        # backreference there and eight declared works carry one in the author.
+        #
+        # if/fi rather than `A && B || C`: ShellCheck 0.9.0 — the version
+        # `.shellcheck-version` pins CI to, which is NOT the version a modern
+        # `brew install` gives you — reports SC2015 on that form and exits 1.
+        hit="$(printf '%s\n' "$outside" | grep -F -m1 -- "$work" || true)"
+        if [ -n "$hit" ]; then
+            printf '%s\t%s\n' "$work" "$hit"
+        fi
+    done <<EOF
+$(declared_works "$root"/*/SKILL.md | LC_ALL=C sort -u)
+EOF
+}
+
+# orphan_lessons <data.ts> <root> — every `lessons` key that no skill declares.
+orphan_lessons() {
+    comm -23 <(lesson_keys "$1" | LC_ALL=C sort -u) \
+             <(declared_works "$2"/*/SKILL.md | LC_ALL=C sort -u)
+}
+
+# rendered_keys <index.html> — the work each rendered spine carries in its
+# `data-key`, with the entity escapes the templating applies undone.
+#
+# THE ONLY READING THAT SEES THE PAGE. Everything else in this suite reads
+# source files and reasons about what they would produce. This one reads what
+# was actually produced, which is the difference between "the component imports
+# the canon" and "the reader can see all 45 works" — and #273 is a bug report
+# about the second.
+# `|| true` INSIDE the pipeline, not at the call site. `grep` exits 1 when it
+# matches nothing, and under `set -euo pipefail` that aborts the assignment its
+# caller is making — the whole script dies with an empty stderr and no failing
+# check, which is indistinguishable in the output from a clean early exit.
+# Verified before this guard: a selector that cannot match ran 12 of 46 checks,
+# exited 1, and wrote 0 bytes to stderr. The `MIN_RENDERED` fatal below
+# documents itself as catching "a page that reads as empty" and was unreachable
+# in exactly that case, as were the two self-tests written for this reader.
+# Third instance of this class in this file; the other two were caught during
+# implementation. See `validate-the-instrument-not-only-the-subject-2026-08-23.md`
+# — an unvalidated read that fails in a format indistinguishable from silence.
+rendered_keys() {
+    { grep -o 'data-key="[^"]*"' "$1" || true; } \
+        | sed -e 's/^data-key="//' -e 's/"$//' \
+        | unescape
+}
+
+# unescape — undo the templating's entity escapes on stdin. Split out of
+# `rendered_keys` so `volume_records` below cannot drift from it: "The Pragmatic
+# Programmer — Andrew Hunt & David Thomas" reaches the page as `&#38;`, and a
+# second reader that forgets one entity reports a live work as missing.
+unescape() {
+    sed -e 's/&#38;/\&/g' -e 's/&amp;/\&/g' \
+        -e 's/&#39;/'"'"'/g' -e 's/&quot;/"/g' \
+        -e 's/&lt;/</g' -e 's/&gt;/>/g'
+}
+
+# volume_records <index.html> — "<full>\t<type>\t<height-px>" per rendered
+# volume, in DOCUMENT ORDER.
+#
+# THREE PROPERTIES OF ONE ELEMENT, READ IN ONE PASS, because issue #274 grades
+# them against each other: the sequence must be the order core lineage dictates,
+# and a paper must render as a visibly different object than a book — which on
+# this page means a shorter one, since the object's height is the only part of
+# its form that reaches the HTML as a value a shell can read.
+#
+# SELECTED ON `data-key`, NOT ON A CLASS NAME. The canon section has been a rack
+# of vertical spines and is now a case of face-out covers, and the class name
+# moved with the form (`.spine` → `.volume`) while the property being graded did
+# not. A reader keyed on the presentation went dark on a redesign that changed
+# nothing it checks — and went dark the loud way, as a fatal about its own
+# reading. `data-key` is the contract this suite actually depends on: it is what
+# `rendered_keys` reads, so the two readers cannot disagree about which elements
+# are in the population.
+#
+# HEIGHT IS AN INLINE STYLE AND THAT IS WHY THIS WORKS. The board, the cloth
+# weave, and the offprint's stapled edge are all in a <style> block, so a
+# checker that wanted them would be reduced to grepping CSS for a selector —
+# the weak, language-construct kind of detector this file already flags in the
+# narrowing check. The height is computed per work in the component's frontmatter
+# and emitted per element, so it can be compared against the canon instead.
+volume_records() {
+    { grep -o '<button[^>]*data-key="[^"]*"[^>]*>' "$1" || true; } \
+        | awk '
+            {
+                h = ""; k = ""; t = ""
+                if (match($0, /height:[0-9]+px/))   h = substr($0, RSTART + 7,  RLENGTH - 9)
+                if (match($0, /data-key="[^"]*"/))  k = substr($0, RSTART + 10, RLENGTH - 11)
+                if (match($0, /data-type="[^"]*"/)) t = substr($0, RSTART + 11, RLENGTH - 12)
+                if (k != "") print k "\t" t "\t" h
+            }' \
+        | unescape
+}
+
+# narrowing_calls <Shelf.astro> — every line that narrows the canon before
+# rendering it, as `grep -n` output. Empty output is the passing state, and the
+# non-zero exit that comes with it is what the caller branches on.
+#
+# COMMENT LINES ARE STRIPPED FIRST. The tripwire greps source text, so it cannot
+# tell a narrowing call from prose *about* one — and #274 wrote a comment
+# explaining why the component accumulates per-type extents in a loop rather than
+# with `canon.filter(...)`, which turned this red for naming the thing it avoids.
+# A detector that punishes the explanation teaches the next author to delete the
+# explanation. Only whole-line `//` comments and block-comment continuation lines
+# are dropped; a narrowing call with a trailing comment is still code and is
+# still reported.
+#
+# THE `*` BRANCH REQUIRES A DELIMITER AFTER THE STAR. Stripping every line whose
+# first non-blank character is `*` also blanks `*rows() { return
+# canon.filter(Boolean) }` — a generator method, valid JavaScript, and exactly
+# the narrowing this exists to catch. A block-comment continuation is always `*`
+# followed by whitespace, `/`, or nothing at all; a generator is `*` followed by
+# an identifier. Matching the delimiter is what separates them, and it is the
+# reconciliation `mechanism-generality-lags-the-pattern-2026-08-23.md` asks for:
+# when the prose says one thing and the matcher does another, widen the matcher
+# rather than trimming the claim.
+narrowing_calls() {
+    sed -e 's|^[[:space:]]*//.*$||' -e 's|^[[:space:]]*\*[[:space:]/]*$||' \
+        -e 's|^[[:space:]]*\*[[:space:]/].*$||' "$1" \
+        | grep -nE '\b(canon|spines|volumes)\b[^;]*\.(slice|filter|splice|shift|pop)\('
+}
+
+# offprint_scan <records> — the first (paper, book) pair the page renders where
+# the paper is at least as tall as the book, as "<paper>\t<px>\t<book>\t<px>".
+# Empty output is the passing state.
+#
+# A PAIRWISE SCAN, NOT TWO EXTREMES. This began as `extreme()`, a min/max reader
+# called twice — tallest paper, shortest book — and the direction lived in a flag
+# at each call site. Inverting the two flags compared every paper against the
+# TALLEST book instead of the shortest, which is a strictly weaker assertion that
+# still printed the property as satisfied; a page with a paper at bound-volume
+# height passed clean. Pinning the reader's semantics with a fixture did not fix
+# it, because a self-test on a function cannot reach the arguments its callers
+# pass. Removing the parameter did: there is no direction left to get backwards,
+# and the code now says the same sentence the claim does.
+#
+# ONE DEFINITION, CALLED BY BOTH THE LIVE CHECK AND ITS SELF-TEST. The first
+# draft of the fix inlined this awk in the live check and gave the self-test its
+# own copy, so mutating the real scan left the self-test green — the same
+# two-readings-of-one-rule defect this file warns about in `shelf_order`.
+offprint_scan() {
+    printf '%s\n' "$1" | awk -F"$(printf '\t')" '
+        $2 == "paper" { pw[++np] = $1; ph[np] = $3 + 0 }
+        $2 == "book"  { bw[++nb] = $1; bh[nb] = $3 + 0 }
+        END {
+            for (i = 1; i <= np; i++)
+                for (j = 1; j <= nb; j++)
+                    if (ph[i] >= bh[j]) { printf "%s\t%d\t%s\t%d\n", pw[i], ph[i], bw[j], bh[j]; exit }
+        }'
+}
+
+# hero_count <index.html> <noun> — the number the hero eyebrow advertises for
+# that noun, or empty when the eyebrow does not name one.
+#
+# ANCHORED TO `data-canon-counts`, NOT TO A CLASS FOUR ELEMENTS SHARE. The
+# original anchor was `class="eyebrow"`, on the reasoning that the <head> sits
+# ~2400 bytes ahead of the hero and an unanchored read grades whatever the meta
+# description says. True, and insufficient: the built page carries four
+# `.eyebrow` elements — the hero's, plus the section headers for the canon, the
+# practice table, and the collection — so the anchor really meant "the first
+# eyebrow that mentions the noun". That was the hero only by accident of document
+# order, and the header most likely to gain a count is the canon section's, which
+# is the heading of the thing this suite grades. `Hero.astro` now marks its own
+# eyebrow and this reads the marker.
+#
+# AND IT STRIPS THROUGH THE TAG BEFORE SCANNING. The capture runs to the next
+# `<`, which includes the element's remaining ATTRIBUTES — so a number in an
+# attribute value beat the number in the text. Verified against
+# `<div class="eyebrow" data-x="a1 books">7 books</div>`, which returned 1.
+# Harmless today (Astro's only added attribute has no space in its value) and
+# waiting for the day the element gains one that does.
+#
+# Generalized to a noun because #274 made the eyebrow advertise two populations —
+# the page may not call a paper a book.
+# DIGITS OR NOTHING, BY CONSTRUCTION. The first spelling was `grep -o "[0-9]* $2"
+# | sed "s/ $2\$//"`, where the strip is a second, independent statement of the
+# noun — so a reader whose two halves disagreed returned "42 books", the live
+# check's `-ne` died with `[: 42 books: integer expected`, and the suite exited
+# before reaching the self-tests that name the reader. That is this file's own
+# recurring failure: an unvalidated read that fails in a format indistinguishable
+# from silence. Matching the number and the noun as one token and printing only
+# the number makes a malformed return impossible rather than merely detected.
+hero_count() {
+    grep -o 'data-canon-counts[^<]*' "$1" 2>/dev/null \
+        | sed -e 's|^[^>]*>||' \
+        | awk -v noun="$2" '
+            {
+                rest = $0
+                while (match(rest, /[0-9]+ [A-Za-z]+/)) {
+                    tok  = substr(rest, RSTART, RLENGTH)
+                    rest = substr(rest, RSTART + RLENGTH)
+                    split(tok, part, " ")
+                    if (part[2] == noun) { print part[1]; exit }
+                }
+            }' \
+        | head -1 || true
+}
+
+# declares_title <skill.md> <title> — does that skill declare a work with this
+# exact title? The `mappings` array cites a bare title, with no author to check
+# a surname against, so this is the weaker of the two matchers by necessity.
+declares_title() {
+    local candidate
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] || continue
+        [ "${candidate%% — *}" = "$2" ] && return 0
+    done <<EOF
+$(declared_works "$1")
+EOF
+    return 1
+}
+
+# unmapped_rows <data.ts> <root> — every `mappings` row whose cited book is not
+# declared by every skill the row names. Empty output is the passing state.
+unmapped_rows() {
+    local data="$1" root="$2" source skills skill dir
+    while IFS="$(printf '\t')" read -r source skills; do
+        [ -n "$source" ] || continue
+        # The skill cell may name more than one stage ("/pre-merge · /closeout").
+        # The row claims the principle drives each of them, so each must declare it.
+        for skill in ${skills//·/ }; do
+            dir="${skill#/}"
+            [ -n "$dir" ] || continue
+            if [ ! -f "$root/$dir/SKILL.md" ]; then
+                printf '%s\t%s names /%s, which is not a skill in this repo\n' "$source" "$source" "$dir"
+                continue
+            fi
+            declares_title "$root/$dir/SKILL.md" "$source" \
+                || printf '%s\t/%s does not declare it in its sources: frontmatter\n' "$source" "$dir"
+        done
+    done <<EOF
+$(mapping_rows "$data")
+EOF
+}
+
+# -----------------------------------------------------------------------------
+section "the declaration population is fully read"
+
+# A FLOOR, in the shape `test-oracle-table-coverage.sh` established. It catches
+# the frontmatter extractor going blind — an empty declaration set would pass
+# every comparison below vacuously and read as a page defect rather than a
+# broken reading. The derived equalities that catch a PARTLY unreadable
+# population live in the canon section further down, where the two independent
+# readings of the array are.
+MIN_DECLARED_WORKS=20
+
+[ -f "$data_ts" ] || fatal "$data_ts is missing; the canon section moved and this suite has not followed it."
+
+declared_count="$(declared_works "$repo_root"/*/SKILL.md | sort -u | grep -c . || true)"
+
+if [ "$declared_count" -lt "$MIN_DECLARED_WORKS" ]; then
+    fatal "read $declared_count declared work(s) from skill frontmatter, expected at least $MIN_DECLARED_WORKS.
+       The extractor is broken, not the repo — an empty declaration set would fail
+       every check at once and read as a page defect. If sources were genuinely
+       removed, lower MIN_DECLARED_WORKS in this file as a deliberate edit."
+fi
+ok "read $declared_count distinct declared work(s) across all skills (floor: $MIN_DECLARED_WORKS)"
+
+# -----------------------------------------------------------------------------
+section "one work, one spelling"
+
+collisions="$(alias_collisions "$repo_root"/*/SKILL.md)"
+while IFS="$(printf '\t')" read -r offender variants; do
+    [ -n "$offender" ] || continue
+    bad "\"$offender\" is declared under more than one author spelling" \
+        "the variants are: $variants. Any derivation over the frontmatter keys on the whole string, so a second spelling splits one work into two entries and halves each one's citation count. Pick one spelling and use it in every skill that declares the work — an alias table would be a second hand-maintained canon list, which is the defect issue #273 exists to remove."
+done <<EOF
+$collisions
+EOF
+
+if [ -z "$collisions" ]; then
+    ok "all $declared_count declared work(s) use one author spelling per title"
+fi
+
+# -----------------------------------------------------------------------------
+section "the canon module is derived from the frontmatter, not written by hand"
+
+# ISSUE #273. The shelf used to be a hand-written array, so a source added to a
+# skill never reached the page and a spine on the page needed nothing behind it.
+# `scripts/generate-canon.sh` derives the whole canon from `sources:` frontmatter
+# and this section is what keeps the committed output honest. The freshness check
+# is byte-exact; everything after it re-reads both sides with THIS file's own
+# extractors, because a diff against the generator proves only that the file
+# matches the generator — not that the generator is right.
+
+MIN_CANON_ENTRIES=20
+
+[ -f "$canon_ts" ] || fatal "$canon_ts is missing.
+       The canon is generated; run \`bash scripts/generate-canon.sh\` and commit it."
+
+entry_slots="$(canon_slots "$canon_ts")"
+entry_count="$(canon_rows "$canon_ts" | grep -c . || true)"
+
+if [ "$entry_count" -lt "$MIN_CANON_ENTRIES" ]; then
+    fatal "read $entry_count canon entr(ies), expected at least $MIN_CANON_ENTRIES.
+       The extractor is broken, not the page — a canon that reads as empty passes
+       every set comparison below vacuously."
+fi
+if [ "$entry_slots" -ne "$entry_count" ]; then
+    fatal "the canon array holds $entry_slots records but only $entry_count parsed.
+       $((entry_slots - entry_count)) entr(ies) are written in a spelling the extractor does not
+       recognize, which makes them invisible to every check below while the page
+       renders them. Fix the extractor or the generator; do not lower a floor."
+fi
+ok "all $entry_slots canon entr(ies) parsed ($entry_slots slots = $entry_count rows)"
+
+# --- 1. freshness: the committed module is what the generator produces now ---
+
+if generator_diff="$(bash "$repo_root/scripts/generate-canon.sh" --check 2>&1)"; then
+    ok "site/src/lib/canon.generated.ts is what scripts/generate-canon.sh produces from the current frontmatter"
+else
+    bad "site/src/lib/canon.generated.ts is stale" \
+        "a skill's sources: block changed and the canon was not regenerated, so the page is back to asserting a set the repo does not produce. Run \`bash scripts/generate-canon.sh\` and commit the result. Generator output:
+$generator_diff"
+fi
+
+# --- 2. population: the same set, read independently of the generator ---
+
+declared_set="$(declared_works "$repo_root"/*/SKILL.md | LC_ALL=C sort -u)"
+canon_set="$(canon_rows "$canon_ts" | cut -f1 | LC_ALL=C sort -u)"
+
+missing_from_canon="$(comm -23 <(printf '%s\n' "$declared_set") <(printf '%s\n' "$canon_set"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "\"$offender\" is declared by a skill but is absent from the canon" \
+        "this is issue #273's headline direction — 34 declared works never reached the page. Adding a source to a skill must be the only action needed to shelve it."
+done <<EOF
+$missing_from_canon
+EOF
+
+extra_in_canon="$(comm -13 <(printf '%s\n' "$declared_set") <(printf '%s\n' "$canon_set"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "the canon carries \"$offender\", which no skill declares" \
+        "this is issue #272's direction — the shelf asserting provenance the repo cannot produce."
+done <<EOF
+$extra_in_canon
+EOF
+
+if [ -z "$missing_from_canon" ] && [ -z "$extra_in_canon" ]; then
+    ok "the canon and the frontmatter name the same $entry_count work(s), in both directions"
+fi
+
+# --- 3. types: the property, re-derived rather than the rule re-implemented ---
+
+# #274 renders papers as a different object, so a wrong type is a visible defect
+# rather than a metadata nit. The rule lives in the generator; what is asserted
+# here is the PROPERTY it exists to produce — an author carrying `et al.` or a
+# trailing parenthesized year is a paper citation, and nothing else is.
+# THE EXPECTED-PAPER ORACLE, WRITTEN BY HAND ON PURPOSE.
+#
+# Everywhere else in this change a hand-maintained list was the wrong answer: an
+# alias table, a table of paper titles inside the generator. The reasoning that
+# rejected those does not apply to a TEST ORACLE, and getting that backwards is
+# what produced the defect this replaces. `mutate-the-oracle-not-only-the-subject-2026-08-19.md`
+# requires the oracle to be capable of disagreeing with the subject. A predicate
+# recomputed from the subject's own input cannot; a list somebody wrote down can.
+#
+# So this list is the point of human judgment about what each work IS, checked
+# against what the derivation SAYS it is.
+#
+# WHAT IT DOES NOT DO, stated plainly because the first draft of this comment
+# claimed otherwise. This is a REGRESSION PIN over a known set, not a gate on new
+# entries. It catches a listed paper being retyped, a marker being removed, and a
+# book acquiring a spurious tell. It does NOT catch a newly added paper that
+# carries no citation tell: that work is absent from both sides of the
+# comparison, so it types `book` and passes. Reproduced on this branch —
+# add `- "Some New Paper With No Tell — Solo Author"` to any skill and the suite
+# stays at full green with the work typed `book`.
+#
+# That gap is accepted rather than closed, and the reason is #273'"'"'s whole thesis:
+# adding a source to a skill must be the ONLY action needed to put the work on
+# the page. The mechanism that would close it — an expected-type row for every
+# one of the 45 works — reintroduces a second required edit per source, which is
+# the maintenance this change exists to remove. The residual cost is bounded and
+# visible: a paper renders as a bound volume until someone notices. Tracked as a
+# follow-up rather than papered over.
+EXPECTED_PAPERS="A Survey and Classification of Controlled Natural Languages — Tobias Kuhn (Computational Linguistics 2014)
+Encouraging Divergent Thinking in LLMs through Multi-Agent Debate — Liang et al. (EMNLP 2024)
+Improving Factuality and Reasoning in Language Models through Multiagent Debate — Du et al. (2023)
+Peer Review on Open-Source Software Projects — Peter C. Rigby"
+
+unrenderable="$(unrenderable_types "$canon_ts")"
+while IFS="$(printf '\t')" read -r offender why; do
+    [ -n "$offender" ] || continue
+    bad "the canon types \"$offender\" wrongly — $why" \
+        "the page renders two objects; a third value silently renders as neither."
+done <<EOF
+$unrenderable
+EOF
+
+# A floor, in the shape every other population in this file already has. With
+# both sides empty the two comm calls report nothing and the check passes
+# vacuously — the one state a set comparison cannot distinguish from agreement.
+MIN_PAPERS=1
+
+actual_papers="$(papers_typed "$canon_ts")"
+expected_papers="$(printf '%s\n' "$EXPECTED_PAPERS" | LC_ALL=C sort)"
+
+if [ "$(printf '%s' "$expected_papers" | grep -c . || true)" -lt "$MIN_PAPERS" ]; then
+    fatal "EXPECTED_PAPERS names $(printf '%s' "$expected_papers" | grep -c . || true) work(s), expected at least $MIN_PAPERS.
+       An empty expected list makes the comparison below agree with an empty
+       derived set and report ok, which is the vacuous pass this floor exists for.
+       If the repo genuinely cites no papers, lower MIN_PAPERS as a deliberate edit."
+fi
+
+wrongly_book="$(comm -23 <(printf '%s\n' "$expected_papers") <(printf '%s\n' "$actual_papers"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "\"$offender\" is a paper and the canon types it book" \
+        "the opened spread labels it \"From the book\" and #274 will render it as a bound volume. If its author field carries no citation tell — no \`et al.\`, no trailing year — declare it under a \`papers:\` key in the \`sources:\` block of a skill that cites it."
+done <<EOF
+$wrongly_book
+EOF
+
+wrongly_paper="$(comm -13 <(printf '%s\n' "$expected_papers") <(printf '%s\n' "$actual_papers"))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "the canon types \"$offender\" as a paper and this suite does not expect one" \
+        "either its author field acquired a citation tell it should not have, a \`papers:\` marker points at it by mistake, or it genuinely is a paper — in which case add it to EXPECTED_PAPERS in this file, deliberately, having checked."
+done <<EOF
+$wrongly_paper
+EOF
+
+paper_count="$(printf '%s' "$actual_papers" | grep -c . || true)"
+book_count=$((entry_count - paper_count))
+if [ -z "$unrenderable" ] && [ -z "$wrongly_book" ] && [ -z "$wrongly_paper" ]; then
+    ok "every canon entry is typed book or paper, and the $paper_count paper(s) are exactly the ones this suite expects"
+fi
+
+# Every `papers:` marker must name a work its own skill actually declares under a
+# tier. Without this a marker is a second, unpoliced way to name a work: it would
+# type something nothing cites, or point at a typo and silently do nothing.
+dangling_markers=0
+while IFS="$(printf '\t')" read -r work skill_md; do
+    [ -n "$work" ] || continue
+    if ! declares_work_at_tier "$skill_md" "$work" primary \
+        && ! declares_work_at_tier "$skill_md" "$work" secondary; then
+        bad "${skill_md#"$repo_root"/} marks \"$work\" as a paper and does not declare it under a tier" \
+            "a papers: entry is a type marker on a work the skill cites, not a way to cite one. Add it under primary: or secondary:, or fix the spelling — the two strings must match exactly."
+        dangling_markers=$((dangling_markers + 1))
+    fi
+done <<EOF
+$(paper_markers "$repo_root"/*/SKILL.md)
+EOF
+marker_count="$(paper_markers "$repo_root"/*/SKILL.md | grep -c . || true)"
+if [ "$dangling_markers" -eq 0 ]; then
+    ok "all $marker_count papers: marker(s) name a work the same skill declares under a tier"
+fi
+
+# --- 4. citations: every edge resolves, in both directions ---
+
+MIN_CITATIONS=60
+citation_rows="$(canon_citation_rows "$canon_ts")"
+citation_count="$(printf '%s' "$citation_rows" | grep -c . || true)"
+if [ "$citation_count" -lt "$MIN_CITATIONS" ]; then
+    fatal "read $citation_count citation edge(s), expected at least $MIN_CITATIONS.
+       The extractor is broken — an unread citation set passes the checks below
+       vacuously, and the citation count is what #274 renders as spine height."
+fi
+
+unresolved="$(unresolved_citations "$canon_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r offender why; do
+    [ -n "$offender" ] || continue
+    bad "the canon cites \"$offender\" unsoundly — $why" \
+        "the opened book links to that skill and labels the citation with that tier; both sides are read from the same file, so this is drift rather than a formatting difference."
+done <<EOF
+$unresolved
+EOF
+[ -z "$unresolved" ] && ok "all $citation_count citation edge(s) resolve to a skill that declares the work at that tier"
+
+# The reverse edge. Without it the generator could drop a citation and stay
+# green: the work would still be shelved by its other citers, and only its
+# citation count — the signal #274 renders — would quietly be wrong.
+dropped="$(dropped_citations "$canon_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r full skill tier; do
+    [ -n "$full" ] || continue
+    bad "/$skill declares \"$full\" as $tier and the canon does not record that citation" \
+        "the work may still be shelved by another citer, so nothing looks broken — but its citation count is understated, and #274 renders that count."
+done <<EOF
+$dropped
+EOF
+[ -z "$dropped" ] && ok "every work/skill/tier declaration in the frontmatter is recorded as a citation"
+
+# -----------------------------------------------------------------------------
+section "the page renders the derived canon, not a hand-written list"
+
+shelf_astro="$repo_root/site/src/components/Shelf.astro"
+[ -f "$shelf_astro" ] || fatal "$shelf_astro is missing; the canon section moved and this suite has not followed it."
+
+strays="$(stray_work_mentions "$data_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r offender where; do
+    [ -n "$offender" ] || continue
+    bad "site/src/lib/data.ts names \"$offender\" outside the lessons map, at $where" \
+        "the canon is derived into site/src/lib/canon.generated.ts; a second, hand-written list of works in data.ts is issue #273 re-opening. If this is a pull-quote, it belongs in \`lessons\` keyed by the verbatim sources: string."
+done <<EOF
+$strays
+EOF
+[ -n "$strays" ] || ok "data.ts names a declared work only as a lessons key"
+
+orphans="$(orphan_lessons "$data_ts" "$repo_root")"
+while IFS= read -r key; do
+    [ -n "$key" ] || continue
+    bad "lessons carries a pull-quote for \"$key\", which no skill declares" \
+        "the key must be the verbatim sources: string of a declared work, or the quote never renders and nothing says so — #272's defect one layer in."
+done <<EOF
+$orphans
+EOF
+lesson_count="$(lesson_keys "$data_ts" | grep -c . || true)"
+[ -n "$orphans" ] || ok "all $lesson_count hand-written lesson(s) are keyed to a work some skill declares"
+
+# THE TOP BOARD, BOTH WAYS IT CAN ROT. `flagships` is exempt from the
+# stray-mention scan above because it only permutes the shelf, and that exemption
+# is only as safe as these two checks. A name matching no declared work is dead
+# prose that silently orders nothing — #272's shape in the ordering layer — and a
+# name listed twice is a rank the component resolves by taking the first, so the
+# array says one order and the page renders another.
+flagship_list="$(flagship_order "$data_ts")"
+flagship_count="$(printf '%s\n' "$flagship_list" | grep -c . || true)"
+flagship_orphans="$(comm -23 <(printf '%s\n' "$flagship_list" | grep -v '^$' | LC_ALL=C sort -u) \
+                             <(declared_works "$repo_root"/*/SKILL.md | LC_ALL=C sort -u))"
+while IFS= read -r offender; do
+    [ -n "$offender" ] || continue
+    bad "the flagship order names \"$offender\", which no skill declares" \
+        "the entry must be the verbatim sources: string of a declared work, or it orders nothing and the shelf silently ignores it."
+done <<EOF
+$flagship_orphans
+EOF
+flagship_dupes="$(printf '%s\n' "$flagship_list" | grep -v '^$' | LC_ALL=C sort | uniq -d)"
+if [ -n "$flagship_dupes" ]; then
+    bad "the flagship order lists a work twice" \
+        "$(printf '%s' "$flagship_dupes" | sed 's/^/       repeated: /')
+the component ranks on first occurrence, so the second one is inert and the array no longer describes the page."
+fi
+if [ -z "$flagship_orphans" ] && [ -z "$flagship_dupes" ]; then
+    ok "all $flagship_count flagship(s) name a distinct declared work"
+fi
+
+# THE NARROWING CHECK, and an honest note about what it is worth. This keys on
+# a language construct, which `mechanism-generality-lags-the-pattern-2026-08-23.md`
+# is explicit is the weaker kind of detector — it catches `.slice(` and misses a
+# reader that narrows some other way. It is here as a fast local tripwire; the
+# check that actually holds the property is the rendered-output section below,
+# which CI always runs because it builds the site first.
+if grep -q 'from "../lib/canon.generated"' "$shelf_astro"; then
+    ok "Shelf.astro renders from the generated canon"
+else
+    bad "Shelf.astro does not import the generated canon" \
+        "the canon section is fed by site/src/lib/canon.generated.ts; a component reading anything else is rendering a list nothing derives."
+fi
+
+if narrowing="$(narrowing_calls "$shelf_astro")"; then
+    bad "Shelf.astro narrows the canon before rendering it" \
+        "$narrowing
+every declared work must reach the page — a curated subset is what issue #273 reported. Ordering and styling are free; dropping entries is not."
+else
+    ok "Shelf.astro renders the canon without slicing or filtering it"
+fi
+
+# -----------------------------------------------------------------------------
+section "the rendered canon section carries every declared work"
+
+built_page="$repo_root/site/dist/index.html"
+if [ ! -f "$built_page" ]; then
+    printf '  SKIP no built page at site/dist/index.html — run "npm run build" in site/ to include this check.\n'
+    printf '       CI always runs it: the canon-render job builds the site before invoking this suite.\n'
+else
+    MIN_RENDERED=20
+    rendered="$(rendered_keys "$built_page" | LC_ALL=C sort -u)"
+    rendered_count="$(printf '%s' "$rendered" | grep -c . || true)"
+    if [ "$rendered_count" -lt "$MIN_RENDERED" ]; then
+        fatal "read $rendered_count volume(s) out of the built page, expected at least $MIN_RENDERED.
+       The reader is broken, not the page — a page that reads as empty passes the
+       comparison below vacuously, which is the failure this whole suite exists
+       to make impossible."
+    fi
+
+    unrendered="$(comm -23 <(printf '%s\n' "$canon_set") <(printf '%s\n' "$rendered"))"
+    while IFS= read -r offender; do
+        [ -n "$offender" ] || continue
+        bad "\"$offender\" is in the canon and does not reach the rendered page" \
+            "issue #273 verbatim: adding a source to a skill must be the only action needed to make it appear on the page."
+    done <<EOF
+$unrendered
+EOF
+
+    unbacked_render="$(comm -13 <(printf '%s\n' "$canon_set") <(printf '%s\n' "$rendered"))"
+    while IFS= read -r offender; do
+        [ -n "$offender" ] || continue
+        bad "the page renders a volume for \"$offender\", which is not in the canon" \
+            "issue #272's direction: the shelf asserting a work the repo does not declare."
+    done <<EOF
+$unbacked_render
+EOF
+
+    if [ -z "$unrendered" ] && [ -z "$unbacked_render" ]; then
+        ok "all $rendered_count rendered volume(s) are exactly the $entry_count canon work(s)"
+    fi
+
+    # THE EYEBROW COUNTS BOOKS AND PAPERS SEPARATELY (issue #274). It advertised
+    # "45 books" while three of the forty-five were conference papers, which is
+    # the page calling a paper a book in its own headline — the exact thing #274
+    # asked the canon section to stop doing one layer further in. So the check is
+    # now per type, and the sum is asserted too: two numbers that are each wrong
+    # by the same amount in opposite directions would otherwise pass both.
+    hero_books="$(hero_count "$built_page" books)"
+    hero_papers="$(hero_count "$built_page" papers)"
+    if [ -z "$hero_books" ]; then
+        bad "the hero eyebrow no longer advertises a book count" \
+            "the reader looks for a digit followed by \" books\". Two things land here: the line was removed, or the count was spelled out as a word — which is how it read before #273 (\"Eight books\"), so a revert to hand-written copy reports here rather than as a mismatch. Either derive it from the canon, or update hero_count if the copy deliberately changed shape."
+    elif [ "$hero_books" -ne "$book_count" ]; then
+        bad "the hero advertises $hero_books books and the canon holds $book_count book(s)" \
+            "the hero eyebrow is the page's advertisement for the canon section and its button links straight to it. A hand-written number here is the same drift the shelf itself had — derive it from the canon rather than restating it. Note this grades books, not works: the canon holds $entry_count works, $paper_count of them papers."
+    elif [ "$paper_count" -gt 0 ] && [ -z "$hero_papers" ]; then
+        bad "the canon holds $paper_count paper(s) and the hero eyebrow counts only books" \
+            "issue #274: books and papers are different objects, and the eyebrow is where the page first says how many of each it has. Folding the papers into the book count is the headline asserting three books this repo does not cite."
+    elif [ "$paper_count" -gt 0 ] && [ "$hero_papers" -ne "$paper_count" ]; then
+        bad "the hero advertises $hero_papers papers and the canon holds $paper_count" \
+            "derive it from the canon's own type field rather than restating it."
+    elif [ "$paper_count" -gt 0 ] && [ "$((hero_books + hero_papers))" -ne "$entry_count" ]; then
+        bad "the hero's $hero_books books + $hero_papers papers do not add up to the canon's $entry_count works" \
+            "each number matched its own population, so the type split itself is wrong — the canon types some work neither book nor paper, or the reader is grading two numbers off one clause."
+    else
+        ok "the hero eyebrow advertises the canon's own split: $book_count book(s), $paper_count paper(s)"
+    fi
+
+    # -------------------------------------------------------------------------
+    # ISSUE #274, THE TWO PROPERTIES THAT ARE NOT COVERAGE. Everything above
+    # this point grades the canon section's *population* — the set of works it
+    # renders. #274 is about the two things the section then does with that set,
+    # and both are silent when they break: the page still builds, every spine
+    # still traces to a declaration, and the coverage checks stay green.
+    records="$(volume_records "$built_page")"
+    record_count="$(printf '%s' "$records" | grep -c . || true)"
+
+    # COMPARED AGAINST AN UNDEDUPLICATED COUNT, AND THE TWO DIRECTIONS MEAN
+    # DIFFERENT THINGS. `$rendered_count` above is a `sort -u` set, so comparing
+    # against it conflated two unrelated events: a reader dropping elements, and
+    # a PAGE rendering one work twice. The first draft did exactly that and read
+    # the second as the first — duplicating a single <button class="volume">
+    # made the suite exit with "volume_records is broken, not the page … dropping
+    # elements", every clause of which was false, and took the order and offprint
+    # checks down with it. A duplicate is a plausible page defect (an ordering
+    # bug, an alias-collapse regression, a stray map) and nothing else here
+    # catches one, because `unbacked_render` also compares against the set.
+    raw_key_count="$(rendered_keys "$built_page" | grep -c . || true)"
+    if [ "$record_count" -lt "$raw_key_count" ]; then
+        fatal "read $record_count volume record(s) but $raw_key_count volume key(s) out of the same page.
+       volume_records is broken, not the page — it reads the height and type off the
+       same <button> that carries the key, so reading FEWER records than keys means
+       it is dropping elements, and a short list passes the order comparison below
+       on a prefix."
+    fi
+    if [ "$raw_key_count" -gt "$rendered_count" ]; then
+        dupes=$((raw_key_count - rendered_count))
+        bad "the page renders $raw_key_count volume(s) for $rendered_count distinct work(s) — $dupes duplicate(s)" \
+            "$(rendered_keys "$built_page" | LC_ALL=C sort | uniq -d | sed 's/^/       repeated: /')
+one work, one volume. A duplicate passes every set comparison in this section vacuously — both directions above compare deduplicated sets — so this is the only check that sees it."
+    fi
+
+    # ORDER. The bookcase is sorted by core lineage, then breadth (see
+    # `shelf_order` above for why, and for why the oracle is derived from the
+    # canon rather than re-read out of the component).
+    want_order="$(shelf_order "$canon_ts" "$data_ts")"
+    got_order="$(printf '%s\n' "$records" | cut -f1)"
+    if [ "$want_order" = "$got_order" ]; then
+        ok "the bookcase renders the $(flagship_order "$data_ts" | grep -c . || true) named flagship(s) first, then core-lineage order"
+    else
+        # `|| true` on the whole pipeline: diff exits 1 on a difference, which is
+        # the case this branch exists for, and `set -o pipefail` would abort the
+        # suite mid-report rather than print the failure it just found.
+        first_wrong="$(diff <(printf '%s\n' "$want_order") <(printf '%s\n' "$got_order") | head -8 || true)"
+        bad "the rendered volume order is not the order the flagship list and core lineage dictate" \
+            "$first_wrong
+the required order is: every work named in data.ts's \`flagships\` array, in the order the array lists them, then everything else by primary-citation count desc, then total desc, then the declared string. Issue #274 is why the tail is ranked on primary count rather than raw citations; the named head is why an engineer's first row is the books they already own."
+    fi
+
+    # PAPERS ARE A DIFFERENT OBJECT. #274 verbatim: "Books and papers are
+    # different objects. Whatever form the section takes should be able to render
+    # both without pretending the papers are books." On a case of face-out covers
+    # the honest form is an offprint — squat, flat, stapled, and visibly shorter
+    # than any bound volume — and height is the one part of that form that
+    # reaches the HTML as a value rather than as a CSS rule, so it is what this
+    # grades. It survived the spine-to-cover redesign unchanged, which is the
+    # point of grading the property rather than the picture.
+    if [ "$paper_count" -gt 0 ]; then
+        # NO DIRECTION FLAG TO INVERT. The first fix for this check pinned
+        # `extreme`'s min/max semantics with a fixture — and left the two CALL
+        # SITES carrying the flags, where inverting them still compared every
+        # paper against the tallest book instead of the shortest and still
+        # reported the property as satisfied. A self-test on the function cannot
+        # reach an argument the function is called with.
+        #
+        # So the comparison no longer extracts two extremes. It asks the property
+        # directly, over both populations: is there any (paper, book) pair where
+        # the paper is at least as tall as the book? There is no parameter left to
+        # get backwards, and the assertion is now the same sentence as the claim.
+        offprint_violation="$(offprint_scan "$records")"
+        rendered_papers="$(printf '%s\n' "$records" | awk -F"$(printf '\t')" '$2 == "paper"' | grep -c . || true)"
+        rendered_books="$(printf '%s\n' "$records" | awk -F"$(printf '\t')" '$2 == "book"' | grep -c . || true)"
+        if [ "$rendered_papers" -ne "$paper_count" ] || [ "$rendered_books" -ne "$book_count" ]; then
+            # The PAGE defect comes first: the markup lost the type, so the
+            # heights have nothing to be graded per type. Reported rather than
+            # fatal, because the rest of the suite still has things to say.
+            bad "the page marks $rendered_papers volume(s) as papers and $rendered_books as books; the canon types $paper_count and $book_count" \
+                "the type has to survive into the markup for the section to render the two differently. If data-type stopped being emitted, the offprints are being drawn as books."
+        elif [ "$book_count" -eq 0 ]; then
+            ok "every work in the canon is a paper, so there is no book to be shorter than"
+        elif [ -n "$offprint_violation" ]; then
+            bad "a paper renders at least as tall as a book: $(printf '%s' "$offprint_violation" | awk -F"$(printf '\t')" '{ printf "\"%s\" at %spx vs \"%s\" at %spx", $1, $2, $3, $4 }')" \
+                "issue #274 asks for the papers to sit on the same board as slim flat offprints rather than as bound volumes. Both heights are derived per type in Shelf.astro; a paper reaching book height means the two scales have merged back into one and the page is shelving a conference paper as a book."
+        else
+            ok "all $paper_count paper(s) render as offprints, shorter than every one of the $book_count book(s)"
+        fi
+    fi
+fi
+
+# -----------------------------------------------------------------------------
+section "every mapped principle is declared by the stage it names"
+
+MIN_MAPPING_ROWS=4
+mapping_count="$(mapping_rows "$data_ts" | grep -c . || true)"
+if [ "$mapping_count" -lt "$MIN_MAPPING_ROWS" ]; then
+    fatal "read $mapping_count mappings row(s), expected at least $MIN_MAPPING_ROWS.
+       The extractor is broken, not the page — an unread mappings array passes the
+       check below vacuously, which is how this array went unpinned in the first
+       place. If rows were genuinely removed, lower MIN_MAPPING_ROWS here as a
+       deliberate edit."
+fi
+
+unmapped="$(unmapped_rows "$data_ts" "$repo_root")"
+while IFS="$(printf '\t')" read -r offender why; do
+    [ -n "$offender" ] || continue
+    bad "the practice table cites \"$offender\" — $why" \
+        "Practice.astro renders this row under \"Each stage operationalizes a named discipline from the literature\", which is the shelf's claim in a second array. Declare the work in the stage the row names, or cite the stage that declares it."
+done <<EOF
+$unmapped
+EOF
+
+if [ -z "$unmapped" ]; then
+    ok "all $mapping_count mappings row(s) are declared by every stage they name (floor: $MIN_MAPPING_ROWS)"
+fi
+
+# -----------------------------------------------------------------------------
+section "the detector still detects (self-test)"
+
+# VALIDATE THE INSTRUMENT, NOT ONLY THE SUBJECT
+# (docs/solutions/testing-patterns/validate-the-instrument-not-only-the-subject-2026-08-23.md).
+# The section above passes when the shelf is clean AND when any extractor has
+# silently stopped returning something the others can disagree with. The floor
+# and the slot equality catch the blunt failures; these fixtures catch a matcher
+# that accepts everything, one that rejects everything, and each bound of the
+# frontmatter scan.
+fixtures="$(mktemp -d)"
+trap 'rm -rf "$fixtures"' EXIT
+
+mkdir -p "$fixtures/alpha" "$fixtures/beta" "$fixtures/gamma"
+
+cat > "$fixtures/alpha/SKILL.md" <<'FIXTURE'
+---
+name: alpha
+description: "A fixture skill that declares a source."
+sources:
+  primary:
+    - "Known Book — Jane Doe"
+  secondary:
+    - "Second Book — Ada Byron"
+---
+
+# Alpha
+FIXTURE
+
+cat > "$fixtures/beta/SKILL.md" <<'FIXTURE'
+---
+name: beta
+description: "A fixture skill with no sources block."
+---
+
+# Beta
+
+Skills declare provenance like this:
+
+sources:
+  primary:
+    - "Body Only Book — Nobody"
+FIXTURE
+
+# gamma exists for the terminator bound: a top-level key AFTER `sources:`, with
+# a quoted value. Nothing in this repo enforces key order — CLAUDE.md § Skill
+# Structure shows `sources:` last purely as an example — so a skill may legally
+# look like this, and the scan must stop at `model:` rather than harvest it.
+cat > "$fixtures/gamma/SKILL.md" <<'FIXTURE'
+---
+name: gamma
+description: "A fixture skill with a quoted top-level key after sources:."
+sources:
+  primary:
+    - "Gamma Book — Grace Hopper"
+model: "Trailing Key Book — Impostor"
+---
+
+# Gamma
+FIXTURE
+
+# --- the frontmatter extractor, both bounds ---
+
+extracted="$(declared_works "$fixtures"/*/SKILL.md | sort | tr '\n' '|')"
+if [ "$extracted" = "Gamma Book — Grace Hopper|Known Book — Jane Doe|Second Book — Ada Byron|" ]; then
+    ok "declared_works reads every sources: entry from frontmatter and nothing else"
+else
+    bad "declared_works returned an unexpected set" "got: $extracted"
+fi
+
+if declared_works "$fixtures/beta/SKILL.md" | grep -q 'Body Only Book'; then
+    bad "declared_works harvested a sources: block from a SKILL.md body" \
+        "prose that merely shows or discusses a sources: block must not back a shelf claim"
+else
+    ok "a sources: block in a SKILL.md body is not treated as a declaration"
+fi
+
+if declared_works "$fixtures/gamma/SKILL.md" | grep -q 'Trailing Key Book'; then
+    bad "declared_works ran past the end of the sources: block" \
+        "a quoted top-level key after sources: was harvested as a declaration; deleting the block terminator must not leave this suite green"
+else
+    ok "a quoted frontmatter key after sources: is not treated as a declaration"
+fi
+
+# --- the alias-collision detector, both directions ---
+#
+# These fixtures live in their own subtree because the exact-set assertion above
+# reads "$fixtures"/*/SKILL.md and would break if this check added a skill to it.
+#
+# Per `../testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md`,
+# both a subject mutation and an oracle mutation are here: `two-spellings`
+# proves the detector still detects, and `one-spelling` + `near-title` prove it
+# has not degenerated into flagging everything — which is the failure mode that
+# would get this check deleted the first week it cried wolf.
+mkdir -p "$fixtures/alias/one" "$fixtures/alias/two" "$fixtures/alias/three"
+
+alias_fixture() {
+    cat > "$fixtures/alias/$1/SKILL.md" <<FIXTURE
+---
+name: $1
+description: "An alias fixture."
+sources:
+  primary:
+    - "$2"
+---
+
+# $1
+FIXTURE
+}
+
+# THE CLEAN CASE: the same work declared identically by two skills. This is what
+# 8 of the repo's skills do with *Thinking in Systems*, so a detector that
+# flagged it would be red on every clean tree.
+alias_fixture one "Shared Book — Jane Doe"
+alias_fixture two "Shared Book — Jane Doe"
+alias_fixture three "Different Book — Ada Byron"
+clean_collisions="$(alias_collisions "$fixtures"/alias/*/SKILL.md)"
+if [ -z "$clean_collisions" ]; then
+    ok "one work declared identically by two skills is not a collision"
+else
+    bad "the collision detector flagged a repo-normal duplicate declaration" \
+        "got: $clean_collisions — most works in this repo are declared by several skills, and every one of them would fail"
+fi
+
+# THE NEAR-TITLE TRAP: one title is a prefix of the other. A detector matching on
+# substrings rather than on the whole title-before-the-separator reports here.
+alias_fixture three "Shared Book Two — Jane Doe"
+near_collisions="$(alias_collisions "$fixtures"/alias/*/SKILL.md)"
+if [ -z "$near_collisions" ]; then
+    ok "a title that merely starts with another title is not a collision"
+else
+    bad "the collision detector matched on a title prefix" "got: $near_collisions"
+fi
+
+# THE PLANTED VARIANT: #273's defect exactly — one work, two author spellings.
+alias_fixture three "Shared Book — J. Doe"
+planted="$(alias_collisions "$fixtures"/alias/*/SKILL.md)"
+planted_count="$(printf '%s' "$planted" | grep -c . || true)"
+if [ "$planted_count" -eq 1 ] && [ "${planted%%	*}" = "Shared Book" ]; then
+    ok "one work declared under two author spellings is flagged, naming the work"
+else
+    bad "the collision detector missed a planted author-spelling variant" \
+        "expected exactly 1 row for \"Shared Book\", got $planted_count row(s): $planted"
+fi
+
+# The variants must reach the failure message; a row that names the work but not
+# the spellings cannot be acted on without re-running the extraction by hand.
+if [ "${planted#*	}" = "Jane Doe | J. Doe" ] || [ "${planted#*	}" = "J. Doe | Jane Doe" ]; then
+    ok "the collision row carries both spellings, not just the work"
+else
+    bad "the collision row did not carry both author spellings" "got: ${planted#*	}"
+fi
+
+rm -rf "$fixtures/alias"
+
+# --- the generator, against fixtures ---
+#
+# The section above proves the committed module matches the generator. These
+# fixtures prove the generator matches the frontmatter, which is the half a
+# byte-exact diff can never establish.
+gen="$fixtures/gen"
+mkdir -p "$gen/booky" "$gen/papery" "$gen/yearless" "$gen/parenthetical"
+
+gen_fixture() {
+    local name="$1" tier="$2"
+    shift 2
+    mkdir -p "$gen/$name"
+    {
+        printf -- '---\nname: %s\ndescription: "A generator fixture."\nsources:\n  %s:\n' "$name" "$tier"
+        printf -- '    - "%s"\n' "$@"
+        printf -- '---\n\n# %s\n' "$name"
+    } > "$gen/$name/SKILL.md"
+}
+
+gen_fixture booky         primary   "Plain Book — Jane Doe" "Shared Work — Ada Byron"
+gen_fixture papery        secondary "A Debate Paper — Liang et al. (EMNLP 2024)" "Shared Work — Ada Byron"
+gen_fixture yearless      primary   "Single-Author Paper — Doe (ICSE 2025)"
+gen_fixture parenthetical primary   "A Book With A Subtitle (Second Edition) — Jane Doe"
+
+genout="$fixtures/gen-canon.ts"
+if bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null; then
+    ok "the generator runs against a fixture tree"
+else
+    bad "the generator failed on a fixture tree" "nothing below can report on a generator that did not run"
+fi
+
+gen_set="$(canon_rows "$genout" | cut -f1 | LC_ALL=C sort | tr '\n' '|')"
+want_set='A Book With A Subtitle (Second Edition) — Jane Doe|A Debate Paper — Liang et al. (EMNLP 2024)|Plain Book — Jane Doe|Shared Work — Ada Byron|Single-Author Paper — Doe (ICSE 2025)|'
+if [ "$gen_set" = "$want_set" ]; then
+    ok "the generator emits one entry per distinct declared work, collapsing a work two skills share"
+else
+    bad "the generator emitted an unexpected set" "got: $gen_set"
+fi
+
+gen_type() { canon_rows "$genout" | awk -F"$(printf '\t')" -v w="$1" '$1 == w { print $4 }'; }
+
+if [ "$(gen_type 'A Debate Paper — Liang et al. (EMNLP 2024)')" = "paper" ]; then
+    ok "an author carrying \`et al.\` is typed paper"
+else
+    bad "an \`et al.\` citation was not typed paper" "#274 renders papers as a different object than books"
+fi
+
+if [ "$(gen_type 'Single-Author Paper — Doe (ICSE 2025)')" = "paper" ]; then
+    ok "a single author with a trailing venue-and-year is typed paper"
+else
+    bad "a trailing parenthesized year was not typed paper" "the rule is \`et al.\` OR a trailing year, not \`et al.\` alone"
+fi
+
+if [ "$(gen_type 'Plain Book — Jane Doe')" = "book" ]; then
+    ok "a plain author is typed book"
+else
+    bad "a plain author was typed paper" "a rule that types everything as a paper is as wrong as one that types nothing"
+fi
+
+# THE TRAP: parentheses without a year. A rule keying on "(...)" alone reports
+# here, and edition markers are the likeliest way a book acquires them.
+if [ "$(gen_type 'A Book With A Subtitle (Second Edition) — Jane Doe')" = "book" ]; then
+    ok "parentheses in the title, with no year in the author, stay a book"
+else
+    bad "a parenthesized edition marker was typed paper" "the tell is a year in the AUTHOR field, not a bracket anywhere in the string"
+fi
+
+gen_tier() {
+    canon_citation_rows "$genout" | awk -F"$(printf '\t')" -v w="$1" -v s="$2" '$1 == w && $2 == s { print $3 }'
+}
+if [ "$(gen_tier 'Shared Work — Ada Byron' booky)" = "primary" ] \
+    && [ "$(gen_tier 'Shared Work — Ada Byron' papery)" = "secondary" ]; then
+    ok "one work cited by two skills records each skill's own tier"
+else
+    bad "the generator lost a citation tier" \
+        "got booky=$(gen_tier 'Shared Work — Ada Byron' booky) papery=$(gen_tier 'Shared Work — Ada Byron' papery); tier is what the opened book labels each citing skill with"
+fi
+
+# --- the papers: affordance ---
+#
+# The tell rule cannot see a single-author paper cited without a year, which is
+# how `/walk-commits` declares Rigby. These fixtures pin the escape hatch and the
+# two ways it could go wrong: typing nothing, or quietly inventing a citation.
+mkdir -p "$gen/tellless"
+cat > "$gen/tellless/SKILL.md" <<'FIXTURE'
+---
+name: tellless
+description: "A paper whose author field carries no citation tell."
+sources:
+  secondary:
+    - "A Paper With No Tell — Solo Author"
+  papers:
+    - "A Paper With No Tell — Solo Author"
+---
+
+# Tellless
+FIXTURE
+bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null
+
+if [ "$(gen_type 'A Paper With No Tell — Solo Author')" = "paper" ]; then
+    ok "a papers: marker types a work whose author field carries no citation tell"
+else
+    bad "the papers: marker did not type the work" \
+        "got: $(gen_type 'A Paper With No Tell — Solo Author') — without this affordance a single-author paper cited without a year cannot be typed at all, which is the live defect review found"
+fi
+
+# THE DUPLICATE-EDGE TRAP. `papers:` names a work already listed under a tier, so
+# a reader that harvests it as a declaration gives that work two identical
+# citations and overstates the count #274 renders as spine height. This happened:
+# before the guard, Rigby carried two walk-commits edges and the repo total read
+# 99 instead of 98.
+tellless_edges="$(canon_citation_rows "$genout" | awk -F"$(printf '\t')" '$1 == "A Paper With No Tell — Solo Author" { n++ } END { print n + 0 }')"
+if [ "$tellless_edges" -eq 1 ]; then
+    ok "a papers: marker adds a type, not a second citation edge"
+else
+    bad "a papers: marker produced $tellless_edges citation edge(s), want 1" \
+        "the marker names a work the skill already cites; counting it twice inflates the citation count silently"
+fi
+
+# The suite's own reader of the same key, checked against the generator's.
+markers="$(paper_markers "$gen"/*/SKILL.md | cut -f1)"
+if [ "$markers" = "A Paper With No Tell — Solo Author" ]; then
+    ok "paper_markers reads the papers: key independently of the generator"
+else
+    bad "paper_markers returned an unexpected set" "got: $markers"
+fi
+
+# A marker naming a work the skill does not declare under a tier. Left unchecked
+# this is a second, unpoliced way to name a work — it would type something
+# nothing cites, or point at a typo and silently do nothing.
+mkdir -p "$gen/dangling"
+cat > "$gen/dangling/SKILL.md" <<'FIXTURE'
+---
+name: dangling
+description: "A papers: marker with no matching tier declaration."
+sources:
+  secondary:
+    - "A Real Citation — Jane Doe"
+  papers:
+    - "A Work This Skill Does Not Cite — Ghost"
+---
+
+# Dangling
+FIXTURE
+if declares_work_at_tier "$gen/dangling/SKILL.md" "A Work This Skill Does Not Cite — Ghost" secondary; then
+    bad "the dangling-marker fixture is not dangling" "it cannot report on a defect it does not contain"
+else
+    ok "a papers: marker naming a work the skill does not declare is detectable as dangling"
+fi
+rm -rf "$gen/tellless" "$gen/dangling"
+bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null
+
+# ISSUE #273'S LITERAL REPRODUCTION STEP: add a source to a skill, do not
+# regenerate, and the check must go red.
+if bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" --check > /dev/null 2>&1; then
+    ok "--check passes on a canon that was just generated"
+else
+    bad "--check failed on a freshly generated canon" "it now cries wolf on every clean tree, which is how a real check gets deleted"
+fi
+
+gen_fixture latecomer primary "A Work Added After Generation — Grace Hopper"
+if bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" --check > /dev/null 2>&1; then
+    bad "--check passed after a skill gained a source without regeneration" \
+        "this is issue #273's reproduction step verbatim; a green here means the page can silently omit a declared work again"
+else
+    ok "--check goes red when a skill gains a source and the canon is not regenerated"
+fi
+
+# The body-block bound, on the generator this time — the frontmatter extractor
+# in this file has its own fixture, and they are two implementations of one rule.
+mkdir -p "$gen/prosey"
+cat > "$gen/prosey/SKILL.md" <<'FIXTURE'
+---
+name: prosey
+description: "A fixture whose sources: block is prose."
+---
+
+# Prosey
+
+Skills declare provenance like this:
+
+sources:
+  primary:
+    - "Body Only Book — Nobody"
+FIXTURE
+bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null
+if canon_rows "$genout" | cut -f1 | grep -q 'Body Only Book'; then
+    bad "the generator shelved a sources: block quoted in a SKILL.md body" \
+        "prose that merely shows a sources: block must not put a work on the page"
+else
+    ok "the generator does not shelve a sources: block quoted in a SKILL.md body"
+fi
+
+# --- the canon detectors, against a mutated canon ---
+#
+# The three checks in the live section above only ever run against a clean tree,
+# which is the shape `partial-oracle-selfcheck-2026-08-22.md` warns about: a
+# detector that has silently stopped detecting reports the same full green. Each
+# one is mutated here in the direction it exists to catch, with a grep guard on
+# the mutation itself, because a self-test cannot report on a change that never
+# landed.
+
+if [ -n "$(unrenderable_types "$genout")" ] \
+    || [ -n "$(unresolved_citations "$genout" "$gen")" ] \
+    || [ -n "$(dropped_citations "$genout" "$gen")" ]; then
+    bad "a freshly generated fixture canon failed one of the three canon detectors" \
+        "each of them cries wolf on a clean canon, so the mutations below prove nothing"
+else
+    ok "a freshly generated fixture canon passes all three canon detectors"
+fi
+
+sed 's/type: "paper"/type: "book"/' "$genout" > "$fixtures/mistyped.ts"
+if grep -q 'type: "book"' "$fixtures/mistyped.ts" && ! grep -q 'type: "paper"' "$fixtures/mistyped.ts"; then
+    # The live check compares `papers_typed` against a hand-written expected
+    # list. Retyping every paper as a book empties the derived side, so the
+    # comparison reports one row per expected paper. This is the mutation the
+    # OLD version of this check could not catch, because it recomputed the
+    # generator's own predicate and so agreed with it by construction.
+    fixture_expected="A Debate Paper — Liang et al. (EMNLP 2024)
+Single-Author Paper — Doe (ICSE 2025)"
+    lost="$(comm -23 <(printf '%s\n' "$fixture_expected" | LC_ALL=C sort) \
+                     <(papers_typed "$fixtures/mistyped.ts") | grep -c . || true)"
+    if [ "$lost" -eq 2 ]; then
+        ok "a paper retyped as a book is caught by the hand-written expected-paper oracle"
+    else
+        bad "retyping both papers as books produced $lost finding(s), want 2" \
+            "an oracle that cannot disagree with the derivation is not an oracle; this is the defect that shipped a paper typed book"
+    fi
+else
+    bad "the mistype fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+# The reverse direction: a work the oracle does NOT expect, typed paper.
+if [ "$(papers_typed "$genout" | grep -c . || true)" -eq 2 ]; then
+    surplus="$(comm -13 <(printf '%s\n' "Single-Author Paper — Doe (ICSE 2025)") \
+                        <(papers_typed "$genout") | grep -c . || true)"
+    if [ "$surplus" -eq 1 ]; then
+        ok "a paper the expected list does not name is reported, not absorbed"
+    else
+        bad "the surplus-paper direction found $surplus of 1" \
+            "an oracle that only checks one direction accepts any number of extra papers"
+    fi
+else
+    bad "the generator fixture no longer types exactly 2 papers" "the surplus check above is comparing against the wrong baseline"
+fi
+
+sed 's/type: "paper"/type: "offprint"/' "$genout" > "$fixtures/unknown-type.ts"
+if grep -q 'type: "offprint"' "$fixtures/unknown-type.ts"; then
+    if [ -n "$(unrenderable_types "$fixtures/unknown-type.ts")" ]; then
+        ok "a type outside book|paper is flagged rather than passed through"
+    else
+        bad "an unrenderable type passed the type check" \
+            "the page has two objects; a third value silently renders as neither"
+    fi
+else
+    bad "the unknown-type fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+sed 's/{ skill: "booky", tier: "primary" }/{ skill: "booky", tier: "secondary" }/' "$genout" > "$fixtures/wrong-tier.ts"
+if ! diff -q "$genout" "$fixtures/wrong-tier.ts" > /dev/null; then
+    if [ -n "$(unresolved_citations "$fixtures/wrong-tier.ts" "$gen")" ]; then
+        ok "a citation recorded at a tier the skill does not declare is flagged"
+    else
+        bad "a wrong citation tier passed" "the opened book labels each citing skill primary or secondary; an unchecked label is decoration"
+    fi
+else
+    bad "the wrong-tier fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+sed 's/{ skill: "booky",/{ skill: "no-such-skill",/' "$genout" > "$fixtures/ghost-citer.ts"
+if grep -q 'no-such-skill' "$fixtures/ghost-citer.ts"; then
+    if [ -n "$(unresolved_citations "$fixtures/ghost-citer.ts" "$gen")" ]; then
+        ok "a citation naming a skill that does not exist is flagged"
+    else
+        bad "a citation to a nonexistent skill passed" "the opened book links to that path; a dead link cannot back a provenance claim"
+    fi
+else
+    bad "the ghost-citer fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+# THE QUIET ONE. Dropping a citation from a work that has another citer leaves
+# the work shelved and every forward edge sound — only the count is wrong.
+grep -v '{ skill: "papery", tier: "secondary" },' "$genout" > "$fixtures/dropped-edge.ts"
+if [ "$(grep -c . "$fixtures/dropped-edge.ts")" -lt "$(grep -c . "$genout")" ]; then
+    if [ -n "$(unresolved_citations "$fixtures/dropped-edge.ts" "$gen")" ]; then
+        bad "the forward-edge check reported on a DROPPED citation" \
+            "it cannot — every remaining edge still resolves. If it fires here the two directions are not independent and the reverse check is untested"
+    elif [ -n "$(dropped_citations "$fixtures/dropped-edge.ts" "$gen")" ]; then
+        ok "a citation dropped from the canon is flagged by the reverse check, and only by it"
+    else
+        bad "a dropped citation passed both directions" \
+            "the work stays shelved by its other citer, so nothing looks broken — and the citation count #274 renders is silently wrong"
+    fi
+else
+    bad "the dropped-edge fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+rm -rf "$gen" "$genout"
+
+# --- the canon parse, on an entry the extractor cannot read ---
+#
+# Ported from the fixture that guarded the old hand-written shelf array, because
+# the gap it exposes is a property of the parser and not of the array it once
+# parsed: an entry written in a spelling `canon_rows` does not recognize is
+# invisible to every set comparison while the page renders it. Single quotes are
+# the cheap way to produce that, and no formatter in this repo forbids them.
+cat > "$fixtures/canon-clean.ts" <<'CANON'
+export const canon: CanonWork[] = [
+	{
+		full: "Known Book — Jane Doe",
+		title: "Known Book",
+		author: "Jane Doe",
+		type: "book",
+		citations: [
+			{ skill: "alpha", tier: "primary" },
+		],
+	},
+	{
+		full: "Gamma Book — Grace Hopper",
+		title: "Gamma Book",
+		author: "Grace Hopper",
+		type: "book",
+		citations: [
+			{ skill: "gamma", tier: "primary" },
+		],
+	},
+];
+CANON
+if [ "$(canon_rows "$fixtures/canon-clean.ts" | grep -c . || true)" -eq 2 ] \
+    && [ "$(canon_slots "$fixtures/canon-clean.ts")" -eq 2 ]; then
+    ok "canon_rows and canon_slots agree on a clean 2-entry canon, ignoring nested citation objects"
+else
+    bad "the canon extractors disagree on a clean fixture" \
+        "slots=$(canon_slots "$fixtures/canon-clean.ts") rows=$(canon_rows "$fixtures/canon-clean.ts" | grep -c . || true), want 2/2 — the nested citations sit at depth 2 and must not be counted as entries"
+fi
+
+sed "s/full: \"Gamma Book — Grace Hopper\"/full: 'Gamma Book — Grace Hopper'/" \
+    "$fixtures/canon-clean.ts" > "$fixtures/canon-unparsed.ts"
+if grep -q "full: 'Gamma Book" "$fixtures/canon-unparsed.ts"; then
+    if [ "$(canon_slots "$fixtures/canon-unparsed.ts")" -eq 2 ] \
+        && [ "$(canon_rows "$fixtures/canon-unparsed.ts" | grep -c . || true)" -eq 1 ]; then
+        ok "an entry the canon extractor cannot parse still counts as a slot, so the gap is visible"
+    else
+        bad "an unparseable canon entry did not produce a slots/rows gap" \
+            "without the gap, an entry written in an unanticipated spelling is invisible to every set comparison while the page renders it"
+    fi
+else
+    bad "the single-quote canon fixture did not apply" "the self-test cannot report on a mutation that never landed"
+fi
+
+# --- the data.ts detectors, both directions ---
+
+cat > "$fixtures/clean-data.ts" <<'DATA'
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+
+export const repoUrl = "https://example.invalid";
+DATA
+if [ -z "$(stray_work_mentions "$fixtures/clean-data.ts" "$fixtures")" ] \
+    && [ -z "$(orphan_lessons "$fixtures/clean-data.ts" "$fixtures")" ]; then
+    ok "a data.ts naming a declared work only as a lessons key passes both directions"
+else
+    bad "a clean data.ts failed a data.ts detector" \
+        "both of them cry wolf on the sanctioned shape, so the fixtures below prove nothing"
+fi
+
+# THE REGRESSION: a hand-written works array creeps back in beside the derived
+# canon. This is #273 re-opening, and it is the reason data.ts is checked at all.
+cat > "$fixtures/rehanded-data.ts" <<'DATA'
+export const shelf = [
+	{ title: "Gamma Book", author: "Hopper", full: "Gamma Book — Grace Hopper" },
+];
+
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+DATA
+if [ -n "$(stray_work_mentions "$fixtures/rehanded-data.ts" "$fixtures")" ]; then
+    ok "a hand-written works array re-introduced into data.ts is flagged"
+else
+    bad "a re-introduced hand-written works array passed" \
+        "a second list rendering beside the derived one is exactly the drift issue #273 closed, and nothing else in this suite would see it"
+fi
+
+# THE VACUOUS-MEMBERSHIP CASE, which is the one that actually bit. The hand
+# lessons are exactly the works the old shelf held, so restoring that shelf
+# verbatim lists ONLY works that are already lessons keys. A membership test goes
+# green here; a position test does not.
+cat > "$fixtures/rehanded-same-works.ts" <<'DATA'
+export const shelf = [
+	{ title: "Known Book", author: "Doe", full: "Known Book — Jane Doe" },
+];
+
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+DATA
+if [ -n "$(stray_work_mentions "$fixtures/rehanded-same-works.ts" "$fixtures")" ]; then
+    ok "a hand-written array listing only works that already have lessons is still flagged"
+else
+    bad "a re-introduced shelf holding only already-curated works passed" \
+        "this is the shape a straight revert of the pre-#273 shelf takes, and it is the one a membership test cannot see"
+fi
+
+# THE TOP BOARD'S EXEMPTION, BOTH DIRECTIONS. `flagships` was added to the
+# stray-mention scan's allowed blocks, and an exemption is the classic way to
+# blind a detector: widen the hole and the regression it was watching for walks
+# through it. The first fixture proves the sanctioned shape passes; the second
+# plants #273's array in a file that ALSO has a legitimate flagships block, which
+# is the shape the hole would hide.
+cat > "$fixtures/flagship-data.ts" <<'DATA'
+export const flagships: string[] = [
+	"Known Book — Jane Doe",
+];
+
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+};
+DATA
+if [ -z "$(stray_work_mentions "$fixtures/flagship-data.ts" "$fixtures")" ]; then
+    ok "a flagships array naming a declared work is a sanctioned mention, not a stray one"
+else
+    bad "the sanctioned flagships block was reported as a stray work mention" \
+        "the ordering list is allowed to name works; it permutes the shelf and cannot subtract from it"
+fi
+
+cat > "$fixtures/flagship-plus-shelf.ts" <<'DATA'
+export const flagships: string[] = [
+	"Known Book — Jane Doe",
+];
+
+export const shelf = [
+	{ title: "Gamma Book", author: "Hopper", full: "Gamma Book — Grace Hopper" },
+];
+DATA
+if [ -n "$(stray_work_mentions "$fixtures/flagship-plus-shelf.ts" "$fixtures")" ]; then
+    ok "the flagships exemption does not hide a hand-written works array beside it"
+else
+    bad "a re-introduced works array passed once a flagships block was present" \
+        "the exemption is scoped to the flagships block by position; if it leaked to the rest of the file, #273's regression check is dead and reports nothing"
+fi
+
+# THE READER'S OWN BOUND. `flagship_order` must return the array in FILE order —
+# the sequence is the claim — and must stop at the array, or the lessons keys one
+# line down enter the order as phantom flagships.
+cat > "$fixtures/flagship-order.ts" <<'DATA'
+export const flagships: string[] = [
+	"Zeta Book — Ada Byron",
+	"Alpha Book — Jane Doe",
+];
+
+export const lessons: Lessons = {
+	"Leaked Book — Grace Hopper": "Must not be read as a flagship.",
+};
+DATA
+got_flagships="$(flagship_order "$fixtures/flagship-order.ts" | tr '\n' '|')"
+if [ "$got_flagships" = "Zeta Book — Ada Byron|Alpha Book — Jane Doe|" ]; then
+    ok "flagship_order reads the array in file order and stops at its closing bracket"
+else
+    bad "flagship_order misread the ordering array" \
+        "got: $got_flagships, want: Zeta Book — Ada Byron|Alpha Book — Jane Doe| — sorted output means the file order was lost, and a third entry means the lessons map leaked in"
+fi
+
+cat > "$fixtures/orphan-lesson-data.ts" <<'DATA'
+export const lessons: Lessons = {
+	"Known Book — Jane Doe": "A pull-quote.",
+	"A Work Nobody Declares — Ghost": "A pull-quote for nothing.",
+};
+DATA
+orphaned="$(orphan_lessons "$fixtures/orphan-lesson-data.ts" "$fixtures" | grep -c . || true)"
+if [ "$orphaned" -eq 1 ]; then
+    ok "a lesson keyed to a work no skill declares is flagged"
+else
+    bad "the orphan-lesson check found $orphaned of 1 planted defect" \
+        "a lesson whose key matches nothing never renders, and no other check in this suite would notice"
+fi
+
+# --- the rendered-page reader ---
+
+cat > "$fixtures/page.html" <<'HTML'
+<button class="spine" data-key="Known Book &#38; Friends — Jane Doe"></button>
+<button class="spine" data-key="Gamma Book — Grace Hopper"></button>
+<a href="#" data-key-other="not a spine">x</a>
+HTML
+read_back="$(rendered_keys "$fixtures/page.html" | tr '\n' '|')"
+if [ "$read_back" = 'Known Book & Friends — Jane Doe|Gamma Book — Grace Hopper|' ]; then
+    ok "rendered_keys reads each volume's work and undoes the templating's entity escapes"
+else
+    bad "rendered_keys misread the built page" \
+        "got: $read_back — an ampersand in a title is escaped by the templating, and a reader that does not undo it reports every such work as unrendered"
+fi
+
+# THE BLIND-READER FIXTURE. A page with no spines at all must reach the
+# MIN_RENDERED fatal and say so, not kill the suite on the assignment. This is
+# the mutation that exposed the missing guard: before it, `rendered_keys` on a
+# match-less page aborted the script with an empty stderr, so 34 of 46 checks —
+# including the reader's own two self-tests, three lines above — never ran, and
+# the output was indistinguishable from a clean early exit.
+# THE HERO-COUNT READER, both directions. The live check above can only ever
+# run against a page whose hero is correct, so nothing there would notice the
+# reader silently returning the wrong number — or nothing at all.
+cat > "$fixtures/hero.html" <<'HTML'
+<div class="eyebrow" data-canon-counts>Thirty skills · 45 books · One pipeline</div>
+<p>Some later prose mentioning 8 books, which must not win.</p>
+HTML
+if [ "$(hero_count "$fixtures/hero.html" books)" = "45" ]; then
+    ok "hero_count reads the eyebrow's count and not a later mention"
+else
+    bad "hero_count misread the hero eyebrow" \
+        "got: $(hero_count "$fixtures/hero.html" books) — a reader that returns the wrong number makes the comparison above pass or fail for the wrong reason"
+fi
+
+# THE UPSTREAM-MATCH TRAP. The built page's <head> sits ~2400 bytes ahead of the
+# eyebrow, so an unanchored reader grades whatever <head> happens to say.
+cat > "$fixtures/hero-early.html" <<'HTML'
+<meta name="description" content="a pack of 8 books, catalogued">
+<div class="eyebrow" data-canon-counts>Thirty skills · 45 books · One pipeline</div>
+HTML
+if [ "$(hero_count "$fixtures/hero-early.html" books)" = "45" ]; then
+    ok "hero_count reads the eyebrow even when an earlier element names a different count"
+else
+    bad "hero_count read a count from outside the eyebrow" \
+        "got: $(hero_count "$fixtures/hero-early.html" books), want 45 — document order put the meta description first, so an unanchored read grades the wrong number and reports ok while the eyebrow is wrong"
+fi
+
+cat > "$fixtures/hero-none.html" <<'HTML'
+<div class="eyebrow" data-canon-counts>Thirty skills · One pipeline</div>
+HTML
+if [ -z "$(hero_count "$fixtures/hero-none.html" books)" ]; then
+    ok "hero_count returns empty, rather than aborting, when no count is present"
+else
+    bad "hero_count invented a count from a page that has none" \
+        "got: $(hero_count "$fixtures/hero-none.html" books)"
+fi
+
+# THE SECOND NOUN (issue #274). The eyebrow now advertises two populations, and
+# the live check grades them against each other — so a reader that returns the
+# book count for "papers", or the same number for both, would make the sum check
+# agree with itself. The fixture puts the two counts in one clause and gives the
+# papers count a value the books count does not have.
+cat > "$fixtures/hero-two.html" <<'HTML'
+<meta name="description" content="a pack of 8 books and 9 papers">
+<div class="eyebrow" data-canon-counts>Thirty skills · 42 books · 3 papers · One pipeline</div>
+HTML
+hero_two_books="$(hero_count "$fixtures/hero-two.html" books)"
+hero_two_papers="$(hero_count "$fixtures/hero-two.html" papers)"
+if [ "$hero_two_books" = "42" ] && [ "$hero_two_papers" = "3" ]; then
+    ok "hero_count reads each noun's own number out of a two-count eyebrow"
+else
+    bad "hero_count misread a two-count eyebrow" \
+        "got books=$hero_two_books papers=$hero_two_papers, want 42 and 3 — a reader that grades one noun with the other's number, or that reaches past the eyebrow into the meta description, makes the books/papers/sum comparison pass on numbers it never actually read"
+fi
+
+if [ -z "$(hero_count "$fixtures/hero.html" papers)" ]; then
+    ok "hero_count returns empty for a noun the eyebrow does not advertise"
+else
+    bad "hero_count invented a paper count from a books-only eyebrow" \
+        "got: $(hero_count "$fixtures/hero.html" papers) — the live check reads empty as 'the page dropped the papers clause', so a reader that invents a number hides exactly that regression"
+fi
+
+# THE VOLUME READER, all three fields at once. `rendered_keys` above proves only
+# that the key survives; the order and offprint checks also need the type and the
+# height off the SAME element, and a reader that pairs a key with the wrong row's
+# height would grade a real page against a shuffled one.
+#
+# THE FIXTURE CARRIES A CLASS THE READER MUST NOT NEED. `class="volume"` is here
+# because that is what the page ships, and the second element deliberately omits
+# the class entirely: the reader selects on `data-key`, and a rewrite that put it
+# back on the presentation would pass the first row and drop the second.
+cat > "$fixtures/volumes.html" <<'HTML'
+<button type="button" class="volume" style="--i:0; height:176px; --h:176px; --vol-w:116px; --cloth:#54364F; --ink:#F0E9D8;" title="t" aria-pressed="false" data-key="The Pragmatic Programmer &#38; Friends" data-type="book" data-astro-cid-x>
+<img class="art" src="/canon/the-pragmatic-programmer.jpg" alt=""></button>
+<button type="button" style="--i:1; height:96px; --h:96px; --vol-w:75px;" title="t" aria-pressed="false" data-key="Du et al. (2023)" data-type="paper" data-astro-cid-x>
+<span class="face"><span class="ftitle">Du et al.</span></span></button>
+HTML
+want_records="$(printf 'The Pragmatic Programmer & Friends\tbook\t176\nDu et al. (2023)\tpaper\t96\n')"
+got_records="$(volume_records "$fixtures/volumes.html")"
+if [ "$got_records" = "$(printf '%s' "$want_records")" ]; then
+    ok "volume_records reads key, type and height off each volume, in document order, unescaped, without keying on a class"
+else
+    bad "volume_records misread the volume markup" \
+        "got:
+$got_records
+want:
+$want_records
+a paper carries no inline background, so its style attribute is shorter than a book's — a reader keyed on the attribute's shape rather than on the fields drops one of the two"
+fi
+
+# THE ORDER ORACLE. It has to be capable of DISAGREEING with the page, which
+# means proving it ranks on the primary count rather than on the count the
+# component's height already encodes. The fixture inverts the two signals: the
+# work with fewer citations is the one more skills are built on.
+cat > "$fixtures/order.ts" <<'TS'
+export const canon: CanonWork[] = [
+	{
+		full: "Broadly Cited — B",
+		title: "Broadly Cited",
+		author: "B",
+		type: "book",
+		citations: [
+			{ skill: "a", tier: "secondary" },
+			{ skill: "b", tier: "secondary" },
+			{ skill: "c", tier: "secondary" },
+		],
+	},
+	{
+		full: "Core Lineage — A",
+		title: "Core Lineage",
+		author: "A",
+		type: "book",
+		citations: [
+			{ skill: "a", tier: "primary" },
+			{ skill: "b", tier: "primary" },
+		],
+	},
+];
+TS
+want_fixture_order="$(printf 'Core Lineage — A\nBroadly Cited — B\n')"
+got_fixture_order="$(shelf_order "$fixtures/order.ts")"
+if [ "$got_fixture_order" = "$(printf '%s' "$want_fixture_order")" ]; then
+    ok "shelf_order ranks core lineage above raw citation count, and is not the height rule re-read"
+else
+    bad "shelf_order did not rank on the primary count" \
+        "got:
+$got_fixture_order
+want:
+$want_fixture_order
+the fixture's more-cited work has no primary citation at all. A reader that ranks on the total would put it first — and would then agree with a page sorted the old way, which is the failure mode this whole oracle exists to avoid."
+fi
+
+# THE NARROWING TRIPWIRE, both directions. #274 loosened it to ignore whole-line
+# comments; the direction that matters is that it still catches the code.
+cat > "$fixtures/narrowed.astro" <<'ASTRO'
+---
+import { canon } from "../lib/canon.generated";
+// A comment about canon.filter(...) must not trip this.
+const spines = canon.slice(0, 12);
+---
+ASTRO
+if narrowed_hit="$(narrowing_calls "$fixtures/narrowed.astro")"; then
+    case "$narrowed_hit" in
+        *"canon.slice(0, 12)"*)
+            case "$narrowed_hit" in
+                *"A comment about"*)
+                    bad "narrowing_calls reported a comment as a narrowing call" "got: $narrowed_hit" ;;
+                *)
+                    ok "narrowing_calls catches a real narrowing call and ignores prose about one" ;;
+            esac ;;
+        *) bad "narrowing_calls reported something other than the narrowing call" "got: $narrowed_hit" ;;
+    esac
+else
+    bad "narrowing_calls missed a literal canon.slice() in the component" \
+        "issue #273's defect is a curated subset reaching the page. #274 taught this reader to skip comment lines so it would stop firing on prose; a reader that now skips the code too is worse than the false positive it replaced."
+fi
+
+# THE STAR THAT IS NOT A COMMENT. Blanking every line whose first non-blank
+# character is `*` also blanks a generator method, which is code and is exactly
+# the narrowing this detector is for. Both shapes in one fixture, because the
+# rule that separates them — a block-comment continuation always has whitespace,
+# `/`, or nothing after the star — is only meaningful as a contrast.
+cat > "$fixtures/star.astro" <<'ASTRO'
+---
+/**
+ * A block comment continuation mentioning canon.filter(...) must be skipped.
+ */
+	*rows() { return canon.filter(Boolean); }
+---
+ASTRO
+if star_hit="$(narrowing_calls "$fixtures/star.astro")"; then
+    case "$star_hit" in
+        *"canon.filter(Boolean)"*)
+            case "$star_hit" in
+                *"block comment continuation"*)
+                    bad "narrowing_calls reported a block-comment continuation line" "got: $star_hit" ;;
+                *)
+                    ok "narrowing_calls skips block-comment continuations and still catches a generator method" ;;
+            esac ;;
+        *) bad "narrowing_calls reported something other than the generator method" "got: $star_hit" ;;
+    esac
+else
+    bad "narrowing_calls swallowed a generator method as if it were a comment" \
+        "\`*rows() { return canon.filter(Boolean); }\` is valid JavaScript and is a narrowing call. A \`^[[:space:]]*\\*\` strip blanks it along with the block comments it was aimed at, so the detector goes quiet on the one construct that starts with the same character as its exclusion."
+fi
+
+# THE OFFPRINT COMPARISON, BOTH DIRECTIONS. The live check can only ever run
+# against a page whose offprints are correct, so nothing there would notice the
+# pairwise scan going blind. The two fixtures differ in one height.
+#
+# THE VIOLATING ONE HIDES ITS DEFECT BEHIND A COMPLIANT PAPER, which is the case
+# an extremes-based comparison got wrong: "Tall Paper" clears the shortest book
+# while "Short Paper" does not, so a scan that stops at the first paper, or that
+# grades only one end of either population, reports clean.
+clean_records="$(printf 'Short Paper\tpaper\t122\nTall Paper\tpaper\t168\nShort Book\tbook\t214\nTall Book\tbook\t356\n')"
+bad_records="$(printf 'Short Paper\tpaper\t122\nTall Paper\tpaper\t300\nShort Book\tbook\t214\nTall Book\tbook\t356\n')"
+
+if [ -z "$(offprint_scan "$clean_records")" ]; then
+    ok "the offprint scan stays silent when every paper is shorter than every book"
+else
+    bad "the offprint scan reported a violation on a compliant fixture" \
+        "got: $(offprint_scan "$clean_records") — a scan that fires on correct input makes the live check's silence meaningless."
+fi
+
+scan_hit="$(offprint_scan "$bad_records")"
+case "$scan_hit" in
+    "Tall Paper	300	Short Book	214")
+        ok "the offprint scan finds a paper taller than a book even when a second paper is compliant" ;;
+    "")
+        bad "the offprint scan missed a paper rendered at bound-volume height" \
+            "the fixture has \"Tall Paper\" at 300px against \"Short Book\" at 214px. This is the exact defect the live check exists to catch, and a scan that compares only one end of either population reports it clean." ;;
+    *)
+        bad "the offprint scan named the wrong pair" "got: $scan_hit, want Tall Paper/300 vs Short Book/214" ;;
+esac
+
+# THE DUPLICATE-VOLUME DIRECTION. The record count is compared against an
+# UNDEDUPLICATED key count, because the deduplicated one conflated a reader
+# dropping elements with a page rendering one work twice — and the first draft
+# read the second as the first, aborting with "volume_records is broken, not the
+# page" on a page that was the thing at fault.
+cat > "$fixtures/dupe.html" <<'HTML'
+<button type="button" class="volume" style="height:176px;" data-key="One Work — A" data-type="book"><span class="face">One Work</span></button>
+<button type="button" class="volume" style="height:176px;" data-key="One Work — A" data-type="book"><span class="face">One Work</span></button>
+HTML
+dupe_raw="$(rendered_keys "$fixtures/dupe.html" | grep -c . || true)"
+dupe_uniq="$(rendered_keys "$fixtures/dupe.html" | LC_ALL=C sort -u | grep -c . || true)"
+dupe_records="$(volume_records "$fixtures/dupe.html" | grep -c . || true)"
+if [ "$dupe_raw" = "2" ] && [ "$dupe_uniq" = "1" ] && [ "$dupe_records" = "2" ]; then
+    ok "a duplicated volume reads as 2 records and 2 keys against 1 distinct work, so it lands on the duplicate check rather than the reader-is-broken fatal"
+else
+    bad "the duplicate fixture did not read as expected" \
+        "got raw=$dupe_raw uniq=$dupe_uniq records=$dupe_records, want 2/1/2 — if records and raw keys disagree here, the fatal fires and blames volume_records for a page defect."
+fi
+
+cat > "$fixtures/empty-case.html" <<'HTML'
+<section id="canon"><div class="bookcase"></div></section>
+HTML
+if blind="$(rendered_keys "$fixtures/empty-case.html")"; then
+    if [ -z "$blind" ]; then
+        ok "a page with no volumes reads as empty rather than killing the suite"
+    else
+        bad "rendered_keys invented $(printf '%s' "$blind" | grep -c .) key(s) from a page with none" "got: $blind"
+    fi
+else
+    bad "rendered_keys aborted on a page with no volumes" \
+        "under set -euo pipefail this kills the whole script with an empty stderr, so the MIN_RENDERED fatal that exists to report an empty page is unreachable and every check after it silently does not run"
+fi
+
+rm -f "$fixtures/canon-clean.ts" "$fixtures/canon-unparsed.ts" \
+      "$fixtures/clean-data.ts" "$fixtures/rehanded-data.ts" \
+      "$fixtures/rehanded-same-works.ts" \
+      "$fixtures/orphan-lesson-data.ts" "$fixtures/flagship-data.ts" \
+      "$fixtures/flagship-plus-shelf.ts" "$fixtures/flagship-order.ts" \
+      "$fixtures/page.html" \
+      "$fixtures/empty-case.html" "$fixtures/volumes.html" "$fixtures/hero.html" "$fixtures/hero-none.html" "$fixtures/hero-early.html"
+
+# --- the mappings direction ---
+
+cat > "$fixtures/mapped.ts" <<'MAPPED'
+export const mappings: Mapping[] = [
+	{ principle: "p", source: "Known Book", skill: "/alpha", what: "w" },
+	{ principle: "p", source: "Gamma Book", skill: "/gamma", what: "w" },
+];
+MAPPED
+if [ -z "$(unmapped_rows "$fixtures/mapped.ts" "$fixtures")" ]; then
+    ok "a mappings row whose named stage declares the cited book passes"
+else
+    bad "the detector flagged a truthful mappings row" "it now cries wolf on a clean practice table"
+fi
+
+cat > "$fixtures/mismapped.ts" <<'MISMAPPED'
+export const mappings: Mapping[] = [
+	{ principle: "p", source: "Known Book", skill: "/gamma", what: "w" },
+	{ principle: "p", source: "A Book Nobody Declares", skill: "/alpha", what: "w" },
+	{ principle: "p", source: "Known Book", skill: "/alpha · /beta", what: "w" },
+];
+MISMAPPED
+mis="$(unmapped_rows "$fixtures/mismapped.ts" "$fixtures" | grep -c . || true)"
+if [ "$mis" -eq 3 ]; then
+    ok "a mappings row citing the wrong stage, an undeclared book, or a multi-stage cell with one bad stage is flagged"
+else
+    bad "the mappings detector flagged $mis of 3 planted defects" \
+        "each row is a provenance claim; a wrong stage, an undeclared book, and one bad stage in a multi-stage cell must each fail"
+fi
+
+# -----------------------------------------------------------------------------
+
+printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ] || exit 1

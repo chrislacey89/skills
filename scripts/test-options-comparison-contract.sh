@@ -52,6 +52,10 @@ assert_found() {
     else bad "$label" "not found in $file: $needle"; fi
 }
 
+# Aborts the run. Used only by the oracle self-check, where continuing would
+# mean grading the subject with an instrument known to be wrong.
+fatal() { printf '  FATAL %s\n' "$1" >&2; exit 2; }
+
 # ---------------------------------------------------------------------------
 section "the threshold's three conditions agree wherever they are restated"
 # ---------------------------------------------------------------------------
@@ -67,6 +71,9 @@ menu_attrs=$( { grep -oE 'Each carries ≥[0-9]+ attributes' "$MENU" || true; } 
 assert_eq "Each carries ≥3 attributes" "$menu_attrs" "menu doc states the attribute count"
 
 # The design doc and both consuming skills restate the same threshold in prose.
+# coverage: enumerated — the four holders of the options-comparison contract.
+# Not derivable: the set is 'the files that must agree on this block', which is
+# a property of the contract rather than something a scan of the tree can find.
 for f in "$DESIGN" pre-merge/SKILL.md visual-recap/SKILL.md walk-commits/SKILL.md; do
     assert_found "three or more mutually exclusive options" "$f" \
         "$(basename "$(dirname "$f")")/$(basename "$f"): option count agrees"
@@ -140,14 +147,33 @@ section "the opt- id shape agrees between its registry and its use"
 
 assert_found 'opt-<option-slug>' "$CORE" "core registers the opt- id shape"
 
+# The FLOOR is the point, and it was missing. `bad_ids` starts at 0 and rises only
+# for an id that is present and WRONG, so deleting every `data-feedback-id` from
+# §11 leaves an empty stream and the assertion passes on nothing. Verified: the
+# option handles would be inert and the round-trip §11's prose describes would be
+# fictional, under a green suite. This is root cause 1 of
+# docs/solutions/testing-patterns/battery-that-only-perturbs-what-is-present-2026-08-28.md,
+# which was fixed in the §12 suite and not carried across until review asked.
+opt_headers=$( { grep -cF 'data-feedback-kind="option"' "$DESIGN" || true; } )
+# The floor. Equality alone is root cause 1 with two counters: delete every
+# option unit and both sides agree at 0. §11's worked example renders four
+# options; below two, the example cannot demonstrate a comparison and every
+# per-option assertion below it is a universal over an empty set.
+[ "${opt_headers:-0}" -ge 2 ] \
+    || bad "§11's worked example renders at least two option units" \
+           "found ${opt_headers:-0}; the per-option assertions below are vacuous on an empty population"
+opt_ids=$( { grep -F 'data-feedback-kind="option"' "$DESIGN" || true; } \
+    | { grep -coE 'data-feedback-id="opt-[^"]+"' || true; } )
+assert_eq "$opt_headers" "$opt_ids" "every option unit in §11 carries an opt- data-feedback-id"
+
 bad_ids=0
 while IFS= read -r id; do
     case "$id" in
         opt-*) ;;
         *) bad_ids=$((bad_ids + 1)); printf '       non-conforming id: %s\n' "$id" ;;
     esac
-done < <(grep -F 'data-feedback-kind="option"' "$DESIGN" \
-         | grep -oE 'data-feedback-id="[^"]+"' | sed 's/.*"\(.*\)"/\1/')
+done < <( { grep -F 'data-feedback-kind="option"' "$DESIGN" || true; } \
+         | { grep -oE 'data-feedback-id="[^"]+"' || true; } | sed 's/.*"\(.*\)"/\1/')
 assert_eq "0" "$bad_ids" "every option unit in §11 uses an opt- id"
 
 # ---------------------------------------------------------------------------
@@ -163,7 +189,11 @@ assert_found 'data-feedback-note' "$CORE" "core's serializer reads a note field"
 # Scoped to the unit's own element, not merely its source line: the serializer calls
 # el.querySelector('[data-feedback-note]'), so an input that sits on the same line but
 # outside the unit's closing tag serializes nothing while a line-wise grep still passes.
-option_units=$(grep -cF 'data-feedback-kind="option"' "$DESIGN")
+# `|| true`: under `set -o pipefail` a zero match exits 1 and aborts the run here,
+# before the assertion below can report "0 option units". Same shape as the three
+# fixed in test-per-unit-series-contract.sh; pinned by test-guards-can-fire.sh
+# Detector D, which found this one.
+option_units=$( { grep -cF 'data-feedback-kind="option"' "$DESIGN" || true; } )
 
 # Walks div depth from the unit's opening tag and counts a note only if it appears
 # before the matching close. A line-wise grep would also pass on markup where the
@@ -189,12 +219,39 @@ section "the block count in the core matches its own table"
 # §3 asserts a countable number of blocks. It said "Nine" against a ten-row
 # table for one commit of #245's review.
 
-declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve) blocks' "$CORE" | head -1 | cut -d' ' -f1)
+declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve|Thirteen) blocks' "$CORE" | head -1 | cut -d' ' -f1)
 rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
-case "$declared" in
-    Nine) declared_n=9 ;; Ten) declared_n=10 ;; Eleven) declared_n=11 ;; Twelve) declared_n=12 ;;
-    *) declared_n=-1 ;;
-esac
+# A named function, not a bare inline `case`, and self-checked before use. Both
+# properties are load-bearing and neither is stylistic.
+#
+# Self-checked, because this is a fixed table standing in as an independent
+# oracle: it holds the only value in this section not read out of the subject,
+# so it is the only thing that can disagree with the subject. Verified
+# exploitable before this fix — rewriting all four arms to `declared_n=$rows`
+# derives the oracle from the very value it grades, and the suite reported
+# 30 passed / 0 failed with §3's opening sentence saying "Nine" against a
+# twelve-row table. A check that cannot fail is not a check.
+#
+# Named, because `scripts/test-oracle-table-coverage.sh` — the meta-suite whose
+# whole job is finding lookup tables with no self-check — scans for `case` inside
+# a `fn() { … }` wrapper. A bare inline `case` is invisible to it, so this table
+# sat outside the detector built to catch exactly this. That is
+# docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md:
+# the sibling instance the first fix did not reach.
+block_word_to_int() {
+    case "$1" in
+        Nine) echo 9 ;; Ten) echo 10 ;; Eleven) echo 11 ;; Twelve) echo 12 ;; Thirteen) echo 13 ;;
+        *) echo "" ;;
+    esac
+}
+
+for expect in Nine:9 Ten:10 Eleven:11 Twelve:12 Thirteen:13; do
+    if [ "$(block_word_to_int "${expect%%:*}")" != "${expect##*:}" ]; then
+        fatal "block_word_to_int(\"${expect%%:*}\") is not ${expect##*:} — the oracle's block-count table is wrong or no longer constant."
+    fi
+done
+
+declared_n="$(block_word_to_int "$declared")"
 assert_eq "$declared_n" "$rows" "§3's declared block count matches its table rows"
 
 # ---------------------------------------------------------------------------
@@ -212,7 +269,48 @@ singular=$( { grep -rn --include='*.md' \
     | wc -l | tr -d ' ')
 assert_eq "0" "$singular" "no file still calls the wireframe the ONE model-authored block"
 
-assert_found "there are two" "$CORE" "core states the carve-out count"
+# The count is DERIVED, not pinned. An earlier version of this line asserted the
+# literal "there are two", which made the guard itself a restated claim — the
+# exact defect docs/restated-claims.md names, and it went stale the moment #317
+# added a third carve-out. The truth is computable: the wireframe, plus every
+# §3 table row whose Role cell marks it forward-looking.
+declared_word=$(grep -oE 'structured blocks are the exception, and there are (two|three|four|five)' "$CORE" \
+    | grep -oE '(two|three|four|five)$' | head -1)
+# The word→integer map is a fixed lookup standing in as an independent oracle,
+# which docs/solutions/testing-patterns/partial-oracle-selfcheck-2026-08-22.md
+# names as a shape that rots silently: a wrong literal makes the comparison
+# below wrong in whichever direction the typo points, and nothing says so.
+# Self-check the table before trusting it.
+word_to_int() {
+    case "$1" in
+        two) echo 2 ;; three) echo 3 ;; four) echo 4 ;; five) echo 5 ;;
+        *) echo "" ;;
+    esac
+}
+
+# EVERY entry, not a sample — test-oracle-table-coverage.sh enforces that, and
+# its header records why: a loop over part of a table leaves the rest reachable,
+# and laundering an unpinned entry turns a real failure into a green run.
+for expect in two:2 three:3 four:4 five:5; do
+    if [ "$(word_to_int "${expect%%:*}")" != "${expect##*:}" ]; then
+        fatal "word_to_int(\"${expect%%:*}\") is not ${expect##*:} — the oracle's number table is wrong or no longer constant."
+    fi
+done
+
+declared_carveouts="$(word_to_int "$declared_word")"
+fl_rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{if (/forward-looking/) n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
+assert_eq "$((1 + fl_rows))" "$declared_carveouts" \
+    "core §1's carve-out count equals the wireframe plus §3's forward-looking rows"
+
+# And the count lives in exactly one place. Restating it beside a block is how
+# it drifted twice during #245's review and once more in #317.
+restated=$( { grep -rn --include='*.md' -E '(one of the )?(two|three|four) \*{0,2}model-authored' \
+    docs/ visual-recap/ walk-commits/ pre-merge/ 2>/dev/null || true; } \
+    | { grep -v '/references/' || true; } \
+    | { grep -v '^docs/solutions/' || true; } \
+    | { grep -v '^docs/visual-rendering-core.md' || true; } \
+    | wc -l | tr -d ' ')
+assert_eq "0" "$restated" "no file outside the core restates the model-authored carve-out count"
 
 # ---------------------------------------------------------------------------
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

@@ -1,31 +1,18 @@
 // Content for the Skill Kit landing page.
 // Ported from the "SkillKit Landing v5 — The Canon" design.
 
-export interface Book {
-	/** Short spine title. */
-	title: string;
-	/** Author surname used on the spine and as the detail key. */
-	author: string;
-	/** Full "Title — Author" shown on hover. */
-	full: string;
-	/** Spine height. */
-	h: string;
-	/** Spine color. */
-	color: string;
-	/** Ink color for the vertical spine label. */
-	ink: string;
-}
-
-export interface BookDetail {
-	/** The pull-quote lesson on the left page. */
-	lesson: string;
-	/** SKILL.md this book feeds into. */
-	file: string;
-	/** Frontmatter excerpt shown as a code block. */
-	fm: string;
-	/** Prose excerpt from the skill. */
-	excerpt: string;
-}
+/**
+ * A hand-written pull-quote for one canon work, keyed by its verbatim
+ * `sources:` string.
+ *
+ * OPTIONAL BY DESIGN. The canon itself is derived (`canon.generated.ts`), and
+ * `scripts/test-canon-coverage.sh` asserts nothing about this map — so a work
+ * with no lesson simply opens to its derived spread, and a missing lesson can
+ * never keep a newly declared source off the page. That is what makes 45
+ * entries maintainable: curation stays possible without becoming mandatory,
+ * and the part that must be complete is the part a script generates.
+ */
+export type Lessons = Record<string, string>;
 
 export interface Mapping {
 	principle: string;
@@ -39,68 +26,65 @@ export interface CatalogGroup {
 	skills: string[];
 }
 
-export const shelf: Book[] = [
-	{ title: "A Philosophy of Software Design", author: "Ousterhout", full: "A Philosophy of Software Design — John Ousterhout", h: "352px", color: "#7A3B2E", ink: "#F0E9D8" },
-	{ title: "Shape Up", author: "Singer", full: "Shape Up — Ryan Singer", h: "260px", color: "#31536B", ink: "#F0E9D8" },
-	{ title: "TDD By Example", author: "Beck", full: "TDD By Example — Kent Beck", h: "282px", color: "#6B5B2E", ink: "#F0E9D8" },
-	{ title: "Refactoring", author: "Fowler", full: "Refactoring — Martin Fowler", h: "310px", color: "#3E5C46", ink: "#F0E9D8" },
-	{ title: "Domain-Driven Design", author: "Evans", full: "Domain-Driven Design — Eric Evans", h: "322px", color: "#54364F", ink: "#F0E9D8" },
-	{ title: "Continuous Delivery", author: "Humble & Farley", full: "Continuous Delivery — Jez Humble & David Farley", h: "292px", color: "#2E4A52", ink: "#F0E9D8" },
-	{ title: "XP Explained", author: "Beck", full: "Extreme Programming Explained — Kent Beck", h: "252px", color: "#8A6A32", ink: "#1C2822" },
-	{ title: "Total TypeScript", author: "Pocock", full: "Total TypeScript — Matt Pocock", h: "272px", color: "#2F4238", ink: "#F0E9D8" },
-];
-
-// Keyed by `${author}-${title}` to match the shelf entries above.
-export const bookDetails: Record<string, BookDetail> = {
-	"Ousterhout-A Philosophy of Software Design": {
-		lesson: "“Design it twice — your first idea is unlikely to be the best.”",
-		file: "design-an-interface/SKILL.md",
-		fm: 'sources:\n  primary:\n    - "A Philosophy of Software Design — John Ousterhout"\n  secondary:\n    - "Designing Web APIs — Jin, Sahni, Shevat"',
-		excerpt: "Based on “Design It Twice”: your first idea is unlikely to be the best. Generate multiple radically different designs, then compare — method count, surface area, depth, caller ergonomics, evolvability.",
-	},
-	"Singer-Shape Up": {
-		lesson: "Set appetite before solution. Name rabbit holes. Declare no-gos.",
-		file: "write-a-prd/SKILL.md",
-		fm: 'sources:\n  primary:\n    - "Shape Up — Ryan Singer"\n  secondary:\n    - "A Philosophy of Software Design — John Ousterhout"\n    - "Software Estimation — Steve McConnell"\n    - "Thinking in Bets — Annie Duke"',
-		excerpt: "This skill produces a shaped pitch — a PRD that’s rough enough for builder judgment, solved enough to ship, and bounded by an explicit time appetite.",
-	},
-	"Beck-TDD By Example": {
-		lesson: "Red, green, refactor — never write code without a failing test.",
-		file: "tdd/SKILL.md",
-		fm: 'sources:\n  primary:\n    - "TDD By Example — Kent Beck"\n  secondary:\n    - "Unit Testing — Vladimir Khorikov"\n    - "Refactoring — Martin Fowler"\n    - "Growing Object-Oriented Software — Freeman & Pryce"',
-		excerpt: "Tests should verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn’t. Test difficulty is a design signal, not an obstacle to work around.",
-	},
-	"Fowler-Refactoring": {
-		lesson: "“Make each refactoring step as small as possible, so you can always see the program working.”",
-		file: "request-refactor-plan/SKILL.md",
-		fm: 'sources:\n  primary:\n    - "Refactoring — Martin Fowler"',
-		excerpt: "A side-route skill for restructuring code safely: a refactor RFC and a tiny-commit migration path, hammered out through a detailed interview before any implementation.",
-	},
-	"Evans-Domain-Driven Design": {
-		lesson: "One ubiquitous language, shared by code, docs, and conversation.",
-		file: "ubiquitous-language/SKILL.md",
-		fm: 'sources:\n  primary:\n    - "Domain-Driven Design — Eric Evans"\n  secondary:\n    - "Domain Storytelling — Hofer & Schwentner"\n    - "Living Documentation — Cyrille Martraire"',
-		excerpt: "Define the domain model’s vocabulary. Each term in this glossary is a model element — changing a term here means changing the model and the code.",
-	},
-	"Humble & Farley-Continuous Delivery": {
-		lesson: "Keep the mainline always releasable; merge in small, verified steps.",
-		file: "pre-merge/SKILL.md",
-		fm: 'sources:\n  secondary:\n    - "Continuous Delivery — Jez Humble & David Farley"\n    - "The Checklist Manifesto — Atul Gawande"\n    - "Release It! — Michael Nygard"\n    - "The Twelve-Factor App — Adam Wiggins"',
-		excerpt: "Create a GitHub PR linking back to the PRD and slice issues, then review the full diff against the project’s architectural principles across 11 review dimensions.",
-	},
-	"Beck-XP Explained": {
-		lesson: "Courage through feedback — short loops beat long plans.",
-		file: "prototype/SKILL.md",
-		fm: 'sources:\n  primary:\n    - "Extreme Programming Explained — Kent Beck"',
-		excerpt: "Throwaway code that answers a question — LOGIC probes the state model, UI compares layout variants, FEASIBILITY discharges an Uncertain research assumption with a spike solution.",
-	},
-	"Pocock-Total TypeScript": {
-		lesson: "Type-level discipline: inference first, narrowing over assertions.",
-		file: "ts-audit/SKILL.md",
-		fm: "description: Audit TypeScript and React code against\n  expert-level best practices from 9 Total\n  TypeScript library references.",
-		excerpt: "Covers type safety, generics, narrowing, branded types, discriminated unions, React patterns, type transformations, and testing — each finding grounded in a specific library reference.",
-	},
+/**
+ * Keys are the verbatim `sources:` string, which is `CanonWork.full`. A key that
+ * matches no declared work is dead prose that silently never renders, so the
+ * contract suite fails on one.
+ */
+export const lessons: Lessons = {
+	"A Philosophy of Software Design — John Ousterhout":
+		"“Design it twice — your first idea is unlikely to be the best.”",
+	"Shape Up — Ryan Singer":
+		"Set appetite before solution. Name rabbit holes. Declare no-gos.",
+	"TDD By Example — Kent Beck":
+		"Red, green, refactor — never write code without a failing test.",
+	"Refactoring — Martin Fowler":
+		"“Make each refactoring step as small as possible, so you can always see the program working.”",
+	"Domain-Driven Design — Eric Evans":
+		"One ubiquitous language, shared by code, docs, and conversation.",
+	"Continuous Delivery — Jez Humble & David Farley":
+		"Keep the mainline always releasable; merge in small, verified steps.",
+	"Extreme Programming Explained — Kent Beck":
+		"Courage through feedback — short loops beat long plans.",
+	"Total TypeScript — Matt Pocock":
+		"Type-level discipline: inference first, narrowing over assertions.",
 };
+
+/**
+ * The works an engineer recognizes on sight, in the order the bookcase shows
+ * them. Everything not named here keeps the derived order behind them.
+ *
+ * WHY A HAND-WRITTEN LIST EXISTS AT ALL, given that #273 removed one. The
+ * derived order ranks by how many skills are *built on* a work, which is a real
+ * signal and the wrong one for the first thing a visiting engineer sees: it put
+ * *Thinking in Systems* and *The Design of Everyday Things* on the top board and
+ * left *Clean Architecture* 28th, *Continuous Delivery* 19th and *TDD By
+ * Example* 14th. The page is a shelf of software engineering practice, and it
+ * was leading with the two books on it that are not about software.
+ *
+ * WHAT MAKES THIS SAFE WHERE #273's LIST WAS NOT. That list was the canon — it
+ * decided which works existed, so a work missing from it was a work the reader
+ * never saw. This one only permutes: the canon is still every declared source,
+ * every one of them still renders, and deleting this array leaves the shelf
+ * complete and merely differently sorted. It is the same bargain as `lessons`
+ * above — optional curation that cannot subtract — and the contract suite holds
+ * both halves: a name here that matches no declared work fails, and the built
+ * page is still required to carry all 45 works.
+ *
+ * Keys are the verbatim `sources:` string, which is `CanonWork.full`.
+ */
+export const flagships: string[] = [
+	"The Pragmatic Programmer — Andrew Hunt & David Thomas",
+	"Refactoring — Martin Fowler",
+	"Domain-Driven Design — Eric Evans",
+	"TDD By Example — Kent Beck",
+	"Clean Architecture — Robert C. Martin",
+	"A Philosophy of Software Design — John Ousterhout",
+	"Continuous Delivery — Jez Humble & David Farley",
+	"Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce",
+	"Extreme Programming Explained — Kent Beck",
+	"Release It! — Michael Nygard",
+];
 
 export const mappings: Mapping[] = [
 	{ principle: "“Design it twice.”", source: "A Philosophy of Software Design", skill: "/design-an-interface", what: "Generates radically different designs before committing." },
@@ -127,7 +111,7 @@ export const catalog: CatalogGroup[] = [
 	{ name: "Planning", skills: ["shape", "create-milestone", "research", "write-a-prd", "prd-to-issues", "design-an-interface", "api-design-review", "prototype", "mermaid"] },
 	{ name: "Development", skills: ["execute", "tdd", "triage-issue", "improve-codebase-architecture", "request-refactor-plan", "ts-audit"] },
 	{ name: "Knowledge & QA", skills: ["qa", "pre-merge", "walk-commits", "visual-recap", "compound", "closeout", "ubiquitous-language", "improve-pipeline"] },
-	{ name: "Orientation", skills: ["help", "correct-course", "handoff"] },
+	{ name: "Orientation", skills: ["help", "correct-course", "handoff", "re-pitch"] },
 	{ name: "Tooling", skills: ["init-pipeline", "setup-pre-commit", "setup-ralph-loop", "git-guardrails-claude-code"] },
 ];
 

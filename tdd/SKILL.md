@@ -11,6 +11,8 @@ sources:
     - "Extreme Programming Explained — Kent Beck"
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
     - "Introduction to Software Testing — Ammann & Offutt"
+    - "Domain Modeling Made Functional — Scott Wlaschin"
+    - "A Survey and Classification of Controlled Natural Languages — Tobias Kuhn (Computational Linguistics 2014)"
 ---
 
 # Test-Driven Development
@@ -74,7 +76,7 @@ Before writing any code:
 - [ ] Confirm with user which behaviors to test (prioritize)
 - [ ] Identify opportunities for [deep modules](deep-modules.md) (small interface, deep implementation)
 - [ ] Classify code under test using the [code classification quadrant](code-classification.md): domain model → unit test, controller → integration test, trivial → skip, overcomplicated → refactor first
-- [ ] Design interfaces for [testability](interface-design.md)
+- [ ] Design interfaces for [testability](interface-design.md), including which preconditions belong in the *type* rather than in a runtime check — [interface-design.md](interface-design.md) § *Make an illegal input unconstructable, not merely detectable*
 - [ ] List the behaviors to test (not implementation steps)
 - [ ] Partition the input domain into characteristics and blocks (see below)
 - [ ] Get user approval on the plan
@@ -128,9 +130,11 @@ After all tests pass, look for [refactor candidates](refactoring.md):
 - [ ] Apply SOLID principles where natural
 - [ ] Consider what new code reveals about existing code
 - [ ] Run tests after each refactor step
-- [ ] **[TypeScript projects, when implementing a library-provided callback]** If the refactor produced a local wrapper type for the callback's return (e.g. `AdjacentStepOverrides` for a Mastra `prepareStep` return), anchor the return to the library's declared shape using `satisfies LibraryReturnType` on the object expression, or return a fresh object literal, or derive the local type via `ReturnType<typeof libraryCallback>` / `Parameters<…>`. Do **not** return a typed local variable. TypeScript's excess-property check does not run on returns of typed values, so any field not declared by the library's signature is silently dropped at runtime — build passes, tests pass, the library never sees the field. This is the failure mode `/research` Phase 1.25 and `/pre-merge` Dim 8 backstop, but `satisfies` at refactor time closes the gap at compile time. Cite: ts-essentials Rule 31, "Use `satisfies` for type validation without losing inference precision."
+- [ ] **Comment the code, not the incident.** Reread the comments this cycle added and move any sentence that explains history rather than the code in front of you. `/execute` Step 3 carries the rule and names where that content lands.
+- [ ] **Consolidate a restated claim.** A *prose contract* often states one claim at several *operative sites* at once. That is information leakage with nothing to break when a site is missed, so an additive edit leaves the superseded statement live beside the new one. Census the artifact, then extract the claim to one interpolated constant. [references/restated-claims.md](references/restated-claims.md) defines both terms and carries the census move, the limit of the literal-count assertion, and the fallback when interpolation is unavailable.
+- [ ] **[TypeScript projects, when implementing a library-provided callback]** If the refactor produced a local wrapper type for the callback's return (e.g. `AdjacentStepOverrides` for a Mastra `prepareStep` return), anchor the return to the library's declared shape using `satisfies LibraryReturnType` on the object expression, or return a fresh object literal, or derive the local type via `ReturnType<typeof libraryCallback>` / `Parameters<…>`. Do **not** return a typed local variable. TypeScript's excess-property check does not run on returns of typed values, so any field not declared by the library's signature is silently dropped at runtime — build passes, tests pass, the library never sees the field. This is the failure mode `/research` Phase 1.25 and `/pre-merge`'s Runtime Initialization & Production-Runtime Parity dimension backstop, but `satisfies` at refactor time closes the gap at compile time. Cite: ts-essentials Rule 31, "Use `satisfies` for type validation without losing inference precision."
 
-**Never refactor while RED.** Get to GREEN first.
+**Never refactor while RED.** Get to GREEN first. One exception, and it is a narrow one: a type-first migration deliberately breaks the *build*, which is not a red bar — see [refactoring.md](refactoring.md) § *A broken build is not a red bar*.
 
 ### 5. Harden with Assertions
 
@@ -163,12 +167,15 @@ Mocking a type you don't own — a platform API (workerd crypto, edge-runtime gl
 
 ```
 [ ] Test describes behavior, not implementation
+[ ] Test name claims no constraint the assertion cannot falsify
 [ ] Test uses public interface only
 [ ] Test would survive internal refactor
 [ ] Expected values come from an independent source, not the code's own formula
 [ ] Code is minimal for this test
 [ ] No speculative features added
 ```
+
+The first two rows are two different name failures, deliberately adjacent. *Describes behavior, not implementation* is the WHAT-vs-HOW axis: a name describing the implementation. *Claims no constraint the assertion cannot falsify* is the name-vs-assertion axis, and it fires only on names that assert a **relationship** — a bound, an ordering, a rejection, a deadline. `"user can checkout with valid cart"` names an outcome and is out of scope for it. A name can pass either row and fail the other. That second row's method is not restated here — see [tests.md](tests.md) § *A test name is a claim the assertion must be able to falsify*.
 
 ## Handoff
 

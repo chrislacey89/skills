@@ -9,6 +9,7 @@ sources:
     - "The Twelve-Factor App — Adam Wiggins"
     - "Release It! — Michael Nygard"
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
+    - "Domain Modeling Made Functional — Scott Wlaschin"
     - "Noise: A Flaw in Human Judgment — Daniel Kahneman, Olivier Sibony & Cass Sunstein"
     - "Best Kept Secrets of Peer Code Review — Jason Cohen"
     - "Engineering a Safer World — Nancy Leveson"
@@ -28,7 +29,7 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
 
 ## Modes
 
-`/pre-merge` runs in one of three modes. All three reuse Phase 3's 11 architectural review dimensions (`review-checklist.md`); they differ in what they consume and what they produce.
+`/pre-merge` runs in one of three modes. All three reuse the architectural review dimensions defined in `review-checklist.md`; they differ in what they consume and what they produce.
 
 - **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4), then hands back there — **it makes no fix commits of its own and opens no second pass.** This is the mode auto-invoked by `/execute` Step 6 on the HITL path.
 - **Reviewer-mode** — invoked as `/pre-merge --pr <number>` against a PR you did not author. The skill skips PR creation (the PR already exists) and produces *draft comment text* (Phase 4) for you to review and post, structured per `references/comment-craft.md` (5P gate, Triple-R, Comment Signals, MMG Exchange).
@@ -41,7 +42,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 ## When to Use
 
 - **Author-mode:** after QA passes and before merging a feature branch to main; after Ralph finishes AFK execution and you've verified behavior; or for any branch you want reviewed before merge, even without a full pipeline run.
-- **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the 11-dimension architectural review to their diff and produce constructive comment text.
+- **Reviewer-mode:** when a teammate or external contributor opens a PR and you want to apply the full architectural review in `review-checklist.md` to their diff and produce constructive comment text.
 - **Loop-mode:** when findings must survive the session that produced them — the AFK handoff from `/execute`, or any branch you will review over several sittings and do not want to re-derive each time. Use it when the cost you are paying is *losing track of findings*, not *making the fixes*.
 
 ## Execution Flow
@@ -67,10 +68,20 @@ If you are running on a branch other than the user's working branch and `--pr` w
        if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
      done
    fi
-   git diff "$BASE_BRANCH...HEAD" --stat
-   git log --oneline "$BASE_BRANCH..HEAD"
+   # A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
+   # $BASE_REF points at it, and is the only thing safe as a range endpoint.
+   if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+     BASE_REF="origin/$BASE_BRANCH"
+   else
+     BASE_REF="$BASE_BRANCH"
+     echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
+   fi
+   git diff "$BASE_REF...HEAD" --stat
+   git log --oneline "$BASE_REF..HEAD"
    ```
-   For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target). If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
+   For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target) and re-derive `$BASE_REF` from it. If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
+
+   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 **Reviewer-mode (`--pr <number>`):**
 
@@ -81,7 +92,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
    ```
    If the PR is already merged or closed, tell the user and stop — review comments on a closed PR are surfaced separately and rarely useful.
 
-2. **Identify the PRD issue from the PR body.** Look for `Closes #<n>`, `Refs #<n>`, or a `## PRD` section pointing at an issue. If found, run the same `gh issue view` + slice-issue search as author-mode step 2 to load PRD context and boundary maps. If the PR has no PRD lineage, treat it as the "no PRD" branch — Phase 3's PRD-gated dimensions (Boundary Map Contracts, Coverage Matrix Reconciliation) skip themselves.
+2. **Identify the PRD issue from the PR body.** Look for `Closes #<n>`, `Refs #<n>`, or a `## PRD` section pointing at an issue. If found, run the same `gh issue view` + slice-issue search as author-mode step 2 to load PRD context and boundary maps. If the PR has no PRD lineage, treat it as the "no PRD" branch — the PRD-gated dimensions skip themselves, each in the phase its `**Runs in:**` marker assigns it to.
 
 3. **Note the diff size and base branch from the PR JSON.** No local branch math — `gh pr diff` returns the merged-base-to-head diff directly. Do not try to check the PR out locally; you are reviewing the diff, not running it.
 
@@ -137,11 +148,11 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 ### Phase 3: Architectural Review
 
-Consult `review-checklist.md` for the review dimensions and their violation patterns. The 11 dimensions run identically in all three modes; only the `diff` they read differs:
+Consult `review-checklist.md` for the review dimensions and their violation patterns. That file is the roster — its `## N.` headings are the only place the set of dimensions is defined, and nothing here restates it. The dimensions run identically in all three modes; only the `diff` they read differs:
 
-- **Author-mode** — the local `git diff "$BASE_BRANCH...HEAD"`.
+- **Author-mode** — the local `git diff "$BASE_REF...HEAD"`.
 - **Reviewer-mode** — the `gh pr diff <pr-number>` output.
-- **Loop-mode** — the same local `git diff "$BASE_BRANCH...HEAD"` as author-mode. Loop-mode makes no commits, so on a later invocation the diff has moved only if the *operator* pushed fixes; the ledger, not a narrowed diff, is what stops the pass re-reporting settled findings.
+- **Loop-mode** — the same local `git diff "$BASE_REF...HEAD"` as author-mode. Loop-mode makes no commits, so on a later invocation the diff has moved only if the *operator* pushed fixes; the ledger, not a narrowed diff, is what stops the pass re-reporting settled findings.
 
 **Delegation exists for reviewer independence; parallelism on large diffs is a sub-case of it.** When `/pre-merge` is auto-invoked by `/execute` Step 6 it runs in the session that just wrote the code, holding every rationalization the implementing agent made while writing it. The dimensions are sound; the reviewer is not independent. Cohen's finding is that the author's job is to *annotate for* a reviewer, not to be one — so the sub-agent split below is first a way to put a clean context in front of the diff, and only second a way to halve wall-clock on a big one.
 
@@ -149,50 +160,59 @@ Consult `review-checklist.md` for the review dimensions and their violation patt
 
 Size then decides *how many* sub-agents, never *whether* the review leaves the authoring session:
 
-- **Small diff** (< 200 changed lines, < 10 files): one sub-agent runs all applicable dimensions.
-- **Larger diff**: spawn the two sub-agents below in parallel.
+- **Small diff** (< 200 changed lines, < 10 files): one sub-agent runs every dimension the checklist marks as sub-agent work and whose own gating condition is met — each dimension's section in the checklist states its own gate; the notes below elaborate on a few of them but are not the inventory.
+- **Larger diff**: spawn two sub-agents in parallel, splitting that same set between them.
+
+Either way the controller-owned dimensions are outside this choice entirely — diff size decides how many *sub-agents* run, never whether a dimension the checklist withholds from sub-agents gets delegated anyway.
 
 **Why the trigger is content and not size.** Cohen's Cisco dataset retires the proxy on its own evidence: four reviews of 1–2 lines each ran past 15 minutes, because small physical changes carried architecture-sized ramifications. This repo has its own instance — a 34-line, 2-file diff, comfortably inside the old band, whose composition defect the authoring session's pass missed across eight findings and a clean context returned as its top Concern in one pass (`docs/solutions/architecture-decisions/self-review-blind-to-composition-2026-08-13.md`). Deleting the band retires the proxy; the four-class exemption keeps what the band was actually protecting, and is narrower.
 
 **When sub-agents are unavailable**, run the dimensions in-session and name the run **degraded mode** in the findings output: the reviewer holds the authoring session's context, so its independence is gone and the findings should be read accordingly. This is the same declaration `/improve-pipeline` Phase 4 makes when its dialectic cannot be spawned. Degraded mode is a disclosure, not a second exemption — do not reach for it because delegation is inconvenient.
 
-**Every sub-agent's context is the same in all three modes:** the diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no such block, because `/execute` never ran on it; that is an absent input, not a missing step.
+**The context contract is about provenance, not permission.** It has three parts, and the closed list is only the first of them.
+
+**Handed over — the same in all three modes.** The diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else is *given* to a sub-agent, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no `## Review Notes` block, because `/execute` never ran on it; that is an absent input, not a missing step.
+
+**Reached for itself — durable state, read at the source.** A dimension's own procedure may send its sub-agent past that list: to the merged tree, the branch's commit history — `git log`, the commit messages, the per-commit diffs — `git show` on a deleted path, the slice or PRD issue body, the package registry, the research archive, an installed `.d.ts`, `docs/solutions/`, a scratch `tsc --noEmit`. The commit history is on that list because two dimensions cannot execute without it: Vertical Slice Integrity is defined entirely over commit structure, and Surgical Scope names the commit messages and branch name as its stated-task source of last resort. It is a separate artifact, not a summary of the diff, so reading it does not touch the rule below. **In reviewer-mode, `gh pr view <n> --json commits` reaches the commit messages and SHAs** without a local checkout; it returns no per-commit diffs, so a pattern that needs them cannot be checked there. That is not an exception to the contract; it is the contract working. Reading a durable artifact yourself is what *preserves* independence — what destroys it is receiving that artifact pre-digested by the session under review. One rule governs it: **read it at its source and cite it, never accept the controller's account of it.** The reviewer reading the diff rather than a summary of the diff is the same rule, applied to the one input that is always present.
+
+**Withheld absolutely — the change's context.** That phrase means the authoring session's working state: its reasoning, the alternatives it discarded, the justifications it assembled while writing the diff, and any controller-authored narration, summary, or paraphrase standing in for something the sub-agent could have read directly. `## Review Notes` is handed over despite being author-written because it is a *checkable* record — `/execute` Step 6 requires commands and exit statuses the reviewer can re-run — and not a construal to inherit.
+
+**What that makes decidable.** A sub-agent can substantiate a finding when the evidence is reachable by a procedure the dimension itself names, from the diff plus durable state of the kind above. It cannot when the finding needs a *view assembled across artifacts* that no single named procedure reconstructs — which is the ground the controller bucket stands on, stated per-dimension in each controller-owned `**Runs in:**` marker rather than as a blanket rule here.
 
 **Loop-mode adds exactly one thing:** from pass 2 on, the *states and evidence* recorded in the ledger, so the pass does not re-report findings the operator already settled. It never adds the previous pass's severity judgments; Phase 5's ledger section gives the full forward/withheld split and the reason for it.
 
 Both reference files are **rubrics** — what to look for, and the bar the resulting prose must meet. The independence contract withholds *the change's context*; it was never about withholding the standards the review is held to.
 
-The split, on larger diffs:
+**The split is derived from the checklist, never restated here.** Every dimension in `review-checklist.md` carries a `**Runs in:**` marker directly under its heading naming exactly one of three owners — `sub-agent A`, `sub-agent B`, or `the controller, in Phase 4` (the checklist's legend defines each bucket's theme). Read the markers and hand each sub-agent the dimensions marked for it. Dimensions marked for the controller are **not** sub-agent work and are not delegated; Phase 4 runs them in-session, where the GitHub state they need is already loaded.
 
-- **Sub-agent A (structural & scope):** Deep Modules, Vertical Slice Integrity, State Discipline, Surgical Scope, Review-friendly Size
-- **Sub-agent B (contracts & quality):** Boundary Map Contracts, Test Quality, docs/solutions/ Adherence, Runtime Initialization, Fix Completeness
+This is deliberately not a list. A hand-maintained copy of the roster sat here and shipped wrong from birth; `scripts/test-review-dimension-partition.sh` carries that incident in its header, and fails on any dimension the canon leaves unassigned.
 
 Each sub-agent reads the full diff and its assigned dimensions from `review-checklist.md`, then returns findings in the three-tier severity format — **each Suggestion and Concern written to the shape and revision bar in `references/writing-for-humans.md`**, which is handed over as a rubric for the finding text even though the doc scopes itself to issue and PR bodies. Observations are exempt, per Phase 4's exemption — not the doc's own when-to-skip list, which exempts artifact classes and reaches no finding. Phase 4 states the bar and the reason for it.
 
 **The reviewer always reads the actual diff, never a summary of it.** A summary is a lossy transformation authored by the controller under review; a fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson: no control system performs better than its measuring channel).
 
-**Dimension 4 (Boundary Map Contracts) only runs if a PRD with slice issues was provided.** Without boundary maps, there are no contracts to verify.
-
-**Dimension 8 (Runtime Initialization & Production-Runtime Parity) only runs if the diff includes schema files, migration files, environment config, server startup code, a CLI/orchestration entrypoint with a dry-run mode, OR code whose deploy runtime differs from its test runtime / static assets resolved at deploy time / behavior bounded by a platform limit the test runtime does not enforce.** Without infrastructure or deploy-runtime changes, there is nothing to verify.
-
-**Surgical Scope runs on every diff.** Where Dimensions 4 and 5 check plan-vs-actual between slices (PRD-gated), Surgical Scope checks scope drift inside a single diff — drive-by reformatting, speculative additions, adjacent fixes — and applies whether or not the work went through `/prd-to-issues`. Findings under this dimension must cite the file path and hunk start line; "looks scope-creepy" is not a finding.
-
-**Dimension 11 (Review-friendly Size) runs on every diff.** It checks whether the diff stays within the convergent engagement bands documented in `review-checklist.md` (>300 LOC Observation, >500 LOC or >20 files Suggestion, >800 LOC + multi-domain Concern). Tracer-bullet slices are exempt — note the suppression in the findings rather than silently skipping. The signal is about *reviewer load*, not scope drift, so it is distinct from Dimension 10 even when both fire on the same diff.
-
-**Dimension 7 (docs/solutions/ Adherence):** Search `docs/solutions/` for files whose `components` or `technologies` frontmatter overlaps with the changed code areas. If relevant solutions exist, check whether the implementation follows or consciously diverges from documented patterns.
+**Gates, thresholds, and per-dimension procedures are stated in the checklist and nowhere else.** Several dimensions fire only when the diff meets their own condition; several carry numeric bands, an exemption, or a named verification procedure. All of it lives under that dimension's heading — hand each sub-agent its assignment and let it read its own gate. A copy here would be a second operative site for the same claim, so changing a band in one file would ship a stale one in the other: the class [references/restated-claims.md](references/restated-claims.md) defines, and the one this skill's own Deep Modules bullet detects. `scripts/test-restated-review-operatives.sh` covers part of this; its header is the one place that states which part, and it is not restated here. Read it before treating a green run as the class being closed.
 
 **TypeScript projects:** `/ts-audit` complements the architectural review with type-safety analysis on changed `.ts`/`.tsx`. Whether it runs depends on the mode:
 
 - **Author-mode and reviewer-mode: mention it, do not invoke it.** For branches with significant `.ts` or `.tsx` changes, note it as an option — "For deeper TypeScript analysis, consider running `/ts-audit` on the changed files" — and leave the decision with the user. This is the deliberate HITL boundary; the scoping below does not move it. A soft "significant" is the right bar here, because the cost of misjudging it is one unnecessary sentence.
 - **Loop-mode: auto-invoke it**, and record its findings in the Phase 5 ledger alongside the dimension findings. It is already the recommended next action at exactly this point for exactly these files; the only reason it was ever manual is that nothing drove the cycle. One constraint, because an *invoke* rule needs a decidable trigger where a *mention* rule does not:
-  - **Trigger — more than 50 changed `.ts`/`.tsx` lines, or more than 2 changed `.ts`/`.tsx` files**, measured over the diff this pass reads. Below that, skip the audit and record the skip on the ledger's "Checks not run this pass" line rather than passing over it silently — the same rule Dimension 11 already follows for suppressed size findings. "Significant changes" is a usable instruction for a human deciding whether to *mention* a tool and an unevaluable one for a loop deciding whether to *run* it.
+  - **Trigger — more than 50 changed `.ts`/`.tsx` lines, or more than 2 changed `.ts`/`.tsx` files**, measured over the diff this pass reads. Below that, skip the audit and record the skip on the ledger's "Checks not run this pass" line rather than passing over it silently — the same rule Review-friendly Size already follows for suppressed size findings. "Significant changes" is a usable instruction for a human deciding whether to *mention* a tool and an unevaluable one for a loop deciding whether to *run* it.
   - Findings it repeats from an earlier pass are matched against the ledger and left as the rows they already have, rather than added twice.
 
-**Verify, don't suspect — library callback semantics, subpath swaps, and provider schema constraints.** When a finding turns on how a library treats a value the application hands it (return from a callback, object passed to a hook, systemMessages/tools/middleware collection semantics), the sub-agent must cite the installed type definition — `node_modules/<library>/**/*.d.ts` file path and line — in the finding. If a research archive entry exists for this feature, prefer its `callback_contracts_snapshot` (see `research/SKILL.md` Phase 1.25). For findings that turn on which subpath of a package an import resolves through — runtime-affecting swaps disguised as type-only diffs across sibling subpaths of multi-runtime packages — prefer the `installed_versions_snapshot` (see `research/SKILL.md` Phase 5b); Dimension 4's spec-reality check item 2 is the gate that consumes it. For findings that turn on **provider schema constraints when an SDK wraps a provider** — the SDK's type signature accepts a shape (JSON Schema, Zod, tool definitions) that the underlying provider's actual contract rejects (e.g. Gemini's `response_schema` rejecting numeric enums, Anthropic's `tool.input_schema` honoring only a subset of JSON Schema, OpenAI Structured Outputs' schema-subset divergence from JSON Schema 2020-12) — the citation must include the provider's contract docs at the installed SDK version, not only the SDK's permissive `.d.ts`. Hedged language ("if the library replaces X rather than merges", "if this field is accepted", "the SDK lets you pass any schema") without a source citation is not acceptable for this class of finding — the proof is one grep or one provider-docs page away and the failure mode is runtime-invisible. Either cite the source and classify as Observation/Suggestion/Concern per the severity rules, or downgrade to a named follow-up with an explicit "verify before merge" action.
+**Verify, don't suspect — library callback semantics, subpath swaps, and provider schema constraints.** When a finding turns on how a library treats a value the application hands it (return from a callback, object passed to a hook, systemMessages/tools/middleware collection semantics), the sub-agent must cite the installed type definition — `node_modules/<library>/**/*.d.ts` file path and line — in the finding. If a research archive entry exists for this feature, prefer its `callback_contracts_snapshot` (see `research/SKILL.md` Phase 1.25). For findings that turn on which subpath of a package an import resolves through — runtime-affecting swaps disguised as type-only diffs across sibling subpaths of multi-runtime packages — prefer the `installed_versions_snapshot` (see `research/SKILL.md` Phase 5b); Boundary Map Contracts' spec-reality check item 2 is the gate that consumes it. For findings that turn on **provider schema constraints when an SDK wraps a provider** — the SDK's type signature accepts a shape (JSON Schema, Zod, tool definitions) that the underlying provider's actual contract rejects (e.g. Gemini's `response_schema` rejecting numeric enums, Anthropic's `tool.input_schema` honoring only a subset of JSON Schema, OpenAI Structured Outputs' schema-subset divergence from JSON Schema 2020-12) — the citation must include the provider's contract docs at the installed SDK version, not only the SDK's permissive `.d.ts`. Hedged language ("if the library replaces X rather than merges", "if this field is accepted", "the SDK lets you pass any schema") without a source citation is not acceptable for this class of finding — the proof is one grep or one provider-docs page away and the failure mode is runtime-invisible. Either cite the source and classify as Observation/Suggestion/Concern per the severity rules, or downgrade to a named follow-up with an explicit "verify before merge" action.
 
 ### Phase 4: Present Findings
 
-Combine findings from all dimensions (or sub-agents).
+**Run the controller-owned dimensions first, then combine findings from all dimensions (or sub-agents).**
+
+**Controller-owned dimensions run here, in this session.** Every dimension in `review-checklist.md` whose `**Runs in:**` marker reads `the controller, in Phase 4` is yours to execute — Phase 3 did not delegate it, and no sub-agent could have. The marker is on those dimensions because their procedures need a cross-slice view — the PRD, every slice issue, and the set of merged slices held together at once. Phase 1 assembles exactly that, in this context, which is the whole reason the work lands here.
+
+Read each such dimension's procedure from `review-checklist.md` and run it now. Its findings are ordinary findings: they carry the severity the checklist assigns them, they join the three tiers below, and in loop-mode they get ledger rows like any other. **In particular, a Concern from a controller-owned dimension is still a Concern, named escalation and all** — the relocation moved where the check runs, not what its verdict is worth. There is no tier above Concern; a dimension whose verdict should stop a merge says so by naming that action inside its Concern, which is what Coverage Matrix Reconciliation does for an unmapped Must.
+
+Then run them through the same evidence discipline as everything else: a controller-owned dimension is not exempt from citing what supports it. What it *is* exempt from is the delegated-finding check immediately below, which exists to catch a sub-agent misreporting; there is no sub-agent here.
+
+If a controller-owned dimension gates itself off — Coverage Matrix Reconciliation only fires when this PR closes the last slice of a multi-slice PRD — say so in the findings output rather than skipping silently, the same way Review-friendly Size declares a suppressed size finding. A dimension that reports nothing and a dimension that never ran read identically otherwise, and that ambiguity is exactly what let this dimension go missing for months.
 
 **Check delegated findings against the tree before presenting them.** Delegation removes one failure mode and exposes another: a fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson — Phase 3 says this of summaries, and it holds equally for sub-agent output). Loop-mode already handles it, at Phase 5 Step 2, which records `refuted — <evidence>` when the tree contradicts a claim. Author-mode and reviewer-mode had no equivalent, so a sub-agent's misreport printed as an advisory with nothing between it and the reader. Now that every non-trivial review is delegated, that gap sits on the default path.
 
@@ -200,13 +220,13 @@ So for each delegated finding, run Phase 3's "Verify, don't suspect" rule from t
 
 - **Supported by the tree** — present it, with the evidence cited in the finding.
 - **Refuted by the tree** — do not present it as a finding. Record it once as a factual note (`sub-agent B reported X; path:line contradicts it`), printed after the three tiers alongside the other reporting-only notes below, so the check is visible rather than a silent deletion. It is not gated on a PRD the way Scope Notes is; a refuted finding on a no-PRD review still gets its line.
-- **Neither confirmable nor refutable from the tree** — present it at the tier the sub-agent assigned, with the unverified basis named, per that rule's downgrade clause.
+- **Neither confirmable nor refutable from the tree** — the disposal depends on whether the finding is of the class "Verify, don't suspect" governs. If it turns on library callback semantics, subpath resolution, or provider schema constraints, **apply that rule's downgrade clause**: it does not print at Observation, Suggestion, or Concern, but as a named follow-up with an explicit "verify before merge" action. That rule already denies an uncited finding of this class a tier, and a controller that could not cite it either has not changed the citation state. Every other finding is presented at the tier the sub-agent assigned, with the unverified basis named — the downgrade clause does not reach it, and does not license the tier either.
 
 Checking is not re-judging. The parent verifies claims; it does not re-rank a sub-agent's severity, and it does not reconcile one sub-agent's findings against the other's.
 
 **This rule governs terminal presentation only, and loop-mode runs Phase 4.** A refuted finding still gets its ledger row, `open`, with the refutation attached — Phase 5 Step 1 takes *every* finding from Phase 3 with no filtering, and Step 2 keeps refuted ones on the explicit ground that dropping one is a decision the operator makes. Suppressing a refuted finding from the terminal is presentation; suppressing it from the ledger would be the unacknowledged report the ledger exists to prevent. Where the two rules would disagree, the ledger wins.
 
-**Minimum-findings guard.** Before presenting, count the total findings across all three tiers. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past dimension 3. **That second pass runs in a fresh sub-agent, on the same context Phase 3 specifies — not as a re-read in this context.** It is spawned from Phase 4, so say so explicitly: it gets the diff, `review-checklist.md`, `references/writing-for-humans.md`, and the `## Review Notes` block, and its findings are held to the same reader bar as any other. The guard fires precisely when the first pass came back thin, and the bias blind spot means hygiene cannot be self-administered (Kahneman, Sibony & Sunstein, *Noise*) — a re-read holding the first pass's context reproduces the review that was thin, and launders it as an independent second look. Its findings go through the evidence check above like any other delegated finding. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
+**Minimum-findings guard.** Before presenting, count the total findings — all three tiers, plus any downgraded verify-before-merge follow-ups, which are findings whose print location moved, not findings that stopped existing. If the total is fewer than 4 on a diff of any meaningful size (more than ~50 changed lines or more than 2 files), do one more focused pass explicitly looking for what you might be missing — scope drift, silent assumption changes, shallow modules, tests that only cover the happy path, or new state files that slipped past State Discipline. **That second pass runs in a fresh sub-agent, on the same context Phase 3 specifies — not as a re-read in this context.** It is spawned from Phase 4, so say so explicitly, and read that context off Phase 3 rather than off a list here — including the one thing loop-mode adds to it, the ledger's recorded states and evidence. An enumeration at this distance from the contract is how this sentence previously dropped the ledger and sent the second pass to re-report findings the operator had already settled. Its findings are held to the same reader bar as any other. **Brief it to skip the controller-owned dimensions.** It is handed the whole checklist, and those dimensions were already disposed of above — run, or declared self-gated-off. Phase 3's sub-agents get the checklist *with an assignment* — the dimensions marked for them — so nothing controller-owned is ever offered; Phase 4's second pass gets the file with no assignment, so it must be told what to skip. Without it the pass either silently drops them or re-runs them from a context that cannot support the verdict. The guard fires precisely when the first pass came back thin, and the bias blind spot means hygiene cannot be self-administered (Kahneman, Sibony & Sunstein, *Noise*) — a re-read holding the first pass's context reproduces the review that was thin, and launders it as an independent second look. Its findings go through the evidence check above like any other delegated finding. A count of zero or one on a non-trivial diff is a signal that the review stopped too early, not that the code is flawless. If after the second pass the count is still low, present what you have — do not fabricate findings to hit a quota.
 
 **Hold each finding to the same reader bar as the PR body.** Phase 2 already requires a plain-language walkthrough for the bodies it writes on non-trivial PRs. The findings had no equivalent bar, and they are this skill's primary product — the body is scaffolding around them. A finding a reader cannot parse fails the same way a finding that was never raised fails, and it fails silently: the tier prints, the ledger row shows an owner, and nothing registers that the signal did not transmit. So write each Suggestion and Concern to the shape and revision bar in `references/writing-for-humans.md` — name the part of the system in domain terms, front-load the claim before qualifying it, close with what it prevents or unlocks, then strip the clutter.
 
@@ -243,6 +263,13 @@ the code better. Written to the reader bar above.]
 specific code, and explains why it matters — and reads cold to someone
 who did not write the diff, per the reader bar above
 (`references/writing-for-humans.md`).]
+
+### Verify before merge (findings that hold no tier)
+
+[Findings the "Verify, don't suspect" downgrade clause removed from the
+tiers — library callback semantics, subpath resolution, or provider schema
+constraints that nothing could cite. Each names the check that would settle
+it. Omit the section when there are none.]
 
 ---
 No action is required. These are advisory.
@@ -354,7 +381,7 @@ Phases 1–4 are a sensor. Without something that acknowledges, investigates, an
 
 #### Step 1 — Record every finding in the ledger
 
-Every finding from Phase 3 — all 11 dimensions, plus `/ts-audit` when its trigger fires — gets a row. No filtering, no severity cutoff, no "this one is obviously fine." A finding the loop drops silently is exactly the unacknowledged report Leveson's rule is about. This includes findings Phase 4's evidence check refuted and therefore did not print: the ledger's input is Phase 3's output, not Phase 4's.
+Every finding from the review — every dimension in `review-checklist.md`, whichever bucket its `**Runs in:**` marker assigns it to, plus `/ts-audit` when its trigger fires — gets a row. That includes the controller-owned dimensions Phase 4 runs rather than Phase 3, which is the whole reason this sentence names the checklist instead of a count: a ledger row is an attestation, and the previous phrasing attested a number this skill never verified against the roster. No filtering, no severity cutoff, no "this one is obviously fine." A finding the loop drops silently is exactly the unacknowledged report Leveson's rule is about. This includes findings Phase 4's evidence check refuted and therefore did not print: the ledger's input is Phase 3's output, not Phase 4's.
 
 Findings arrive **open**. `open` means "recorded, awaiting the operator's decision," and it is the only state loop-mode may assign.
 
@@ -406,7 +433,7 @@ Recorded by `/pre-merge` loop-mode. Every finding below has an owner. Rows marke
 
 The **Checks not run this pass** line is where a suppressed check is recorded. A skipped check is not a finding and has no state, so it does not belong in the table — but leaving it out entirely would let the ledger read as "everything ran," which is the silent-truncation failure the ledger exists to prevent. Omit the line when every check ran.
 
-**The `Finding` cell is read cold, sittings later, by whoever picks the branch up.** It is the narrowest slot Phase 4's reader bar applies to and the one where it matters most: name the thing in domain terms and front-load the claim, so the row stands on its own without the terminal output that produced it — `Duplicate date formatter in pipeline`, not `Dim 1 issue`. Two cells are outside the bar. The `Evidence / outcome` cell carries a citation, not prose, and padding it into a sentence would bury the grep the operator is there to check. And Observation rows are exempt here as they are in Phase 4 — the ledger takes every finding, so Observations do get rows, but a naming-pattern note is not made to carry domain setup to sit in one.
+**The `Finding` cell is read cold, sittings later, by whoever picks the branch up.** It is the narrowest slot Phase 4's reader bar applies to and the one where it matters most: name the thing in domain terms and front-load the claim, so the row stands on its own without the terminal output that produced it — `Duplicate date formatter in pipeline`, not `Deep Modules issue`. Two cells are outside the bar. The `Evidence / outcome` cell carries a citation, not prose, and padding it into a sentence would bury the grep the operator is there to check. And Observation rows are exempt here as they are in Phase 4 — the ledger takes every finding, so Observations do get rows, but a naming-pattern note is not made to carry domain setup to sit in one.
 
 **States in the `State` column.** Loop-mode writes only `open`. The operator writes the rest — `fixed` (with the commit), `filed` (with the issue number), `accepted` (won't fix, with the reason), or `dropped` (with why the finding was wrong). `/pre-merge` never overwrites an operator's state on a later pass; it appends new findings and leaves settled rows alone.
 
@@ -483,7 +510,7 @@ Output shape in the terminal:
 #### `path/to/file.ts:42`
 **`needs change:` Move helper into existing utility module**
 
-**Rationale** — the new `formatBillDate` in `src/pipeline/format.ts:42` duplicates `lib/dates/format.ts`'s shape. `pre-merge/review-checklist.md` Dim 1 (Deep Modules) flags this as information leakage between two modules holding the same protocol detail.
+**Rationale** — the new `formatBillDate` in `src/pipeline/format.ts:42` duplicates `lib/dates/format.ts`'s shape. `pre-merge/review-checklist.md`'s Deep Modules dimension flags this as information leakage between two modules holding the same protocol detail.
 
 **Result** — `formatBillDate` lives in `lib/dates/format.ts` and `src/pipeline/format.ts:42` imports it.
 
@@ -505,7 +532,7 @@ Output shape in the terminal:
 - [One-line note per dropped concern with the reason — kept for the user's audit, not for the PR]
 ```
 
-If after the 5P gate the per-line comment count is zero, the review may still produce a top-level approval comment — phrase it as collaborative ("ready to ship from a structural standpoint" rather than "LGTM"). Tacke notes that LGTM-only approvals are a code-review failure mode; if you ran the 11 dimensions and have nothing concrete to say, that result is meaningful and should at least name which dimensions were checked.
+If after the 5P gate the per-line comment count is zero, the review may still produce a top-level approval comment — phrase it as collaborative ("ready to ship from a structural standpoint" rather than "LGTM"). Tacke notes that LGTM-only approvals are a code-review failure mode; if you ran every dimension in `review-checklist.md` and have nothing concrete to say, that result is meaningful and should at least name which dimensions were checked.
 
 If a disagreement is anticipated (e.g., the finding overturns a deliberate choice the author made), draft a single comment opening the MMG Exchange offline ("Can we sync briefly on the X tradeoff before I leave detailed comments?") rather than posting an objection thread on the PR.
 
