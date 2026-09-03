@@ -156,7 +156,7 @@ done < <(section_commands '## What Stays Allowed')
 # (a claim nothing executes) relocated into the test that was meant to end it.
 # Changing either documented list is expected to change these numbers; that is
 # the forcing function, not an obstacle.
-EXPECTED_BLOCKED=20
+EXPECTED_BLOCKED=21
 EXPECTED_ALLOWED=10
 [ "${#documented_blocked[@]}" -eq "$EXPECTED_BLOCKED" ] || \
     fatal "extracted ${#documented_blocked[@]} blocked forms, expected $EXPECTED_BLOCKED. If you changed '## What Gets Blocked', update EXPECTED_BLOCKED; if you did not, the extractor is dropping entries."
@@ -252,6 +252,37 @@ assert_blocked_form 'git status; git reset --hard'     'second command after a s
 assert_blocked_form 'bash -c "git push -f"'            'wrapped in bash -c'
 assert_blocked_form '/usr/bin/git push -f'             'invoked by absolute path'
 
+# Spellings the shell joins back into `git`: a quote pair or a backslash inside
+# a word is removed by the shell before the command runs, so `g''it` and
+# `\git` both execute git. An independent probe walked all of these past a
+# draft that replaced quotes with a space instead of removing them.
+assert_blocked_form "g''it push -f"                    'empty quotes spliced into the word git'
+assert_blocked_form "git pu''sh -f"                    'empty quotes spliced into the subcommand'
+assert_blocked_form "g'i't push -f"                    'a quoted letter inside the word git'
+assert_blocked_form '\git push -f'                     'backslash before the word git'
+assert_blocked_form 'g\it push -f'                     'backslash inside the word git'
+assert_blocked_form 'git \push -f'                     'backslash before the subcommand'
+assert_blocked_form $'git push \\\n-f'                  'backslash-newline continuation before the flag'
+
+# A bare glob is expanded by the shell into every entry of the directory, so it
+# names the whole tree as surely as `.` does. This also pins `set -f` in the
+# guard: without it the guard itself would expand `*` into this directory's
+# files while tokenizing, see a list of ordinary paths, and allow the command.
+assert_blocked_form 'git checkout *'                   'a bare glob is the whole tree'
+assert_blocked_form 'git restore -- *'                 'a bare glob after the -- separator'
+assert_blocked_form 'git checkout ./*'                 'the cwd glob spelling'
+
+# Short spellings of restore's index/worktree flags (git help restore: -S is
+# --staged, -W is --worktree), bundled and split.
+assert_blocked_form 'git restore -W .'                 'short worktree flag'
+assert_blocked_form 'git restore -S -W .'              'short staged AND worktree'
+assert_blocked_form 'git restore -SW .'                'the same two, bundled'
+
+# Everything after `--` is an operand, so a dry-run flag written there is a
+# filename and does not neutralize the force. This is the one case that tells a
+# guard honoring `--` from one that ignores it.
+assert_blocked_form 'git clean -f -- -n'               'a flag-shaped filename after -- is not a flag'
+
 # -----------------------------------------------------------------------------
 
 section "benign near-misses stay allowed"
@@ -295,6 +326,8 @@ assert_allowed_form 'git checkout -p .'                'patch mode prompts befor
 assert_allowed_form 'git restore --patch .'            'long patch-mode spelling'
 assert_allowed_form 'git push origin main:main'        'an ordinary refspec with no leading +'
 assert_allowed_form 'git checkout .config/wt.toml'     'a dot-directory path, not the whole tree'
+assert_allowed_form 'git restore -S .'                 'the short spelling of --staged'
+assert_allowed_form 'git checkout src/*.ts'            'a glob under a path is not the whole tree'
 
 # The guard must not choke on input that is not a git command at all.
 assert_allowed_form 'echo hello'                       'a non-git command'

@@ -74,8 +74,10 @@ has_force_refspec() {
 # working tree. Recognized by reduction rather than by listing spellings: git
 # accepts `.`, `./`, `./.`, the `:/` top-level magic prefix, and `:/.`, and
 # enumerating that set is how the substring matcher this replaced kept leaking.
-# A path that merely begins with a dot (`.gitignore`) reduces to itself and is
-# left alone.
+# A bare glob (`*`, `./*`) reaches this hook unexpanded and is expanded by the
+# shell into every entry of the directory, so it reduces the same way. A path
+# that merely begins with a dot (`.gitignore`) or ends in a glob (`src/*.ts`)
+# reduces to itself and is left alone.
 pathspec_is_everything() {
     local word candidate
     for word in $1; do
@@ -85,6 +87,7 @@ pathspec_is_everything() {
         esac
         while :; do
             case "$candidate" in
+                *\*) candidate=${candidate%\*} ;;
                 */.) candidate=${candidate%/.} ;;
                 */)  candidate=${candidate%/} ;;
                 *)   break ;;
@@ -110,8 +113,10 @@ inspect_git() {
     # `git -C /path push -f` is still recognized as a push.
     while [ $# -gt 0 ]; do
         case "$1" in
-            -C|-c|--git-dir|--work-tree|--namespace|--exec-path|--super-prefix)
-                # These take a separate value argument.
+            -C|-c|--git-dir|--work-tree|--namespace|--super-prefix)
+                # These take a separate value argument. `--exec-path` is not
+                # among them: its value is only ever attached with `=`, and the
+                # bare form prints the path and runs nothing.
                 shift
                 if [ $# -gt 0 ]; then shift; fi
                 ;;
@@ -171,6 +176,12 @@ inspect_git() {
                 REASON="force push — rewrites published history"
                 return 1
             fi
+            # Verified against git: --mirror force-updates every ref on the
+            # remote and deletes the ones that are gone locally.
+            if has "$flags" --mirror; then
+                REASON="mirror push — force-updates every remote ref"
+                return 1
+            fi
             # `git push origin +main` is a force push with no force flag.
             if has_force_refspec "$operands"; then
                 REASON="force push via + refspec — rewrites published history"
@@ -216,9 +227,10 @@ inspect_git() {
                 return 0
             fi
             # `git restore --staged .` unstages; it does not touch the working
-            # tree. Only `--worktree` alongside it reaches the files.
-            if ! has "$flags" --worktree; then
-                if has "$flags" --staged || has "$flags" --cached; then
+            # tree. Only `--worktree` alongside it reaches the files. -S and -W
+            # are git's short spellings of the same two flags.
+            if ! has "$flags" --worktree && ! has "$flags" -W; then
+                if has "$flags" --staged || has "$flags" -S || has "$flags" --cached; then
                     return 0
                 fi
             fi
@@ -236,13 +248,19 @@ inspect_git() {
     return 0
 }
 
-# Quotes are stripped rather than honored, so a wrapped invocation like
-# `bash -c "git push -f"` still tokenizes into inspectable words. The tradeoff
-# is deliberate and fails closed: it also blocks a `git push --force` that only
-# appears as search text, which is the harmless direction to be wrong in.
+# Quotes and backslashes are removed rather than honored, so a wrapped
+# invocation like `bash -c "git push -f"` still tokenizes into inspectable
+# words. Removed, not replaced with a space: the shell joins `g''it` and
+# `\git` back into `git`, and a separator inserted there is what let those
+# spellings walk past an earlier draft. A backslash-newline is a continuation,
+# so it becomes a space before the backslashes go. The tradeoff is deliberate
+# and fails closed: it also blocks a `git push --force` that only appears as
+# search text, which is the harmless direction to be wrong in.
 normalized=$COMMAND
-normalized=${normalized//\"/ }
-normalized=${normalized//\'/ }
+normalized=${normalized//\\$'\n'/ }
+normalized=${normalized//\\/}
+normalized=${normalized//\"/}
+normalized=${normalized//\'/}
 
 # Shell control operators become segment boundaries, so `git status && rm -f x`
 # is not read as one invocation with an -f flag. Two-character operators are

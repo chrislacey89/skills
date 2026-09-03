@@ -29,7 +29,15 @@ pinned_file="$root/.shellcheck-version"
 pinned="$(tr -d '[:space:]' < "$pinned_file")"
 [ -n "$pinned" ] || { echo "shellcheck-pinned: $pinned_file is empty" >&2; exit 1; }
 
-lint() { (cd "$root" && git ls-files "*.sh" | xargs "$1"); }
+# The file set is every tracked *.sh, wherever it lives — the same set CI
+# lints — and an empty set is an error, not a clean run: xargs on empty input
+# runs nothing and exits 0, which would report "linted" having linted nothing.
+lint() {
+    local n
+    n="$(cd "$root" && git ls-files "*.sh" | grep -c .)" || true
+    [ "$n" -gt 0 ] || { echo "shellcheck-pinned: git ls-files found no *.sh files to lint" >&2; return 1; }
+    (cd "$root" && git ls-files -z "*.sh" | xargs -0 "$1")
+}
 
 # Fast path: the PATH shellcheck already is the gate's instrument.
 if command -v shellcheck >/dev/null 2>&1; then

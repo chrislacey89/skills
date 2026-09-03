@@ -19,6 +19,7 @@ Do not treat it as part of the normal feature pipeline. It is a repo or user set
 
 - `git push --force` / `git push -f` / `git push --force-with-lease`
 - `git push origin +main` (a leading `+` on a refspec is a force push)
+- `git push --mirror` (force-updates every remote ref)
 - `git reset --hard`
 - `git clean -f` / `git clean -fd` / `git clean -df` / `git clean -d -f`
 - `git branch -D` / `git branch --delete --force` / `git branch -f -d`
