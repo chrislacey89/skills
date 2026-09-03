@@ -1093,15 +1093,140 @@ fi
 
 # review-checklist.md is not a SKILL.md, so it is outside $base_sites and outside
 # every loop above. It documents the same command and must not drift from the
-# canonical statement in /execute, which is what its own prose promises ("same
-# condition and same command as /execute Step 4's Tier 1 rung"). Compare the two
-# literals directly — this is the mechanism behind that sentence.
+# canonical statement in /execute, which is what its own prose promises (it
+# names /execute Step 4's Tier 1 rung as "the canonical statement"). Compare the
+# two literals directly — this is the mechanism behind that sentence.
 exec_del="$(extract_range_lines "$repo_root/execute/SKILL.md" | grep -m1 '^git diff .*--diff-filter=' || true)"
 check_del="$(extract_range_lines "$repo_root/pre-merge/review-checklist.md" | grep -m1 '^git diff .*--diff-filter=' || true)"
 [[ -n "$exec_del" ]]  || fatal "execute/SKILL.md no longer documents a --diff-filter deletion-trigger line"
 [[ -n "$check_del" ]] || fatal "pre-merge/review-checklist.md no longer documents a --diff-filter deletion-trigger line"
 assert_eq "$exec_del" "$check_del" \
     "pre-merge/review-checklist.md's deletion trigger is byte-identical to /execute's canonical one"
+
+# -----------------------------------------------------------------------------
+
+section "the sentence that gates the rung names the diff, not a header"
+
+# The command above is pinned to the byte. The sentence an agent reads to decide
+# whether to run it at all was not, and #333's review reverted that sentence to
+# the pre-#326 header gate with the command untouched: the whole suite stayed
+# green. That is #326's defect one level in — a reader whose condition nothing
+# checks against the command underneath it. So pin the gate sentence at both
+# sites: it names the diff as the trigger and does not name the header as one.
+# coverage: enumerated — the two sites that carry the deletion-trigger line,
+# the same pair the byte-identity check above fatals on if either drops it.
+for site in execute/SKILL.md pre-merge/review-checklist.md; do
+    gate_line="$(grep -m1 -E '^\*\*(Deletion Completeness|For deletion orphan surfaces) \(' "$repo_root/$site" || true)"
+    [[ -n "$gate_line" ]] || fatal "$site no longer opens the deletion rung with a bolded gate sentence"
+    if printf '%s' "$gate_line" | grep -q 'diff.*deletes or renames'; then
+        printf '  ok   %s gates the deletion rung on the diff deleting or renaming\n' "$site"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s gate sentence no longer names the diff as the trigger: %q\n' "$site" "$gate_line"
+        fail=$((fail + 1))
+    fi
+    if printf '%s' "$gate_line" | grep -q 'only when the slice body'; then
+        printf '  FAIL %s gate sentence regressed to the header gate: %q\n' "$site" "$gate_line"
+        fail=$((fail + 1))
+    else
+        printf '  ok   %s gate sentence does not gate on a ### Deletes header\n' "$site"
+        pass=$((pass + 1))
+    fi
+done
+
+# -----------------------------------------------------------------------------
+
+section "the checklist's author-mode block refuses to run without a base ref"
+
+# Found by an independent probe of #333: with $BASE_REF unset, git reads the
+# empty left endpoint of `...HEAD` as HEAD itself, exits 0, and prints nothing —
+# which the rung's own prose reads as "nothing deleted, skip." review-checklist.md
+# has no detection block of its own (Phase 1 resolves the ref), so a reviewer who
+# copies the author-mode block without Phase 1 gets a confident clean pass.
+# The block's first line now refuses instead; this runs the block both ways.
+extract_block_with() {
+    # The first fenced block in $1 whose body contains the literal $2.
+    awk -v needle="$2" '
+        /^[[:space:]]*```/ {
+            if (inblock) {
+                if (found) { for (i = 1; i <= n; i++) print buf[i]; exit }
+                inblock = 0; n = 0; next
+            }
+            inblock = 1; n = 0; found = 0; next
+        }
+        inblock {
+            buf[++n] = $0
+            if (index($0, needle)) found = 1
+        }
+    ' "$1" | sed 's/^[[:space:]]*//'
+}
+check_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" '--diff-filter=DR')"
+[[ -n "$check_block" ]] || fatal "pre-merge/review-checklist.md has no fenced block carrying the deletion trigger"
+
+set +e
+unset_out="$(cd "$deltrig" && env -u BASE_REF bash -c "$check_block" 2>&1)"
+unset_status=$?
+set -e
+if [[ "$unset_status" -ne 0 ]]; then
+    printf '  ok   with BASE_REF unset the checklist block exits %s instead of printing an empty pass\n' "$unset_status"
+    pass=$((pass + 1))
+else
+    printf '  FAIL with BASE_REF unset the checklist block exited 0 with output %q — a silent clean pass\n' "$unset_out"
+    fail=$((fail + 1))
+fi
+assert_eq '' "$(printf '%s' "$unset_out" | grep -E '^[DR]' || true)" \
+    "with BASE_REF unset the checklist block reports no deletions it could not have measured"
+
+set +e
+set_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$check_block" 2>&1)"
+set_status=$?
+set -e
+assert_eq 0 "$set_status" "with BASE_REF set the checklist block is a valid invocation"
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$set_out")" \
+    "with BASE_REF set the checklist block reports the planted deletion and rename"
+
+# -----------------------------------------------------------------------------
+
+section "the reviewer-mode filter keeps removed and renamed rows and nothing else"
+
+# The reviewer-mode command in review-checklist.md asks GitHub for the PR's file
+# list and filters it with jq. GitHub's half — the `status` vocabulary — is
+# referenced to its docs from the prose (CLAUDE.md § Commands a skill documents,
+# rule a). The jq half is ours, so it is pinned here against a fixture in the
+# documented response shape: one row per status the filter must keep, plus the
+# two it must drop. The filter is read from the checklist, not restated.
+gh_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" 'pulls/<pr-number>/files')"
+[[ -n "$gh_block" ]] || fatal "pre-merge/review-checklist.md has no fenced block carrying the reviewer-mode file-list query"
+# Join backslash-continued lines only; the filter's own backslashes (`\(.status)`,
+# `\t`) are part of the program and must survive.
+jq_filter="$(printf '%s\n' "$gh_block" | awk '{ if (sub(/\\$/, "")) printf "%s", $0; else print }' | sed -n "s/.*--jq '\([^']*\)'.*/\1/p")"
+[[ -n "$jq_filter" ]] || fatal "could not extract a single-quoted --jq filter from the reviewer-mode block"
+if printf '%s' "$gh_block" | grep -q -- '--paginate'; then
+    printf '  ok   the reviewer-mode query paginates, so a deletion past the first page is not dropped\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the reviewer-mode query no longer paginates; the default page is not the whole file list\n'
+    fail=$((fail + 1))
+fi
+if command -v jq >/dev/null 2>&1; then
+    files_fixture='[
+      {"filename": "kept.txt",    "status": "modified"},
+      {"filename": "new.txt",     "status": "added"},
+      {"filename": "gone.txt",    "status": "removed"},
+      {"filename": "new-name.txt","status": "renamed", "previous_filename": "old-name.txt"}
+    ]'
+    expected="$(printf 'removed\t\tgone.txt\nrenamed\told-name.txt\tnew-name.txt')"
+    set +e
+    actual="$(printf '%s' "$files_fixture" | jq -r "$jq_filter" 2>&1)"
+    jq_status=$?
+    set -e
+    assert_eq 0 "$jq_status" "the reviewer-mode --jq filter parses and runs"
+    assert_eq "$expected" "$actual" \
+        "the reviewer-mode --jq filter keeps the removed and renamed rows, in the documented tab-separated shape, and drops the rest"
+else
+    printf '  FAIL jq is not installed, so the reviewer-mode filter was not checked (install jq; CI has it)\n'
+    fail=$((fail + 1))
+fi
 
 # -----------------------------------------------------------------------------
 

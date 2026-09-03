@@ -108,9 +108,10 @@ For each `Produces` entry in the PR's slice issue:
 
 For each `Consumes` entry referencing an already-closed upstream slice, run the same check against the upstream's declared Produces. If the upstream export is missing or shape-drifted, note it and flag the upstream issue for correction.
 
-**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header. In author-mode and loop-mode, run the same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it, with `$BASE_REF` as Phase 1's detection block resolved it:
+**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header. In author-mode and loop-mode, run the same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it, with `$BASE_REF` as Phase 1's detection block resolved it. The first line refuses to run without it, because an empty left endpoint makes git diff `HEAD` against itself and print nothing, which reads as a clean pass:
 
 ```bash
+: "${BASE_REF:?resolve it with the Phase 1 detection block before running this}"
 git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
 ```
 
