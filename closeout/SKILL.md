@@ -150,6 +150,26 @@ Confirm the PR now reports `MERGED` before touching the worktree:
 gh pr view <number> --json state -q .state       # expect: MERGED
 ```
 
+**Then release the post-review edit lock.** `/pre-merge` Phase 4 wrote
+`.claude/.review-stamped` beside the review-currency stamp; the classification
+hook reads it and refuses implementation writes while it exists and
+`.claude/.fix-findings-active` does not. Once the PR is merged that review is
+spent, and a flag left behind would lock the *next* branch on the strength of
+this one's review. Remove it here, while the shell is still in the checkout that
+holds it — after Step 5 removes the worktree there may be nothing left to reach,
+and on a plain `git checkout -b` branch, or a host-owned worktree Step 5 skips,
+the flag would otherwise survive indefinitely:
+
+```bash
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+rm -f "$PROJECT_DIR/.claude/.review-stamped"
+```
+
+`.claude/.fix-findings-active` is not removed here — `/fix-findings` removes its
+own flag on every exit path, and a copy still present at merge means that run
+aborted without cleaning up. Say so rather than deleting it silently; it is the
+one signal that the lock has been standing open.
+
 ### 4. Re-anchor the shell to the base checkout — BEFORE removing the worktree
 
 **This is the load-bearing step.** If the current working tree is a linked worktree, move the shell to the base checkout *now*, while the worktree still exists, so nothing is removed out from under the running shell. Pick the re-anchor mechanism that matches how the session got into the worktree:

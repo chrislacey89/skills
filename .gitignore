@@ -13,3 +13,11 @@ plans/
 # settings or hooks here stays possible.
 .claude/.tdd-active
 .claude/.tdd-skipped
+
+# The post-review edit lock's two flags. /pre-merge Phase 4 writes the first
+# beside the review-currency stamp and /closeout removes it at merge;
+# /fix-findings writes the second when it loads and removes it when it reports.
+# Same transience as the markers above, and a committed copy of either would
+# hold the lock shut or open across every future branch in this repo.
+.claude/.review-stamped
+.claude/.fix-findings-active

@@ -348,6 +348,19 @@ ORIG_BYTES=$(wc -c < "$BODY_FILE")
 
 gh pr edit <pr-number> --body-file "$BODY_FILE"
 rm -f "$BODY_FILE"
+
+# The stamp's local twin. `.claude/.review-stamped` is read by
+# .claude/hooks/enforce-classification.sh, which refuses implementation writes
+# while it exists and .claude/.fix-findings-active does not — so a post-review
+# fix has to go through /fix-findings or through a visible hand deletion.
+# /closeout removes it at merge. Only touch it after the stamp write succeeded:
+# a flag written beside a stamp that aborted would lock the branch on the
+# strength of a review nothing recorded.
+# $CLAUDE_PROJECT_DIR is unset outside a Claude Code session, and an unguarded
+# expansion would resolve to "/.claude" — a silent no-write that leaves the
+# lock disengaged while everything above reports success.
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
 ```
 
 - **Both guards refuse rather than repair, and an abort is not a failed review.** Retry the fetch **once**; if the second attempt also aborts, report it and hand back with the findings you already presented standing. The bound matters — an unbudgeted retry loop against a flaking API was an untimed contributor to the incident this guard came from. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of.
@@ -356,8 +369,8 @@ rm -f "$BODY_FILE"
 - **The HTML comment carries the full 40-character SHA — never the short form.** The two placeholders sit on adjacent lines and are not interchangeable: `<full-sha>` is the untruncated `git rev-parse HEAD` output, `<short-sha>` is the abbreviated form and belongs *only* in the visible prose line. `/closeout` compares the extracted marker against `headRefOid`, which is always 40 characters, so a short SHA in the comment can never compare equal — the gate would then report divergence on a PR whose head never moved, and a gate that cries wolf is one that gets clicked through. `/closeout`'s parser requires exactly 40 hex characters, so a swapped placeholder does not degrade quietly into a prefix match; it fails to parse. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this contract by round-tripping this template through `/closeout`'s own extraction, so the two skills cannot drift apart silently.
 - **Exactly one stamp per PR.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer.
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
-- **Reviewer-mode does not stamp.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify.
-- **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed.
+- **Reviewer-mode does not stamp, and does not touch `.claude/.review-stamped`.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify. Locking a local checkout on the strength of comments nobody has posted would refuse edits on a branch the reviewer does not own.
+- **Fixes made in response to these findings will move the head past the stamp.** That is the mechanism working, not a false alarm: those commits genuinely have not been reviewed. `/closeout` Step 2 makes that divergence *visible* at merge; the `.claude/.review-stamped` flag written above is what makes it *cost something* at the moment of the edit, by routing the fix to `/fix-findings` — a sub-agent that did not write the code — or forcing a deliberate hand deletion. The flag is local and transient; the stamp in the PR body remains the durable record, and this skill remains its only writer.
 - **Loop-mode stamps exactly as author-mode does.** It makes no commits of its own, so the head does not move underneath it and none of the rules above need a loop-mode exception. Fixes the *operator* makes in response to the ledger move the head past the stamp, which is the bullet immediately above: real and unreviewed.
 
 **At the very end of Phase 4 output, if — and only if — a durable lesson emerged from this work that future `/research` or `/write-a-prd` would benefit from, recommend capturing it in this PR before merge.** `/compound`'s default is to commit the `docs/solutions/` entry onto this still-open PR branch, so the lesson is reviewed in the same pass as the code and merged atomically with it — capture it now, before `/closeout`, rather than as a separate post-merge session. Print the runtime handoff line:
@@ -549,7 +562,7 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 ## Handoff
 
 - **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), an existing PR number you want reviewed (reviewer-mode), or an AFK handoff from `/execute` — branch plus the `## Review Notes` it wrote into the PR body (loop-mode)
-- **Produces:** a PR with lineage, stamped with the head SHA the review covered, plus an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or that same PR plus a `## Review Disposition Ledger` in which every finding has a row, an owner, and the evidence for or against it (loop-mode)
+- **Produces:** a PR with lineage, stamped with the head SHA the review covered — plus, locally, the transient `.claude/.review-stamped` flag the classification hook reads to route post-review fixes through `/fix-findings` — and an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or that same PR plus a `## Review Disposition Ledger` in which every finding has a row, an owner, and the evidence for or against it (loop-mode)
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
 - **May invoke:** `/ts-audit` on changed `.ts`/`.tsx` — in loop-mode only; author-mode and reviewer-mode mention it without invoking
 - **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR so it is reviewed and merged with the code it explains (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`. In loop-mode, the ledger hands back to the operator: settle the `open` rows — fix, file, accept, or drop each one — then either re-invoke `/pre-merge --loop` on the updated diff or continue to `/compound` and `/closeout` as above

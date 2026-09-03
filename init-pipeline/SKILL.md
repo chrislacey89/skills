@@ -30,6 +30,8 @@ Create `.claude/hooks/enforce-classification.sh` and make it executable. This bl
 
 The hook checks for either `.claude/.tdd-active` (TDD invoked) or `.claude/.tdd-skipped` (visual frontend, explicitly opted out). No path checking beyond the trigger surface — it enforces "did you go through the gate?"
 
+It carries a second, independent clause on the same trigger surface: the **post-review edit lock**, which refuses an implementation write while `.claude/.review-stamped` exists and `.claude/.fix-findings-active` does not. The first clause asks "was this work classified?"; the second asks "is this edit landing after a review, authored by the session the review went around?" Both are one script because both key off the same file-pattern decision.
+
 **Install-time: ask which file patterns constitute implementation code.** Before scaffolding the hook, present the user with the default include list and ask:
 
 > "The TDD classification gate fires on Write/Edit of files matching a pattern list. Default: `*.ts, *.tsx, *.astro, *.py, *.go, *.rb, *.java, *.rs, *.js, *.jsx, *.vue, *.svelte`. Over-gating is acceptable — classification is a quick decision at the top of /execute, though backend/behavior-heavy matches will trigger a full /tdd cycle. Accept the default, or customize for this project?"
@@ -66,8 +68,31 @@ if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT
   echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy) or create .claude/.tdd-skipped (visual frontend)."}' >&2
   exit 2
 fi
+# Post-review edit lock. /pre-merge Phase 4 touches .review-stamped beside the
+# review-currency stamp; /fix-findings touches .fix-findings-active when it
+# loads and removes it when it reports. Between those two, an implementation
+# edit is a post-review fix authored by the session the review just went around.
+if [ -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active" ]; then
+  echo '{"decision":"block","reason":"BLOCKED: this branch has been reviewed and stamped. A post-review fix needs an independent author. Either invoke /fix-findings <numbers>, or delete .claude/.review-stamped to take the edit yourself."}' >&2
+  exit 2
+fi
 exit 0
 ```
+
+**The lock's two exits are both deliberate acts.** Invoking `/fix-findings`
+routes the edit to a sub-agent that did not write the code; deleting
+`.claude/.review-stamped` by hand takes the edit anyway. Today that second choice
+is made silently and invisibly — this clause does not remove it, it makes it
+visible.
+
+**What the clause deliberately does not cover.** It reuses the `IMPL_PATTERNS`
+list and the `*test*` / `*spec*` / `*.d.ts` / `*.config.*` skip logic above,
+unchanged, so a post-review edit to a test file, a type declaration, a config
+file, or anything outside the pattern list is **not** refused. That is the same
+trigger surface the classification gate already uses, and giving the two clauses
+different definitions of "implementation file" would make the hook's behavior
+unreadable from its own source. The `/pre-merge` delta pass, not this hook,
+covers a post-review edit to a test.
 
 After writing, run: `chmod +x .claude/hooks/enforce-classification.sh`
 
@@ -260,9 +285,13 @@ Append these lines if not already present:
 .claude/.tdd-active
 .claude/.tdd-skipped
 .claude/.ralph-checked
+.claude/.review-stamped
+.claude/.fix-findings-active
 ```
 
 `.claude/.ralph-checked` is reserved here but created by `/setup-ralph-loop`, which is auto-invoked by `/execute` when a multi-slice task needs AFK bounds or may be run manually. `/init-pipeline` does not create the marker itself.
+
+`.claude/.review-stamped` and `.claude/.fix-findings-active` are the post-review edit lock's two flags, also reserved here rather than created: `/pre-merge` Phase 4 writes the first beside the review-currency stamp and `/closeout` removes it at merge; `/fix-findings` writes the second when it loads and removes it when it reports. Both are transient, and a committed one would hold the lock open or shut across every future branch.
 
 ### 7. Worktree provisioning mode (optional)
 
@@ -311,4 +340,4 @@ Before considering setup complete, check:
 - **Produces:** complete enforcement infrastructure — Claude Code hooks, git guardrails, pre-commit hooks using detected or user-confirmed tools
 - **Auto-invoked by:** `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing
 - **Invokes:** `/git-guardrails-claude-code` (project scope), `/setup-pre-commit`
-- **Supports downstream:** `/tdd` (marker creation), `/execute` (marker cleanup); reserves `.claude/.ralph-checked` for `/setup-ralph-loop`, which creates the marker itself (auto-invoked by `/execute` for multi-slice work, or run manually)
+- **Supports downstream:** `/tdd` (marker creation), `/execute` (marker cleanup); reserves `.claude/.ralph-checked` for `/setup-ralph-loop`, which creates the marker itself (auto-invoked by `/execute` for multi-slice work, or run manually); reserves `.claude/.review-stamped` and `.claude/.fix-findings-active` for the post-review edit lock, written by `/pre-merge` Phase 4 and `/fix-findings` respectively
