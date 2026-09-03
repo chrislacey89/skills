@@ -15,7 +15,7 @@ pre-commit:
     shellcheck-version:
       run: bash scripts/check-shellcheck-version.sh
     shellcheck:
-      glob: "scripts/*.sh"
+      glob: "**/*.sh"
       run: shellcheck {staged_files}
     # Cheap (<1s) and catches the one-file case at the moment it happens: a
     # SKILL.md's sources: block changed and site/src/lib/canon.generated.ts was
@@ -52,6 +52,8 @@ pre-push:
       run: bash scripts/test-per-unit-series-contract.sh
     documented-git-command-tests:
       run: bash scripts/test-documented-git-commands.sh
+    git-guardrail-tests:
+      run: bash scripts/test-git-guardrails.sh
     compound-clustering-single-source-tests:
       run: bash scripts/test-compound-clustering-single-source.sh
     q4-mechanism-name-tests:
