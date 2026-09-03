@@ -40,3 +40,5 @@ docs/restated-claims.md         tdd
 docs/restated-claims.md         pre-merge
 docs/restated-claims.md         execute
 docs/mutation-at-consumption.md  execute
+docs/mutation-at-consumption.md  fix-findings
+docs/next-step-menu.md          fix-findings
