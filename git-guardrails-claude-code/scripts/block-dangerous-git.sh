@@ -345,6 +345,12 @@ STALE_STAMP_OPT_OUT=ALLOW_STALE_STAMP_MERGE
 # word in command position. The list is short and every entry is probed in
 # scripts/test-git-guardrails.sh rather than trusted from memory; a wrapper it
 # does not know produces a miss, which is the safe direction.
+#
+# `bash -c`, `sh -c`, and `eval` are in the list because the quote stripping
+# above has already flattened their argument into ordinary tokens by the time
+# this runs — the same property that lets the git rules see into
+# `bash -c "git push -f"`. An independent probe walked all three of them, plus
+# `xargs -I{} bash -c '…'`, past a draft that had only the process wrappers.
 gh_invocation_index() {
     GH_INDEX=""
     local i=0 tok
@@ -357,6 +363,7 @@ gh_invocation_index() {
                 ;;
             [A-Za-z_]*=*)            ;;  # VAR=value prefix
             sudo|doas|env|command|exec|nohup|time|xargs) ;;
+            bash|sh|zsh|dash|eval)                        ;;
             if|then|elif|else|do|while|until|!|\{)       ;;
             -*)                      ;;  # a wrapper's own flags
             *) return 1 ;;
@@ -403,18 +410,31 @@ heredoc_delimiter() {
 # tokens after `merge`. Sets GH_SELECTOR and GH_REPO, and returns 1 when the
 # target cannot be determined without guessing.
 #
-# `gh pr merge` takes at most one positional argument, `[<number> | <url> |
-# <branch>]`. That single fact is enough to resolve the common forms without
-# re-authoring gh's flag table — a paraphrase of another tool's option list is
-# a permanent drift liability this repo would then own (CLAUDE.md § "Commands a
-# skill documents", rule (a)). What the fact cannot do is tell a bare token
-# apart from a value belonging to a flag that takes one, so:
+# Two facts resolve this without re-authoring gh's flag table, which would be
+# a paraphrase of another tool's option list and a permanent drift liability
+# this repo would then own (CLAUDE.md § "Commands a skill documents", rule (a)):
+# `gh pr merge` takes at most one positional argument, and a flag's value
+# always follows the flag it belongs to. So an operand that appears BEFORE any
+# flag cannot be a value, and is the positional:
 #
-#   no operands                      -> the PR for the current branch
-#   one operand, no other flags      -> that operand IS the positional
-#   one operand, other flags present -> accepted only when it is a PR number
-#                                       or a URL, which no gh flag takes
-#   anything else                    -> unresolvable; the command runs
+#   no operands                        -> the PR for the current branch
+#   one operand, before any flag       -> that operand IS the positional
+#   one operand, after some flag       -> unresolvable; the command runs
+#   anything else                      -> unresolvable; the command runs
+#
+# An earlier draft accepted an all-digits operand anywhere on the grounds that
+# no gh flag takes a number. That was a claim about gh's option list made
+# without reading it, and it is false: an independent probe read
+# `gh pr merge --help` and found five value-taking flags, so
+# `gh pr merge --subject 4821` was resolving to PR 4821 while the merge it
+# would permit targets the current branch's PR. Looking up the wrong pull
+# request is worse than not looking one up, because it reaches a confident
+# verdict about a PR nobody asked about — so the rule above is the sound one,
+# and `gh pr merge --squash 4821` is a documented miss rather than a guess.
+#
+# A `#` token starts a shell comment. Everything after it is prose, not
+# operands — without this, `gh pr merge # ship it` counted three operands,
+# fell through to unresolvable, and let the barest form of the command through.
 #
 # `-R` / `--repo` is read rather than dropped, and forwarded to the lookup.
 # Dropping it was a real defect in the first version of this check: it made
@@ -435,6 +455,7 @@ gh_merge_target() {
         fi
 
         case "$tok" in
+            \#*)       break ;;
             --repo=*)  GH_REPO=${tok#--repo=} ; continue ;;
             --repo|-R) next_is_repo=1         ; continue ;;
             -R?*)      GH_REPO=${tok#-R}      ; continue ;;
@@ -442,29 +463,16 @@ gh_merge_target() {
         esac
 
         operand_count=$((operand_count + 1))
-        [ "$operand_count" -eq 1 ] && first_operand=$tok
+        if [ "$operand_count" -eq 1 ] && [ "$other_flags" -eq 0 ]; then
+            first_operand=$tok
+        fi
     done
 
-    case "$operand_count" in
-        0) return 0 ;;
-        1)
-            if [ "$other_flags" -eq 0 ]; then
-                GH_SELECTOR=$first_operand
-                return 0
-            fi
-            case "$first_operand" in
-                *[!0-9]*)
-                    case "$first_operand" in
-                        http://*|https://*) GH_SELECTOR=$first_operand; return 0 ;;
-                    esac
-                    return 1
-                    ;;
-                ?*) GH_SELECTOR=$first_operand; return 0 ;;
-            esac
-            return 1
-            ;;
-    esac
-    return 1
+    [ "$operand_count" -le 1 ] || return 1
+    [ "$operand_count" -eq 0 ] && return 0
+    [ -n "$first_operand" ]    || return 1
+    GH_SELECTOR=$first_operand
+    return 0
 }
 
 # check_gh_merge — the refusal itself. Returns 1 with the message on stderr
