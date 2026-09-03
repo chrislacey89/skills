@@ -1108,11 +1108,11 @@ assert_eq "$exec_del" "$check_del" \
 section "the sentence that gates the rung names the diff, not a header"
 
 # The command above is pinned to the byte. The sentence an agent reads to decide
-# whether to run it at all was not, and #333's review reverted that sentence to
-# the pre-#326 header gate with the command untouched: the whole suite stayed
-# green. That is #326's defect one level in — a reader whose condition nothing
-# checks against the command underneath it. So pin the gate sentence at both
-# sites: it names the diff as the trigger and does not name the header as one.
+# whether to run it at all is a second operative site for the same trigger, and
+# a sentence nothing checks can regress to the header gate while the command
+# and its assertions stay green — #326's defect one level in. So pin the gate
+# sentence at both sites: it names the diff as the trigger and does not name
+# the header as one.
 # coverage: enumerated — the two sites that carry the deletion-trigger line,
 # the same pair the byte-identity check above fatals on if either drops it.
 for site in execute/SKILL.md pre-merge/review-checklist.md; do
@@ -1202,10 +1202,10 @@ gh_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" 'pulls
 jq_filter="$(printf '%s\n' "$gh_block" | awk '{ if (sub(/\\$/, "")) printf "%s", $0; else print }' | sed -n "s/.*--jq '\([^']*\)'.*/\1/p")"
 [[ -n "$jq_filter" ]] || fatal "could not extract a single-quoted --jq filter from the reviewer-mode block"
 if printf '%s' "$gh_block" | grep -q -- '--paginate'; then
-    printf '  ok   the reviewer-mode query paginates, so a deletion past the first page is not dropped\n'
+    printf '  ok   the reviewer-mode query carries --paginate\n'
     pass=$((pass + 1))
 else
-    printf '  FAIL the reviewer-mode query no longer paginates; the default page is not the whole file list\n'
+    printf '  FAIL the reviewer-mode query no longer carries --paginate; gh returns one page without it\n'
     fail=$((fail + 1))
 fi
 if command -v jq >/dev/null 2>&1; then
@@ -1224,7 +1224,7 @@ if command -v jq >/dev/null 2>&1; then
     assert_eq "$expected" "$actual" \
         "the reviewer-mode --jq filter keeps the removed and renamed rows, in the documented tab-separated shape, and drops the rest"
 else
-    printf '  FAIL jq is not installed, so the reviewer-mode filter was not checked (install jq; CI has it)\n'
+    printf '  FAIL jq is not installed, so the reviewer-mode filter was not checked; install jq\n'
     fail=$((fail + 1))
 fi
 
