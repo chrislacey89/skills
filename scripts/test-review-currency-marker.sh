@@ -3,10 +3,15 @@
 # `<!-- reviewed-at: <sha> -->` review-currency stamp.
 #
 # /pre-merge Phase 4 WRITES the marker into the PR body. /closeout Step 2 READS
-# it back and compares it to `headRefOid` before merging. Two skills, one
-# string, and no shared definition of the string's shape — which is exactly the
-# drift class docs/solutions/architecture-decisions/staleness-gate-intermediate-writers-2026-08-06.md
-# named under Prevention → Code-level.
+# it back and compares it to `headRefOid` before merging, and the git guardrail
+# hook performs the SAME read at `gh pr merge`, so a merge that never goes
+# through /closeout cannot skip it (#327, Lock 2). Three files, one string, and
+# no shared definition of the string's shape — which is exactly the drift class
+# docs/solutions/architecture-decisions/staleness-gate-intermediate-writers-2026-08-06.md
+# named under Prevention → Code-level. Two readers make it worse than the
+# original two-party case: a change made to one reader and not the other leaves
+# the two gates disagreeing about the same PR, and neither of them wrong on its
+# own terms.
 #
 # The contract is: the marker carries a full 40-character OID. `headRefOid` is
 # always 40 characters, so a short SHA reaching the marker would parse fine and
@@ -24,6 +29,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 closeout_skill="$repo_root/closeout/SKILL.md"
 premerge_skill="$repo_root/pre-merge/SKILL.md"
+guard_script="$repo_root/git-guardrails-claude-code/scripts/block-dangerous-git.sh"
 
 pass=0
 fail=0
@@ -60,6 +66,18 @@ reader_filter="$(printf '%s' "$reader_line" \
 # The marker template /pre-merge Phase 4 substitutes the reviewed SHA into.
 writer_template="$(grep -o '<!-- reviewed-at: [^ ]* -->' "$premerge_skill" | head -1)"
 
+# The second reader: the same extraction, inside the git guardrail hook. Pulled
+# out with the same two expressions used on /closeout above, so a reader that
+# stops having this shape fails the FATAL below rather than passing vacuously.
+guard_line="$(grep "sed -n 's/[^']*reviewed-at" "$guard_script" | head -1)"
+
+guard_expr="$(printf '%s' "$guard_line" \
+    | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
+    | sed "s/^sed -n '//; s/'\$//")"
+
+guard_filter="$(printf '%s' "$guard_line" \
+    | sed "s/.*'[[:space:]]*|[[:space:]]*//; s/)[[:space:]]*\$//")"
+
 if [[ -z "$reader_expr" ]]; then
     printf 'FATAL: no sed -n reviewed-at extraction found in %s\n' "$closeout_skill" >&2
     printf '       Either the reader moved or its shape changed; update this suite with it.\n' >&2
@@ -70,9 +88,18 @@ if [[ -z "$writer_template" ]]; then
     printf '       Either the writer moved or its shape changed; update this suite with it.\n' >&2
     exit 2
 fi
+if [[ -z "$guard_expr" ]]; then
+    printf 'FATAL: no sed -n reviewed-at extraction found in %s\n' "$guard_script" >&2
+    printf '       The guard hook is the second reader of this marker (#327, Lock 2). If the\n' >&2
+    printf '       refusal was removed on purpose, delete this section; if not, it has drifted\n' >&2
+    printf '       into a shape this suite can no longer compare.\n' >&2
+    exit 2
+fi
 
 printf 'reader (closeout/SKILL.md):   %s\n' "$reader_expr"
 printf 'reader filter:                %s\n' "$reader_filter"
+printf 'reader (guardrail hook):      %s\n' "$guard_expr"
+printf 'reader filter (guardrail):    %s\n' "$guard_filter"
 printf 'writer (pre-merge/SKILL.md):  %s\n' "$writer_template"
 
 # read_marker <<< body — run /closeout's own extraction over a PR body on stdin.
@@ -104,6 +131,25 @@ section "the reader is fully accounted for"
 
 assert_eq 'tail -1' "$reader_filter" \
     "the post-sed filter is still 'tail -1', which read_marker replicates"
+
+# -----------------------------------------------------------------------------
+
+section "both readers of the marker extract it the same way"
+
+# The guardrail hook and /closeout read the same stamp on the same PR at
+# almost the same moment. If the two expressions diverge, one gate reports a
+# stale stamp and the other reports none, on a PR neither of them is wrong
+# about in isolation — and the divergence is invisible in both files, because
+# each one reads correctly on its own.
+#
+# Byte equality, not equivalence: this suite cannot decide whether two
+# different regexes accept the same language, so it requires the cheaper
+# property it can actually check. Every round-trip assertion below then
+# covers both readers, because they are the same string.
+assert_eq "$reader_expr" "$guard_expr" \
+    "the guardrail hook's sed is byte-identical to /closeout's"
+assert_eq "$reader_filter" "$guard_filter" \
+    "the guardrail hook applies the same post-sed filter"
 
 # -----------------------------------------------------------------------------
 

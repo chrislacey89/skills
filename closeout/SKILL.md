@@ -136,6 +136,8 @@ Three outcomes, and only one of them interrupts:
 
 This precondition **never hard-blocks**. `/closeout` is HITL and non-blocking by design, and the fix here is making the divergence *visible* — not seizing the merge decision from the user.
 
+The git guardrail hook does hard-block, on the merge command rather than here, so that a merge which never passes through `/closeout` cannot skip this read (`/git-guardrails-claude-code` → "What Gets Blocked Conditionally"). Where it is installed, the **Merge anyway** branch above needs the opt-out named in Step 3.
+
 ### 3. Merge the PR
 
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it:
@@ -143,6 +145,14 @@ Merge with the repo's convention (squash is the common default; confirm if unsur
 ```bash
 gh pr merge <number> --squash --delete-branch   # or --merge / --rebase per repo convention
 ```
+
+If the guardrail hook is installed and Step 2 found a stale stamp that the user chose to accept, this command is refused — the hook reads the same stamp and does not know a human just decided. Carry the decision across explicitly:
+
+```bash
+ALLOW_STALE_STAMP_MERGE=1 gh pr merge <number> --squash --delete-branch
+```
+
+Only after the user picked **Merge anyway** in Step 2. Reaching for the variable because a merge was refused, without going back through Step 2, is defeating the gate rather than passing it.
 
 Confirm the PR now reports `MERGED` before touching the worktree:
 
