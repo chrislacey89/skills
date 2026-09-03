@@ -90,7 +90,7 @@ if [ -z "$violations" ]; then
 else
   n=$(wc -l <<<"$violations" | tr -d ' ')
   bad "$n pipeline(s) feed a producer into 'grep -q' under pipefail"
-  sed 's/^/       /' <<<"$violations"
+  printf '       %s\n' "${violations//$'\n'/$'\n'       }"
   printf '       fix: grep -q NEEDLE <<<"$var"   or   grep -q NEEDLE < <(producer)\n'
 fi
 
@@ -126,7 +126,7 @@ if [ -z "$capture_violations" ]; then
 else
   n=$(wc -l <<<"$capture_violations" | tr -d ' ')
   bad "$n capture(s) abort before their own empty-check can run"
-  sed 's/^/       /' <<<"$capture_violations"
+  printf '       %s\n' "${capture_violations//$'\n'/$'\n'       }"
   printf '       fix: append `|| true` inside the substitution, so the next line decides\n'
 fi
 
