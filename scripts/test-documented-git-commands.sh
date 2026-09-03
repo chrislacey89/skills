@@ -1205,7 +1205,7 @@ if printf '%s' "$gh_block" | grep -q -- '--paginate'; then
     printf '  ok   the reviewer-mode query carries --paginate\n'
     pass=$((pass + 1))
 else
-    printf '  FAIL the reviewer-mode query no longer carries --paginate; gh returns one page without it\n'
+    printf '  FAIL the reviewer-mode query no longer carries --paginate\n'
     fail=$((fail + 1))
 fi
 if command -v jq >/dev/null 2>&1; then
