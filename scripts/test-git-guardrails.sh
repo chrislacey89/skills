@@ -207,6 +207,7 @@ section "destructive forms the doc does not enumerate are still blocked"
 # that defeated the substring matcher. Each is a real invocation of the
 # corresponding blocked command, verified against git before being listed here.
 assert_blocked_form() { assert_verdict "$BLOCKED" "$1" "$2"; }
+assert_allowed_form() { assert_verdict "$ALLOWED" "$1" "$2"; }
 
 # Flag order: the operand can precede the flag.
 assert_blocked_form 'git push origin main -f'          'force flag after the operands'
@@ -275,6 +276,9 @@ assert_blocked_form 'git checkout **'                  'a doubled glob is still 
 assert_blocked_form 'git checkout ./**'                'the cwd spelling of the doubled glob'
 assert_blocked_form "git checkout '[a-z]*'"            'a character class reaches every tracked file'
 assert_blocked_form "git checkout -- '?*'"             'a single-character wildcard does too'
+assert_blocked_form "git checkout -- '[[:alpha:]]*'"   'a POSIX class does too'
+assert_allowed_form 'git checkout n?ext'               'a lone ? cannot cross a directory'
+assert_allowed_form "git checkout '[a-z]'"             'a lone character class cannot either'
 
 # Git's pathspec magic and path traversal, each verified to revert every
 # tracked file in a scratch repository.
@@ -301,8 +305,6 @@ assert_blocked_form 'git clean -f -- -n'               'a flag-shaped filename a
 # -----------------------------------------------------------------------------
 
 section "benign near-misses stay allowed"
-
-assert_allowed_form() { assert_verdict "$ALLOWED" "$1" "$2"; }
 
 # The false-positive class the substring matcher had: `git checkout \.` matched
 # any path beginning with a dot. Dotfiles and dot-directories are ordinary
@@ -375,11 +377,13 @@ section "the deliberate over-block is pinned, not accidental"
 assert_verdict "$BLOCKED" "grep -r 'git push --force' docs/" \
     'the dangerous string as search text (accepted over-block: quotes are stripped)'
 
-# A wildcard at the root of a checkout or restore is refused whatever it
-# spells, because `[a-z]*` and `?*` reach every tracked file and the guard
-# cannot tell which names `*.md` reaches without reading the tree.
-assert_verdict "$BLOCKED" "git checkout -- '*.md'" \
-    'a root-level pattern (accepted over-block: the guard cannot see what it matches)'
+# A starred pattern at the root of a checkout or restore is refused whatever
+# it spells, because `[a-z]*` and `?*` reach every tracked file and the guard
+# cannot tell which names `*.txt` reaches without reading the tree. This one
+# costs something real — `git checkout -- '*.txt'` is a legitimate partial
+# revert — and #334 carries it as a known over-block.
+assert_verdict "$BLOCKED" "git checkout -- '*.txt'" \
+    'a root-level starred pattern (accepted over-block: the guard cannot see what it matches)'
 
 # -----------------------------------------------------------------------------
 

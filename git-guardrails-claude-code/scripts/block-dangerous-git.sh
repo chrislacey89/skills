@@ -76,10 +76,11 @@ has_force_refspec() {
 # Each operand is walked component by component: `.` and an empty component
 # are nothing, `..` steps back out, and a trailing wildcard component is
 # dropped — `*` because the shell expands it into every entry of the
-# directory, and `?*` or `[a-z]*` because git's own matching lets them reach
-# every tracked file just the same. That drops `*.md` too; the guard cannot
-# know which names a pattern reaches, so a pattern at the root is refused (the
-# harmless direction) and pinned in the suite as an accepted over-block. An
+# directory, and `?*` or `[a-z]*` because git's own matching lets a star reach
+# every tracked file just the same. That drops `*.md` and `*.txt` too; the
+# guard cannot know which names a pattern reaches, so a starred pattern at the
+# root is refused (the harmless direction) and pinned in the suite as an
+# accepted over-block. An
 # operand that walks back to the root — `.`, `./`, `./.`, `*`, `./*`,
 # `sub/..` — names everything. Git's short pathspec magic is peeled first: `:/` anchors at the
 # root, a bare `:` is the empty pathspec, and an exclusion (`:!`, `:^`) with no
@@ -126,9 +127,11 @@ pathspec_is_everything() {
             if [ "$comp" = "$rest" ]; then rest=""; else rest=${rest#*/}; fi
             case "$comp" in
                 ''|.) ;;
-                *\**|*\?*|*\[*)
-                    # A wildcard names everything only in last position;
-                    # `*/x` is partial.
+                *\**)
+                    # A star names everything only in last position; `*/x`
+                    # is partial. `?` and `[...]` alone cannot reach every
+                    # path — only a star crosses directories — so they are
+                    # ordinary components.
                     if [ -n "$rest" ]; then depth=$((depth + 1)); fi
                     ;;
                 ..)
