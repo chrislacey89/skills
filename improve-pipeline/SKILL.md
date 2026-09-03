@@ -131,6 +131,8 @@ Classify the finding:
 
 If the issue is only a Local event, stop and redirect to the downstream repo's normal documentation or `/compound` flow.
 
+**Do not price a proposal in rework.** Review rounds, findings per pass, and fix-up commits are the numbers this pipeline can readily produce about itself, and every one of them is a cost paid *inside* the pipeline. They are not a quality signal: a 2026-09-03 join of bug-labeled issues to the PRs that shipped the code they name — 212 merged PRs across three repos — found that fix-up share does not predict fewer bugs filed after merge, within any slice size band. Slice size does. So a case resting on "this would cut a review round" or "this PR needed four passes" is arguing about spend, not outcome, and must say so. See [references/escaped-defect-join.md](references/escaped-defect-join.md) for the method, the caveats, and how thin the evidence still is — 28 of 117 bugs joined, because the pack deliberately keeps file paths out of bug reports.
+
 ### Phase 3: Expand Scope to the Whole Repository
 
 Never evaluate a proposed pipeline change in isolation.
@@ -205,6 +207,7 @@ The Skeptic should look for:
 - recommendations that would burden ordinary users who are not trying to improve the pipeline
 - evidence that the issue was downstream and not structural here
 - adds a feature whose cost is paid by every future user (Norman's featuritis, paired with Meadows policy resistance)
+- treats an in-pipeline rework number as an outcome — see the Phase 2 note above and [references/escaped-defect-join.md](references/escaped-defect-join.md)
 
 The Skeptic must cite at least one library source or established principle that warns against the change or names a known failure mode the change could create (for example, Nygard on accidental coupling, Meadows on policy resistance, Ousterhout on shallow modules, Fowler on premature abstraction).
 
