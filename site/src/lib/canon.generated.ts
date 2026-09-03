@@ -67,6 +67,7 @@ export const canon: CanonWork[] = [
 		author: "Jason Cohen",
 		type: "book",
 		citations: [
+			{ skill: "fix-findings", tier: "secondary" },
 			{ skill: "pre-merge", tier: "secondary" },
 			{ skill: "visual-recap", tier: "primary" },
 			{ skill: "walk-commits", tier: "secondary" },
@@ -157,6 +158,7 @@ export const canon: CanonWork[] = [
 		author: "Nancy Leveson",
 		type: "book",
 		citations: [
+			{ skill: "fix-findings", tier: "primary" },
 			{ skill: "pre-merge", tier: "secondary" },
 		],
 	},
@@ -216,6 +218,7 @@ export const canon: CanonWork[] = [
 		author: "Ammann & Offutt",
 		type: "book",
 		citations: [
+			{ skill: "fix-findings", tier: "secondary" },
 			{ skill: "tdd", tier: "secondary" },
 		],
 	},
@@ -370,6 +373,7 @@ export const canon: CanonWork[] = [
 		type: "book",
 		citations: [
 			{ skill: "closeout", tier: "primary" },
+			{ skill: "fix-findings", tier: "secondary" },
 			{ skill: "handoff", tier: "primary" },
 			{ skill: "improve-pipeline", tier: "secondary" },
 			{ skill: "prototype", tier: "secondary" },
@@ -457,6 +461,7 @@ export const canon: CanonWork[] = [
 			{ skill: "compound", tier: "secondary" },
 			{ skill: "correct-course", tier: "primary" },
 			{ skill: "create-milestone", tier: "secondary" },
+			{ skill: "fix-findings", tier: "secondary" },
 			{ skill: "improve-pipeline", tier: "primary" },
 			{ skill: "shape", tier: "secondary" },
 			{ skill: "triage-issue", tier: "primary" },
