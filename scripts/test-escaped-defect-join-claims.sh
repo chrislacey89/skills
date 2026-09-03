@@ -78,7 +78,10 @@ printf '%s: figures restated from %s still appear there\n' "$SKILL" "$DOC"
 
 # The Phase 2 note summarizes the run inline. Every number it states must be a
 # number the write-up states, or the summary has outlived its source.
-note="$(tr '\n' ' ' < "$SKILL" | tr -s ' ' | grep -oE 'Do not price a proposal in rework\.[^|]*escaped-defect-join\.md\)')"
+# Paragraphs in this repo are single physical lines (CLAUDE.md, "Reading a prose
+# diff"), so the note is exactly the line that opens it -- no multi-line join,
+# and no greedy match that runs on into the Skeptic bullet further down.
+note="$(grep -F 'Do not price a proposal in rework' "$SKILL")"
 [ -n "$note" ] || { printf 'FATAL the Phase 2 rework note is missing from %s\n' "$SKILL"; exit 1; }
 
 n_fig=0
