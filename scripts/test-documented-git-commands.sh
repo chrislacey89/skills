@@ -880,14 +880,34 @@ for site in $base_sites; do
     while IFS= read -r line; do
         [[ -n "$line" ]] || continue
         out="$(run_in_fixture "$block" "$line")"
+        # Keyed on the FLAGS, not on the subcommand. The first version of this
+        # case matched every `git diff` line and asserted a stat triple against
+        # it, so /execute's `--diff-filter=DR --name-status` line — which emits
+        # paths, never a summary sentence — parsed as 0/0/0 and reddened four
+        # assertions that were describing correct prose. A `git diff` shape this
+        # loop does not recognize now fails by name instead of being scored
+        # against the wrong oracle or, worse, dropped silently.
         case "$line" in
-            "git diff"*)
+            "git diff"*--stat*|"git diff"*--shortstat*)
                 assert_eq "$truth_files/$truth_ins/$truth_del" "$(stat_triple "$out")" \
                     "$site: '$line' reports the branch's real size"
+                ;;
+            "git diff"*--diff-filter=*)
+                # Asserted against its own planted fixture further down, where a
+                # deletion and a rename actually exist. This fixture has neither,
+                # so the only thing checkable here is that the line is a valid
+                # invocation that stays silent when nothing was deleted — which
+                # is the half the rung's prose gates on ("empty output skips it").
+                assert_eq '' "$out" \
+                    "$site: '$line' stays silent on a branch that deletes nothing"
                 ;;
             "git log"*)
                 assert_eq "$truth_commits" "$(printf '%s' "$out" | grep -c .)" \
                     "$site: '$line' lists only the branch's own commits"
+                ;;
+            *)
+                printf '  FAIL %s documents a range line this suite has no oracle for: %q\n' "$site" "$line"
+                fail=$((fail + 1))
                 ;;
         esac
     done <<< "$lines"
@@ -912,7 +932,12 @@ section "the fixture separates the right answer from each wrong one"
 #                                      fixes had to ship together)
 first_diff_line=""
 for site in $base_sites; do
-    line="$(extract_range_lines "$repo_root/$site" | grep -m1 '^git diff' || true)"
+    # `--stat` selected explicitly: the mutants below are scored with
+    # stat_triple, so a site whose first documented diff line is a
+    # `--diff-filter` line would have its controls run against an oracle that
+    # returns 0/0/0 for every mutant — three green negative controls that
+    # separate nothing.
+    line="$(extract_range_lines "$repo_root/$site" | grep -m1 '^git diff .*--stat' || true)"
     [[ -n "$line" ]] || continue
     block="$(extract_detect_block "$repo_root/$site")"
 
@@ -937,6 +962,271 @@ for site in $base_sites; do
 done
 
 [[ -n "$first_diff_line" ]] || fatal "no site documents a 'git diff' range line; the controls above ran on nothing"
+
+# -----------------------------------------------------------------------------
+
+section "the deletion-trigger line finds a real deletion and a real rename"
+
+# /execute Step 4's Deletion Completeness rung and the Boundary Map Contracts
+# dimension in /pre-merge review-checklist.md both gate on this line. #326 is
+# the incident: the rung gated on a section header that had readers and no
+# writer, so it never fired. The header was replaced by the diff, so the diff
+# command IS the gate now, and a wrong one fails the same way the header did:
+# silently, with the rung reporting nothing to sweep.
+#
+# The main fixture cannot check this. Its feature branch adds files and deletes
+# nothing, so the line correctly emits empty there and an empty result is
+# indistinguishable from a broken command. This fixture plants one deletion and
+# one rename on the feature branch, and one file deleted on the BASE side after
+# the branch was cut — the last one is the negative control that separates
+# three-dot from two-dot, exactly as merged-c/merged-d do for the stat line.
+deltrig="$base_sandbox/deltrig"
+deltrig_up="$base_sandbox/deltrig-upstream"
+(
+    mkdir -p "$deltrig_up"
+    cd "$deltrig_up"
+    git init -q -b prod .
+    git config user.email skillkit@example.invalid
+    git config user.name 'Skill Kit Test'
+    git config commit.gpgsign false
+    echo keep > keep.txt
+    echo doomed > doomed.txt
+    printf 'a\nb\nc\nd\ne\nf\ng\nh\n' > moved.txt
+    git add -A && git commit -q -m c1
+)
+git clone -q "$deltrig_up" "$deltrig"
+git -C "$deltrig" config user.email skillkit@example.invalid
+git -C "$deltrig" config user.name 'Skill Kit Test'
+git -C "$deltrig" config commit.gpgsign false
+git -C "$deltrig" checkout -q -b feature origin/prod
+(
+    cd "$deltrig"
+    git rm -q doomed.txt
+    git mv moved.txt renamed.txt
+    echo more >> keep.txt
+    git add -A && git commit -q -m F1
+)
+# Base-side work lands AFTER the branch point. Under `--diff-filter=DR` the
+# separating case is an ADDITION on the base, not a deletion: two-dot compares
+# origin/prod's tree to HEAD's, so a file the base gained and the branch never
+# had reads as `D` — a deletion the branch did not make, which would open a
+# consumer-surface sweep for a module nobody removed. (A base-side *deletion*
+# reads as `A` under two-dot and the DR filter drops it, so it separates
+# nothing here — that mistake was in this section's first draft and the fixture
+# caught it.)
+(
+    cd "$deltrig_up"
+    echo base-side > base-added.txt
+    git add base-added.txt && git commit -q -m c2
+)
+git -C "$deltrig" fetch -q origin
+
+# The oracle: sorted status letter + final path, so a rename's similarity score
+# (R100 today, R09x if git's heuristic shifts) does not make the assertion
+# brittle while the D/R distinction it exists to check stays pinned.
+del_oracle() {
+    printf '%s\n' "$1" | awk 'NF { print substr($1, 1, 1) " " $NF }' | sort | tr '\n' ';'
+}
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(printf 'D\tdoomed.txt\nR100\tmoved.txt\trenamed.txt\n')")" \
+    "del_oracle reduces planted name-status output to status letter + final path"
+assert_eq '' "$(del_oracle '')" "del_oracle stays empty on empty input"
+
+deltrig_sites=0
+for site in $base_sites; do
+    line="$(extract_range_lines "$repo_root/$site" | grep -m1 '^git diff .*--diff-filter=' || true)"
+    [[ -n "$line" ]] || continue
+    deltrig_sites=$((deltrig_sites + 1))
+    block="$(extract_detect_block "$repo_root/$site")"
+
+    set +e
+    out="$(cd "$deltrig" && eval "$block" >/dev/null 2>&1; eval "$line" 2>&1)"
+    status=$?
+    set -e
+    assert_eq 0 "$status" "$site's deletion-trigger line is a valid invocation"
+    assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$out")" \
+        "$site: the deletion-trigger line reports the branch's own deletion and rename"
+
+    # Negative control 1 — two-dot. It sweeps in the base-side deletion, so the
+    # rung would open a consumer-surface sweep for a module this branch never
+    # touched. Built by mutating the real extracted line, so a site that stops
+    # documenting a three-dot range cannot skip its own control.
+    two_dot="${line/\.\.\./..}"
+    if [[ "$two_dot" == "$line" ]]; then
+        printf '  FAIL %s: could not build a two-dot mutant from %q; the documented deletion trigger is not three-dot\n' "$site" "$line"
+        fail=$((fail + 1))
+    else
+        set +e
+        two_out="$(cd "$deltrig" && eval "$block" >/dev/null 2>&1; eval "$two_dot" 2>&1)"
+        set -e
+        assert_eq 'D base-added.txt;D doomed.txt;R renamed.txt;' "$(del_oracle "$two_out")" \
+            "$site: two-dot invents a deletion for base-side work the branch never touched"
+    fi
+
+    # Negative control 2 — drop the filter. Without it the line reports every
+    # modified file too, so the rung fires on any diff at all and the trigger
+    # stops discriminating. This is the mutation that most resembles a
+    # well-meaning simplification.
+    unfiltered="${line/--diff-filter=DR /}"
+    if [[ "$unfiltered" == "$line" ]]; then
+        printf '  FAIL %s: could not build an unfiltered mutant from %q; the documented filter is not --diff-filter=DR\n' "$site" "$line"
+        fail=$((fail + 1))
+    else
+        set +e
+        unf_out="$(cd "$deltrig" && eval "$block" >/dev/null 2>&1; eval "$unfiltered" 2>&1)"
+        set -e
+        assert_eq 'D doomed.txt;M keep.txt;R renamed.txt;' "$(del_oracle "$unf_out")" \
+            "$site: without --diff-filter=DR the line also reports plain modifications, so the trigger stops discriminating"
+    fi
+done
+
+# The floor. #326 replaced a trigger that had readers and no writer; a suite
+# that silently checks zero sites would be the same failure one level up. Only
+# SKILL.md files are in $base_sites, so the reachable floor here is 1;
+# review-checklist.md is checked by name below.
+if [[ "$deltrig_sites" -ge 1 ]]; then
+    printf '  ok   derived %s site(s) documenting the deletion-trigger line\n' "$deltrig_sites"
+    pass=$((pass + 1))
+else
+    printf '  FAIL no site documents a --diff-filter deletion-trigger line; every check in this section ran on nothing\n'
+    fail=$((fail + 1))
+fi
+
+# review-checklist.md is not a SKILL.md, so it is outside $base_sites and outside
+# every loop above. It documents the same command and must not drift from the
+# canonical statement in /execute, which is what its own prose promises (it
+# names /execute Step 4's Tier 1 rung as "the canonical statement"). Compare the
+# two literals directly — this is the mechanism behind that sentence.
+exec_del="$(extract_range_lines "$repo_root/execute/SKILL.md" | grep -m1 '^git diff .*--diff-filter=' || true)"
+check_del="$(extract_range_lines "$repo_root/pre-merge/review-checklist.md" | grep -m1 '^git diff .*--diff-filter=' || true)"
+[[ -n "$exec_del" ]]  || fatal "execute/SKILL.md no longer documents a --diff-filter deletion-trigger line"
+[[ -n "$check_del" ]] || fatal "pre-merge/review-checklist.md no longer documents a --diff-filter deletion-trigger line"
+assert_eq "$exec_del" "$check_del" \
+    "pre-merge/review-checklist.md's deletion trigger is byte-identical to /execute's canonical one"
+
+# -----------------------------------------------------------------------------
+
+section "the sentence that gates the rung names the diff, not a header"
+
+# The command above is pinned to the byte. The sentence an agent reads to decide
+# whether to run it at all is a second operative site for the same trigger, and
+# a sentence nothing checks can regress to the header gate while the command
+# and its assertions stay green — #326's defect one level in. So pin the gate
+# sentence at both sites: it names the diff as the trigger and does not name
+# the header as one.
+# coverage: enumerated — the two sites that carry the deletion-trigger line,
+# the same pair the byte-identity check above fatals on if either drops it.
+for site in execute/SKILL.md pre-merge/review-checklist.md; do
+    gate_line="$(grep -m1 -E '^\*\*(Deletion Completeness|For deletion orphan surfaces) \(' "$repo_root/$site" || true)"
+    [[ -n "$gate_line" ]] || fatal "$site no longer opens the deletion rung with a bolded gate sentence"
+    if printf '%s' "$gate_line" | grep -q 'diff.*deletes or renames'; then
+        printf '  ok   %s gates the deletion rung on the diff deleting or renaming\n' "$site"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s gate sentence no longer names the diff as the trigger: %q\n' "$site" "$gate_line"
+        fail=$((fail + 1))
+    fi
+    if printf '%s' "$gate_line" | grep -q 'only when the slice body'; then
+        printf '  FAIL %s gate sentence regressed to the header gate: %q\n' "$site" "$gate_line"
+        fail=$((fail + 1))
+    else
+        printf '  ok   %s gate sentence does not gate on a ### Deletes header\n' "$site"
+        pass=$((pass + 1))
+    fi
+done
+
+# -----------------------------------------------------------------------------
+
+section "the checklist's author-mode block refuses to run without a base ref"
+
+# Found by an independent probe of #333: with $BASE_REF unset, git reads the
+# empty left endpoint of `...HEAD` as HEAD itself, exits 0, and prints nothing —
+# which the rung's own prose reads as "nothing deleted, skip." review-checklist.md
+# has no detection block of its own (Phase 1 resolves the ref), so a reviewer who
+# copies the author-mode block without Phase 1 gets a confident clean pass.
+# The block's first line now refuses instead; this runs the block both ways.
+extract_block_with() {
+    # The first fenced block in $1 whose body contains the literal $2.
+    awk -v needle="$2" '
+        /^[[:space:]]*```/ {
+            if (inblock) {
+                if (found) { for (i = 1; i <= n; i++) print buf[i]; exit }
+                inblock = 0; n = 0; next
+            }
+            inblock = 1; n = 0; found = 0; next
+        }
+        inblock {
+            buf[++n] = $0
+            if (index($0, needle)) found = 1
+        }
+    ' "$1" | sed 's/^[[:space:]]*//'
+}
+check_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" '--diff-filter=DR')"
+[[ -n "$check_block" ]] || fatal "pre-merge/review-checklist.md has no fenced block carrying the deletion trigger"
+
+set +e
+unset_out="$(cd "$deltrig" && env -u BASE_REF bash -c "$check_block" 2>&1)"
+unset_status=$?
+set -e
+if [[ "$unset_status" -ne 0 ]]; then
+    printf '  ok   with BASE_REF unset the checklist block exits %s instead of printing an empty pass\n' "$unset_status"
+    pass=$((pass + 1))
+else
+    printf '  FAIL with BASE_REF unset the checklist block exited 0 with output %q — a silent clean pass\n' "$unset_out"
+    fail=$((fail + 1))
+fi
+assert_eq '' "$(printf '%s' "$unset_out" | grep -E '^[DR]' || true)" \
+    "with BASE_REF unset the checklist block reports no deletions it could not have measured"
+
+set +e
+set_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$check_block" 2>&1)"
+set_status=$?
+set -e
+assert_eq 0 "$set_status" "with BASE_REF set the checklist block is a valid invocation"
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$set_out")" \
+    "with BASE_REF set the checklist block reports the planted deletion and rename"
+
+# -----------------------------------------------------------------------------
+
+section "the reviewer-mode filter keeps removed and renamed rows and nothing else"
+
+# The reviewer-mode command in review-checklist.md asks GitHub for the PR's file
+# list and filters it with jq. GitHub's half — the `status` vocabulary — is
+# referenced to its docs from the prose (CLAUDE.md § Commands a skill documents,
+# rule a). The jq half is ours, so it is pinned here against a fixture in the
+# documented response shape: one row per status the filter must keep, plus the
+# two it must drop. The filter is read from the checklist, not restated.
+gh_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" 'pulls/<pr-number>/files')"
+[[ -n "$gh_block" ]] || fatal "pre-merge/review-checklist.md has no fenced block carrying the reviewer-mode file-list query"
+# Join backslash-continued lines only; the filter's own backslashes (`\(.status)`,
+# `\t`) are part of the program and must survive.
+jq_filter="$(printf '%s\n' "$gh_block" | awk '{ if (sub(/\\$/, "")) printf "%s", $0; else print }' | sed -n "s/.*--jq '\([^']*\)'.*/\1/p")"
+[[ -n "$jq_filter" ]] || fatal "could not extract a single-quoted --jq filter from the reviewer-mode block"
+if printf '%s' "$gh_block" | grep -q -- '--paginate'; then
+    printf '  ok   the reviewer-mode query carries --paginate\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the reviewer-mode query no longer carries --paginate\n'
+    fail=$((fail + 1))
+fi
+if command -v jq >/dev/null 2>&1; then
+    files_fixture='[
+      {"filename": "kept.txt",    "status": "modified"},
+      {"filename": "new.txt",     "status": "added"},
+      {"filename": "gone.txt",    "status": "removed"},
+      {"filename": "new-name.txt","status": "renamed", "previous_filename": "old-name.txt"}
+    ]'
+    expected="$(printf 'removed\t\tgone.txt\nrenamed\told-name.txt\tnew-name.txt')"
+    set +e
+    actual="$(printf '%s' "$files_fixture" | jq -r "$jq_filter" 2>&1)"
+    jq_status=$?
+    set -e
+    assert_eq 0 "$jq_status" "the reviewer-mode --jq filter parses and runs"
+    assert_eq "$expected" "$actual" \
+        "the reviewer-mode --jq filter keeps the removed and renamed rows, in the documented tab-separated shape, and drops the rest"
+else
+    printf '  FAIL jq is not installed, so the reviewer-mode filter was not checked; install jq\n'
+    fail=$((fail + 1))
+fi
 
 # -----------------------------------------------------------------------------
 
@@ -986,7 +1276,9 @@ for site in $base_sites; do
         pass=$((pass + 1))
     fi
 
-    line="$(extract_range_lines "$repo_root/$site" | grep -m1 '^git diff' || true)"
+    # `--stat`, for the same reason as the controls above: this pair is scored
+    # with stat_triple.
+    line="$(extract_range_lines "$repo_root/$site" | grep -m1 '^git diff .*--stat' || true)"
     [[ -n "$line" ]] || continue
     set +e
     out="$(cd "$noremote" && eval "$block" >/dev/null 2>&1; eval "$line" 2>&1)"
@@ -1021,7 +1313,13 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # The endpoint is matched structurally (optional flags, optional quote, a
 # variable or a bare word, then the dots) rather than by any site's phrasing,
 # which is what makes this a census and not a fifth copy of one site's wording.
-range_pattern='git (diff|log)( +--?[a-z-]+)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# The flag arm carries an optional `=value` because #326's deletion trigger is
+# the first documented range line with a valued flag (`--diff-filter=DR`). Before
+# that arm existed the line matched nothing, dropped out of the census, and the
+# raw-`..HEAD` reconciliation below is the only reason that was visible at all
+# rather than a silently unchecked endpoint — which is the exact failure this
+# section exists to prevent.
+range_pattern='git (diff|log)( +--?[a-z-]+(=[A-Za-z0-9,._-]+)?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies

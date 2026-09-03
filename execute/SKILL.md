@@ -304,7 +304,31 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - Imports between modules are wired correctly (not importing from a path that doesn't resolve)
 - Implementation is substantive (not stubs, not console.log placeholders, not TODO comments where real code should be)
 
-**Deletion Completeness (only when the slice body contains a `### Deletes` section).** For each deleted module, enumerate its external consumer surfaces — the symbolic names callers were taught to emit for it to consume, beyond its exports. Typical surfaces:
+**Deletion Completeness (when this slice's diff deletes or renames a module).** Read the trigger off the diff, which you already have, rather than off a section header nothing in the pipeline writes:
+
+```bash
+BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
+if [ -z "$BASE_BRANCH" ]; then
+  for candidate in main master prod develop trunk; do
+    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
+  done
+fi
+# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
+# $BASE_REF points at it, and is the only thing safe as a range endpoint.
+if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+  BASE_REF="origin/$BASE_BRANCH"
+else
+  BASE_REF="$BASE_BRANCH"
+  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
+fi
+git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
+```
+
+**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+
+Deleted paths print as `D<TAB><path>`, renames as `R<score><TAB><old><TAB><new>`. Any output at all fires the rung; empty output skips it. Gate on the output, not the exit status — the command exits 0 either way. A `### Deletes` section in the slice body is an optional hint that names which surfaces to sweep; it is not the trigger.
+
+For each deleted or renamed module, enumerate its external consumer surfaces — the symbolic names callers were taught to emit for it to consume, beyond its exports. Typical surfaces:
 
 - DOM data-attributes the module read (`data-*`)
 - CSS class names and selectors the module applied or queried
@@ -312,7 +336,7 @@ Then apply the verification ladder — use the strongest tier you can reach:
 - `window`, `localStorage`, or `sessionStorage` keys
 - Route names, config keys, or feature-flag names the module owned
 
-Infer surfaces from the module body as it existed before deletion (git show, or the `Deletes` bullet's accompanying notes). Grep the merged tree for each surface across every source-text file type the project uses — templates, source code, styles, config, docs. Do not restrict to a fixed extension list; the relevant surfaces depend on the stack (`.py`/`.rb`/`.go`/`.rs` for imports, `.vue`/`.svelte`/`.astro`/`.tsx` for templates, `.css`/`.scss`/`.sass`/`.less`/`.styl` for styles, `.yml`/`.toml`/`.json` for config, `.md`/`.mdx` for docs that ship). Zero matches required to pass. Non-zero matches: restore the module, migrate the consumers, or declare them as intentionally inert and track the cleanup as a follow-up slice. Imports alone are the narrowest possible definition of "consumer"; the surface may be wider.
+Infer surfaces from the module body as it existed before deletion (`git show <base>:<path>`, or the `Deletes` hint notes when the slice body happens to carry them). Grep the merged tree for each surface across every source-text file type the project uses — templates, source code, styles, config, docs. Do not restrict to a fixed extension list; the relevant surfaces depend on the stack (`.py`/`.rb`/`.go`/`.rs` for imports, `.vue`/`.svelte`/`.astro`/`.tsx` for templates, `.css`/`.scss`/`.sass`/`.less`/`.styl` for styles, `.yml`/`.toml`/`.json` for config, `.md`/`.mdx` for docs that ship). Zero matches required to pass. Non-zero matches: restore the module, migrate the consumers, or declare them as intentionally inert and track the cleanup as a follow-up slice. Imports alone are the narrowest possible definition of "consumer"; the surface may be wider.
 
 **Upstream shape sweep.** After the consumer-surface sweep above, list each export touched on a shared module in this slice (context fields, builder return-type fields, interface or type members, schema fields, exported map or record entries). For each such export, grep the post-delete tree for non-self-reference reads. Zero matches required to pass. Non-zero matches: confirm the readers are live and intentional. Zero matches: drop the export in the same PR — the migration window closes the moment the legacy consumer is deleted, and a retained-but-unread export widens the import contract so a future cleanup becomes a breaking change rather than a silent removal. Dead-export linters (`knip`, `ts-prune`, TypeScript `noUnusedLocals`) cover many shapes of this but not exported context, interface, or schema fields — those are read by the type itself and look live to the tool, so the targeted post-delete grep is doing work the linter cannot.
 
