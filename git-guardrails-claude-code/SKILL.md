@@ -35,12 +35,13 @@ The guard reads the command as tokens and never evaluates it, so a destructive c
 ### Refused when the review stamp is stale
 
 - `gh pr merge`
+- `gh pr merge # ship it`
 - `gh pr merge 4821`
 - `gh pr merge 4821 --squash --delete-branch`
-- `gh pr merge --squash 4821`
 - `gh pr merge 4821 -R owner/repo`
 - `gh pr merge my-branch`
 - `sudo gh pr merge 4821`
+- `bash -c "gh pr merge 4821"`
 
 The refusal prints both SHAs and the size of what landed after the review, then names its two exits: re-review with `/pre-merge`, which re-stamps at the new head, or re-run the merge with `ALLOW_STALE_STAMP_MERGE=1` in front of it to accept the diff as it stands. That variable is also honored as an exported environment variable, for a repo that wants the check advisory rather than blocking.
 
@@ -51,6 +52,7 @@ The refusal prints both SHAs and the size of what landed after the review, then 
 - `echo gh pr merge now`
 - `grep -rn "gh pr merge" .`
 - `git commit -m "gh pr merge is what closeout runs"`
+- `gh pr merge --squash 4821`
 - `gh pr merge --subject fix 4821`
 - `gh pr merge --squash my-branch`
 - `gh pr view 4821`
@@ -58,11 +60,13 @@ The refusal prints both SHAs and the size of what landed after the review, then 
 
 Two different reasons, and both are deliberate.
 
-The first three only *mention* the words. Unlike the git rules above, a `gh` token is inspected only where it is being invoked — first in its segment, or after an environment assignment or a wrapper like `sudo` — and never inside a heredoc body. The asymmetry is the point: a `git push --force` written as search text is refused because a blocked grep costs one rephrase and a missed force push costs history, while the words `gh pr merge` appear in prose, in commit messages, and in every grep for them, and a missed merge is read a second time by `/closeout`.
+The first three only *mention* the words. Unlike the git rules above, a `gh` token is inspected only where it is being invoked — first in its segment, or after an environment assignment or a wrapper (`sudo`, `env`, `xargs`, `bash -c`, `eval`, and the shell keywords) — and never inside a heredoc body. The asymmetry is the point: a `git push --force` written as search text is refused because a blocked grep costs one rephrase and a missed force push costs history, while the words `gh pr merge` appear in prose, in commit messages, and in every grep for them, and a missed merge is read a second time by `/closeout`.
 
-The last four are commands the guard declines to judge. `gh pr merge` takes at most one positional argument, which resolves the common forms without this repo re-authoring gh's flag table from memory — but it cannot tell a bare token apart from the value of a flag that takes one. So a single operand is accepted as the PR when no other flag is present, or when it is a PR number or a URL; anything else runs. `gh pr merge --subject fix 4821` and `gh pr merge --squash my-branch` are what that buys, and they are pinned as misses rather than left to be rediscovered.
+The last five are commands the guard declines to judge, and the rule that decides is deliberately narrower than it could be. Two facts resolve which PR a merge would act on without this repo owning a copy of gh's option list: `gh pr merge` takes at most one positional argument, and a flag's value always follows its flag. So an operand appearing **before any flag** is the PR, and an operand appearing after one might be some flag's value — `gh pr merge --squash 4821` is therefore a miss, not a guess. An earlier draft guessed, on the reasoning that no gh flag takes a number; reading `gh pr merge --help` shows five that take a value, and the guess was resolving `gh pr merge --subject 4821` to PR 4821 while the merge itself would target the current branch's PR. Looking up the wrong pull request is worse than looking up none, because it reaches a confident verdict about a PR nobody asked about.
 
 The check also fails open when `gh` or `jq` is absent, when the API call fails, when the PR carries no stamp, and when the stamp is malformed — every case where it cannot be certain. A gate that refuses wrongly is a gate that gets deleted, and `/closeout` Step 2 still performs this read on the path most merges take.
+
+It inherits the design limit recorded above for the git rules, and for the same reason: the command is read as tokens and never evaluated, so a merge assembled at run time — `$CMD`, `gh${IFS}pr${IFS}merge`, a subcommand produced by command substitution — is invisible to it. #334 carries that limit for both halves.
 
 ## What Stays Allowed
 

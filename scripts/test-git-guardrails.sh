@@ -433,8 +433,8 @@ done < <(conditional_commands '### Allowed even when the stamp is stale')
 
 # Same forcing function as EXPECTED_BLOCKED above: without a count pin the
 # extractor can quietly return a subset and every assertion below still passes.
-EXPECTED_STALE_BLOCKED=7
-EXPECTED_STALE_ALLOWED=7
+EXPECTED_STALE_BLOCKED=8
+EXPECTED_STALE_ALLOWED=8
 [ "${#stale_blocked[@]}" -eq "$EXPECTED_STALE_BLOCKED" ] || \
     fatal "extracted ${#stale_blocked[@]} stale-stamp blocked forms, expected $EXPECTED_STALE_BLOCKED. If you changed '### Refused when the review stamp is stale', update EXPECTED_STALE_BLOCKED; if you did not, the extractor is dropping entries."
 [ "${#stale_allowed[@]}" -eq "$EXPECTED_STALE_ALLOWED" ] || \
@@ -535,7 +535,9 @@ assert_gh_lookup() {
 
 assert_gh_lookup 'gh pr merge'                     'pr view --json body,headRefOid'
 assert_gh_lookup 'gh pr merge 4821'                'pr view 4821 --json body,headRefOid'
-assert_gh_lookup 'gh pr merge --squash 4821'       'pr view 4821 --json body,headRefOid'
+assert_gh_lookup 'gh pr merge # ship it'           'pr view --json body,headRefOid'
+assert_gh_lookup 'gh pr merge 4821 --squash --delete-branch' \
+    'pr view 4821 --json body,headRefOid'
 assert_gh_lookup 'gh pr merge 4821 -R owner/repo'  'pr view 4821 --repo owner/repo --json body,headRefOid'
 assert_gh_lookup 'gh pr merge -R owner/repo 4821'  'pr view 4821 --repo owner/repo --json body,headRefOid'
 assert_gh_lookup 'gh pr merge --repo=owner/repo 4821' 'pr view 4821 --repo owner/repo --json body,headRefOid'
@@ -545,9 +547,32 @@ assert_gh_lookup 'gh pr merge https://github.com/o/r/pull/9 --squash' \
 
 # A form the guard declines to judge must not ask at all. Asking and then
 # allowing would be a wasted API call on every merge; asking and then refusing
-# is the wrong-PR defect above.
+# is the wrong-PR defect below.
 assert_gh_lookup 'gh pr merge --subject fix 4821'  ''
 assert_gh_lookup 'echo gh pr merge now'            ''
+
+# An operand that follows a flag may be that flag's value, and these are the
+# five that take one:
+#
+#     -A, --author-email text    -b, --body text    -F, --body-file file
+#     -t, --subject text         --match-head-commit SHA
+#
+# read out of `gh pr merge --help` by an independent probe, after a draft of
+# this check accepted any all-digits operand on the reasoning that no gh flag
+# takes a number. Under that draft `gh pr merge --subject 4821` looked up PR
+# 4821 while the merge it would permit targets the CURRENT branch's PR — a
+# confident verdict about a pull request nobody asked about, reached either
+# way, and invisible in the exit code. The list above is not what the script
+# checks and is not maintained anywhere: the rule is that a flag's value
+# follows its flag, so an operand after any flag is unresolvable whatever the
+# flag turns out to be.
+assert_gh_lookup 'gh pr merge --subject 4821'      ''
+assert_gh_lookup 'gh pr merge -t 4821'             ''
+assert_gh_lookup 'gh pr merge --body 4821'         ''
+assert_gh_lookup 'gh pr merge --author-email 4821' ''
+assert_gh_lookup 'gh pr merge --match-head-commit 4821' ''
+assert_gh_lookup 'gh pr merge --squash 4821'       ''
+assert_gh_lookup 'gh pr merge --squash https://github.com/o/r/pull/9' ''
 
 # -----------------------------------------------------------------------------
 
@@ -662,6 +687,34 @@ assert_verdict_gh "$BLOCKED" 'if gh pr merge 4821; then echo ok; fi' 'as an if c
 assert_verdict_gh "$BLOCKED" '/opt/homebrew/bin/gh pr merge 4821' 'by absolute path'
 assert_verdict_gh "$BLOCKED" 'cd /tmp && gh pr merge 4821'    'second in an && chain'
 
+# Indirect execution. The quote stripping that lets the git rules see into
+# `bash -c "git push -f"` flattens these into ordinary tokens too, so the only
+# thing that was missing was the wrapper name. An independent probe walked all
+# four past a draft that listed only the process wrappers, and confirmed each
+# one really does run the merge.
+assert_verdict_gh "$BLOCKED" 'bash -c "gh pr merge 4821"'     'through bash -c'
+assert_verdict_gh "$BLOCKED" 'sh -c "gh pr merge 4821"'       'through sh -c'
+assert_verdict_gh "$BLOCKED" 'eval "gh pr merge 4821"'        'through eval'
+assert_verdict_gh "$BLOCKED" "printf '%s' 4821 | xargs -I{} bash -c 'gh pr merge {}'" \
+    'through xargs into bash -c'
+
+# A trailing comment is prose, not an operand. Counting `#`, `ship` and `it`
+# as three operands made this unresolvable, and it let the barest form of the
+# command through — the same probe found it, and it is the cheapest bypass in
+# the set because nobody typing it is trying to bypass anything.
+assert_verdict_gh "$BLOCKED" 'gh pr merge # ship it'          'with a trailing comment'
+assert_verdict_gh "$BLOCKED" 'gh pr merge 4821 # ship it'     'with a PR number and a trailing comment'
+
+# The design limit, pinned as a MISS rather than left to be rediscovered. The
+# command is read as tokens and never evaluated, so a merge assembled at run
+# time is invisible — identical to the limit the git rules carry, and #334
+# holds it for both halves. These assertions exist so that a future change
+# claiming to close the class has to change them.
+# shellcheck disable=SC2016  # the unexpanded $CMD and ${IFS} ARE the test data
+assert_verdict_gh "$ALLOWED" 'CMD="gh pr merge 4821"; $CMD'   'assembled in a variable (known limit)'
+# shellcheck disable=SC2016
+assert_verdict_gh "$ALLOWED" 'gh${IFS}pr${IFS}merge 4821'     'spliced with ${IFS} (known limit)'
+
 # The evasions the substring matcher had. Each of these passed it because the
 # matcher required whitespace or end-of-line after the word `merge`; the
 # tokenizer makes every one of them the same segment.
@@ -678,6 +731,13 @@ assert_verdict_gh "$ALLOWED" 'grep -rn "gh pr merge" docs/'   'as a search strin
 assert_verdict_gh "$ALLOWED" 'rg -l "gh pr merge" .'          'as a search string for another tool'
 assert_verdict_gh "$ALLOWED" 'git commit -m "document gh pr merge"' 'in a commit message'
 assert_verdict_gh "$ALLOWED" 'printf "%s\n" "gh pr merge 4821"' 'as a printf argument'
+
+# Negative controls for the wrappers added above. Widening the list is how a
+# guard acquires a false positive, so each new wrapper is probed in the
+# direction that would hurt: the same wrapper around a MENTION must still pass.
+assert_verdict_gh "$ALLOWED" 'bash -c "echo gh pr merge"'     'a mention inside bash -c'
+assert_verdict_gh "$ALLOWED" 'eval "echo gh pr merge 4821"'   'a mention inside eval'
+assert_verdict_gh "$ALLOWED" "sh -c 'grep -rn \"gh pr merge\" .'" 'a search inside sh -c'
 
 # A heredoc body is data. The terminator ends it, so an invocation after the
 # body is still read — a one-way skip would be a bypass, not a narrowing.
