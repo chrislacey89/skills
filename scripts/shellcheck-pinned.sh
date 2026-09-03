@@ -29,7 +29,11 @@ pinned_file="$root/.shellcheck-version"
 pinned="$(tr -d '[:space:]' < "$pinned_file")"
 [ -n "$pinned" ] || { echo "shellcheck-pinned: $pinned_file is empty" >&2; exit 1; }
 
-lint() { "$1" "$root"/scripts/*.sh; }
+# The set of shell files is git's answer, not a directory literal. The one
+# script outside scripts/ — git-guardrails-claude-code/scripts/block-dangerous-git.sh,
+# a PreToolUse hook installed by copy into downstream .claude/hooks/ — went
+# unlinted by every surface for as long as the glob named one directory.
+lint() { git -C "$root" ls-files -z '*.sh' | xargs -0 -- "$1"; }
 
 # Fast path: the PATH shellcheck already is the gate's instrument.
 if command -v shellcheck >/dev/null 2>&1; then

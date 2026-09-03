@@ -15,7 +15,7 @@ pre-commit:
     shellcheck-version:
       run: bash scripts/check-shellcheck-version.sh
     shellcheck:
-      glob: "scripts/*.sh"
+      glob: "*.sh"
       run: shellcheck {staged_files}
     # Cheap (<1s) and catches the one-file case at the moment it happens: a
     # SKILL.md's sources: block changed and site/src/lib/canon.generated.ts was

@@ -87,7 +87,11 @@ jobs:
           fi
 
       - name: Lint shell scripts
-        run: shellcheck scripts/*.sh
+        # Every tracked *.sh, resolved by git rather than by a directory literal.
+        # git-guardrails-claude-code/scripts/block-dangerous-git.sh is shipped as
+        # an executable into downstream .claude/hooks/ and sat outside a
+        # scripts/-only glob.
+        run: git ls-files -z '*.sh' | xargs -0 -- shellcheck
 
   script-tests:
     runs-on: ubuntu-latest
