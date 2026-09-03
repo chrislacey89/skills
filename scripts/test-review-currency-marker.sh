@@ -18,6 +18,15 @@
 # marker template from pre-merge/SKILL.md rather than restating either. That is
 # the point: the suite fails when either half drifts from the other, which a
 # hand-copied regex could not detect.
+#
+# THE SECOND CONTRACT: ONE WRITER. /pre-merge is the only skill licensed to
+# write the marker. /fix-findings (#327) commits fixes that deliberately move
+# the head past the stamp and must hand off to a /pre-merge delta pass to
+# re-stamp; a skill that stamped its own fixes would certify as reviewed the one
+# commit nothing independent read, and #292's provenance fix — the stamp records
+# the SHA a review actually read — would be bypassed in silence. Nothing else in
+# the repo would notice a second writer appearing, so the last section below
+# greps every other SKILL.md for the writer template.
 
 set -euo pipefail
 
@@ -164,6 +173,31 @@ stale_marker="$marker"
 newer_marker="${writer_template//<full-sha>/$newer_sha}"
 extracted="$(pr_body "$stale_marker" "$newer_marker" | read_marker)"
 assert_eq "$newer_sha" "$extracted" "the last stamp in the body wins"
+
+# -----------------------------------------------------------------------------
+
+section "exactly one skill writes the stamp"
+
+# The template is extracted above from pre-merge/SKILL.md, so this searches for
+# whatever that file actually declares rather than for a restated literal. A
+# fixed-string search (-F) because the template contains no regex metacharacters
+# by design and a future one should not silently become a pattern.
+#
+# Scoped to */SKILL.md: a skill's reference files are prose about the marker
+# (closeout/SKILL.md's own reader line lives in the skill body and is matched by
+# the reader extraction above, not here). What must stay unique is the WRITER —
+# the substituted template with a real 40-character SHA in it, and the
+# unsubstituted template it comes from.
+writers="$(grep -lF "$writer_template" -- */SKILL.md | sort || true)"
+assert_eq "pre-merge/SKILL.md" "$writers" \
+    "the writer template appears in pre-merge/SKILL.md and no other SKILL.md"
+
+# The same check one level down: no skill emits a *substituted* marker either,
+# which is what a second writer would most plausibly look like — a literal
+# 40-hex stamp pasted into a skill body rather than the placeholder form.
+substituted="$(grep -lE '<!-- reviewed-at: [0-9a-f]{40} -->' -- */SKILL.md | sort || true)"
+assert_eq "" "$substituted" \
+    "no SKILL.md carries a substituted 40-character marker"
 
 # -----------------------------------------------------------------------------
 
