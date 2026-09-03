@@ -273,6 +273,8 @@ assert_blocked_form 'git restore -- *'                 'a bare glob after the --
 assert_blocked_form 'git checkout ./*'                 'the cwd glob spelling'
 assert_blocked_form 'git checkout **'                  'a doubled glob is still the whole tree'
 assert_blocked_form 'git checkout ./**'                'the cwd spelling of the doubled glob'
+assert_blocked_form "git checkout '[a-z]*'"            'a character class reaches every tracked file'
+assert_blocked_form "git checkout -- '?*'"             'a single-character wildcard does too'
 
 # Git's pathspec magic and path traversal, each verified to revert every
 # tracked file in a scratch repository.
@@ -372,6 +374,12 @@ section "the deliberate over-block is pinned, not accidental"
 # asserted here rather than left to be rediscovered as a bug.
 assert_verdict "$BLOCKED" "grep -r 'git push --force' docs/" \
     'the dangerous string as search text (accepted over-block: quotes are stripped)'
+
+# A wildcard at the root of a checkout or restore is refused whatever it
+# spells, because `[a-z]*` and `?*` reach every tracked file and the guard
+# cannot tell which names `*.md` reaches without reading the tree.
+assert_verdict "$BLOCKED" "git checkout -- '*.md'" \
+    'a root-level pattern (accepted over-block: the guard cannot see what it matches)'
 
 # -----------------------------------------------------------------------------
 

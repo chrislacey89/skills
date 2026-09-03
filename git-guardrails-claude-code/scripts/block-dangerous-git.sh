@@ -74,10 +74,14 @@ has_force_refspec() {
 # working tree. Recognized by reduction rather than by listing spellings, since
 # enumerating spellings is how the substring matcher this replaced kept leaking.
 # Each operand is walked component by component: `.` and an empty component
-# are nothing, `..` steps back out, and a trailing glob (`*`, `**`) is dropped
-# because the shell expands it into every entry of the directory. An operand
-# that walks back to the root — `.`, `./`, `./.`, `*`, `./*`, `sub/..` — names
-# everything. Git's short pathspec magic is peeled first: `:/` anchors at the
+# are nothing, `..` steps back out, and a trailing wildcard component is
+# dropped — `*` because the shell expands it into every entry of the
+# directory, and `?*` or `[a-z]*` because git's own matching lets them reach
+# every tracked file just the same. That drops `*.md` too; the guard cannot
+# know which names a pattern reaches, so a pattern at the root is refused (the
+# harmless direction) and pinned in the suite as an accepted over-block. An
+# operand that walks back to the root — `.`, `./`, `./.`, `*`, `./*`,
+# `sub/..` — names everything. Git's short pathspec magic is peeled first: `:/` anchors at the
 # root, a bare `:` is the empty pathspec, and an exclusion (`:!`, `:^`) with no
 # positive operand beside it means "everything but". The long form, `:(top)`
 # and friends, never arrives here: parentheses are segment boundaries in the
@@ -122,9 +126,9 @@ pathspec_is_everything() {
             if [ "$comp" = "$rest" ]; then rest=""; else rest=${rest#*/}; fi
             case "$comp" in
                 ''|.) ;;
-                \*|\*\*)
-                    # A glob names everything only in last position; `*/x`
-                    # is partial.
+                *\**|*\?*|*\[*)
+                    # A wildcard names everything only in last position;
+                    # `*/x` is partial.
                     if [ -n "$rest" ]; then depth=$((depth + 1)); fi
                     ;;
                 ..)
