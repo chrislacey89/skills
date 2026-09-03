@@ -272,6 +272,18 @@ assert_blocked_form 'git checkout *'                   'a bare glob is the whole
 assert_blocked_form 'git restore -- *'                 'a bare glob after the -- separator'
 assert_blocked_form 'git checkout ./*'                 'the cwd glob spelling'
 assert_blocked_form 'git checkout **'                  'a doubled glob is still the whole tree'
+assert_blocked_form 'git checkout ./**'                'the cwd spelling of the doubled glob'
+
+# Git's pathspec magic and path traversal, each verified to revert every
+# tracked file in a scratch repository.
+assert_blocked_form 'git checkout :'                   'a bare colon is the empty pathspec'
+assert_blocked_form 'git checkout :.'                  'the empty magic prefix on the cwd'
+assert_blocked_form 'git checkout ::'                  'a colon-terminated empty magic prefix'
+assert_blocked_form "git checkout -- ':(top)'"         'the long-form top magic'
+assert_blocked_form 'git checkout sub/..'              'a directory and back out is the root'
+assert_blocked_form 'git checkout ./sub/../.'          'traversal with dot components'
+assert_blocked_form "git checkout -- ':!README.md'"    'an exclusion alone is everything but one file'
+assert_blocked_form "git checkout -- ':^docs/'"        'the caret spelling of an exclusion'
 
 # Short spellings of restore's index/worktree flags (git help restore: -S is
 # --staged, -W is --worktree), bundled and split.
@@ -330,7 +342,17 @@ assert_allowed_form 'git checkout .config/wt.toml'     'a dot-directory path, no
 assert_allowed_form 'git restore -S .'                 'the short spelling of --staged'
 assert_allowed_form 'git checkout src/*.ts'            'a glob under a path is not the whole tree'
 assert_allowed_form 'git checkout */'                  'a trailing-slash glob matches nothing in git'
+assert_allowed_form 'git checkout ./*/'                'the cwd spelling of the same'
+assert_allowed_form 'git checkout sub/**'              'a doubled glob under a directory is that directory'
+assert_allowed_form 'git checkout */*'                 'a glob before the last component is partial'
+assert_allowed_form 'git checkout sub/../sub'          'traversal that lands back in a subdirectory'
+assert_allowed_form 'git checkout ../*'                'a path outside the repository, which git rejects'
+assert_allowed_form "git checkout -- ':!README.md' src/" 'an exclusion beside a positive operand is partial'
 assert_allowed_form 'git --exec-path push -f'          'bare --exec-path prints a path and runs nothing'
+assert_allowed_form 'git --version push -f'            'bare --version prints and runs nothing'
+assert_allowed_form 'git --html-path push -f'          'bare --html-path prints and runs nothing'
+assert_allowed_form 'git --man-path reset --hard'      'bare --man-path prints and runs nothing'
+assert_allowed_form 'git --info-path reset --hard'     'bare --info-path prints and runs nothing'
 
 # The guard must not choke on input that is not a git command at all.
 assert_allowed_form 'echo hello'                       'a non-git command'

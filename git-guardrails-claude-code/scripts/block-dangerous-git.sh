@@ -70,39 +70,78 @@ has_force_refspec() {
     return 1
 }
 
-# pathspec_is_everything <operands> — true when any operand names the whole
-# working tree. Recognized by reduction rather than by listing spellings: git
-# accepts `.`, `./`, `./.`, the `:/` top-level magic prefix, and `:/.`, and
-# enumerating that set is how the substring matcher this replaced kept leaking.
-# A bare glob (`*`, `**`, `./*`) reaches this hook unexpanded and is expanded
-# by the shell into every entry of the directory, so it reduces the same way. A
-# path that merely begins with a dot (`.gitignore`) or ends in a glob
-# (`src/*.ts`) reduces to itself and is left alone.
+# pathspec_is_everything <operands> — true when the operands name the whole
+# working tree. Recognized by reduction rather than by listing spellings, since
+# enumerating spellings is how the substring matcher this replaced kept leaking.
+# Each operand is walked component by component: `.` and an empty component
+# are nothing, `..` steps back out, and a trailing glob (`*`, `**`) is dropped
+# because the shell expands it into every entry of the directory. An operand
+# that walks back to the root — `.`, `./`, `./.`, `*`, `./*`, `sub/..` — names
+# everything. Git's short pathspec magic is peeled first: `:/` anchors at the
+# root, a bare `:` is the empty pathspec, and an exclusion (`:!`, `:^`) with no
+# positive operand beside it means "everything but". The long form, `:(top)`
+# and friends, never arrives here: parentheses are segment boundaries in the
+# normalizer, so it reaches this function as a bare `:` and is refused — the
+# harmless direction for a spelling nobody types by accident. A path that
+# merely begins with a dot (`.gitignore`), ends in a glob under a directory
+# (`src/*.ts`), or leaves the repository (`../x`, which git rejects) reduces to
+# itself and is left alone.
 pathspec_is_everything() {
-    local word candidate
+    local word candidate rest comp depth outside positive=0 exclusion=0
     for word in $1; do
         candidate=$word
         case "$candidate" in
-            :/*) candidate=${candidate#:/} ;;
+            :*)
+                candidate=${candidate#:}
+                while :; do
+                    case "$candidate" in
+                        /*)  candidate=${candidate#/} ;;
+                        !*)  exclusion=1; candidate=${candidate#!} ;;
+                        ^*)  exclusion=1; candidate=${candidate#^} ;;
+                        *)   break ;;
+                    esac
+                done
+                case "$word" in
+                    :!*|:^*|:/!*|:/^*) continue ;;
+                esac
+                candidate=${candidate#:}
+                ;;
         esac
-        # A trailing glob is dropped once, before the slash reduction, so `*/`
-        # stays `*/` — verified against git, that spelling matches nothing.
+        positive=1
+
+        # Verified against git: a glob followed by a slash matches nothing.
         case "$candidate" in
-            \*|\*\*)  candidate="" ;;
-            */\*\*) candidate=${candidate%/\*\*} ;;
-            */\*)   candidate=${candidate%/\*} ;;
+            \*/|\*\*/|*/\*/|*/\*\*/) continue ;;
         esac
-        while :; do
-            case "$candidate" in
-                */.) candidate=${candidate%/.} ;;
-                */)  candidate=${candidate%/} ;;
-                *)   break ;;
+
+        depth=0
+        outside=0
+        rest=$candidate
+        while [ -n "$rest" ]; do
+            comp=${rest%%/*}
+            if [ "$comp" = "$rest" ]; then rest=""; else rest=${rest#*/}; fi
+            case "$comp" in
+                ''|.) ;;
+                \*|\*\*)
+                    # A glob names everything only in last position; `*/x`
+                    # is partial.
+                    if [ -n "$rest" ]; then depth=$((depth + 1)); fi
+                    ;;
+                ..)
+                    if [ "$depth" -gt 0 ]; then depth=$((depth - 1)); else outside=1; fi
+                    ;;
+                *)
+                    depth=$((depth + 1))
+                    ;;
             esac
         done
-        if [ -z "$candidate" ] || [ "$candidate" = "." ]; then
+        if [ "$depth" -eq 0 ] && [ "$outside" -eq 0 ]; then
             return 0
         fi
     done
+    if [ "$exclusion" -eq 1 ] && [ "$positive" -eq 0 ]; then
+        return 0
+    fi
     return 1
 }
 
