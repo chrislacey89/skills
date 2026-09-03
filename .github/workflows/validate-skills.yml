@@ -145,6 +145,9 @@ jobs:
       - name: Run widened-domain tell contract suite
         run: bash scripts/test-widened-domain-tell.sh
 
+      - name: Run escaped-defect-join claim contract suite
+        run: bash scripts/test-escaped-defect-join-claims.sh
+
       - name: Run canon-coverage contract suite
         run: bash scripts/test-canon-coverage.sh
         # NOTE: this run SKIPS the rendered-page check — site/dist does not exist

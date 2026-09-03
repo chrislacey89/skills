@@ -66,6 +66,8 @@ pre-push:
       run: bash scripts/test-canon-coverage.sh
     absent-local-gate-tell-tests:
       run: bash scripts/test-absent-local-gate-tells.sh
+    escaped-defect-join-claim-tests:
+      run: bash scripts/test-escaped-defect-join-claims.sh
     shellcheck-version-parity-tests:
       run: bash scripts/test-shellcheck-version-parity.sh
     markdown-diff-attribute-tests:
