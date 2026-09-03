@@ -83,7 +83,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 |-------|-------------|
 | [init-pipeline](init-pipeline/) | Scaffold pipeline enforcement — Claude Code hooks, git guardrails, pre-commit setup (auto-invoked by `/execute`) |
 | [setup-pre-commit](setup-pre-commit/) | Lefthook + Biome pre-commit hooks (detects existing tools) |
-| [git-guardrails-claude-code](git-guardrails-claude-code/) | Block dangerous git commands |
+| [git-guardrails-claude-code](git-guardrails-claude-code/) | Block dangerous git commands, and a `gh pr merge` whose head outran its `/pre-merge` review stamp |
 
 ### Knowledge & QA
 

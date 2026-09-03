@@ -331,7 +331,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/init-pipeline` | Project that will use `/execute` | Claude Code hooks, git guardrails, pre-commit setup | `/execute` (auto-invokes it) |
 | `/setup-pre-commit` | Repo needing commit-time quality gates | Lefthook config plus formatter/linter wiring | Normal feature work, now gated at commit |
 | `/setup-ralph-loop` | Repo wanting repeatable Ralph execution | `ralph-once.sh` and bounded `ralph.sh` | `/execute`, first HITL then bounded AFK |
-| `/git-guardrails-claude-code` | Project or user environment needing git safety | Installed guardrail hooks blocking destructive commands | Normal workflow with guardrails in place |
+| `/git-guardrails-claude-code` | Project or user environment needing git safety | Installed guardrail hooks blocking destructive commands, and a `gh pr merge` whose head has moved past its `/pre-merge` review stamp | Normal workflow with guardrails in place |
 
 ### Default Handoff Map
 
@@ -377,7 +377,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 ├── init-pipeline/SKILL.md          # Scaffold all enforcement: Claude Code hooks, git guardrails, pre-commit, pnpm (auto-invoked by /execute)
 ├── setup-pre-commit/SKILL.md       # Lefthook + detected formatter/linter, supports ESLint/Prettier/Biome (enhanced)
 ├── setup-ralph-loop/SKILL.md       # Generates ralph-once.sh and bounded ralph.sh for HITL-to-AFK /execute execution
-├── git-guardrails-claude-code/     # Block dangerous git commands (from Matt, unmodified)
+├── git-guardrails-claude-code/     # Block dangerous git commands, and merges that outran their review (from Matt, extended)
 │   ├── SKILL.md
 │   └── scripts/block-dangerous-git.sh
 │

@@ -136,6 +136,8 @@ Three outcomes, and only one of them interrupts:
 
 This precondition **never hard-blocks**. `/closeout` is HITL and non-blocking by design, and the fix here is making the divergence *visible* — not seizing the merge decision from the user.
 
+**A second reader of the same stamp sits at the command, and it does block.** `/git-guardrails-claude-code`'s PreToolUse hook performs this comparison on any `gh pr merge`, and refuses when the stamp is stale. That is deliberate asymmetry rather than a duplicate of this check: reaching this section means a human is already in the loop and about to be shown the delta, whereas the hook's whole reason to exist is the merge that never came through here — typed by hand, or issued by an AFK loop, with nobody to show anything to. Where the hook is installed, running the merge from Step 3 after the user has chosen "merge anyway" needs `ALLOW_STALE_STAMP_MERGE=1`, which is the same explicit acknowledgement written a second time rather than a new decision.
+
 ### 3. Merge the PR
 
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it:
