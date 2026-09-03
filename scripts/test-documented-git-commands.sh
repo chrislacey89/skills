@@ -1118,14 +1118,14 @@ section "the sentence that gates the rung names the diff, not a header"
 for site in execute/SKILL.md pre-merge/review-checklist.md; do
     gate_line="$(grep -m1 -E '^\*\*(Deletion Completeness|For deletion orphan surfaces) \(' "$repo_root/$site" || true)"
     [[ -n "$gate_line" ]] || fatal "$site no longer opens the deletion rung with a bolded gate sentence"
-    if printf '%s' "$gate_line" | grep -q 'diff.*deletes or renames'; then
+    if grep -q 'diff.*deletes or renames' <<<"$gate_line"; then
         printf '  ok   %s gates the deletion rung on the diff deleting or renaming\n' "$site"
         pass=$((pass + 1))
     else
         printf '  FAIL %s gate sentence no longer names the diff as the trigger: %q\n' "$site" "$gate_line"
         fail=$((fail + 1))
     fi
-    if printf '%s' "$gate_line" | grep -q 'only when the slice body'; then
+    if grep -q 'only when the slice body' <<<"$gate_line"; then
         printf '  FAIL %s gate sentence regressed to the header gate: %q\n' "$site" "$gate_line"
         fail=$((fail + 1))
     else
@@ -1201,7 +1201,7 @@ gh_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" 'pulls
 # `\t`) are part of the program and must survive.
 jq_filter="$(printf '%s\n' "$gh_block" | awk '{ if (sub(/\\$/, "")) printf "%s", $0; else print }' | sed -n "s/.*--jq '\([^']*\)'.*/\1/p")"
 [[ -n "$jq_filter" ]] || fatal "could not extract a single-quoted --jq filter from the reviewer-mode block"
-if printf '%s' "$gh_block" | grep -q -- '--paginate'; then
+if grep -q -- '--paginate' <<<"$gh_block"; then
     printf '  ok   the reviewer-mode query carries --paginate\n'
     pass=$((pass + 1))
 else
@@ -1456,7 +1456,8 @@ classify_name_claims() {
 #     planted line whose signal sat between a `base` span and a `git switch` one.
 signal_is_inline_code() {
     # shellcheck disable=SC2016  # the backticks are markdown delimiters in a sed script, not command substitution
-    ! printf '%s' "$1" | sed 's/`[^`]*`//g' | grep -qF "$name_signal"
+    # shellcheck disable=SC2001  # ${var//x/y} is glob-only and would match greedily across spans; this needs the regex
+    ! grep -qF "$name_signal" < <(sed 's/`[^`]*`//g' <<<"$1")
 }
 
 # DETECTOR: is the line's inline-code markup even well-formed?

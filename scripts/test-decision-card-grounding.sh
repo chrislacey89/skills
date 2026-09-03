@@ -266,7 +266,7 @@ section "the zero-hit detectors still detect (self-test)"
 # Assertions above are healthy at zero. Each fixture is a perturbed copy of the
 # REAL first row of §13's example, so the battery cannot only contain shapes
 # simpler than what the corpus holds.
-real_row="$(grep -oE '<div class="dc-row">.*' <<<"$s13_html" | head -1)"
+real_row="$(grep -oE '<div class="dc-row">.*' <<<"$s13_html" | head -1 || true)"
 [ -n "$real_row" ] || fatal "could not lift a real dc-row from §13 to build fixtures."
 
 # Direction 1: a genuinely broken row must be caught.
@@ -451,7 +451,7 @@ assert_has "$(cat "$CORE")" 'asks rather than claims' "core §1 states why a que
 # file's own header commits every such detector to a fixture battery. The first
 # draft exempted these two and shipped one blind. Fixtures are perturbations of
 # the REAL §14 markup, including the combined-class form that slipped through.
-real_q="$(grep -oE '<div class="oq-q">.*' <<<"$s14_html" | head -1)"
+real_q="$(grep -oE '<div class="oq-q">.*' <<<"$s14_html" | head -1 || true)"
 [ -n "$real_q" ] || fatal "could not lift §14's real question line to build fixtures."
 q_standalone="${real_q/<div class=\"oq-q\">/<span class=\"oc-cited\">x</span><div class=\"oq-q\">}"
 q_combined="${real_q/class=\"oq-q\"/class=\"oq-q oc-cited\"}"
@@ -477,7 +477,7 @@ else
     bad "grading detector FALSE-POSITIVES on §14's real markup"
 fi
 
-real_id="$(grep -oE 'data-feedback-id="q-[a-z0-9-]+"' <<<"$s14_html" | head -1)"
+real_id="$(grep -oE 'data-feedback-id="q-[a-z0-9-]+"' <<<"$s14_html" | head -1 || true)"
 if [ -n "$(printf '%s' "${real_id//q-blocked-run-ok/q-1}" | detect_positional_qid)" ]; then
     ok "id detector catches: a positional q-<n>"
 else

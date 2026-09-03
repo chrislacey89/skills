@@ -198,6 +198,14 @@ jobs:
       - name: Run decision card grounding contract suite
         run: bash scripts/test-decision-card-grounding.sh
 
+      # A committed instrument that fails while reporting normally is the defect
+      # docs/solutions/testing-patterns/validate-the-instrument-not-only-the-
+      # subject-2026-08-23.md recorded as prose. This is its mechanizable half:
+      # `producer | grep -q` under pipefail answers "not found" for text that is
+      # there, so a ban goes green precisely when the banned thing is present.
+      - name: Run pipefail-safe matcher suite
+        run: bash scripts/test-pipefail-safe-matchers.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

@@ -322,10 +322,10 @@ for label in Discipline Candidates; do
     refac_seen=$((refac_seen + 1))
     body="$(section_body "$refac" "$label")"
     [ -n "$body" ] || fatal "could not extract the '$label' section of $refac; its headings changed."
-    if printf '%s' "$body" | grep -q '^## '; then
+    if grep -q '^## ' <<<"$body"; then
         fatal "the '$label' extraction from $refac still contains a '## ' heading — the range overran its section, which is the defect this fix exists to close."
     fi
-    if printf '%s' "$body" | grep -qF -- "§ *${heading}*"; then
+    if grep -qF -- "§ *${heading}*" <<<"$body"; then
         ok "$refac § $label points at the type-level rule"
     else
         bad "$refac § $label lost its pointer to the type-level rule" \
@@ -389,7 +389,7 @@ section "the source is declared where it is operationalized"
 # CLAUDE.md § Editing Skills: only claim a source the body operationalizes. The
 # body now quotes Wlaschin in two reference files; the frontmatter must say so.
 frontmatter="$(sed -n '2,/^---$/p' "$skill")"
-if printf '%s' "$frontmatter" | grep -qF -- 'Domain Modeling Made Functional'; then
+if grep -qF -- 'Domain Modeling Made Functional' <<<"$frontmatter"; then
     ok "$skill declares Wlaschin under sources:"
 else
     bad "$skill does not declare Wlaschin under sources:" \

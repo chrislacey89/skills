@@ -144,7 +144,7 @@ assert_contains "$dark_tokens" '--sx-v' "dark theme defines --sx-v"
 for theme_name in light dark; do
     block_tokens="light_tokens"
     [[ "$theme_name" == dark ]] && block_tokens="dark_tokens"
-    if printf '%s\n' "${!block_tokens}" | grep -q -x -- '--sx-t'; then
+    if grep -q -x -- '--sx-t' <<<"${!block_tokens}"; then
         printf '  FAIL %s theme still defines --sx-t\n' "$theme_name"
         printf '       It was deleted in #305: zero applied usages, and an RGB distance of\n'
         printf '       20.6 (light) / 13.9 (dark) from --sx-n. Two names for one color is what\n'
@@ -240,7 +240,7 @@ planted="$scan_out"
 assert_contains "$planted" 'planted-definition.md' "the detector finds a planted '--sx-t:' definition"
 assert_contains "$planted" 'planted-usage.md' "the detector finds a planted 'var(--sx-t)' usage"
 
-if printf '%s\n' "$planted" | grep -q -x 'near-miss.md'; then
+if grep -q -x 'near-miss.md' <<<"$planted"; then
     printf '  FAIL the detector fires on prose that only names --sx-t\n'
     printf '       That is the false positive the matcher was narrowed to avoid — it would\n'
     printf '       redden on CHANGELOG.md and on this suite\x27s own header.\n'
@@ -322,11 +322,11 @@ done <<< "$all_tokens"
 # The mapping must actually name shell, since a shell PR is what exposed the gap.
 # shellcheck disable=SC2016  # the backticks are literal markdown table cells, not command substitution
 mapping_row="$(grep -F '| `--sx-v` |' "$design" || true)"
-mapping_row="$(printf '%s' "$mapping_row" | head -1)"
+mapping_row="$(printf '%s' "$mapping_row" | head -1 || true)"
 # `$` alone is met by "costs US$5" — verified green under that mutation. The
 # row has to carry a variable, so require the sigil followed by a name or brace.
 # shellcheck disable=SC2016  # the $NAME forms below are literal prose about shell syntax
-if printf '%s' "$mapping_row" | grep -qE '\$[A-Za-z_{]'; then
+if grep -qE '\$[A-Za-z_{]' <<<"$mapping_row"; then
     printf '  ok   the --sx-v row carries a shell variable form ($NAME or ${NAME})\n'
     pass=$((pass + 1))
 else
@@ -346,7 +346,7 @@ section "the CDN highlighter is not the primary path"
 # `highlight.js` in the file: an added cross-reference earlier in the doc would
 # otherwise silently retarget both assertions below at the wrong sentence.
 hl_line="$(grep -F 'Reach for a CDN library' "$core" || true)"
-hl_line="$(printf '%s' "$hl_line" | head -1)"
+hl_line="$(printf '%s' "$hl_line" | head -1 || true)"
 [[ -n "$hl_line" ]] || fatal "no 'Reach for a CDN library' clause found in $core — :186 was deleted, which #305 explicitly rejected (the CDN clause is sharpened, not removed)."
 
 assert_contains "$hl_line" 'no-CDN fallback' "the highlight.js clause still requires a no-CDN fallback"
@@ -401,7 +401,7 @@ block_sentence="$(grep -o 'blocks cover the surface' "$core" || true)"
 [[ -n "$block_sentence" ]] || fatal "the '… blocks cover the surface' sentence is gone from $core — §3's opening moved; update this suite with it."
 
 count_word="$(grep -o '[A-Z][a-z]* blocks cover the surface' "$core" || true)"
-count_word="$(printf '%s' "$count_word" | head -1 | awk '{print $1}')"
+count_word="$(printf '%s' "$count_word" | head -1 | awk '{print $1}' || true)"
 assert_eq "Thirteen" "$count_word" "§3 still opens 'Thirteen blocks cover the surface'"
 
 # -----------------------------------------------------------------------------

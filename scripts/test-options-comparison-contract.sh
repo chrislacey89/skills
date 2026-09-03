@@ -126,7 +126,7 @@ while IFS= read -r line; do
     fi
     total=$((cited + asserted))
     has_chip=0
-    printf '%s' "$line" | grep -qF 'oc-chip is-asserted' && has_chip=1
+    grep -qF 'oc-chip is-asserted' <<<"$line" && has_chip=1
     # asserted/total >= 2/3  <=>  3*asserted >= 2*total
     should_chip=0
     [ $((3 * asserted)) -ge $((2 * total)) ] && should_chip=1
@@ -219,7 +219,7 @@ section "the block count in the core matches its own table"
 # §3 asserts a countable number of blocks. It said "Nine" against a ten-row
 # table for one commit of #245's review.
 
-declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve|Thirteen) blocks' "$CORE" | head -1 | cut -d' ' -f1)
+declared=$(grep -oE '^(Ten|Nine|Eleven|Twelve|Thirteen) blocks' "$CORE" | head -1 | cut -d' ' -f1 || true)
 rows=$(awk '/^\| Block \| Role \|/{t=1;next} t&&/^\|---/{next} t&&/^\|/{n++} t&&!/^\|/{t=0} END{print n+0}' "$CORE")
 # A named function, not a bare inline `case`, and self-checked before use. Both
 # properties are load-bearing and neither is stylistic.
