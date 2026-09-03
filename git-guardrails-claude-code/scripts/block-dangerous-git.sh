@@ -74,10 +74,10 @@ has_force_refspec() {
 # working tree. Recognized by reduction rather than by listing spellings: git
 # accepts `.`, `./`, `./.`, the `:/` top-level magic prefix, and `:/.`, and
 # enumerating that set is how the substring matcher this replaced kept leaking.
-# A bare glob (`*`, `./*`) reaches this hook unexpanded and is expanded by the
-# shell into every entry of the directory, so it reduces the same way. A path
-# that merely begins with a dot (`.gitignore`) or ends in a glob (`src/*.ts`)
-# reduces to itself and is left alone.
+# A bare glob (`*`, `**`, `./*`) reaches this hook unexpanded and is expanded
+# by the shell into every entry of the directory, so it reduces the same way. A
+# path that merely begins with a dot (`.gitignore`) or ends in a glob
+# (`src/*.ts`) reduces to itself and is left alone.
 pathspec_is_everything() {
     local word candidate
     for word in $1; do
@@ -85,9 +85,15 @@ pathspec_is_everything() {
         case "$candidate" in
             :/*) candidate=${candidate#:/} ;;
         esac
+        # A trailing glob is dropped once, before the slash reduction, so `*/`
+        # stays `*/` — verified against git, that spelling matches nothing.
+        case "$candidate" in
+            \*|\*\*)  candidate="" ;;
+            */\*\*) candidate=${candidate%/\*\*} ;;
+            */\*)   candidate=${candidate%/\*} ;;
+        esac
         while :; do
             case "$candidate" in
-                *\*) candidate=${candidate%\*} ;;
                 */.) candidate=${candidate%/.} ;;
                 */)  candidate=${candidate%/} ;;
                 *)   break ;;
@@ -114,11 +120,15 @@ inspect_git() {
     while [ $# -gt 0 ]; do
         case "$1" in
             -C|-c|--git-dir|--work-tree|--namespace|--super-prefix)
-                # These take a separate value argument. `--exec-path` is not
-                # among them: its value is only ever attached with `=`, and the
-                # bare form prints the path and runs nothing.
+                # These take a separate value argument.
                 shift
                 if [ $# -gt 0 ]; then shift; fi
+                ;;
+            --exec-path|--html-path|--man-path|--info-path|--version)
+                # Verified against git: the bare form prints a path or the
+                # version and exits without running whatever follows.
+                # `--exec-path=<path>` is different and falls through below.
+                return 0
                 ;;
             -*)
                 shift

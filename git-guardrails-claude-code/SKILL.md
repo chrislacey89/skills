@@ -26,6 +26,8 @@ Do not treat it as part of the normal feature pipeline. It is a repo or user set
 - `git checkout .` / `git restore .` / `git checkout -- .` / `git restore -- .`
 - `git checkout ./` / `git checkout ./.` / `git checkout :/` / `git restore :/`
 
+The guard reads the command as tokens and never evaluates it, so a destructive command assembled at run time — a flag or subcommand held in a variable, spliced with `${IFS}`, or produced by command substitution — is not visible to it. That is a limit of the design, not a missing entry; #334 records it alongside the destructive commands the lists do not yet cover.
+
 ## What Stays Allowed
 
 - `git push origin feature/my-branch`

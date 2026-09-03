@@ -271,6 +271,7 @@ assert_blocked_form $'git push \\\n-f'                  'backslash-newline conti
 assert_blocked_form 'git checkout *'                   'a bare glob is the whole tree'
 assert_blocked_form 'git restore -- *'                 'a bare glob after the -- separator'
 assert_blocked_form 'git checkout ./*'                 'the cwd glob spelling'
+assert_blocked_form 'git checkout **'                  'a doubled glob is still the whole tree'
 
 # Short spellings of restore's index/worktree flags (git help restore: -S is
 # --staged, -W is --worktree), bundled and split.
@@ -328,6 +329,8 @@ assert_allowed_form 'git push origin main:main'        'an ordinary refspec with
 assert_allowed_form 'git checkout .config/wt.toml'     'a dot-directory path, not the whole tree'
 assert_allowed_form 'git restore -S .'                 'the short spelling of --staged'
 assert_allowed_form 'git checkout src/*.ts'            'a glob under a path is not the whole tree'
+assert_allowed_form 'git checkout */'                  'a trailing-slash glob matches nothing in git'
+assert_allowed_form 'git --exec-path push -f'          'bare --exec-path prints a path and runs nothing'
 
 # The guard must not choke on input that is not a git command at all.
 assert_allowed_form 'echo hello'                       'a non-git command'
