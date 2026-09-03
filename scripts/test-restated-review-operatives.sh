@@ -231,7 +231,7 @@ printf '%s\n' "$band_bullets" | grep -oE '>[0-9]+ (LOC|files)' | sort -u > "$ban
 band_count="$(grep -c . "$bands_file" || true)"
 [ "$band_count" -ge 3 ] || fatal "extracted $band_count review-size threshold(s) from the canon's band bullets; expected at least 3. The band-bullet shape changed. Refusing to report a vacuous pass."
 
-observation_bound="$(printf '%s\n' "$band_bullets" | grep -E '^- \*\*Observation:' | grep -oE '>[0-9]+ (LOC|files)' | head -1)"
+observation_bound="$(printf '%s\n' "$band_bullets" | grep -E '^- \*\*Observation:' | grep -oE '>[0-9]+ (LOC|files)' | head -1 || true)"
 [ -n "$observation_bound" ] || fatal "could not extract the Observation band's threshold from the canon. Refusing to report a vacuous pass."
 
 printf 'band thresholds: %s (Observation bound: %s)\n' "$(tr '\n' ' ' < "$bands_file")" "$observation_bound"
@@ -279,7 +279,7 @@ detect_undefined_severity_labels() {
         | sed -E 's/ *—.*$//' \
         | while IFS= read -r label; do
             [ -n "$label" ] || continue
-            printf '%s\n' "$tiers" | grep -qx "$label" || printf '%s\n' "$label"
+            grep -qx "$label" <<<"$tiers" || printf '%s\n' "$label"
         done
     } || true
 }
@@ -310,7 +310,7 @@ while IFS= read -r f; do
     p="$repo_root/$f"
     [ -f "$p" ] || continue
 
-    h="$(detect_numeric_dimension_refs < "$p" | head -3)"
+    h="$(detect_numeric_dimension_refs < "$p" | head -3 || true)"
     [ -n "$h" ] && numeric_hits="$numeric_hits$f: $h
 "
 

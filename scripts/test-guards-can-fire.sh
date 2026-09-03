@@ -93,7 +93,7 @@ detect_subshell_guard() {  # stdin: file text. stdout: offending lines.
 # unwrapped record first, then match against it.
 detect_wrapped_anchor_match() {  # stdin: file text. stdout: offending lines.
     local text; text="$(cat)"
-    if printf '%s' "$text" | strip_comments | grep -q 'RS *= *""'; then
+    if grep -q 'RS *= *""' < <(strip_comments <<<"$text"); then
         # shellcheck disable=SC2016  # literal awk source being searched for, not a shell expansion
         printf '%s' "$text" | strip_comments | grep -nE 'index\(\$0,' || true
     fi
@@ -494,7 +494,7 @@ fi
 # exclusion that silently stopped matching would put this file back in the scan
 # where its own fixtures would redden it — a false red on a suite that is
 # working, which is how a suite gets deleted rather than fixed.
-printf '%s\n' "$suites" | grep -qx -- "$self" \
+grep -qx -- "$self" <<<"$suites" \
     && fatal "$self is in its own scan list; its fixture strings will flag as real defects."
 ok "this suite is excluded from its own scan, and the exclusion still matches"
 

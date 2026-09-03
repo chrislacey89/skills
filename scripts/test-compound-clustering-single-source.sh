@@ -240,13 +240,13 @@ else
             continue
         fi
         # shellcheck disable=SC2016  # literal backticks, no expansion intended
-        if printf '%s' "$para" | grep -qF -- '`/compound` Phase 4'; then
+        if grep -qF -- '`/compound` Phase 4' <<<"$para"; then
             ok "$ov names /compound Phase 4 as the owner"
         else
             bad "$ov describes /compound without naming Phase 4 as the rule's owner" \
                 "reference by name forces a reader to the source; partial enumeration does not"
         fi
-        if printf '%s' "$para" | grep -qE -- "$threshold_re"; then
+        if grep -qE -- "$threshold_re" <<<"$para"; then
             bad "$ov carries a threshold of its own" \
                 "matched: $(printf '%s' "$para" | grep -oE -- "$threshold_re" | head -1)"
         else

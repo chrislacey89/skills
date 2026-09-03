@@ -58,8 +58,8 @@ assert_contains() {
 
 # --- Pull the markers out of the skill ---------------------------------------
 
-pass_template="$(grep -o '<!-- loop-pass:[^>]*>' "$premerge_skill" | head -1)"
-judge_template="$(grep -o '<!-- loop-judge:[^>]*>' "$premerge_skill" | head -1)"
+pass_template="$(grep -o '<!-- loop-pass:[^>]*>' "$premerge_skill" | head -1 || true)"
+judge_template="$(grep -o '<!-- loop-judge:[^>]*>' "$premerge_skill" | head -1 || true)"
 
 if [[ -z "$pass_template" ]]; then
     printf 'FATAL: no loop-pass marker template found in %s\n' "$premerge_skill" >&2

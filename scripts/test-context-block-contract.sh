@@ -141,9 +141,9 @@ assert_contains "$(cat "$execute_skill")" '### Context' \
 # above the grep and would satisfy a naive first-match comparison no matter
 # where the real instruction moved to.
 step1_lead="Read the slice's \`### Context\` block before the grep below"
-context_line="$(grep -n -- "$step1_lead" "$execute_skill" | head -1 | cut -d: -f1)"
+context_line="$(grep -n -- "$step1_lead" "$execute_skill" | head -1 | cut -d: -f1 || true)"
 # shellcheck disable=SC2016  # the backticks are literal markdown, not a subshell
-grep_line="$(grep -n 'Consult `docs/solutions/`' "$execute_skill" | head -1 | cut -d: -f1)"
+grep_line="$(grep -n 'Consult `docs/solutions/`' "$execute_skill" | head -1 | cut -d: -f1 || true)"
 
 if [[ -z "$context_line" ]]; then
     printf '  FAIL Step 1 instruction not found (looked for: %q)\n' "$step1_lead"

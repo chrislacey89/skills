@@ -95,7 +95,7 @@ if [ -z "$hooks_item" ]; then
         "a fresh worktree inherits none, and nothing reports their absence because the reporter would be one of the absent hooks. Without this item a session reasons from lefthook.yml as though it ran."
 else
     ok "the checklist has an item about local git hooks"
-    if printf '%s' "$hooks_item" | grep -qi 'untracked\|per-worktree'; then
+    if grep -qi 'untracked\|per-worktree' <<<"$hooks_item"; then
         ok "that item says why the absence is invisible (hooks are per-worktree and untracked)"
     else
         bad "the hooks item does not say hooks are per-worktree/untracked" \
@@ -109,7 +109,7 @@ section "the host-provisioned stand-down does not wave the hooks item away"
 standdown="$(section_body "$execute_md" 'When standing down:')"
 [ -n "$standdown" ] || fatal "could not read the stand-down paragraph; its anchor moved."
 
-if printf '%s' "$standdown" | grep -qi 'hook'; then
+if grep -qi 'hook' <<<"$standdown"; then
     ok "the stand-down names the hooks item as an exception to \"informational only\""
 else
     bad "the stand-down dismisses the whole worktree checklist without carving out hooks" \
@@ -125,7 +125,7 @@ if [ -z "$notes" ]; then
         "\"lint clean\" is a claim about whichever binary was on PATH. Linters disagree across releases in both directions, so without a version the reviewer cannot tell whether the row describes the merge gate."
 else
     ok "Step 6 requires the version beside a pinned tool's claim"
-    if printf '%s' "$notes" | grep -qi 'hook'; then
+    if grep -qi 'hook' <<<"$notes"; then
         ok "…and requires saying whether the repo's own local gates ran"
     else
         bad "the review-notes rule names the version but not whether local gates ran" \
@@ -209,7 +209,7 @@ Second line of the same paragraph.
 A later paragraph that must not be included.
 FIXTURE
 body="$(section_body "$fixtures/para.md" 'When standing down:')"
-if printf '%s' "$body" | grep -q 'Second line' && ! printf '%s' "$body" | grep -q 'later paragraph'; then
+if grep -q 'Second line' <<<"$body" && ! grep -q 'later paragraph' <<<"$body"; then
     ok "section_body returns the whole anchored paragraph and stops at the blank line"
 else
     bad "section_body misread a clean fixture" \

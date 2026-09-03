@@ -457,7 +457,7 @@ while IFS= read -r candidate; do
     # A line that both talks about blocking git commands and enumerates
     # backticked `git <verb>` forms is a restatement of the contract.
     if grep -qiE '(block|guard)[^.]*git command' "$candidate" 2>/dev/null; then
-        if grep -iE '(block|guard)[^.]*git command' "$candidate" | grep -q '`git '; then
+        if grep -q '`git ' < <(grep -iE '(block|guard)[^.]*git command' "$candidate"); then
             restating_files="$restating_files $candidate"
         fi
     fi

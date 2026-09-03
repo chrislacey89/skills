@@ -1375,14 +1375,14 @@ else
     bad "declared_works returned an unexpected set" "got: $extracted"
 fi
 
-if declared_works "$fixtures/beta/SKILL.md" | grep -q 'Body Only Book'; then
+if grep -q 'Body Only Book' < <(declared_works "$fixtures/beta/SKILL.md"); then
     bad "declared_works harvested a sources: block from a SKILL.md body" \
         "prose that merely shows or discusses a sources: block must not back a shelf claim"
 else
     ok "a sources: block in a SKILL.md body is not treated as a declaration"
 fi
 
-if declared_works "$fixtures/gamma/SKILL.md" | grep -q 'Trailing Key Book'; then
+if grep -q 'Trailing Key Book' < <(declared_works "$fixtures/gamma/SKILL.md"); then
     bad "declared_works ran past the end of the sources: block" \
         "a quoted top-level key after sources: was harvested as a declaration; deleting the block terminator must not leave this suite green"
 else
@@ -1646,7 +1646,7 @@ sources:
     - "Body Only Book — Nobody"
 FIXTURE
 bash "$repo_root/scripts/generate-canon.sh" --root "$gen" --out "$genout" > /dev/null
-if canon_rows "$genout" | cut -f1 | grep -q 'Body Only Book'; then
+if grep -q 'Body Only Book' < <(canon_rows "$genout" | cut -f1); then
     bad "the generator shelved a sources: block quoted in a SKILL.md body" \
         "prose that merely shows a sources: block must not put a work on the page"
 else

@@ -76,6 +76,8 @@ pre-push:
       run: bash scripts/test-guards-can-fire.sh
     syntax-palette-contract-tests:
       run: bash scripts/test-syntax-palette-contract.sh
+    pipefail-safe-matcher-tests:
+      run: bash scripts/test-pipefail-safe-matchers.sh
     recap-mode-contract-tests:
       run: bash scripts/test-recap-mode-contract.sh
     decision-card-grounding-tests:

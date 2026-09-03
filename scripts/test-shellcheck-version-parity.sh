@@ -40,7 +40,7 @@ section "the version file is a single, well-formed source"
 pinned="$(tr -d '[:space:]' < "$VERSION_FILE")"
 [ -n "$pinned" ] || fatal "$VERSION_FILE is empty — every check below would compare against nothing"
 
-if printf '%s' "$pinned" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+if grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$' <<<"$pinned"; then
     ok "$VERSION_FILE holds an exact version ($pinned)"
 else
     bad "$VERSION_FILE does not hold an exact version" \
@@ -108,14 +108,14 @@ if command -v shellcheck >/dev/null 2>&1; then
     here="$(shellcheck --version | awk -F': ' '/^version:/ {print $2}' | tr -d '[:space:]')"
 
     out="$(run_probe "$here")"
-    if printf '%s' "$out" | grep -q 'local'; then
+    if grep -q 'local' <<<"$out"; then
         bad "warner complains when local matches the pin" "it would cry wolf on every correct setup"
     else
         ok "warner is silent when local matches the pin ($here)"
     fi
 
     out="$(run_probe "0.0.1-not-a-real-version")"
-    if printf '%s' "$out" | grep -q 'local'; then
+    if grep -q 'local' <<<"$out"; then
         ok "warner announces a mismatch when local differs from the pin"
     else
         bad "warner said nothing on a planted mismatch" \
@@ -126,7 +126,7 @@ else
 fi
 
 out="$(rm -f "$probe_dir/.shellcheck-version"; bash "$probe_dir/scripts/$(basename "$WARNER")" 2>&1 || true)"
-if printf '%s' "$out" | grep -q 'missing'; then
+if grep -q 'missing' <<<"$out"; then
     ok "warner fails loudly when the version file is absent"
 else
     bad "warner tolerated a missing version file" "it would silently compare against nothing"
