@@ -108,13 +108,20 @@ For each `Produces` entry in the PR's slice issue:
 
 For each `Consumes` entry referencing an already-closed upstream slice, run the same check against the upstream's declared Produces. If the upstream export is missing or shape-drifted, note it and flag the upstream issue for correction.
 
-**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header — same condition and same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it:
+**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header. In author-mode and loop-mode, run the same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it, with `$BASE_REF` as Phase 1's detection block resolved it:
 
 ```bash
 git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
 ```
 
-`$BASE_REF` is the base-branch ref resolved by Phase 1's detection block, the same variable the diff stat at the Surgical Scope dimension reads. Deleted paths print as `D<TAB><path>`, renames as `R<score><TAB><old><TAB><new>`. Any output fires the check; empty output skips it. Gate on the output, not the exit status — the command exits 0 either way. A `### Deletes` section is an optional hint naming which surfaces to sweep, never the trigger. Infer the deleted module's external consumer surfaces from those hint notes when present, otherwise from `git show <base>:<path>`. Grep the merged tree for each surface type across all source-text files — templates, source code, styles, config, docs. Zero matches required to pass. Non-zero matches: flag as Concern with the matched path and line. This mirrors the Tier 1 build-time check in `/execute`; its value here is catching surfaces the author missed at implementation time, now verified against the full merged tree.
+In reviewer-mode there is no local ref, so read the same fact from the PR's file list, keeping the removed and renamed rows — the `status` vocabulary is documented at [REST: list pull requests files](https://docs.github.com/en/rest/pulls/pulls#list-pull-requests-files):
+
+```bash
+gh api --paginate "repos/{owner}/{repo}/pulls/<pr-number>/files" \
+  --jq '.[] | select(.status == "removed" or .status == "renamed") | "\(.status)\t\(.previous_filename // "")\t\(.filename)"'
+```
+
+A consumed upstream slice is already merged, so it has a PR number and no local branch: read its deletions with that second command in every mode, substituting its number. Git prints deleted paths as `D<TAB><path>` and renames as `R<score><TAB><old><TAB><new>`; the API query prints `removed<TAB><TAB><path>` and `renamed<TAB><old><TAB><new>`. Any row fires the check; no rows skips it. A `### Deletes` section is an optional hint naming which surfaces to sweep, never the trigger. Infer the deleted module's external consumer surfaces from those hint notes when present, otherwise from `git show <base>:<path>` in author-mode or the file's contents at the PR's base commit in reviewer-mode. Grep the merged tree for each surface type across all source-text files — templates, source code, styles, config, docs. Zero matches required to pass. Non-zero matches: flag as Concern with the matched path and line. This mirrors the Tier 1 build-time check in `/execute`; its value here is catching surfaces the author missed at implementation time, now verified against the full merged tree.
 
 **Out of scope:** Whether the interfaces are well-designed or deep (Deep Modules covers shallowness). Verifying that the upstream slice's *close state* was correct at merge time is handled by the Verification procedure above.
 

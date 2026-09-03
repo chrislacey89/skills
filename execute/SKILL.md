@@ -326,7 +326,7 @@ git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
 
 **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
-Deleted paths print as `D<TAB><path>`, renames as `R<score><TAB><old><TAB><new>`. Any output at all fires the rung; empty output skips it. Gate on the output, not the exit status — the command exits 0 either way. A `### Deletes` section in the slice body is an optional hint that names which surfaces to sweep; it is not the trigger, because `/prd-to-issues` does not emit that header and the rung gated on it never fired.
+Deleted paths print as `D<TAB><path>`, renames as `R<score><TAB><old><TAB><new>`. Any output at all fires the rung; empty output skips it. Gate on the output, not the exit status — the command exits 0 either way. A `### Deletes` section in the slice body is an optional hint that names which surfaces to sweep; it is not the trigger.
 
 For each deleted or renamed module, enumerate its external consumer surfaces — the symbolic names callers were taught to emit for it to consume, beyond its exports. Typical surfaces:
 

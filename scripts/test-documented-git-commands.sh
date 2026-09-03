@@ -885,7 +885,7 @@ for site in $base_sites; do
         # it, so /execute's `--diff-filter=DR --name-status` line — which emits
         # paths, never a summary sentence — parsed as 0/0/0 and reddened four
         # assertions that were describing correct prose. A `git diff` shape this
-        # loop does not recognise now fails by name instead of being scored
+        # loop does not recognize now fails by name instead of being scored
         # against the wrong oracle or, worse, dropped silently.
         case "$line" in
             "git diff"*--stat*|"git diff"*--shortstat*)
@@ -968,12 +968,11 @@ done
 section "the deletion-trigger line finds a real deletion and a real rename"
 
 # /execute Step 4's Deletion Completeness rung and the Boundary Map Contracts
-# dimension in /pre-merge review-checklist.md both gate on this line. #326 is the incident: the rung previously
-# gated on the slice body carrying a `### Deletes` header, which /prd-to-issues
-# does not emit and which appeared in 0 of 274 measured issues — five reader
-# sites, no writer, never fired once. The header was replaced by the diff, so the
-# diff command IS the gate now, and a wrong one fails the same way the header
-# did: silently, with the rung reporting nothing to sweep.
+# dimension in /pre-merge review-checklist.md both gate on this line. #326 is
+# the incident: the rung gated on a section header that had readers and no
+# writer, so it never fired. The header was replaced by the diff, so the diff
+# command IS the gate now, and a wrong one fails the same way the header did:
+# silently, with the rung reporting nothing to sweep.
 #
 # The main fixture cannot check this. Its feature branch adds files and deletes
 # nothing, so the line correctly emits empty there and an empty result is
@@ -1080,11 +1079,10 @@ for site in $base_sites; do
     fi
 done
 
-# The floor. #326 replaced a trigger that had five reader sites and no writer;
-# a suite that silently checks zero sites would be the same failure one level
-# up. Two sites carry the line today — /execute Step 4 and, via review-checklist,
-# /pre-merge's Boundary Map Contracts dimension — but only SKILL.md files are in
-# $base_sites, so the reachable floor here is 1.
+# The floor. #326 replaced a trigger that had readers and no writer; a suite
+# that silently checks zero sites would be the same failure one level up. Only
+# SKILL.md files are in $base_sites, so the reachable floor here is 1;
+# review-checklist.md is checked by name below.
 if [[ "$deltrig_sites" -ge 1 ]]; then
     printf '  ok   derived %s site(s) documenting the deletion-trigger line\n' "$deltrig_sites"
     pass=$((pass + 1))
