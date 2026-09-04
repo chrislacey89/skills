@@ -62,6 +62,24 @@
 # requires it to separate them. It still cannot prove a downstream project runs
 # the gate; it does prove the gate can tell the two installs apart, which is the
 # half that lives in this repo's text.
+#
+# AND WHAT SECTION 11 DECLARES, because a gate named for currency does not have
+# it. The gate's matcher is one literal, the lock's own flag path, so it knows
+# exactly one version boundary: the term is absent on every pre-lock install and
+# present on every install from the lock onward, forever. A hook change made
+# AFTER that boundary — clause ordering, a message, a new skip pattern — leaves
+# the term in place, so the gate reports the same verdict for it as for a hook
+# that is genuinely current, and the change is never distributed. That is root
+# cause #2 of
+# docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md:
+# zero hits is the mechanism's healthy state, so its silence carries no signal.
+# That entry rules out widening the matcher past what
+# it can do accurately and names the escape — make the narrowness DECLARED AND
+# SELF-TESTED — so section 11 takes it in three moves: /execute Step 0's third
+# verdict is named for the term it found rather than for currency and states the
+# limit in prose; the blindness is asserted here against a post-lock hook that
+# differs from the shipped body; and the shipped body is digested, which is the
+# signal at the crossover the entry says a green run does not carry.
 
 set -euo pipefail
 
@@ -982,18 +1000,101 @@ assert_eq "hooks-stale" "$(run_gate "$gate_proj")" \
     "the pre-lock hook installed: the gate fires, and /init-pipeline re-scaffolds"
 
 cp "$hook_file" "$gate_proj/$hook_rel"
-assert_eq "hooks-current" "$(run_gate "$gate_proj")" \
+assert_eq "hooks-lock-present" "$(run_gate "$gate_proj")" \
     "the shipped hook installed: the gate stays silent"
 
 # Same three-way separation with the variable the harness may not set, since the
 # gate wrote the same ${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}
 # fallback section 6 measures for /pre-merge and /fix-findings.
-assert_eq "hooks-current" "$(run_gate "")" \
+assert_eq "hooks-lock-present" "$(run_gate "")" \
     "…and with \$CLAUDE_PROJECT_DIR unset, the gate resolves the project by git toplevel"
 
 cp "$prelock" "$gate_proj/$hook_rel"
 assert_eq "hooks-stale" "$(run_gate "")" \
     "…and still fires on the pre-lock hook through that same fallback"
+
+# --- Every verdict the gate emits is a verdict Step 0's prose defines --------
+#
+# The verdicts are DERIVED from the block rather than listed here, so renaming
+# one in the code fence and leaving the paragraph describing the old name fails
+# here. This is the routing surface: an agent reads a token out of the gate and
+# looks for what to do with it, and a token the prose never mentions routes
+# nowhere.
+
+gate_verdicts="$(grep -oE 'echo "[a-z-]+"' <<<"$hooks_gate" | sed -E 's/^echo "(.*)"$/\1/' | sort -u)"
+[ "$(grep -c '' <<<"$gate_verdicts")" -ge 3 ] || fatal "read fewer than three verdicts out of Step 0's gate — the gate has three branches, so that extractor no longer matches its echoes"
+
+execute_prose="$(awk '/^```/ { inblock = ! inblock; next } ! inblock' execute/SKILL.md)"
+
+while read -r verdict; do
+    [ -n "$verdict" ] || continue
+    if grep -qF -- "\`$verdict\`" <<<"$execute_prose"; then
+        assert_eq "documented" "documented" "Step 0's prose says what to do with $verdict, which its gate emits"
+    else
+        assert_eq "documented" "unmentioned" "Step 0's prose says what to do with $verdict, which its gate emits"
+    fi
+done <<<"$gate_verdicts"
+
+# --- The narrowness, declared in Step 0's prose and asserted here ------------
+#
+# The three rows above are the whole of what the gate can do, and the third one
+# is the one that over-reads: it fired on the shipped hook, but it fires on ANY
+# hook carrying the lock's term. Section 9's ordering control is exactly such a
+# hook — the shipped body with clause 1's stand-down taken out, which is the
+# version that shipped before 93f5453 and which section 9 has already proven
+# reproduces both halves of that defect. So it is a hook that is demonstrably
+# not current, and the gate is required here to call it lock-present anyway.
+#
+# This assertion is a REQUIRED NON-MATCH, and it goes red the day somebody
+# widens the gate to a second boundary term. That is the point: the limit stops
+# being an assumption nobody has to revisit and becomes a line that has to be
+# rewritten deliberately, together with the paragraph in /execute Step 0 that
+# states it. Same shape as the required non-match in test-oracle-table-
+# coverage.sh, and for the same reason — a floor asserts the repo still has the
+# defect, a self-test asserts the mechanism still behaves as documented.
+
+if [ "$(cat "$ordering_mutant")" != "$hook_body" ]; then
+    assert_eq "differs" "differs" "the post-lock control is a different hook body from the shipped one"
+else
+    assert_eq "differs" "identical" "the post-lock control is a different hook body from the shipped one"
+fi
+
+if grep -qF -- "${stamp_rel##*/}" "$ordering_mutant"; then
+    assert_eq "carries the term" "carries the term" "…and still carries the lock's flag path, which is the only thing the gate reads"
+else
+    assert_eq "carries the term" "absent" "…and still carries the lock's flag path, which is the only thing the gate reads"
+fi
+
+cp "$ordering_mutant" "$gate_proj/$hook_rel"
+assert_eq "hooks-lock-present" "$(run_gate "$gate_proj")" \
+    "DECLARED LIMIT: a hook change made after the lock boundary is invisible to this gate, so it reports the same verdict as for the shipped body"
+
+# --- The signal at the crossover: the shipped hook body cannot change quietly -
+#
+# The limit above says a later hook change is not distributed. Nothing so far
+# would tell the author of that change, because a green suite looks the same on
+# both sides of the crossover. A digest of the hook body is the cheapest thing
+# that does: it is red exactly when the hook changes, and its message is the
+# decision that has to be made at that moment. The value is restated rather than
+# derived because there is nothing to derive it from — it is a baseline, "what
+# the hook looked like when the gate was last thought about," which no state in
+# this tree carries. Restating it is safe in the way a coverage list is not: it
+# has one reader, and being stale makes it LOUD rather than silent.
+
+if command -v shasum >/dev/null 2>&1; then
+    digest_cmd=(shasum -a 256)
+elif command -v sha256sum >/dev/null 2>&1; then
+    digest_cmd=(sha256sum)
+else
+    fatal "neither shasum nor sha256sum is on PATH — the hook-body tripwire in section 11 cannot run"
+fi
+
+# The digest of init-pipeline § 2's hook body as of the commit that wrote
+# /execute Step 0's "What this gate cannot see" paragraph.
+hook_body_digest="212fd2c01346d7b8a515bc13380aa10ed929f87957fd9ed0e5603b3eb811b954"
+
+assert_eq "$hook_body_digest" "$(printf '%s' "$hook_body" | "${digest_cmd[@]}" | cut -d' ' -f1)" \
+    "the shipped hook body is the one the declared limit was written against — if you changed it, this gate does NOT distribute that change to upgraded projects: give the new boundary its own elif term in /execute Step 0, then update hook_body_digest here"
 
 # -----------------------------------------------------------------------------
 
