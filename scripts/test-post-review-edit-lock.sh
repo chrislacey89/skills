@@ -796,12 +796,24 @@ fi
 
 # -----------------------------------------------------------------------------
 
-section "8. the breaker's copy is structurally unable to write to the branch"
+section "8. the breaker's copy cannot be committed to, and announces where it is"
 
 # /fix-findings chooses `git archive` over `git worktree add` on the stated
-# ground that it "writes a plain directory with no .git inside it, so 'the
-# breaker cannot write to the branch' is structural rather than promised."
-# Structural is a checkable word.
+# ground that it writes a plain directory with no .git inside it. Structural is
+# a checkable word, and #344 is the incident that says which half of the claim
+# it can carry: absent .git makes *committing to the branch* impossible, and
+# does nothing about a write that lands in the original working tree by another
+# route — a bare relative path, a lost $BREAKER_DIR, a wrong `-C`. In the field
+# a breaker's `sed` reached the real repo exactly that way, because $BREAKER_DIR
+# was bound in one shell and the breaker mutated from a later one.
+#
+# So this section measures two different things. The .git assertion below is the
+# structural half. The path assertions are the mechanism under the discipline
+# half: the block must hand the breaker an ABSOLUTE path and must PRINT it, so
+# a breaker in a fresh shell has a literal to cd into rather than a variable
+# that did not survive. Neither assertion can see whether the breaker obeys the
+# rule — that is prose, and it stays prose; what is pinned is that the block
+# still supplies what the rule depends on.
 
 # The block archives the SHA the controller hands it in $FIX_SHA, not HEAD (#341).
 # That distinction only exists once the two differ, so give the fixture a second
@@ -819,7 +831,28 @@ if [ "$fix_sha" = "$(git -C "$gitrepo" rev-parse HEAD)" ]; then
     fatal "the fixture's two commits share a SHA — the HEAD-vs-FIX_SHA distinction is untestable"
 fi
 
-breaker_dir="$( cd "$gitrepo" && FIX_SHA="$fix_sha" bash -c "$archive_block"$'\n''printf "%s" "$BREAKER_DIR"' )"
+# US (0x1f) separates what the block printed from the value it bound, so one run
+# yields both. A literal the block never emits is the right separator here: any
+# byte the announcement could plausibly contain would split it in the wrong place.
+archive_out="$( cd "$gitrepo" && FIX_SHA="$fix_sha" bash -c "$archive_block"$'\n''printf "\037%s" "$BREAKER_DIR"' )"
+archive_announced="${archive_out%%$'\037'*}"
+breaker_dir="${archive_out##*$'\037'}"
+
+case "$breaker_dir" in
+    /*) assert_eq "absolute" "absolute" "the block binds \$BREAKER_DIR to an absolute path" ;;
+    *)  assert_eq "absolute" "relative: $breaker_dir" "the block binds \$BREAKER_DIR to an absolute path" ;;
+esac
+
+# The announcement is what a breaker in a later shell reads the path off. Assert
+# the block prints the very directory it bound — a block that printed some other
+# path, or nothing, would leave the breaker with a variable that is empty by the
+# time it mutates, which is the #344 failure.
+case "$archive_announced" in
+    *"$breaker_dir"*) assert_eq "announced" "announced" \
+        "the block prints the absolute path it created, so a fresh shell has a literal to cd into" ;;
+    *) assert_eq "announced" "silent (printed: ${archive_announced:-nothing})" \
+        "the block prints the absolute path it created, so a fresh shell has a literal to cd into" ;;
+esac
 
 if [ -f "$breaker_dir/src/service.ts" ]; then
     assert_eq "extracted" "extracted" "the archive block extracts the committed tree"

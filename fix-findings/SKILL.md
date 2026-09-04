@@ -198,6 +198,7 @@ if ! git archive "$FIX_SHA" | tar -x -C "$BREAKER_DIR"; then
   echo "breaker aborted: could not extract $FIX_SHA into a throwaway copy" >&2
   exit 1
 fi
+echo "breaker copy: $BREAKER_DIR"
 ```
 
 A `git worktree add` would register an entry in a git directory that other
@@ -205,8 +206,32 @@ sessions read and that survives a crashed breaker as a prunable stub — two
 controllers over one stock, which is the coordination hazard Leveson names and
 which is real here, because parallel-workspace hosts share one git directory
 across sessions. `git archive` writes a plain directory with no `.git` inside it,
-so "the breaker cannot write to the branch" is structural rather than promised.
-Clean up with `rm -rf "$BREAKER_DIR"` when the breaker reports.
+so the breaker has no branch to commit to — and **committing is the whole of what
+the missing `.git` buys**. It does nothing about a write that lands in the
+*original working tree* by another route: a bare relative path, a `sed` with the
+wrong `-C`, a `$BREAKER_DIR` that was bound in the block's shell and had gone
+empty by the shell that mutated. In the field a breaker reached the real repo
+exactly that way and edited two rows of a file under review while a sibling agent
+was reading it. The isolation is structural for commits and asserted for
+everything else, and #344 is the run where the asserted half failed — so the two
+halves are named separately here rather than under one word.
+
+So the copy carries a mechanism for the second half rather than a promise. The
+block prints the absolute path it created, and **every command the breaker runs
+— the control, the mutation, and the check — runs with that path as its working
+directory, `cd`'d there by the printed literal at the top of each shell.** Not by
+re-reading `$BREAKER_DIR`, which lives only in the shell the block ran in: a
+breaker that mutates from a later shell gets the empty string, and a relative
+path then resolves against the repo under review. With the copy as cwd the
+failure inverts into the safe direction — a bare relative path resolves *inside*
+the copy, where it belonged, and a lost path makes the command fail rather than
+land somewhere. `git show "$FIX_SHA"` run from the original repo stays permitted;
+it is a read, and it is the one command in the breaker's repertoire that names
+the original on purpose.
+
+Clean up with `rm -rf <the printed path>` when the breaker reports — the literal,
+for the same reason: `rm -rf "$BREAKER_DIR"` in a later shell expands to
+`rm -rf ""`, which reports success and removes nothing.
 
 **The extraction fails closed, and the guard is not decoration.** An unguarded
 `git archive <bad-rev> | tar -x` prints its `fatal:` to stderr and exits **0**,
@@ -253,9 +278,27 @@ nothing.
 
 ### Step 3. Report, then release the lock
 
-Print one block per finding — number, the fixer's verdict and commit SHA, the
-breaker's verdict **and the SHA it archived**, and the command behind each. No
-conclusions the human cannot re-run.
+**First reconcile the original working tree — you do this, not the breaker.**
+The cwd rule in Step 2 makes an escape unlikely; it does not make it visible, and
+a breaker that escaped leaves its mutation sitting in the repo under review. Run
+`git status --short` in the original repo after each breaker reports, and account
+for every path it lists. The in-flight fixer's own edits are expected, and you
+are the only actor here who knows which those are. An unexplained modification is
+an escaped breaker: restore the path before the next fixer commits on top of it,
+report that breaker's finding as **`not-run`** rather than passing its verdict
+through, and say in the report that the reconciliation is why.
+
+This sits with the controller for two reasons, and handing it to the breaker
+would fail on both. The breaker is forbidden to read the original working tree at
+all (Step 2), so the instruction would contradict the restriction that makes the
+fixer/breaker overlap safe. And it could not read the answer if it were allowed
+to: it does not know what the concurrent fixer touched, so it cannot tell its own
+escaped `sed` from a legitimate in-flight edit. You know both, because you
+ordered them.
+
+Then print one block per finding — number, the fixer's verdict and commit SHA,
+the breaker's verdict **and the SHA it archived**, and the command behind each.
+No conclusions the human cannot re-run.
 
 ```
 Finding 3 — fixed at a1b2c3d
