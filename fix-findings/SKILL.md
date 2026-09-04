@@ -165,11 +165,23 @@ What it may read is what cannot move: the extracted copy, and the commit
 in-flight fixer, so the `git archive "$FIX_SHA"` extraction below is not a
 violation of this — and a breaker that needs to see what the fix changed runs
 `git show "$FIX_SHA"` from the original repo, since the extracted copy has no
-`.git`, rather than inferring the diff from the working files or from the
-fixer's report. Carrying dependencies into the copy is permitted for a different
-reason: symlinking a read-only dependency tree, copying `.env.local` and its
-siblings, brings over the test command's apparatus rather than the breaker's
-subject, and a fixer repairing a review finding is not editing those.
+`.git`, rather than inferring the diff from the working files, which move.
+Nor does it infer the diff from the fixer's report, on a different axis: that
+report cannot move, but relying on it would make the breaker's verdict a
+restatement of the fixer's own account of its fix rather than an independent
+read of the fix, and independence is the reason this sub-agent exists at all.
+Carrying dependencies into the copy is permitted on the same mutability axis:
+a fixer repairing a review finding does not edit a dependency tree or
+`.env.local` and its siblings, so symlinking the tree in and copying those
+files brings over the test command's apparatus, not anything that moves.
+
+The same hazard reaches `gh pr view` and `gh issue view`. PR and issue state
+is another agent's or a human's in-flight work and can change while the
+breaker runs, so the breaker does not fetch either itself. Its inputs — the
+finding, `$FIX_SHA`, the test command, and anything from the PR or issue it
+needs — are handed to it by the controller before it starts, the same way
+Step 1 hands a fixer the PR body's `## Review Notes` block rather than
+letting the fixer fetch it.
 
 **Where the copy lives: `git archive`, not a second worktree — and it archives
 the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
@@ -360,9 +372,10 @@ eight findings that is not a trade worth making. **Breakers may run in parallel*
 with each other, and a breaker may run while the next fixer works. The two
 conditions that make that safe are stated in Step 2 and are deliberately not
 restated here — the `$FIX_SHA` the extraction archives, and the restriction on
-reading the original tree — because a rule written at two sites is a rule that
-will later be changed at one. Neither is a tidiness rule. On #338 a breaker was
-backgrounded while the next fixer was still committing, read the real repo, and
+reading the original working tree or resolving a moving ref — because a rule
+written at two sites is a rule that will later be changed at one. Neither is a
+tidiness rule. On #338 a breaker was backgrounded while the next fixer was
+still committing, read the real repo, and
 had to disclaim edits that were not its subject; nothing was corrupted, because
 breakers write nothing, but the report was confused by state it had never been
 told to stay out of. And the overlap is the only concurrency worth having here:
