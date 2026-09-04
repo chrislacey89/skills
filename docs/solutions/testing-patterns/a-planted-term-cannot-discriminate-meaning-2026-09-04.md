@@ -30,10 +30,14 @@ it; `CLAUDE.md` rule (b) then said *pin the claim*, and the author pinned it.
 The branch was PR #338, which adds `/fix-findings`. Its suite,
 `scripts/test-post-review-edit-lock.sh`, grew to 1,525 lines. Sections 1–10
 executed things: they ran the hook body, drove the five documented commands, ran
-`/execute` Step 0's gate against real installs. Sections 12–14 grepped prose:
-that `/init-pipeline` § 2 "routes Path C past the sections that ask a human,"
-that "every site states both halves of the auto-invoke condition," that a
-surgery span "starts at" a named anchor.
+`/execute` Step 0's gate against real installs. Sections 12–14 mostly grepped
+prose: that `/init-pipeline` § 2 "routes Path C past the sections that ask a
+human," that "every site states both halves of the auto-invoke condition,"
+that a surgery span "starts at" a named anchor. The two buckets are not clean
+— section 11's required non-match and digest, section 12's clause counts, and
+section 14c's string-absence check executed or compared by identity and were
+deleted with the rest; the suite header names each. The line this entry draws
+is about the comparison relation, not the section number.
 
 ## Symptoms
 
