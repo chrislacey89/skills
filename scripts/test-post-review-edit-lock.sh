@@ -997,5 +997,75 @@ assert_eq "hooks-stale" "$(run_gate "")" \
 
 # -----------------------------------------------------------------------------
 
+section "12. /init-pipeline § 2 gives the gate's two verdicts disjoint install-time paths"
+
+# THE DRIFT CLASS THIS CLOSES, which is not the hook's behavior but the prose
+# that tells a downstream agent how to write it. Section 11 proves the gate can
+# separate a pre-lock install from a current one. It cannot see what happens
+# next: both verdicts route to the same call, `invoke /init-pipeline now`, so
+# § 2 is entered in two different situations and has to hold two different
+# rules — ask/default on a fresh install, carry the installed list over on a
+# re-scaffold. The lock upgrade added the second rule as a new paragraph and
+# left the first one unconditional, which is docs/restated-claims.md
+# § "Why an additive edit is not a replacement": both sentences present, both
+# reading as true, and the one an agent reaches first re-defaults the trigger
+# surface of every pre-lock project — the single harm the new paragraph exists
+# to prevent, on exactly the population it was written for.
+#
+# So the two verdicts are DERIVED by running the gate against the fixtures
+# section 11 built, and § 2's paths are required to partition them: each
+# verdict named under exactly one path, no path claiming both, and no
+# instruction touching IMPL_PATTERNS floating above the path labels where it
+# reads as applying to every run.
+
+rm -f "$gate_proj/$hook_rel"
+v_absent="$(run_gate "$gate_proj")"
+cp "$prelock" "$gate_proj/$hook_rel"
+v_stale="$(run_gate "$gate_proj")"
+
+if [ -z "$v_absent" ] || [ -z "$v_stale" ] || [ "$v_absent" = "$v_stale" ]; then
+    fatal "the gate did not yield two distinct verdicts to partition (got '$v_absent' and '$v_stale')"
+fi
+
+install_block="$(awk '
+    /^\*\*Install-time:/ { on = 1 }
+    on && /^```bash$/     { exit }
+    on                    { print }
+' init-pipeline/SKILL.md)"
+[ -n "$install_block" ] || fatal "no **Install-time: block found in init-pipeline/SKILL.md § 2 — either it moved or its opening changed; update this suite with it"
+
+# A paragraph is blank-line-separated, and it is accumulated into one unwrapped
+# string before anything is matched against it — not read with RS="" and matched
+# against $0, which is test-guards-can-fire.sh detector B's shape: a wrap landing
+# inside the anchor makes the match miss and the assertion pass for the wrong
+# reason. "A path" is the bolded label plus the prose that rides with it, so the
+# intro paragraph that names both verdicts to explain the fork is not itself a
+# path and is not counted as one.
+counts="$(awk -v a="$v_absent" -v b="$v_stale" '
+    function flush(   is_path) {
+        if (para == "") return
+        is_path = (para ~ /^\*\*Path /)
+        if (is_path) {
+            labeled = 1
+            if (index(para, a)) n_a++
+            if (index(para, b)) n_b++
+            if (index(para, a) && index(para, b)) n_both++
+        }
+        if (index(para, "IMPL_PATTERNS") && ! labeled) n_loose++
+        para = ""
+    }
+    /^[[:space:]]*$/ { flush(); next }
+                     { para = (para == "" ? $0 : para " " $0) }
+    END              { flush(); printf "%d %d %d %d\n", n_a + 0, n_b + 0, n_both + 0, n_loose + 0 }
+' <<<"$install_block")"
+read -r n_absent n_stale n_both n_loose <<<"$counts"
+
+assert_eq 1 "$n_absent" "exactly one path in § 2 is keyed to $v_absent"
+assert_eq 1 "$n_stale"  "exactly one path in § 2 is keyed to $v_stale"
+assert_eq 0 "$n_both"   "no single path claims both verdicts — the antecedent that covered both is what shipped the conflict"
+assert_eq 0 "$n_loose"  "no unlabeled paragraph above the paths instructs on IMPL_PATTERNS"
+
+# -----------------------------------------------------------------------------
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1
