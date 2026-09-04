@@ -426,9 +426,10 @@ tidiness rule. On #338 a breaker was backgrounded while the next fixer was
 still committing, read the real repo, and
 had to disclaim edits that were not its subject; nothing was corrupted, because
 breakers write nothing, but the report was confused by state it had never been
-told to stay out of. And the overlap is the only concurrency worth having here:
-wall clock is dominated by the fixers, so a breaker that waits for them buys
-nothing.
+told to stay out of. Before the cap below existed, that overlap was the only
+concurrency worth having: wall clock was dominated by the fixers, so a breaker
+that waited for them bought nothing. The cap changes that calculus — see the
+paragraph below beginning "That bound chains" for what the overlap costs now.
 
 **A same-file overlap needs one more condition, and it is not the isolation
 condition above.** Step 2's isolation is about what the breaker may *read*; it
@@ -459,17 +460,35 @@ one dirty line it cannot resolve, unmeasured by any comparison this section ran
 for that pair.
 
 So: **a breaker's overlap with fixers is capped at one, not the round.** A
-backgrounded breaker may run concurrently with the single fixer the same-file
-check above cleared it against. Before starting the *next* fixer after that
-one, confirm the earlier breaker has reported — if it has not, hold that fixer
-rather than opening a second fixer against a still-open breaker. This is a
-wait, not a second comparison: the controller does not re-derive a file match
-against a moving target, it bounds how long a breaker gets to stay in flight
-against the working tree at all. Breakers may still overlap each other freely
-under this cap — one finishing while the next starts costs nothing, since
-neither writes — because the cap governs only a breaker's overlap with the
-fixer editing the tree, which is the one relationship Step 3's file-granularity
-claim depends on staying pairwise.
+backgrounded breaker may run concurrently with the fixer the same-file check
+above cleared it against — except on that check's "hold the breaker" branch,
+where the breaker is not backgrounded until after that fixer has already
+committed, and so overlaps no fixer at all. Before starting the *next* fixer
+after that one, confirm the earlier breaker has reported — if it has not, hold
+that fixer rather than opening a second fixer against a still-open breaker.
+This is a wait, not a second comparison: the controller does not re-derive a
+file match against a moving target, it bounds how long a breaker gets to stay
+in flight against the working tree at all.
+
+**That bound chains, and the chain is the cap's real cost.** Breaker *i* is
+cleared to overlap fixer *i+1*, and breaker *i+1* is backgrounded at the same
+moment fixer *i+2* is — the same "may run while the next fixer works" relation
+that governs every breaker, one step later. The wait gate that holds fixer
+*i+2* until breaker *i* has reported therefore also holds breaker *i+1* from
+being backgrounded until breaker *i* has reported. Carried through the round,
+that serializes the whole breaker chain: no two breakers ever run
+concurrently. What the cap leaves standing is the narrower overlap it is named
+for — one breaker with the one fixer after it — not breaker-on-breaker
+concurrency, which this cap spends to close the escape gap two paragraphs up.
+That spend is real, not free: a breaker now stalls its second-following fixer
+whenever it outlives the one fixer it overlaps, which is the normal case — a
+breaker does extraction, apparatus validation, mutation, and adversarial
+reasoning against a fixer's single commit — so wall clock from the third
+finding on is breaker-dominated, the reverse of the fixer-dominated picture
+assumed above before this cap existed. It is still the right trade: the
+alternative is the N-way escape this cap exists to close, not a faster round.
+But it is a trade, and a controller sizing a round's wall clock should budget
+breaker time accordingly rather than assume fixers still dominate it.
 
 ## Handoff
 
