@@ -149,10 +149,16 @@ evidence), or `blocked` (with what it needed and did not have). Nothing else.
 A second sub-agent, fresh, **read-only**, and working in a throwaway copy of the
 tree. Spawn it on the same cheaper tier as the fixer, for the same reason and with the same escalation signal (Step 1). Its procedure is a checklist and its mutation is drawn from the corpus rather than composed, and the apparatus check gates the verdict — a breaker that cannot make its control go red reports `not-run` rather than false confidence. Neither sub-agent may drop below Sonnet: both read a real tree and run a real suite, and a breaker that misreports `killed` is worse than no breaker at all. It never edits the branch, never commits, never stamps, and never fixes
 what it finds — #249 is the incident that rule comes from: a review sub-agent
-mutated the tree it was reviewing. **It also never *reads* the original tree** —
-not `git status`, not the working files, not for orientation. Its subject is the
-extracted copy and nothing else; § *Cap* explains why that restriction is what
-makes a breaker safe to overlap with the next fixer.
+mutated the tree it was reviewing. **It also never *reads* the original tree for
+evidence about the fix** — not `git status`, not the working files, not for
+orientation. Its subject is the extracted copy and nothing else for that
+purpose; § *Cap* explains why that restriction is what makes a breaker safe to
+overlap with the next fixer. That is narrower than "never touches the original
+tree at all": the `git archive` extraction below has to run against it to stand
+the copy up, and carrying dependencies into the copy — symlinking a read-only
+dependency tree, copying `.env.local` and its siblings — is bringing over what
+the test command needs, not gathering evidence about the fix, so neither is
+banned by this sentence.
 
 **Where the copy lives: `git archive`, not a second worktree — and it archives
 the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
