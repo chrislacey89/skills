@@ -467,6 +467,20 @@ for context in "$tdd_active" ""; do
     fi
 done
 
+# The trigger surface itself, not just the two clauses. Every row above drives
+# "src/service.ts" — one extension — so a mutation to /init-pipeline's hook
+# body that only changes WHICH files IMPL_PATTERNS or the skip clause reach
+# could pass every row above unchanged. The PR body's own hand-run fixture
+# table already claims these two REFUSE (stamped, no fix-active); pinned here
+# so the file backs the claim instead of a table nobody re-runs.
+set_flags "$stamp_rel"
+run_hook "src/component.tsx"
+assert_eq 2 "$hook_status" "stamped, no fixer flag, markerless: src/component.tsx is refused"
+
+set_flags "$stamp_rel"
+run_hook "src/main.py"
+assert_eq 2 "$hook_status" "stamped, no fixer flag, markerless: src/main.py is refused"
+
 # -----------------------------------------------------------------------------
 
 section "4. what the lock does not refuse, which is more than the prose used to say"
