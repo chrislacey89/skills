@@ -1112,5 +1112,121 @@ assert_eq 2 "$(count_marker_clauses "$hook_body")" \
 
 # -----------------------------------------------------------------------------
 
+section "13. /init-pipeline § 2 routes a run with nobody to ask past the sections that ask"
+
+# THE DRIFT CLASS. Section 12 pinned that § 2's three paths partition the gate's
+# two verdicts. It says nothing about where a path GOES afterwards, and Path C's
+# closing clause sent the re-scaffold on "through § 6" — back through § 4, which
+# holds for a confirmation before invoking /setup-pre-commit, and § 5, which asks
+# whether to install the optional quality gate. On a pre-lock project both were
+# answered at its own install, and on the run that reaches them neither is
+# answerable: /execute Step 0 holds Step 1 until this skill reports, and an AFK
+# Ralph iteration drives `claude --message` with nobody at the keyboard. § 3
+# ("merge — do not overwrite") and § 6 ("if not already present") were guarded
+# against re-entry and § 4 and § 5 were not, so the guard covered the two
+# sections that did not need it.
+#
+# So the asking sections are DERIVED — every section below § 2 whose prose waits
+# on a human — and three things are then required of the text: § 2's per-path
+# rule names each of them, each of them points back at that rule, and no path
+# paragraph routes anywhere on its own, because a path that carries its own
+# forward instruction is how the contradicting sentence got in. Adding a sixth
+# section that asks a question, and not dispositioning it in the rule, fails here.
+#
+# THE LIMIT: the asking set is detected by phrasing. A section that starts
+# waiting on a human in words this detector does not recognize drops out of the
+# set silently, and nothing here would notice. The detector fatals on an empty
+# set, which catches the total-rewrite case; it cannot catch a single new phrasing.
+
+ip_skill="init-pipeline/SKILL.md"
+
+# § 2 is excluded by construction: it is the router, and Path A's question is
+# the thing the rule dispositions rather than a section the rule sends a run to.
+asking_sections="$(awk '
+    function flush() {
+        if (n >= 3 && body ~ /[Aa]sk the user|[Aa]sk for confirmation|[Aa]fter user confirms/) print n
+    }
+    /^### [0-9]+\./ { flush(); n = $2 + 0; body = ""; next }
+                    { body = body " " $0 }
+    END             { flush() }
+' "$ip_skill")"
+[ -n "$asking_sections" ] || fatal "no section below /init-pipeline § 2 reads as waiting on a human — either the asks are gone or their phrasing moved; check which before updating this suite"
+
+rule_para="$(awk '
+    function flush() { if (para ~ /^\*\*The rest of the run/) { print para; found = 1; exit } para = "" }
+    /^[[:space:]]*$/ { flush(); next }
+                     { para = (para == "" ? $0 : para " " $0) }
+    END              { if (! found) flush() }
+' "$ip_skill")"
+[ -n "$rule_para" ] || fatal "no '**The rest of the run, per path.**' rule found in init-pipeline/SKILL.md § 2 — either it moved or its opening changed; update this suite with it"
+
+# The pointer the asking sections must carry is read out of the rule's own
+# bolded lead-in, not typed here, so renaming the rule renames what is required
+# of them and this stays one statement rather than three.
+rule_anchor="$(sed -E 's/^\*\*([^*]+)\.\*\*.*/\1/' <<<"$rule_para")"
+[ "$rule_anchor" != "$rule_para" ] || fatal "could not read the rule's bolded lead-in back out of it"
+
+section_body() {  # $1 = section number, from init-pipeline/SKILL.md
+    awk -v want="$1" '
+        /^### [0-9]+\./ { n = $2 + 0 }
+        n == want       { print }
+    ' "$ip_skill"
+}
+
+# Reuses section 12's install_block, so the paths are read from § 2 alone.
+path_paras="$(awk '
+    function flush() { if (para ~ /^\*\*Path /) print para; para = "" }
+    /^[[:space:]]*$/ { flush(); next }
+                     { para = (para == "" ? $0 : para " " $0) }
+    END              { flush() }
+' <<<"$install_block")"
+[ -n "$path_paras" ] || fatal "no **Path paragraphs extracted from § 2's install block"
+path_letters="$(grep -oE '^\*\*Path [A-Z]' <<<"$path_paras" | grep -oE '[A-Z]$')"
+[ -n "$path_letters" ] || fatal "no path labels read back out of § 2's path paragraphs"
+
+# Every (path, asking section) pair has to be dispositioned, not merely
+# mentioned somewhere in the rule. Checking presence in the whole paragraph
+# passes on a rule that names § 5 once while saying nothing about what Path C
+# does with it — which is the state the section-12-shaped assertion left
+# reachable, and the exact shape of the defect this section exists to catch.
+while read -r letter; do
+    [ -n "$letter" ] || continue
+    clause="$(awk -v want="$letter" '
+        { n = split($0, part, /On \*\*Path /)
+          for (i = 2; i <= n; i++) if (substr(part[i], 1, 1) == want) printf "%s", part[i] }
+    ' <<<"$rule_para")"
+    if [ -z "$clause" ]; then
+        assert_eq "dispositioned" "absent" "§ 2's rule says what Path $letter does after § 2"
+        continue
+    fi
+    while read -r n; do
+        [ -n "$n" ] || continue
+        if grep -qF -- "§ $n" <<<"$clause"; then
+            assert_eq "dispositioned" "dispositioned" "§ 2's rule says what Path $letter does with § $n, which waits on a human answer"
+        else
+            assert_eq "dispositioned" "unmentioned" "§ 2's rule says what Path $letter does with § $n, which waits on a human answer"
+        fi
+    done <<<"$asking_sections"
+done <<<"$path_letters"
+
+while read -r n; do
+    [ -n "$n" ] || continue
+    if grep -qiF -- "$rule_anchor" <<<"$(section_body "$n")"; then
+        assert_eq "points back" "points back" "§ $n points back at '$rule_anchor' before asking anything"
+    else
+        assert_eq "points back" "silent" "§ $n points back at '$rule_anchor' before asking anything"
+    fi
+done <<<"$asking_sections"
+
+# No path paragraph may name a numbered section. Routing is stated once, in the
+# rule; a path that also routes is two sentences both reading as true, which is
+# what "then continue through § 6" was beside a Path C that must not re-enter
+# § 4 or § 5.
+
+assert_eq "" "$(grep -oE '§+ [0-9]+' <<<"$path_paras" | paste -sd, - || true)" \
+    "no path paragraph routes to a numbered section on its own — the per-path rule is the only router"
+
+# -----------------------------------------------------------------------------
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1

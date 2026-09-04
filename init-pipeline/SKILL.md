@@ -44,7 +44,9 @@ Use the confirmed list (default or customized) to populate the `IMPL_PATTERNS` a
 
 **Path B — no hook installed, and `/init-pipeline` is running non-interactively** (auto-invoked by `/execute` Step 0 on a project whose hooks gate reported `hooks-absent`). Do not ask. Populate `IMPL_PATTERNS` with the default list from Path A's question and record that fact in the hook body via a leading comment.
 
-**Path C — a hook is installed but does not read `.claude/.review-stamped`** (`hooks-stale`: every project initialized before the post-review edit lock shipped). The trigger-surface question was answered at that project's own install, so neither Path A's question nor Path B's default applies here — both belong to the fresh-install case, and reaching for either on this path is the one harm this path exists to prevent. Do not ask again, and do not silently re-default: carry the installed hook's `IMPL_PATTERNS` array — with the provenance comment above it — and its skip clauses over verbatim, because the project may have customized them at its own install time, and changing them changes the classification gate's behavior for work that has nothing to do with the lock. Replace everything from the installed hook's `# Check for classification markers` comment through its final `exit 0` with the marker-check clauses at the foot of the block below — that is one clause replaced and one added, not two replaced, because a pre-lock hook carries the classification clause alone and the post-review clause is what this upgrade brings. Then continue through § 6, whose `.gitignore` append is idempotent and is the step that stops the lock's two flags from landing as committable untracked files in a repo that predates them.
+**Path C — a hook is installed but does not read `.claude/.review-stamped`** (`hooks-stale`: every project initialized before the post-review edit lock shipped). The trigger-surface question was answered at that project's own install, so neither Path A's question nor Path B's default applies here — both belong to the fresh-install case, and reaching for either on this path is the one harm this path exists to prevent. Do not ask again, and do not silently re-default: carry the installed hook's `IMPL_PATTERNS` array — with the provenance comment above it — and its skip clauses over verbatim, because the project may have customized them at its own install time, and changing them changes the classification gate's behavior for work that has nothing to do with the lock. Replace everything from the installed hook's `# Check for classification markers` comment through its final `exit 0` with the marker-check clauses at the foot of the block below — that is one clause replaced and one added, not two replaced, because a pre-lock hook carries the classification clause alone and the post-review clause is what this upgrade brings.
+
+**The rest of the run, per path.** § 4 and § 5 are the two sections below that wait on a human — § 4 presents its detection findings and holds for a confirmation before invoking `/setup-pre-commit`, and § 5 asks whether to install the optional quality gate — and a run with nobody to ask cannot execute either. That is not hypothetical: `/execute` Step 0 sends both of its verdicts here and holds Step 1 until this skill reports, so a section waiting on an answer nobody is present to give stalls the caller rather than the callee, and an AFK Ralph iteration drives `claude --message` with no user at the keyboard at all. On **Path A**, run everything below, § 4 and § 5 included. On **Path B**, run § 3, § 6 and § 7; take § 4 without asking, applying what its detection block finds or the default it names when it finds nothing; and skip § 5, which is optional and whose unanswered default is no. On **Path C**, run § 3 (a merge, never an overwrite) and § 6 — whose `.gitignore` append is idempotent, and is the step that stops the lock's two flags from landing as committable untracked files in a repo that predates them — then stop: skip § 4, § 5 and § 7 outright, because this project answered them at its own install and a lock upgrade that re-opens a settled toolchain decision is doing something nothing asked it to do. If a Path C run notices that a section it skipped never ran at that project at all, say so in what it reports and leave it — `/init-pipeline` invoked by hand, with a user present, is Path A and asks properly.
 
 **Skip logic stays extension-agnostic.** Tests, type declarations, and config files are detected by path substring (`*test*`, `*spec*`, `.d.ts`, `.config.*`) rather than per-language expansion.
 
@@ -157,6 +159,8 @@ If `.claude/settings.json` already exists, merge the `hooks.PreToolUse` entries 
 
 ### 4. Pre-commit hooks and package manager enforcement
 
+**Gated by § 2's rule for the rest of the run, per path — read it before asking anything here.**
+
 **Detect before suggesting.** Before invoking any setup, check what the project already uses:
 
 ```bash
@@ -209,6 +213,8 @@ Key flags: `--no-errors-on-unmatched` prevents false failures when no staged fil
 For npm or yarn, skip this step — `only-allow` is only needed when enforcing pnpm specifically.
 
 ### 5. Quality gate (Claude Code hook — optional)
+
+**Gated by § 2's rule for the rest of the run, per path — read it before asking anything here.**
 
 Ask the user: "Do you want a quality gate hook that runs feedback loops during editing? This catches issues while Claude works, not just at commit time."
 
@@ -347,7 +353,7 @@ Merge into existing settings — do not overwrite. When no host env var is prese
 
 ## Verification
 
-Before considering setup complete, check:
+Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all seven. A Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, so the pre-commit and quality-gate items below belong to the install that already ran and are not this run's to satisfy:
 
 - [ ] `.claude/hooks/enforce-classification.sh` exists and is executable
 - [ ] Hook's `IMPL_PATTERNS` array matches the project's implementation surface: on § 2's Path A or B, the default list or the customized answer confirmed during this install; on Path C, byte-identical to the array in the hook that was already there
