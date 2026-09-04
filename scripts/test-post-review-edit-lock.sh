@@ -873,7 +873,7 @@ status=0
 # single-quoting as the two runs above, which shellcheck reads as a nested script only because
 # `bash -c` is the first word there and `env -u FIX_SHA` displaces it here.
 unset_out="$( cd "$gitrepo" && env -u FIX_SHA bash -c "$archive_block"$'\n''printf "%s" "$BREAKER_DIR"' 2>/dev/null )" || status=$?
-assert_eq 1 "$status" "an unset \$FIX_SHA aborts with the same status as an unresolvable revision, via the guard the skill claims already covers it"
+assert_eq 1 "$status" "an unset \$FIX_SHA aborts with the same status as an unresolvable revision"
 assert_eq "" "$unset_out" "…and likewise reaches the breaker with no directory to run a mutation in"
 
 # -----------------------------------------------------------------------------

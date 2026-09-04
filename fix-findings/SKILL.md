@@ -175,13 +175,10 @@ a fixer repairing a review finding does not edit a dependency tree or
 `.env.local` and its siblings, so symlinking the tree in and copying those
 files brings over the test command's apparatus, not anything that moves.
 
-The same hazard reaches `gh pr view` and `gh issue view`. PR and issue state
-is another agent's or a human's in-flight work and can change while the
-breaker runs, so the breaker does not fetch either itself. Its inputs — the
-finding, `$FIX_SHA`, the test command, and anything from the PR or issue it
-needs — are handed to it by the controller before it starts, the same way
-Step 1 hands a fixer the PR body's `## Review Notes` block rather than
-letting the fixer fetch it.
+PR and issue bodies are on the other side of that line. Nothing in a
+`/fix-findings` run edits them — this skill opens no PRs and edits no bodies,
+and fixers only commit — so they are durable state the breaker reads at its
+source, on the same footing Step 1 gives the fixer for the slice or PRD issue.
 
 **Where the copy lives: `git archive`, not a second worktree — and it archives
 the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
