@@ -283,10 +283,18 @@ The cwd rule in Step 2 makes an escape unlikely; it does not make it visible, an
 a breaker that escaped leaves its mutation sitting in the repo under review. Run
 `git status --short` in the original repo after each breaker reports, and account
 for every path it lists. The in-flight fixer's own edits are expected, and you
-are the only actor here who knows which those are. An unexplained modification is
-an escaped breaker: restore the path before the next fixer commits on top of it,
-report that breaker's finding as **`not-run`** rather than passing its verdict
-through, and say in the report that the reconciliation is why.
+are the only actor here who knows which those are. This is decidable at file
+granularity only because § *Cap*'s same-file overlap rule already kept this
+breaker off whatever file the concurrent fixer is touching — with that rule
+followed, a dirty path outside the in-flight fixer's own target cannot be the
+fixer's, so `git status --short` is enough to tell the two apart. (It would not
+be if the two shared a file: a single dirty line for a shared file cannot show
+whether it holds the fixer's edit, an escape, or both, which is exactly why
+§ *Cap* forbids that overlap rather than asking this step to resolve it after
+the fact.) An unexplained modification is an escaped breaker: restore the path
+before the next fixer commits on top of it, report that breaker's finding as
+**`not-run`** rather than passing its verdict through, and say in the report
+that the reconciliation is why.
 
 This sits with the controller for two reasons, and handing it to the breaker
 would fail on both. The breaker is forbidden to read the original working tree at
@@ -421,6 +429,22 @@ breakers write nothing, but the report was confused by state it had never been
 told to stay out of. And the overlap is the only concurrency worth having here:
 wall clock is dominated by the fixers, so a breaker that waits for them buys
 nothing.
+
+**A same-file overlap needs one more condition, and it is not the isolation
+condition above.** Step 2's isolation is about what the breaker may *read*; it
+says nothing about whether Step 3 can *see* an escape once one happens.
+`git status --short` reports one line per file. If the breaker's escape and the
+concurrent fixer's legitimate edit land in the same file — the case this
+section already says is routine — that one dirty line is both, and Step 3's
+reconciliation cannot tell them apart from that line alone. So: **before
+backgrounding a breaker while the next fixer starts, compare the fix's own
+`git show "$FIX_SHA" --stat` against the next finding's `file:` locator** (both
+already in hand — the stat from Step 2, the locator from Step 0's inputs). Same
+file, do not overlap that pair: let the breaker finish before that fixer starts,
+or hold the breaker until that fixer commits. Different files, overlap as
+above — a dirty path outside the in-flight fixer's own target is unexplained by
+construction. This narrows the exception to the one contested file, not to the
+round, and costs a comparison the controller already has the parts for.
 
 ## Handoff
 
