@@ -138,7 +138,13 @@ tdd_marker_remove="$(fenced_bash_block execute/SKILL.md 'tdd-active' || true)"
 
 stamp_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$stamp_write")"
 stamp_rel="${stamp_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
-[ -n "$stamp_rel" ] && [ "$stamp_rel" != "$stamp_arg" ] || fatal "could not read a project-relative stamp-flag path out of /pre-merge's touch"
+# `if [ -z … ] || [ -z … ]` rather than `[ -n … ] && [ … ] || fatal`: the second
+# form is SC2015, which local shellcheck 0.11.0 accepts and the pinned CI 0.9.0
+# rejects. test-markdown-diff-attribute.sh:132 states the same house idiom for
+# the same reason.
+if [ -z "$stamp_rel" ] || [ "$stamp_rel" = "$stamp_arg" ]; then
+    fatal "could not read a project-relative stamp-flag path out of /pre-merge's touch"
+fi
 
 fixer_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$fixer_write")"
 fixer_rel="${fixer_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
