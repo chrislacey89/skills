@@ -63,7 +63,7 @@ When isolation is host-owned, `/closeout` runs a reduced sequence:
 
 - **Step 3 (merge) still runs in full** — `gh pr merge --delete-branch`. Conductor and similar hosts create the PR but leave the *merge* to a human action; the pipeline performing the GitHub-native merge is the value it adds, and the host reflects the result. The deferral is scoped to filesystem teardown, **never** the merge.
 - **Skip Step 4's re-anchor, Step 5's `wt remove` / `git worktree remove` / `ExitWorktree { remove }`, and Step 6's local-branch prune** — the host owns the worktree and branch lifecycle (Conductor reclaims them when the workspace is archived). Never `--force` against a host-managed tree.
-- **Step 8's checklist:** "Worktree gone" and "Branch pruned" become **"N/A — host-managed."** The merge, clean-tree, and PR-merged checks still apply.
+- **Step 8's checklist:** "Worktree gone" and "Branch pruned" become **"N/A — host-managed."** The merge, clean-tree, PR-merged, and **remote-branch** checks still apply. The last one is easy to file under the same N/A and is not: what the host owns is the *filesystem* worktree and the *local* branch, while the remote branch is deleted by the `gh pr merge --delete-branch` this skill still runs in full one bullet above. Ceding the half the host owns does not cede the half it does not.
 
 ### 1. Confirm intent and gather state
 
@@ -233,6 +233,15 @@ Confirm the *outcome*, not that the steps ran. All must be true:
 - [ ] PR merged — `gh pr view <number> --json state -q .state` reports `MERGED`.
 - [ ] Worktree gone — the feature worktree no longer appears in `git worktree list`. (N/A — host-managed — when isolation is host-owned, Step 0.)
 - [ ] Branch pruned — the feature branch no longer appears in `git branch`. (N/A — host-managed — when isolation is host-owned, Step 0.)
+- [ ] Remote branch gone — the branch Step 3's `--delete-branch` was supposed to delete is not on the remote (the command below exits **2**). This one is not N/A under host-owned isolation: the host owns the filesystem worktree, `gh` owns the remote branch.
+
+```bash
+git ls-remote --exit-code --heads origin <feature-branch>   # exit 2 = confirmed gone (pass); exit 0 = still on the remote (fail); anything else = could not check
+```
+
+**Why the remote gets its own check.** Every other item above passes while the remote branch survives — Step 3 confirms the PR reports `MERGED`, Step 6 prunes the local branch and its remote-*tracking* ref, and this list's "Branch pruned" reads `git branch`, which is local. None of them asks the remote. In the field `gh pr merge --delete-branch` aborted at its local step in a multi-worktree checkout (`'main' is already used by worktree`) *after* the remote merge had succeeded: the merge reported success, the branch deletion silently did not happen, and a fully green closeout ran over the top of it. `--exit-code` is what makes found and not-found distinguishable at all here; without it the command exits 0 in both states and the check reads as permanently clean.
+
+**Read the number, not just its sign.** `--exit-code`'s documented contract (`git-ls-remote(1)`) only names status `2`, for "no matching refs" — that is the sole status this check should read as pass. Status `0` means the branch is still there. Every other status — an unreachable remote from an expired credential, a renamed `origin`, a transient network blip — is also non-zero and would misread as "gone" under a bare non-zero check, which silently reproduces the exact failure this item exists to close, one level down. If the exit status is neither `0` nor `2`, the check did not run; treat the item as open, fix the access problem, and re-run it rather than passing it.
 
 Report the end state in one short block. If any check fails, say which and stop — a half-clean state is exactly the failure mode this skill exists to prevent.
 

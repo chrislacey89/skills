@@ -1781,5 +1781,109 @@ fi
 
 # -----------------------------------------------------------------------------
 
+section "/closeout's Step 8 remote-branch check, run in both polarities"
+
+# #344's second finding: `gh pr merge --delete-branch` aborted at its LOCAL step
+# in a multi-worktree checkout ('main' is already used by worktree) *after* the
+# remote merge succeeded, and the remote branch stayed alive. Every check
+# /closeout had passed in that state — Step 3 confirms the PR reports MERGED,
+# Step 6 prunes local and remote-TRACKING refs, and Step 8's "Branch pruned"
+# reads `git branch`, which is local. Nothing asked the remote.
+#
+# So Step 8 grew a line that does, and it is run here rather than believed,
+# because its whole contract is an exit status: `--exit-code` is what makes
+# "found" and "not found" distinguishable at all, and a line that lost the flag
+# would exit 0 in BOTH states and read as permanently clean. Both polarities are
+# exercised for exactly that reason — a one-sided test passes on a broken flag.
+#
+# The line is extracted from the skill, never restated here (header rule).
+ls_remote_line="$(grep -m1 '^git ls-remote ' "$repo_root/closeout/SKILL.md" || true)"
+[[ -n "$ls_remote_line" ]] || fatal "no 'git ls-remote' line found in closeout/SKILL.md"
+[[ "$ls_remote_line" == *'<feature-branch>'* ]] \
+    || fatal "placeholder <feature-branch> is gone from /closeout's 'git ls-remote' line"
+printf 'ls-remote (closeout/SKILL.md): %s\n' "$ls_remote_line"
+
+remote_sandbox="$(mktemp -d)"
+trap 'rm -rf "$sandbox" "$base_sandbox" "$remote_sandbox"' EXIT
+
+git init -q --bare "$remote_sandbox/origin.git"
+git init -q "$remote_sandbox/work"
+(
+    cd "$remote_sandbox/work"
+    git remote add origin "$remote_sandbox/origin.git"
+    printf 'x\n' > f.txt
+    git add f.txt
+    git -c user.email=t@example.invalid -c user.name=Test -c commit.gpgsign=false \
+        commit -q --no-verify -m "seed"
+    git branch -m closeout-fixture-base
+    git push -q origin closeout-fixture-base
+    git switch -qc issue-9-widget
+    git push -q origin issue-9-widget
+)
+# Check the fixture's OUTCOME, not the subshell's status: `set -e` is suppressed
+# in the left operand of `||`, so a `) || fatal` here could not report a failure
+# that happened inside (scripts/test-guards-can-fire.sh detector A). What the
+# polarity runs below actually depend on is the branch being on the remote.
+git -C "$remote_sandbox/origin.git" show-ref --verify --quiet refs/heads/issue-9-widget \
+    || fatal "the ls-remote fixture never got issue-9-widget onto the fixture remote; the polarity runs would measure nothing"
+
+# Polarity 1 — the branch is still on the remote. This is the state the field
+# incident left behind, and the check must NOT read as clean here.
+alive_status=0
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || alive_status=$?
+if [[ "$alive_status" -eq 0 ]]; then
+    printf '  ok   the check exits 0 while the branch is still on the remote (a surviving branch is visible)\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits %d on a branch that IS on the remote; it cannot see the failure it exists for\n' "$alive_status"
+    fail=$((fail + 1))
+fi
+
+# Polarity 2 — the branch is gone from the remote, which is what a successful
+# --delete-branch leaves. `--exit-code`'s own documented contract (git-ls-remote(1))
+# names exactly one status for this — 2, "no matching refs" — and it is the half
+# that dies silently if --exit-code is ever dropped. The assertion checks for 2
+# specifically, not merely non-zero: #345's finding is that "non-zero" is not one
+# outcome (see polarity 3), so the pass condition here has to be as narrow as the
+# contract it is standing in for.
+git -C "$remote_sandbox/work" push -q origin --delete issue-9-widget \
+    || fatal "could not delete the fixture branch from the fixture remote"
+gone_status=0
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || gone_status=$?
+if [[ "$gone_status" -eq 2 ]]; then
+    printf '  ok   the check exits 2 (git-ls-remote'"'"'s documented "no matching refs" status) once the branch is gone from the remote\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits %d, not 2, on a branch that is NOT on the remote; confirmed-gone is not distinguishable from other outcomes\n' "$gone_status"
+    fail=$((fail + 1))
+fi
+
+# Polarity 3 — the check itself cannot run, because the remote cannot be reached.
+# #345's finding: `--exit-code` only documents status 2; every other status it can
+# exit with is still non-zero and, under a bare "expect non-zero" reading, reads as
+# the confirmed-gone case in polarity 2 above — an expired credential, a renamed
+# `origin`, or a transient network blip would silently pass the same check a real
+# deletion passes. This polarity proves the command's own exit status is actually
+# distinguishable in the two cases, which is what the prose fix in closeout/SKILL.md
+# now depends on. Pointed at a missing local path rather than a live unreachable
+# host: same "could not access the remote" failure git-ls-remote takes, with no
+# network dependency in the suite (validate-the-instrument-not-only-the-subject:
+# prefer an instrument with fewer preconditions). git-ls-remote(1) documents status
+# 2 for --exit-code but no fixed status for this path, so the assertion below only
+# pins "not 0, not 2" — distinguishable from confirmed-gone — not a specific number.
+unreachable_status=0
+git -C "$remote_sandbox/work" remote set-url origin "$remote_sandbox/does-not-exist.git" \
+    || fatal "could not repoint the fixture's origin at a missing path"
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || unreachable_status=$?
+if [[ "$unreachable_status" -ne 0 && "$unreachable_status" -ne 2 ]]; then
+    printf '  ok   the check exits %d (non-zero, not 2) when the remote cannot be reached — distinguishable from confirmed-gone\n' "$unreachable_status"
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits %d when the remote cannot be reached; that is indistinguishable from confirmed-gone (2) or from success (0)\n' "$unreachable_status"
+    fail=$((fail + 1))
+fi
+
+# -----------------------------------------------------------------------------
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1
