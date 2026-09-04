@@ -52,6 +52,16 @@
 # fallback the skills themselves wrote for that variable's absence. And the
 # hook is documented prose, not an installed file: this proves the block a
 # downstream agent copies is correct, not that any given project copied it.
+#
+# WHAT SECTION 11 ADDS TO THAT LIMIT, because the limit had nothing behind it.
+# Sections 1-10 all assume the current hook is installed. In every project that
+# ran /init-pipeline before #327 it is not, and /execute Step 0's gate was
+# existence-only — the file is there, /init-pipeline is never re-invoked, and
+# the shipped lock is inert in exactly the silent direction named above. Section
+# 11 runs Step 0's gate against three installs (none, pre-lock, current) and
+# requires it to separate them. It still cannot prove a downstream project runs
+# the gate; it does prove the gate can tell the two installs apart, which is the
+# half that lives in this repo's text.
 
 set -euo pipefail
 
@@ -849,6 +859,141 @@ for flag in "$stamp_rel" "$fixer_rel"; do
         assert_eq "ignored" "tracked" "$flag is ignored by this repo"
     fi
 done
+
+# -----------------------------------------------------------------------------
+
+section "11. /execute Step 0's gate separates a pre-lock install from a current one"
+
+# THE GAP THIS CLOSES. #327 shipped the lock as a hook clause and left /execute
+# Step 0's gate existence-only: "if .claude/hooks/enforce-classification.sh does
+# not exist, invoke /init-pipeline". In a project that ran /init-pipeline before
+# the lock, the file exists, so /init-pipeline is never re-invoked and the hook
+# keeps only clause 1. /pre-merge still writes the stamp flag and /fix-findings
+# still writes the fixer flag; the pre-lock hook reads neither. The fixer is then
+# refused by clause 1 under a message naming /tdd — the defect commit 93f5453
+# fixed INSIDE the hook, reproduced verbatim in every repo that does not receive
+# the new hook. Nothing above reaches it, because everything above installs the
+# current hook by construction.
+#
+# The fixture is BUILT FROM THE SHIPPED HOOK, not typed: take clause 1's
+# stand-down term back out (the surgery section 9's second control performs),
+# then delete clause 2's if…fi block and the comment lines that named the two
+# flags. What comes out is not required to be byte-identical to the hook on
+# prod — it is required to be a hook with no stamp-flag term in it that still
+# reproduces the refusal, and both of those are asserted before the gate is
+# pointed at it.
+
+hooks_gate="$(fenced_bash_block execute/SKILL.md 'hooks-stale' || true)"
+[ -n "$hooks_gate" ] || fatal "no hook-staleness gate found in execute/SKILL.md Step 0 — either the gate moved or its fence changed; update this suite with it"
+
+status=0
+bash -n <<<"$hooks_gate" || status=$?
+assert_eq 0 "$status" "the gate /execute Step 0 documents parses as bash"
+
+# Two derived paths the gate has to agree with, so a rename in either writer
+# fails here rather than turning the gate into a check that can never fire:
+# the stamp flag (read out of /pre-merge's touch, above) and the hook script
+# (read out of /init-pipeline's own settings registration, in section 4).
+# Backslashes are stripped because the gate carries the path as a grep BRE.
+gate_plain="${hooks_gate//\\/}"
+
+if grep -qF "$stamp_rel" <<<"$gate_plain"; then
+    assert_eq "$stamp_rel" "$stamp_rel" "the gate tests for the same stamp-flag path /pre-merge writes"
+else
+    assert_eq "$stamp_rel" "(absent from the gate)" "the gate tests for the same stamp-flag path /pre-merge writes"
+fi
+
+if grep -qF "$hook_rel" <<<"$gate_plain"; then
+    assert_eq "$hook_rel" "$hook_rel" "the gate looks at the same hook path /init-pipeline registers"
+else
+    assert_eq "$hook_rel" "(absent from the gate)" "the gate looks at the same hook path /init-pipeline registers"
+fi
+
+# --- The pre-lock install, rebuilt from the shipped hook ---------------------
+
+prelock_standdown="[ ! -f \"\$CLAUDE_PROJECT_DIR/$stamp_rel\" ] && "
+prelock_body="${hook_body/"$prelock_standdown"/}"
+
+if [ "$(printf '%s' "$prelock_body" | wc -c)" -lt "$(printf '%s' "$hook_body" | wc -c)" ]; then
+    assert_eq "removed" "removed" "clause 1's stand-down term was found and taken back out"
+else
+    assert_eq "removed" "not found — clause 1 no longer carries the term in this shape" \
+        "clause 1's stand-down term was found and taken back out"
+fi
+
+prelock_body="$(awk -v needle="-f \"\$CLAUDE_PROJECT_DIR/$stamp_rel\"" \
+                    -v sb="${stamp_rel##*/}" -v fb="${fixer_rel##*/}" '
+    index($0, needle)                                   { skip = 1 }
+    skip                                                { if ($0 == "fi") skip = 0; next }
+    /^[[:space:]]*#/ && (index($0, sb) || index($0, fb)) { next }
+                                                        { print }
+' <<<"$prelock_body")"
+
+prelock="$scratch/prelock-hook.sh"
+printf '%s\n' "$prelock_body" > "$prelock"
+
+assert_eq 0 "$(grep -c -- "${stamp_rel##*/}" "$prelock" || true)" \
+    "the rebuilt pre-lock hook mentions the stamp flag nowhere at all"
+
+status=0
+bash -n "$prelock" || status=$?
+assert_eq 0 "$status" "the rebuilt pre-lock hook is still a valid script"
+
+# The apparatus check for this section: the fixture must actually exhibit the
+# finding, or the gate below is being asked to detect nothing. Drive it in the
+# state the pipeline reaches — markerless (/execute Step 6 has run), stamped
+# (/pre-merge Phase 4), fixer flag held (/fix-findings) — and require the two
+# halves back: refused, by clause 1, with the fixer's route never named.
+real_hook="$hook_file"
+hook_file="$prelock"
+set_context "" "$stamp_rel" "$fixer_rel"
+run_hook "src/service.ts"
+hook_file="$real_hook"
+
+assert_eq 2 "$hook_status" "the pre-lock hook refuses the /fix-findings fixer that holds its own flag"
+if grep -qF "$class_msg" <<<"$hook_err" && ! grep -qF "$fixer_route" <<<"$hook_err"; then
+    assert_eq "clause 1's message, naming no route" "clause 1's message, naming no route" \
+        "…by the classification clause, and $fixer_route is never named — the state every pre-lock project is in"
+else
+    assert_eq "clause 1's message, naming no route" "$hook_err" \
+        "…by the classification clause, and $fixer_route is never named — the state every pre-lock project is in"
+fi
+
+# --- The gate, run against all three installs -------------------------------
+
+gate_proj="$scratch/gate-project"
+mkdir -p "$gate_proj/$(dirname "$hook_rel")"
+git init -q "$gate_proj" >/dev/null 2>&1 || fatal "could not init a scratch git repo for the gate's fallback row"
+
+run_gate() {  # $1 = CLAUDE_PROJECT_DIR, or "" to exercise the git-toplevel fallback
+    if [ -n "$1" ]; then
+        ( cd "$gate_proj" && CLAUDE_PROJECT_DIR="$1" bash -c "$hooks_gate" )
+    else
+        ( cd "$gate_proj" && env -u CLAUDE_PROJECT_DIR bash -c "$hooks_gate" )
+    fi
+}
+
+rm -f "$gate_proj/$hook_rel"
+assert_eq "hooks-absent" "$(run_gate "$gate_proj")" \
+    "no hook installed: the gate reports it, and /init-pipeline scaffolds"
+
+cp "$prelock" "$gate_proj/$hook_rel"
+assert_eq "hooks-stale" "$(run_gate "$gate_proj")" \
+    "the pre-lock hook installed: the gate fires, and /init-pipeline re-scaffolds"
+
+cp "$hook_file" "$gate_proj/$hook_rel"
+assert_eq "hooks-current" "$(run_gate "$gate_proj")" \
+    "the shipped hook installed: the gate stays silent"
+
+# Same three-way separation with the variable the harness may not set, since the
+# gate wrote the same ${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}
+# fallback section 6 measures for /pre-merge and /fix-findings.
+assert_eq "hooks-current" "$(run_gate "")" \
+    "…and with \$CLAUDE_PROJECT_DIR unset, the gate resolves the project by git toplevel"
+
+cp "$prelock" "$gate_proj/$hook_rel"
+assert_eq "hooks-stale" "$(run_gate "")" \
+    "…and still fires on the pre-lock hook through that same fallback"
 
 # -----------------------------------------------------------------------------
 

@@ -132,7 +132,20 @@ Skip this gate for one-off tasks not tied to a GitHub issue.
 
 If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 until Ralph setup is complete or the conditions are not met.
 
-**Pipeline hooks gate.** If `.claude/hooks/enforce-classification.sh` does not exist in this project, invoke `/init-pipeline` now to scaffold enforcement hooks.
+**Pipeline hooks gate.** The hook file existing is not the same as the hook being current, and this gate has to test both. A project that ran `/init-pipeline` before the post-review edit lock shipped carries a hook that never reads `.claude/.review-stamped`: the lock is inert there, and a `/fix-findings` fixer holding `.claude/.fix-findings-active` is refused anyway — by the classification clause, under a message that names `/tdd` and never names the route the fixer is standing on. Both halves fail silently, which is why an existence-only check is not enough: an inert lock looks from the outside exactly like a branch nobody edited after review.
+
+```bash
+HOOK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/enforce-classification.sh"
+if [ ! -f "$HOOK" ]; then
+  echo "hooks-absent"
+elif ! grep -q '\.claude/\.review-stamped' "$HOOK"; then
+  echo "hooks-stale"
+else
+  echo "hooks-current"
+fi
+```
+
+`hooks-absent` and `hooks-stale` both mean **invoke `/init-pipeline` now**, and do not proceed to Step 1 until it reports. The first scaffolds enforcement hooks into a project that has none. The second re-scaffolds § 2's hook body over an existing install and re-runs § 6's `.gitignore` append, which that install never ran for the lock's two flags — without it both land as untracked files that can be committed, holding the lock shut or open across every future branch in that repo. `/init-pipeline` § 2 carries an existing `IMPL_PATTERNS` line through a re-scaffold rather than re-asking, so an upgrade does not reset a trigger surface the project customized. `hooks-current` proceeds.
 
 **TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes both markers after commit.
 

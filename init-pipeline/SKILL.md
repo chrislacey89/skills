@@ -9,7 +9,7 @@ Scaffold pipeline enforcement infrastructure into the current project: Claude Co
 
 ## When to use
 
-- Automatically invoked by `/execute` Step 0 if `.claude/hooks/enforce-classification.sh` is missing
+- Automatically invoked by `/execute` Step 0 if `.claude/hooks/enforce-classification.sh` is missing, or if the installed hook predates the post-review edit lock (see § 2's re-scaffold note)
 - Manually by the user when setting up a new project for pipeline work
 
 ## What it sets up
@@ -39,6 +39,8 @@ It carries a second clause on the same trigger surface: the **post-review edit l
 > "The TDD classification gate fires on Write/Edit of files matching a pattern list. Default: `*.ts, *.tsx, *.astro, *.py, *.go, *.rb, *.java, *.rs, *.js, *.jsx, *.vue, *.svelte`. Over-gating is acceptable — classification is a quick decision at the top of /execute, though backend/behavior-heavy matches will trigger a full /tdd cycle. Accept the default, or customize for this project?"
 
 Use the confirmed list (default or customized) to populate the `IMPL_PATTERNS` array in the hook body below. Over-gating is acceptable — the cost of an extra classification prompt is lower than the cost of silent under-fire on a polyglot project. If `/init-pipeline` is running non-interactively (auto-invoked by `/execute` Step 0), accept the default list and record that fact in the hook body via a leading comment.
+
+**Re-scaffolding over an existing install — do not re-ask.** `/execute` Step 0 invokes this skill on a project that already has `.claude/hooks/enforce-classification.sh` when that hook does not read `.claude/.review-stamped`, which is every project initialized before the post-review edit lock shipped. In that case the trigger-surface question above is already answered: carry the installed hook's `IMPL_PATTERNS` array and its skip clauses over verbatim — the project may have customized them at its own install time, and re-asking or silently re-defaulting changes the classification gate's behavior for work that has nothing to do with the lock. Replace only the two marker-check clauses at the foot of the hook body, then continue through § 6, whose `.gitignore` append is idempotent and is the step that stops the lock's two flags from landing as committable untracked files in a repo that predates them.
 
 **Skip logic stays extension-agnostic.** Tests, type declarations, and config files are detected by path substring (`*test*`, `*spec*`, `.d.ts`, `.config.*`) rather than per-language expansion.
 
@@ -358,6 +360,6 @@ Before considering setup complete, check:
 
 - **Expected input:** any project that will use `/execute`
 - **Produces:** complete enforcement infrastructure — Claude Code hooks, git guardrails, pre-commit hooks using detected or user-confirmed tools
-- **Auto-invoked by:** `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing
+- **Auto-invoked by:** `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing, or when it exists but does not read `.claude/.review-stamped` — a pre-lock install, re-scaffolded per § 2
 - **Invokes:** `/git-guardrails-claude-code` (project scope), `/setup-pre-commit`
 - **Supports downstream:** `/tdd` (marker creation), `/execute` (marker cleanup); reserves `.claude/.ralph-checked` for `/setup-ralph-loop`, which creates the marker itself (auto-invoked by `/execute` for multi-slice work, or run manually); reserves `.claude/.review-stamped` and `.claude/.fix-findings-active` for the post-review edit lock, written by `/pre-merge` Phase 4 and `/fix-findings` respectively
