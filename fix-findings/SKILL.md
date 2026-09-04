@@ -416,9 +416,10 @@ working tree and commits to one branch, so two at once is a race on both, and
 each fixer its own worktree would trade that race for merge conflicts on exactly
 the findings most likely to collide, since findings routinely land in one file
 (three of five in one round of #338 landed in `/init-pipeline` § 2); at three to
-eight findings that is not a trade worth making. **Breakers may run in parallel**
-with each other, and a breaker may run while the next fixer works. The two
-conditions that make that safe are stated in Step 2 and are deliberately not
+eight findings that is not a trade worth making. **Before the cap below
+existed, breakers could run in parallel with each other, and a breaker could
+run while the next fixer worked.** The two conditions that make any
+breaker/fixer overlap safe are stated in Step 2 and are deliberately not
 restated here — the `$FIX_SHA` the extraction archives, and the restriction on
 reading the original working tree or resolving a moving ref — because a rule
 written at two sites is a rule that will later be changed at one. Neither is a
@@ -426,10 +427,13 @@ tidiness rule. On #338 a breaker was backgrounded while the next fixer was
 still committing, read the real repo, and
 had to disclaim edits that were not its subject; nothing was corrupted, because
 breakers write nothing, but the report was confused by state it had never been
-told to stay out of. Before the cap below existed, that overlap was the only
-concurrency worth having: wall clock was dominated by the fixers, so a breaker
-that waited for them bought nothing. The cap changes that calculus — see the
-paragraph below beginning "That bound chains" for what the overlap costs now.
+told to stay out of. Before the cap, that overlap — breaker-on-breaker
+included — was the only concurrency worth having: wall clock was dominated by
+the fixers, so a breaker that waited for them bought nothing. **The cap below
+changes what holds now**: it bounds a breaker's overlap to the one fixer
+immediately after it and, as a chained consequence, removes breaker-on-breaker
+concurrency entirely — see the paragraph below beginning "That bound chains"
+for the mechanism and what the remaining overlap costs today.
 
 **A same-file overlap needs one more condition, and it is not the isolation
 condition above.** Step 2's isolation is about what the breaker may *read*; it
