@@ -30,7 +30,9 @@ Create `.claude/hooks/enforce-classification.sh` and make it executable. This bl
 
 The hook checks for either `.claude/.tdd-active` (TDD invoked) or `.claude/.tdd-skipped` (visual frontend, explicitly opted out). No path checking beyond the trigger surface — it enforces "did you go through the gate?"
 
-It carries a second, independent clause on the same trigger surface: the **post-review edit lock**, which refuses an implementation write while `.claude/.review-stamped` exists and `.claude/.fix-findings-active` does not. The first clause asks "was this work classified?"; the second asks "is this edit landing after a review, authored by the session the review went around?" Both are one script because both key off the same file-pattern decision.
+It carries a second clause on the same trigger surface: the **post-review edit lock**, which refuses an implementation write while `.claude/.review-stamped` exists and `.claude/.fix-findings-active` does not. The first clause asks "was this work classified?"; the second asks "is this edit landing after a review, authored by the session the review went around?" Both are one script because both key off the same file-pattern decision.
+
+**The two clauses are ordered, not independent — read the `.review-stamped` term in the first one before editing either.** The classification clause stands down on a stamped branch, so the post-review clause is the only one that decides there. This is not a stylistic preference: `/execute` Step 6 removes `.claude/.tdd-active` and `.claude/.tdd-skipped` *before* it hands off to `/pre-merge`, so a stamped branch never carries a classification marker. Two independent clauses in this order therefore never reach the second one — the `/fix-findings` fixer is refused despite holding the flag written for it, and the authoring session is refused by the wrong clause, told to invoke `/tdd` and never told that `/fix-findings` is the route. A lock whose designed affordance never prints is a lock nobody can use, and it was described here as "independent" while behaving this way. `scripts/test-post-review-edit-lock.sh` now drives `/execute` Step 6's removal as part of the round trip, so the ordering is measured rather than asserted.
 
 **Install-time: ask which file patterns constitute implementation code.** Before scaffolding the hook, present the user with the default include list and ask:
 
@@ -63,8 +65,15 @@ fi
 if [[ "$FILE_PATH" == *.config.* ]]; then
   exit 0
 fi
-# Check for classification markers
-if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ]; then
+# Check for classification markers — but stand down on a stamped branch, so the
+# post-review clause below is the one that decides there. /execute Step 6 removes
+# BOTH classification markers before it hands off to /pre-merge, so by the time
+# .review-stamped exists there is never a marker left for this test to find.
+# Without the .review-stamped term, this clause short-circuits every post-review
+# write: the /fix-findings fixer is refused outright, and the authoring session is
+# refused by the wrong clause, under a message that names /tdd and never names the
+# route the lock was built to offer.
+if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ]; then
   echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy) or create .claude/.tdd-skipped (visual frontend)."}' >&2
   exit 2
 fi

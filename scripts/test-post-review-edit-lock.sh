@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test-post-review-edit-lock.sh — contract test for the post-review edit lock:
-# the second clause of `.claude/hooks/enforce-classification.sh` and the four
-# runnable blocks, spread across four skills, that drive it.
+# the second clause of `.claude/hooks/enforce-classification.sh` and the five
+# runnable blocks, spread across five skills, that drive it.
 #
 # THE DRIFT CLASS. #327 built a lock out of one hook clause and four commands
 # that live in four different files. `/pre-merge` Phase 4 touches the stamp
@@ -25,13 +25,25 @@
 # passage each shipped a wrong claim, every wrong draft was caught by a human or
 # a review sub-agent, and none by a check.
 #
-# SO THIS SUITE RUNS THE THING. It extracts the hook body and all four commands
+# SO THIS SUITE RUNS THE THING. It extracts the hook body and all five commands
 # verbatim from the skills that document them and executes them against real
 # files in a scratch project. It types no flag path of its own: the flag paths
 # are read out of `/pre-merge`'s `touch` and `/fix-findings`' harness line, and
-# section 5 drives the whole lifecycle — stamped, opened, shut, released — using
-# only text the skills supply. A rename in one file that the other three do not
-# mirror fails here, rather than in a downstream repo at merge time.
+# section 5 drives the whole lifecycle — classified, cleared, stamped, opened,
+# shut, released — using only text the skills supply. A rename in one file that
+# the other four do not mirror fails here, rather than in a downstream repo at
+# merge time.
+#
+# THE CLASSIFICATION CONTEXT IS PART OF THE SUBJECT, not scenery. The first
+# version of this suite set `.tdd-active` in every lock fixture and drove the
+# round trip without `/execute` Step 6's removal — so it never once observed the
+# state the lock actually operates in, which is a STAMPED and MARKERLESS branch.
+# In that state a strictly ordered pair of clauses never reaches the second one:
+# the `/fix-findings` fixer is refused despite holding the flag written for it,
+# and the human is refused by a message naming `/tdd` that never names the route
+# the lock exists to offer. Every assertion was green. Section 3 now drives both
+# contexts, section 5 runs Step 6's removal in sequence, and section 8's second
+# control rebuilds that exact hook and requires both halves to come back.
 #
 # NOT COVERED, stated so nobody over-trusts it. Whether Claude Code actually
 # invokes the hook on Write/Edit, and whether the harness sets
@@ -111,6 +123,14 @@ fixer_remove="$(fenced_bash_block fix-findings/SKILL.md 'fix-findings-active' ||
 archive_block="$(fenced_bash_block fix-findings/SKILL.md 'git archive' || true)"
 [ -n "$archive_block" ] || fatal "no git archive block found in fix-findings/SKILL.md"
 
+# /execute Step 6's removal of both classification markers. This is the
+# lifecycle step that makes the post-review state MARKERLESS, and leaving it out
+# of section 5 is what let the two clauses' ordering defect ship green: the round
+# trip stamped a branch that still carried .tdd-active, a state /execute has
+# already destroyed by the time /pre-merge runs.
+tdd_marker_remove="$(fenced_bash_block execute/SKILL.md 'tdd-active' || true)"
+[ -n "$tdd_marker_remove" ] || fatal "no classification-marker removal found in execute/SKILL.md Step 6"
+
 # --- The flag paths, read out of the writers rather than typed here ----------
 
 stamp_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$stamp_write")"
@@ -180,7 +200,7 @@ run_documented() {  # $1 = directory, $2 = command text, $3 = CLAUDE_PROJECT_DIR
 
 # -----------------------------------------------------------------------------
 
-section "1. the hook is a runnable script, and the four files agree on two paths"
+section "1. the hook is a runnable script, and the five files agree on two paths"
 
 status=0
 bash -n "$hook_file" || status=$?
@@ -223,29 +243,88 @@ assert_eq 0 "$hook_status" "a write under $tdd_skipped is allowed"
 
 # -----------------------------------------------------------------------------
 
-section "3. the lock's truth table (clause 2)"
+section "3. the lock's truth table (clause 2), in both classification contexts"
 
-set_flags "$tdd_active"
-run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "unstamped branch: the write lands"
+# Driven TWICE, because the classification context is not incidental to it.
+#
+# Every row here used to run with `$tdd_active` present, and that state cannot
+# occur: /execute Step 6 removes both classification markers before it hands off
+# to /pre-merge, so a stamped branch is always markerless. Under a strictly
+# ordered pair of clauses that is the whole defect — clause 1 short-circuits, the
+# /fix-findings fixer is refused despite holding the flag written for it, and the
+# human is refused by a message that names /tdd and never names /fix-findings.
+# Green rows with a marker in place could not see any of it.
+#
+# So the outcomes below must be IDENTICAL in both contexts. That is the property
+# the `.review-stamped` term in clause 1 establishes: on a stamped branch the
+# classification clause stands down, and this clause is the sole decider.
 
-set_flags "$tdd_active" "$stamp_rel"
-run_hook "src/service.ts"
-assert_eq 2 "$hook_status" "stamped, no fixer flag: the write is refused"
-
-if grep -qF "/fix-findings" <<<"$hook_err"; then
-    assert_eq "names /fix-findings" "names /fix-findings" "the refusal routes the human to the skill that can take the edit"
-else
-    assert_eq "names /fix-findings" "$hook_err" "the refusal routes the human to the skill that can take the edit"
+# The two refusal messages, read out of the hook rather than typed here, so that
+# "which clause refused this" is a measurement and not a guess. Clause 1's echo
+# precedes clause 2's in the body.
+class_msg="$(grep -o '"reason":"BLOCKED:[^"]*"' <<<"$hook_body" | sed -n 1p)"
+lock_msg="$(grep -o '"reason":"BLOCKED:[^"]*"' <<<"$hook_body" | sed -n 2p)"
+if [ -z "$class_msg" ] || [ -z "$lock_msg" ]; then
+    fatal "could not read two BLOCKED reasons out of the hook body"
 fi
+[ "$class_msg" != "$lock_msg" ] || fatal "the hook's two refusals are byte-identical — 'which clause refused' is unmeasurable"
 
-set_flags "$tdd_active" "$stamp_rel" "$fixer_rel"
-run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "stamped with the fixer flag present: the write lands"
+set_context() {  # $1 = classification marker, or "" for none; rest = extra flags
+    local marker="$1"; shift
+    if [ -n "$marker" ]; then set_flags "$marker" "$@"; else set_flags "$@"; fi
+}
 
-set_flags "$tdd_active" "$fixer_rel"
-run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "fixer flag alone, nothing stamped: the write lands"
+for context in "$tdd_active" ""; do
+    if [ -n "$context" ]; then
+        where="under $context"
+    else
+        where="with no classification marker (the state /execute Step 6 leaves)"
+    fi
+
+    set_context "$context"
+    run_hook "src/service.ts"
+    if [ -n "$context" ]; then
+        assert_eq 0 "$hook_status" "unstamped, $where: the write lands"
+    else
+        # Unstamped and unclassified is clause 1's own case, and it must keep
+        # refusing — the stand-down is scoped to stamped branches only.
+        assert_eq 2 "$hook_status" "unstamped, $where: the classification gate still refuses"
+    fi
+
+    set_context "$context" "$stamp_rel"
+    run_hook "src/service.ts"
+    assert_eq 2 "$hook_status" "stamped, no fixer flag, $where: the write is refused"
+
+    if grep -qF "$lock_msg" <<<"$hook_err"; then
+        assert_eq "the lock refused it" "the lock refused it" \
+            "the refusal routes the human to /fix-findings, $where"
+    else
+        assert_eq "the lock refused it" "$hook_err" \
+            "the refusal routes the human to /fix-findings, $where"
+    fi
+
+    if grep -qF "$class_msg" <<<"$hook_err"; then
+        assert_eq "not the classification clause" "the classification clause refused it" \
+            "clause 1 does not preempt the lock, $where"
+    else
+        assert_eq "not the classification clause" "not the classification clause" \
+            "clause 1 does not preempt the lock, $where"
+    fi
+
+    set_context "$context" "$stamp_rel" "$fixer_rel"
+    run_hook "src/service.ts"
+    assert_eq 0 "$hook_status" "stamped with the fixer flag present, $where: the fixer's write lands"
+
+    set_context "$context" "$fixer_rel"
+    run_hook "src/service.ts"
+    if [ -n "$context" ]; then
+        assert_eq 0 "$hook_status" "fixer flag alone, nothing stamped, $where: the write lands"
+    else
+        # The fixer flag is not a classification marker and must not act as one
+        # off a stamped branch — otherwise a leaked flag opens the TDD gate too.
+        assert_eq 2 "$hook_status" "fixer flag alone, nothing stamped, $where: still unclassified, still refused"
+    fi
+done
 
 # -----------------------------------------------------------------------------
 
@@ -256,7 +335,7 @@ section "4. the non-coverage /init-pipeline and /fix-findings both state in pros
 # edit to a test, a type declaration, a config file, or anything off the pattern
 # list is NOT refused. That is a measured claim now rather than an asserted one.
 
-set_flags "$tdd_active" "$stamp_rel"
+set_context "" "$stamp_rel"
 
 run_hook "src/service.test.ts"
 assert_eq 0 "$hook_status" "a stamped branch does not refuse a test file"
@@ -275,24 +354,43 @@ assert_eq 0 "$hook_status" "a stamped branch does not refuse a file off the patt
 
 # -----------------------------------------------------------------------------
 
-section "5. round trip: the four documented commands drive the hook"
+section "5. round trip: the five documented commands drive the hook"
 
 # The load-bearing section. Every state change below is made by running text
 # extracted from a skill, and every observation is made by running the hook.
-# No flag path appears as a literal anywhere in it, so the four files can only
+# No flag path appears as a literal anywhere in it, so the five files can only
 # stay green by continuing to agree with each other.
+#
+# /execute Step 6's removal is the fifth command and was the missing one. Without
+# it this walk stamped a branch that still carried `.tdd-active` — a state the
+# real pipeline destroys one step before /pre-merge runs — and every assertion
+# after the stamp was answered by a marker that would not have been there. The
+# sequence below is now the sequence the pipeline actually performs.
 
 set_flags "$tdd_active"
 run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "before /pre-merge stamps: open"
+assert_eq 0 "$hook_status" "classified, before anything else: open"
+
+run_documented "$proj" "$tdd_marker_remove" "$proj"
+run_hook "src/service.ts"
+assert_eq 2 "$hook_status" "after /execute Step 6's rm: the branch is markerless, so the classification gate refuses"
 
 run_documented "$proj" "$stamp_write" "$proj"
 run_hook "src/service.ts"
 assert_eq 2 "$hook_status" "after /pre-merge Phase 4's touch: shut"
 
+# On a markerless stamped branch, WHICH clause refuses is the whole finding. If
+# clause 1 answers here, the lock's designed affordance never prints and the
+# fixer below is refused too.
+if grep -qF "$lock_msg" <<<"$hook_err"; then
+    assert_eq "the lock" "the lock" "…and it is the lock that refuses, not the classification gate"
+else
+    assert_eq "the lock" "$hook_err" "…and it is the lock that refuses, not the classification gate"
+fi
+
 run_documented "$proj" "$fixer_write" "$proj"
 run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "after /fix-findings' harness line: open for the fixer"
+assert_eq 0 "$hook_status" "after /fix-findings' harness line: open for the fixer, with no classification marker in reach"
 
 run_documented "$proj" "$fixer_remove" "$proj"
 run_hook "src/service.ts"
@@ -300,7 +398,21 @@ assert_eq 2 "$hook_status" "after /fix-findings Step 3's rm: shut again"
 
 run_documented "$proj" "$stamp_remove" "$proj"
 run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "after /closeout Step 3's rm at merge: released"
+assert_eq 2 "$hook_status" "after /closeout Step 3's rm at merge: still refused, because the branch is markerless"
+
+# Released means the LOCK stopped refusing, not that everything is permitted —
+# the classification gate is a separate question and answers this one now.
+if grep -qF "$class_msg" <<<"$hook_err"; then
+    assert_eq "the classification gate" "the classification gate" \
+        "…and the lock is released: the refusal is clause 1's, not the lock's"
+else
+    assert_eq "the classification gate" "$hook_err" \
+        "…and the lock is released: the refusal is clause 1's, not the lock's"
+fi
+
+touch "$proj/$tdd_active"
+run_hook "src/service.ts"
+assert_eq 0 "$hook_status" "…and re-classifying the next slice's work reopens the gate with no stamp left to fight"
 
 # -----------------------------------------------------------------------------
 
@@ -402,6 +514,54 @@ assert_eq 0 "$hook_status" "with the lock's condition pointed at a path that can
 
 run_hook "src/service.ts"
 assert_eq 2 "$hook_status" "and the unmutated hook refuses it again on the very next run"
+
+# --- Control 2: the shipped defect, rebuilt and re-killed --------------------
+#
+# The control above proves clause 2's CONDITION is live. It cannot see the defect
+# this section was extended for, because that defect was in the clauses' ORDER,
+# and order is invisible to any fixture that leaves a classification marker lying
+# around. So: strip the `.review-stamped` stand-down term out of clause 1 — built
+# from /pre-merge's own flag path, not typed — and the hook becomes the version
+# that shipped. Both halves of the finding must come back.
+
+stand_down="[ ! -f \"\$CLAUDE_PROJECT_DIR/$stamp_rel\" ] && "
+ordering_mutant="$scratch/ordering-mutant-hook.sh"
+printf '%s' "${hook_body/"$stand_down"/}" > "$ordering_mutant"
+
+if [ "$(grep -c '' <"$ordering_mutant")" -lt "$(grep -c '' <<<"$hook_body")" ] \
+   || [ "$(wc -c <"$ordering_mutant")" -lt "$(printf '%s' "$hook_body" | wc -c)" ]; then
+    assert_eq "removed" "removed" "the stand-down term was found in clause 1 and taken out"
+else
+    assert_eq "removed" "not found — clause 1 no longer carries the term in this shape" \
+        "the stand-down term was found in clause 1 and taken out"
+fi
+
+status=0
+bash -n "$ordering_mutant" || status=$?
+assert_eq 0 "$status" "the ordering control is still a valid script"
+
+real_hook="$hook_file"
+hook_file="$ordering_mutant"
+
+set_context "" "$stamp_rel" "$fixer_rel"
+run_hook "src/service.ts"
+assert_eq 2 "$hook_status" "without the stand-down: the /fix-findings fixer is refused despite holding its flag"
+
+set_context "" "$stamp_rel"
+run_hook "src/service.ts"
+if grep -qF "$class_msg" <<<"$hook_err"; then
+    assert_eq "clause 1's message" "clause 1's message" \
+        "without the stand-down: the human is refused by the wrong clause, and /fix-findings is never named"
+else
+    assert_eq "clause 1's message" "$hook_err" \
+        "without the stand-down: the human is refused by the wrong clause, and /fix-findings is never named"
+fi
+
+hook_file="$real_hook"
+
+set_context "" "$stamp_rel" "$fixer_rel"
+run_hook "src/service.ts"
+assert_eq 0 "$hook_status" "and the shipped hook lets that same fixer write on the very next run"
 
 # -----------------------------------------------------------------------------
 

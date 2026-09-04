@@ -226,6 +226,8 @@ is not load-bearing (#326).
 | `.claude/.review-stamped` | `/pre-merge` Phase 4, beside the review-currency stamp | `.claude/hooks/enforce-classification.sh` — refuses Write/Edit on implementation files while it exists and `.fix-findings-active` does not | `/closeout` Step 3 at merge; `/execute` Step 0's fresh-slate checklist |
 | `.claude/.fix-findings-active` | this skill, by the harness line at the top of this file, when it loads | the same hook clause — its presence is what re-opens the lock | Step 3 above, on every exit path; `/execute` Step 0's fresh-slate checklist |
 
+**`.review-stamped` also stands the classification clause down, which is what lets this skill's fixer write at all.** The same hook carries an earlier clause refusing implementation writes unless `.claude/.tdd-active` or `.claude/.tdd-skipped` exists — and `/execute` Step 6 removes both of those *before* `/pre-merge` stamps, so no fixer ever arrives holding one. Were the two clauses genuinely independent in that order, the flag the harness line writes above would be read too late to matter: every fixer would be refused by the classification clause, under a message naming `/tdd`. So on a stamped branch the classification clause does not fire and this lock is the sole decider. Do not remove that coupling on the grounds that it looks like a leak between two unrelated gates — `scripts/test-post-review-edit-lock.sh` § 5 drives the real lifecycle, Step 6's removal included, and fails if it goes.
+
 **Two exits from the lock, both visible.** Invoke this skill, or delete
 `.claude/.review-stamped` by hand. The second is a deliberate act that leaves a
 trace, which is the whole point: today's exit is silent (Norman — prospective
