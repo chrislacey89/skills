@@ -446,6 +446,31 @@ above — a dirty path outside the in-flight fixer's own target is unexplained b
 construction. This narrows the exception to the one contested file, not to the
 round, and costs a comparison the controller already has the parts for.
 
+**That comparison is pairwise, and runs once — the concurrency two paragraphs up
+is not bounded to one pair.** It fires at the moment a breaker is backgrounded,
+against the one fixer starting then. But "breakers may run in parallel with each
+other" means a backgrounded breaker's report is not guaranteed by the time the
+fixer *after* the one it was checked against also starts — nothing re-runs the
+comparison then, because the rule as stated only ever asks about "the next"
+finding, once. If that breaker's file matches the file two findings later — the
+same routine case cited above — an escape from it lands while a second fixer is
+legitimately editing that file, and Step 3's `git status --short` is back to the
+one dirty line it cannot resolve, unmeasured by any comparison this section ran
+for that pair.
+
+So: **a breaker's overlap with fixers is capped at one, not the round.** A
+backgrounded breaker may run concurrently with the single fixer the same-file
+check above cleared it against. Before starting the *next* fixer after that
+one, confirm the earlier breaker has reported — if it has not, hold that fixer
+rather than opening a second fixer against a still-open breaker. This is a
+wait, not a second comparison: the controller does not re-derive a file match
+against a moving target, it bounds how long a breaker gets to stay in flight
+against the working tree at all. Breakers may still overlap each other freely
+under this cap — one finishing while the next starts costs nothing, since
+neither writes — because the cap governs only a breaker's overlap with the
+fixer editing the tree, which is the one relationship Step 3's file-granularity
+claim depends on staying pairwise.
+
 ## Handoff
 
 - **Expected input:** the finding numbers a human chose from a `/pre-merge`
