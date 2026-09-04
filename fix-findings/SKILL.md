@@ -18,7 +18,7 @@ sources:
 
 Take the review findings a human has already chosen, have a **fresh** sub-agent
 write each fix, have a **second** fresh sub-agent try to break it, and report
-both back. Hand off to a `/pre-merge` delta pass, which is the only thing that
+both back. Hand off to a `/pre-merge` re-run, which is the only thing that
 re-stamps.
 
 ## Why this skill exists
@@ -69,7 +69,7 @@ human to dispose of findings, so there is no valid input.
   stop. A surviving mutation is reported to the human, never fed back to the
   fixer. If the human wants another round they invoke `/fix-findings` again.
 - **It does not review the branch.** It touches only what the chosen findings
-  name. The delta pass is the review.
+  name. The `/pre-merge` re-run is the review.
 
 ## Inputs
 
@@ -130,9 +130,8 @@ The fixer's instructions, in order:
    post-review commit is invisible to the review that has already run.
 3. **Run the project's test command** and report the exit status verbatim.
 4. **Commit exactly one commit**, whose message says what the finding was and
-   what the fix does. One commit per fix — the delta pass reviews these commits
-   individually, and a fix squashed together with another is a fix nobody can
-   read separately.
+   what the fix does. One commit per fix — a fix squashed together with another
+   is a fix nobody can read separately.
 
 The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
@@ -195,10 +194,11 @@ or prose change, and why a green result is not self-validating are stated once i
 Read it there; it is not restated here.
 
 **The verdict is advisory.** `survived` is reported to the human as a line item
-and to the delta pass as evidence. It is never auto-re-fixed (that is the re-fix
-loop #253 recorded), and it never earns or withholds a stamp — a `survived`
-verdict that nothing executed reads identically to one that did, which is why
-the apparatus check gates the verdict and why the verdict gates nothing.
+and to the `/pre-merge` re-run as evidence. It is never auto-re-fixed (that is
+the re-fix loop #253 recorded), and it never earns or withholds a stamp — a
+`survived` verdict that nothing executed reads identically to one that did,
+which is why the apparatus check gates the verdict and why the verdict gates
+nothing.
 
 ### Step 3. Report, then release the lock
 
@@ -270,7 +270,7 @@ declaration, a config file, or any file outside the pattern list is **not**
 refused after a review. That is the same trigger surface the pack already
 accepts for the TDD gate, and widening it here would make the two gates disagree
 about what "implementation file" means. A post-review edit to a test file is a
-real gap in the lock; the delta pass, not the hook, is what covers it.
+real gap in the lock; a `/pre-merge` re-run, not the hook, is what covers it.
 
 ## Cap
 
@@ -290,19 +290,20 @@ the human's decision behind it. Without the cap this is the fix-review-fix cycle
   did not write the code under repair; a per-finding breaker verdict with the
   command behind it; and `refuted` reports for findings the tree did not confirm.
   It produces no stamp, no PR edit, and no merge.
-- **Comes next by default:** a `/pre-merge` delta pass over the fix commits,
-  which re-runs the review dimensions on them and re-stamps. Hand it the breaker
-  verdicts as evidence, and hand it the **range** rather than an assumption that
-  the head equals the stamp — other steps also commit after a stamp (`/compound`
-  captures its lesson onto the open PR), so the delta is "everything past the
-  stamp," not "the commits this skill made." Then `/compound` if a lesson
-  emerged, then `/closeout`.
+- **Comes next by default:** a re-run of `/pre-merge` in author-mode, which
+  re-runs the review dimensions and replaces the existing stamp. Hand it the
+  breaker verdicts as evidence. There is nothing to hand it a *range*:
+  author-mode reviews `git diff "$BASE_REF...HEAD"` — the whole branch — and
+  `/pre-merge` defines no mode that takes a range or scopes itself to what is
+  past the stamp (`pre-merge/SKILL.md` § *Modes*). These fix commits are covered
+  because everything is, so no step has to work out where the stamp fell. Then
+  `/compound` if a lesson emerged, then `/closeout`.
 
 **Next-step menu.** This is a branch point, so offer it as a single
 `AskUserQuestion` rather than leaving the user to retype a command (see
 [references/next-step-menu.md](references/next-step-menu.md)), recommended option
-first: **→ `/pre-merge` delta pass over the fix commits (recommended — review the
-fixes and re-stamp)**, **Fix another finding — `/fix-findings <numbers>`**,
+first: **→ Re-run `/pre-merge` (recommended — review the fixes and re-stamp)**,
+**Fix another finding — `/fix-findings <numbers>`**,
 **Stop here — leave the fixes unreviewed on the branch**. Include a run-specific
 follow-up when the breaker returned `survived` or `not-run`: **Show the surviving
 mutation for finding N**. The platform's free-text "Other" option is the escape
@@ -312,5 +313,5 @@ Print the runtime handoff line either way:
 
 ```
 **Next session:** /pre-merge
-**Input:** the fix commits on branch <branch-name>, past the stamp — delta pass and re-stamp
+**Input:** branch <branch-name>, carrying the fix commits past the stamp — re-review and re-stamp
 ```

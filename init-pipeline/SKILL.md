@@ -100,8 +100,8 @@ unchanged, so a post-review edit to a test file, a type declaration, a config
 file, or anything outside the pattern list is **not** refused. That is the same
 trigger surface the classification gate already uses, and giving the two clauses
 different definitions of "implementation file" would make the hook's behavior
-unreadable from its own source. The `/pre-merge` delta pass, not this hook,
-covers a post-review edit to a test.
+unreadable from its own source. A re-run of `/pre-merge`, not this hook, covers
+a post-review edit to a test.
 
 After writing, run: `chmod +x .claude/hooks/enforce-classification.sh`
 
