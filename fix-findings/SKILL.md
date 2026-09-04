@@ -149,20 +149,22 @@ evidence), or `blocked` (with what it needed and did not have). Nothing else.
 A second sub-agent, fresh, **read-only**, and working in a throwaway copy of the
 tree. Spawn it on the same cheaper tier as the fixer, for the same reason and with the same escalation signal (Step 1). Its procedure is a checklist and its mutation is drawn from the corpus rather than composed, and the apparatus check gates the verdict — a breaker that cannot make its control go red reports `not-run` rather than false confidence. Neither sub-agent may drop below Sonnet: both read a real tree and run a real suite, and a breaker that misreports `killed` is worse than no breaker at all. It never edits the branch, never commits, never stamps, and never fixes
 what it finds — #249 is the incident that rule comes from: a review sub-agent
-mutated the tree it was reviewing. **And its subject has to be a snapshot that
-nothing can change under it.** While a breaker works, § *Cap* permits the next
-fixer to be editing the original working tree and committing to the branch, so
-whatever the breaker reads there is another agent's in-flight state — that is
-the #338 slip, and it is what makes this restriction the thing that makes the
-overlap safe rather than a tidiness rule. So the ban is on what moves, not on
-what a read is for: **it never reads the original working tree and never
-resolves a moving ref** — not `git status`, not the working files, not `HEAD`.
-"Only for orientation" is not an exception, because orientation taken off a
-moving tree is precisely what went wrong.
+mutated the tree it was reviewing. **And its subject has to be a fixed commit,
+not whatever the branch holds when the breaker looks.** A round processes
+findings one after another, and `HEAD` keeps moving as later findings' fixers
+commit — by the time the round is reported, `HEAD` no longer names this fix.
+A breaker's verdict has to be about the specific fix it was asked to check, not
+a restatement of the fixer's own account of that fix (independence from the
+fixer's account is the reason this sub-agent exists at all) and not whatever
+the branch has accumulated by the time anyone reads the verdict back. So:
+**it never reads the original working tree and never resolves a moving ref** —
+not `git status`, not the working files, not `HEAD`. "Only for orientation" is
+not an exception: orientation taken off `HEAD` names whichever commit is
+current when it is taken, which is not this breaker's subject.
 
 What it may read is what cannot move: the extracted copy, and the commit
-`$FIX_SHA` names. A commit that already exists cannot be perturbed by an
-in-flight fixer, so the `git archive "$FIX_SHA"` extraction below is not a
+`$FIX_SHA` names. A commit that already exists cannot be perturbed by anything
+else running, so the `git archive "$FIX_SHA"` extraction below is not a
 violation of this — and a breaker that needs to see what the fix changed runs
 `git show "$FIX_SHA"` from the original repo, since the extracted copy has no
 `.git`, rather than inferring the diff from the working files, which move.
@@ -182,11 +184,14 @@ source, on the same footing Step 1 gives the fixer for the slice or PRD issue.
 
 **Where the copy lives: `git archive`, not a second worktree — and it archives
 the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
-1, handed to the breaker along with the finding. It is not `HEAD`, because by
-the time a breaker extracts, § *Cap* permits the next fixer to have already
-committed — and a verdict about the accumulated branch is not the verdict
-anybody asked for. The block does not bind `FIX_SHA` itself — export it before
-running the block below: `export FIX_SHA=<the SHA the fixer reported>`.
+1, handed to the breaker along with the finding. It is not `HEAD`, because a
+round processes findings one after another and `HEAD` keeps moving as later
+fixers commit — a verdict pinned to a moving ref stops naming this fix by the
+time anyone reads it back, even though nothing else is touching the tree while
+this particular breaker runs. `$FIX_SHA` names the exact commit the verdict is
+about, permanently, regardless of when the round is read. The block does not
+bind `FIX_SHA` itself — export it before running the block below: `export
+FIX_SHA=<the SHA the fixer reported>`.
 
 ```bash
 # pipefail is load-bearing: without it the pipeline reports tar's status, and a
@@ -279,30 +284,21 @@ nothing.
 ### Step 3. Report, then release the lock
 
 **First reconcile the original working tree — you do this, not the breaker.**
-The cwd rule in Step 2 makes an escape unlikely; it does not make it visible, and
-a breaker that escaped leaves its mutation sitting in the repo under review. Run
-`git status --short` in the original repo after each breaker reports, and account
-for every path it lists. The in-flight fixer's own edits are expected, and you
-are the only actor here who knows which those are. This is decidable at file
-granularity only because § *Cap*'s same-file overlap rule already kept this
-breaker off whatever file the concurrent fixer is touching — with that rule
-followed, a dirty path outside the in-flight fixer's own target cannot be the
-fixer's, so `git status --short` is enough to tell the two apart. (It would not
-be if the two shared a file: a single dirty line for a shared file cannot show
-whether it holds the fixer's edit, an escape, or both, which is exactly why
-§ *Cap* forbids that overlap rather than asking this step to resolve it after
-the fact.) An unexplained modification is an escaped breaker: restore the path
-before the next fixer commits on top of it, report that breaker's finding as
-**`not-run`** rather than passing its verdict through, and say in the report
-that the reconciliation is why.
+The breaker is read-only and works in an isolated copy (Step 2), which makes an
+escape unlikely; it does not make it visible, and a breaker that escaped leaves
+its mutation sitting in the repo under review. Run `git status --short` in the
+original repo after each breaker reports. No fixer is ever editing while a
+breaker runs — the two never overlap — so this is exact, not merely
+file-granular: with no concurrent editor of any kind, any dirty path
+`git status --short` reports is unexplained by construction, and unexplained
+means an escaped breaker. Restore the path before the next fixer starts, report
+that breaker's finding as **`not-run`** rather than passing its verdict
+through, and say in the report that the reconciliation is why.
 
-This sits with the controller for two reasons, and handing it to the breaker
-would fail on both. The breaker is forbidden to read the original working tree at
-all (Step 2), so the instruction would contradict the restriction that makes the
-fixer/breaker overlap safe. And it could not read the answer if it were allowed
-to: it does not know what the concurrent fixer touched, so it cannot tell its own
-escaped `sed` from a legitimate in-flight edit. You know both, because you
-ordered them.
+This sits with the controller rather than the breaker for the same reason
+Step 2 gives: the breaker is forbidden to read the original working tree at
+all, so handing it the reconciliation would contradict the restriction that
+makes its read-only isolation mean anything.
 
 Then print one block per finding — number, the fixer's verdict and commit SHA,
 the breaker's verdict **and the SHA it archived**, and the command behind each.
@@ -317,12 +313,13 @@ Finding 3 — fixed at a1b2c3d
 ```
 
 The archived SHA is on the breaker's line because it is the one thing that says
-what the verdict is *about*. With overlap permitted, a report that names only the
-verdict leaves a `survived` attributable to whatever the branch had accumulated
-by then — and a `survived` misattributed to the wrong fix sends the human back to
-code that was never the subject. When the two SHAs match, as they do above, the
-line is redundant and should still be printed: a reader cannot tell a match from
-an omission.
+what the verdict is *about*. By the time the round's report prints, `HEAD` has
+moved past this fix — later findings' fixers have committed on top of it — so a
+report that names only the verdict leaves a `survived` attributable to whatever
+the branch had accumulated by then, and a `survived` misattributed to the wrong
+fix sends the human back to code that was never the subject. When the two SHAs
+match, as they do above, the line is redundant and should still be printed: a
+reader cannot tell a match from an omission.
 
 Then remove `.claude/.fix-findings-active`, resolving it through the same
 fallback the harness line above used, so the removal reaches the file that line
@@ -416,83 +413,42 @@ working tree and commits to one branch, so two at once is a race on both, and
 each fixer its own worktree would trade that race for merge conflicts on exactly
 the findings most likely to collide, since findings routinely land in one file
 (three of five in one round of #338 landed in `/init-pipeline` § 2); at three to
-eight findings that is not a trade worth making. **Before the cap below
-existed, breakers could run in parallel with each other, and a breaker could
-run while the next fixer worked.** The two conditions that make any
-breaker/fixer overlap safe are stated in Step 2 and are deliberately not
-restated here — the `$FIX_SHA` the extraction archives, and the restriction on
-reading the original working tree or resolving a moving ref — because a rule
-written at two sites is a rule that will later be changed at one. Neither is a
-tidiness rule. On #338 a breaker was backgrounded while the next fixer was
-still committing, read the real repo, and
-had to disclaim edits that were not its subject; nothing was corrupted, because
-breakers write nothing, but the report was confused by state it had never been
-told to stay out of. Before the cap, that overlap — breaker-on-breaker
-included — was the only concurrency worth having: wall clock was dominated by
-the fixers, so a breaker that waited for them bought nothing. **The cap below
-changes what holds now**: it bounds a breaker's overlap to the one fixer
-immediately after it and, as a chained consequence, removes breaker-on-breaker
-concurrency entirely — see the paragraph below beginning "That bound chains"
-for the mechanism and what the remaining overlap costs today.
+eight findings that is not a trade worth making.
 
-**A same-file overlap needs one more condition, and it is not the isolation
-condition above.** Step 2's isolation is about what the breaker may *read*; it
-says nothing about whether Step 3 can *see* an escape once one happens.
-`git status --short` reports one line per file. If the breaker's escape and the
-concurrent fixer's legitimate edit land in the same file — the case this
-section already says is routine — that one dirty line is both, and Step 3's
-reconciliation cannot tell them apart from that line alone. So: **before
-backgrounding a breaker while the next fixer starts, compare the fix's own
-`git show "$FIX_SHA" --stat` against the next finding's `file:` locator** (both
-already in hand — the stat from Step 2, the locator from Step 0's inputs). Same
-file, do not overlap that pair: let the breaker finish before that fixer starts,
-or hold the breaker until that fixer commits. Different files, overlap as
-above — a dirty path outside the in-flight fixer's own target is unexplained by
-construction. This narrows the exception to the one contested file, not to the
-round, and costs a comparison the controller already has the parts for.
+**A breaker runs only against a fix already committed, and nothing runs
+concurrently with a fixer editing the working tree.** Per finding: spawn the
+fixer and wait for its verdict; if `fixed`, spawn the breaker against
+`$FIX_SHA` and wait for its verdict; only then start the next finding's fixer.
+No two sub-agents are ever in flight together — not two fixers, not a fixer and
+a breaker, not two breakers.
 
-**That comparison is pairwise, and runs once — the concurrency two paragraphs up
-is not bounded to one pair.** It fires at the moment a breaker is backgrounded,
-against the one fixer starting then. But "breakers may run in parallel with each
-other" means a backgrounded breaker's report is not guaranteed by the time the
-fixer *after* the one it was checked against also starts — nothing re-runs the
-comparison then, because the rule as stated only ever asks about "the next"
-finding, once. If that breaker's file matches the file two findings later — the
-same routine case cited above — an escape from it lands while a second fixer is
-legitimately editing that file, and Step 3's `git status --short` is back to the
-one dirty line it cannot resolve, unmeasured by any comparison this section ran
-for that pair.
+This section previously permitted a breaker to run concurrently with the next
+fixer, and spent four corrective rounds (6cc84c0, 5272615, 04f9e35, 28aec29)
+trying to keep that permission both safe and accurately described: a same-file
+comparison before backgrounding a breaker, a cap bounding how long a
+backgrounded breaker could stay in flight, and two further rounds correcting
+false claims the cap's own text made about its consequences. The cap's own
+derivation showed the overlap it was defending had already collapsed: the wait
+gate it introduced made every breaker's report a precondition for the next
+breaker's start, so no two breakers ever ran concurrently under it regardless
+of what the section's lead sentence claimed. Four rounds could not make the
+permission and its description agree at the same time. This round removes the
+permission instead of patching its description again.
 
-So: **a breaker's overlap with fixers is capped at one, not the round.** A
-backgrounded breaker may run concurrently with the fixer the same-file check
-above cleared it against — except on that check's "hold the breaker" branch,
-where the breaker is not backgrounded until after that fixer has already
-committed, and so overlaps no fixer at all. Before starting the *next* fixer
-after that one, confirm the earlier breaker has reported — if it has not, hold
-that fixer rather than opening a second fixer against a still-open breaker.
-This is a wait, not a second comparison: the controller does not re-derive a
-file match against a moving target, it bounds how long a breaker gets to stay
-in flight against the working tree at all.
-
-**That bound chains, and the chain is the cap's real cost.** Breaker *i* is
-cleared to overlap fixer *i+1*, and breaker *i+1* is backgrounded at the same
-moment fixer *i+2* is — the same "may run while the next fixer works" relation
-that governs every breaker, one step later. The wait gate that holds fixer
-*i+2* until breaker *i* has reported therefore also holds breaker *i+1* from
-being backgrounded until breaker *i* has reported. Carried through the round,
-that serializes the whole breaker chain: no two breakers ever run
-concurrently. What the cap leaves standing is the narrower overlap it is named
-for — one breaker with the one fixer after it — not breaker-on-breaker
-concurrency, which this cap spends to close the escape gap two paragraphs up.
-That spend is real, not free: a breaker now stalls its second-following fixer
-whenever it outlives the one fixer it overlaps, which is the normal case — a
-breaker does extraction, apparatus validation, mutation, and adversarial
-reasoning against a fixer's single commit — so wall clock from the third
-finding on is breaker-dominated, the reverse of the fixer-dominated picture
-assumed above before this cap existed. It is still the right trade: the
-alternative is the N-way escape this cap exists to close, not a faster round.
-But it is a trade, and a controller sizing a round's wall clock should budget
-breaker time accordingly rather than assume fixers still dominate it.
+**Say the cost plainly: this is slower.** Wall clock is now fixer time plus
+breaker time, summed per finding, with nothing hiding one behind the other. A
+breaker's extraction, apparatus validation, mutation, and adversarial reasoning
+against a fixer's single commit runs to completion before the next finding's
+fixer starts, every time — and the cap's own derivation already showed that,
+beyond the second finding, a breaker typically outlived the one fixer it was
+allowed to overlap, so the concurrency being given up here was buying less than
+it advertised. The trade is worth it regardless: the escape-detection ambiguity
+the four prior rounds kept trying to bound — an escaped breaker mutation and a
+concurrently-editing fixer's legitimate edit landing in the same file,
+indistinguishable to `git status --short` — is not bounded by this change, it
+is removed. With no concurrent editor of any kind, Step 3's reconciliation is
+exact: any unexplained dirty path after a breaker reports is an escape, full
+stop.
 
 ## Handoff
 
