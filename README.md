@@ -1,10 +1,10 @@
 # Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-30-blue)
+![Skills](https://img.shields.io/badge/skills-32-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 30 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 32 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -72,6 +72,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 |-------|-------------|
 | [execute](execute/) | Execute a unit of work end-to-end with verification |
 | [tdd](tdd/) | Test-driven development with red-green-refactor loop (invoked from `/execute`) |
+| [fix-findings](fix-findings/) | Fix the `/pre-merge` findings you chose, with a fresh sub-agent writing each fix and a second one trying to break it — user-invoked only, never selects findings, never stamps |
 | [triage-issue](triage-issue/) | Deep bug diagnosis + root cause + TDD fix plan (invoked from `/qa` per issue) |
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
@@ -83,6 +84,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 |-------|-------------|
 | [init-pipeline](init-pipeline/) | Scaffold pipeline enforcement — Claude Code hooks, git guardrails, pre-commit setup (auto-invoked by `/execute`) |
 | [setup-pre-commit](setup-pre-commit/) | Lefthook + Biome pre-commit hooks (detects existing tools) |
+| [setup-ralph-loop](setup-ralph-loop/) | Generate `ralph-once.sh` and a bounded `ralph.sh` for HITL-to-AFK `/execute` runs (auto-invoked by `/execute` for multi-slice work) |
 | [git-guardrails-claude-code](git-guardrails-claude-code/) | Block dangerous git commands |
 
 ### Knowledge & QA
@@ -95,6 +97,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML artifact in one of two modes — a scrolling recap (file-tree + change flags, annotated split diffs with line-anchored callouts, contract cards, UI wireframes, before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a walkthrough deck (premise → changes → mechanism → aftermath, one idea per screen); CSS-spine diagrams for trivial flows, Mermaid-via-CDN for multi-stage graphs, copy-text feedback loop (optional, never auto-invoked, transient artifact) |
 | [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR before `/closeout` merges (default), or post-merge as the fallback |
+| [improve-pipeline](improve-pipeline/) | File a Skill Kit improvement proposal as a GitHub issue when the lesson is about the pipeline rather than the project |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
 
 ### Orientation & Recovery

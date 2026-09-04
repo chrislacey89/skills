@@ -18,6 +18,15 @@
 # marker template from pre-merge/SKILL.md rather than restating either. That is
 # the point: the suite fails when either half drifts from the other, which a
 # hand-copied regex could not detect.
+#
+# THE SECOND CONTRACT: ONE WRITER. /pre-merge is the only skill licensed to
+# write the marker. /fix-findings (#327) commits fixes that deliberately move
+# the head past the stamp and must hand off to a /pre-merge re-run to
+# re-stamp; a skill that stamped its own fixes would certify as reviewed the one
+# commit nothing independent read, and #292's provenance fix — the stamp records
+# the SHA a review actually read — would be bypassed in silence. Nothing else in
+# the repo would notice a second writer appearing, so the last section below
+# greps every other SKILL.md for the writer template.
 
 set -euo pipefail
 
@@ -164,6 +173,148 @@ stale_marker="$marker"
 newer_marker="${writer_template//<full-sha>/$newer_sha}"
 extracted="$(pr_body "$stale_marker" "$newer_marker" | read_marker)"
 assert_eq "$newer_sha" "$extracted" "the last stamp in the body wins"
+
+# -----------------------------------------------------------------------------
+
+section "exactly one skill writes the stamp"
+
+# The template is extracted above from pre-merge/SKILL.md, so this searches for
+# whatever that file actually declares rather than for a restated literal. A
+# fixed-string search (-F) because the template contains no regex metacharacters
+# by design and a future one should not silently become a pattern.
+#
+# Scoped to */SKILL.md: a skill's reference files are prose about the marker
+# (closeout/SKILL.md's own reader line lives in the skill body and is matched by
+# the reader extraction above, not here). What must stay unique is the WRITER —
+# the substituted template with a real 40-character SHA in it, and the
+# unsubstituted template it comes from.
+writers="$(grep -lF "$writer_template" -- */SKILL.md | sort || true)"
+assert_eq "pre-merge/SKILL.md" "$writers" \
+    "the writer template appears in pre-merge/SKILL.md and no other SKILL.md"
+
+# The same check one level down: no skill emits a *substituted* marker either,
+# which is what a second writer would most plausibly look like — a literal
+# 40-hex stamp pasted into a skill body rather than the placeholder form.
+substituted="$(grep -lE '<!-- reviewed-at: [0-9a-f]{40} -->' -- */SKILL.md | sort || true)"
+assert_eq "" "$substituted" \
+    "no SKILL.md carries a substituted 40-character marker"
+
+# -----------------------------------------------------------------------------
+
+section "the step that re-stamps names a mode /pre-merge actually defines"
+
+# THE DRIFT THIS CATCHES. /fix-findings (#327) shipped its entire handoff — five
+# sentences in its own body, two rows in SYSTEM-OVERVIEW, a clause in
+# /init-pipeline's hook rationale, this file's own header, and both of
+# /pre-merge's own next-step menu labels — terminating in a "/pre-merge delta
+# pass over everything past the stamp." No such thing existed. § Modes defines
+# three modes; none takes a range, none scopes itself to what is past a stamp,
+# and `git grep "delta pass"` at the branch point was empty, so the term was
+# invented by the same change that depended on it. The single-writer contract
+# above is only worth what the handoff that closes it is worth, and a handoff
+# terminating in a mode nobody implemented closes nothing — which is what makes
+# this suite's business.
+#
+# Both halves of the vocabulary are derived, never typed here: the mode names
+# come out of /pre-merge § Modes, and the two pass-qualifiers /fix-findings is
+# entitled to use for its OWN passes come out of its § Cap sentence.
+
+premerge_modes="$(sed -n '/^## Modes$/,/^## When to Use$/p' "$premerge_skill" \
+    | sed -n 's/^- \*\*\([A-Za-z][A-Za-z-]*\)-mode.*/\1/p' \
+    | tr '[:upper:]' '[:lower:]' | sort -u)"
+if [[ -z "$premerge_modes" ]]; then
+    printf 'FATAL: no "- **X-mode**" bullets found under %s § Modes\n' "$premerge_skill" >&2
+    exit 2
+fi
+
+fixfindings_skill="$repo_root/fix-findings/SKILL.md"
+# /fix-findings' § Cap sentence is the one place its own two passes are named.
+own_passes="$(sed -n 's/.*One \([a-z]*\) pass and one \([a-z]*\) pass per finding.*/\1\n\2/p' "$fixfindings_skill" | sort -u)"
+if [[ -z "$own_passes" ]]; then
+    printf 'FATAL: no "One <x> pass and one <y> pass per finding" sentence found in %s\n' "$fixfindings_skill" >&2
+    exit 2
+fi
+
+allowed_qualifiers="$(printf '%s\n%s\n' "$premerge_modes" "$own_passes" | sort -u)"
+printf 'modes (pre-merge/SKILL.md):   %s\n' "$(tr '\n' ' ' <<<"$premerge_modes")"
+printf 'own passes (fix-findings):    %s\n' "$(tr '\n' ' ' <<<"$own_passes")"
+
+# unresolved <noun-alternation> <text> — every "<qualifier> pass" (and, where
+# the caller asks for it, "<qualifier>-mode") in <text> that is neither a
+# /pre-merge mode nor one of /fix-findings' own passes. Both boundary classes
+# are load-bearing: without the trailing one "disable-model-invocation" reads as
+# a "-mode" and "password" as a "pass", and without the leading one
+# "**Reviewer-mode**" yields the qualifier "eviewer". The text is lowercased and
+# space-padded first so both boundaries can be plain character classes.
+unresolved() {
+    local nouns="$1" qualifier out=""
+    while IFS= read -r qualifier; do
+        [[ -n "$qualifier" ]] || continue
+        grep -qxF "$qualifier" <<<"$allowed_qualifiers" || out+="$qualifier"$'\n'
+    done < <(printf ' %s ' "$2" | tr '[:upper:]' '[:lower:]' \
+        | grep -oE "[^a-z-][a-z][a-z-]*[ -]($nouns)[^a-z-]" \
+        | sed -E "s/^.//; s/[ -]($nouns)[^a-z-]\$//" | sort -u)
+    printf '%s' "$out"
+}
+
+# The three files the drift has to pass through to reach a reader, folded to one
+# line each: these paragraphs are hard-wrapped, and the phrase straddles line
+# breaks. A trailing space keeps the boundary class satisfied at end of text.
+fold() { tr '\n' ' ' < "$1"; }
+
+# Detector 1 — a pass or mode hung directly off a skill mention, which is the
+# form the invented term took in every file but /fix-findings' own body:
+# "`/pre-merge` delta pass". Immediate adjacency only; "/pre-merge runs in one
+# of three modes" and "acting on the previous pass" are ordinary prose and must
+# not fire.
+attributed=""
+for f in "$repo_root"/SYSTEM-OVERVIEW.md "$repo_root"/*/SKILL.md; do
+    hits="$(fold "$f" | grep -oE '/(pre-merge|fix-findings)`? +[a-z][a-z-]*[ -](pass|mode)[^a-z-]' || true)"
+    [[ -n "$hits" ]] || continue
+    bad="$(unresolved 'pass|mode' "$hits")"
+    [[ -z "$bad" ]] || attributed+="${f#"$repo_root"/}: $(tr '\n' ' ' <<<"$bad")"$'\n'
+done
+assert_eq "" "$attributed" \
+    "no skill hangs a pass or mode off /pre-merge or /fix-findings that neither defines"
+
+# Detector 2 — /fix-findings' own body, where the term also appears with no
+# skill name beside it ("The delta pass is the review."). Scoped to that one
+# file because "<word> pass" is ordinary English elsewhere — pre-merge/SKILL.md
+# alone carries "second pass", "focused pass", "previous pass", none of which
+# names a mode. In this file every such noun is a procedure step, so the
+# vocabulary is closed and checkable. Detectors 2 and 3 ask about "pass" only:
+# "<determiner> mode" is unavoidable English ("no mode takes a range", "which
+# mode you are in"), and mode names are already covered by detector 1, where the
+# skill mention beside them makes the window tight enough to be decidable.
+assert_eq "" "$(unresolved 'pass' "$(fold "$fixfindings_skill")" | tr '\n' ' ' | sed 's/ $//')" \
+    "/fix-findings names no pass but the two it defines"
+
+# Detector 3 — the paragraphs elsewhere that route a reader INTO /fix-findings:
+# SYSTEM-OVERVIEW's handoff row and default-map bullet, and /pre-merge's own two
+# next-step menu labels. Those labels are where the reader meets the term first,
+# and they name /fix-findings without naming /pre-merge beside the pass, so
+# detector 1 cannot see them. Paragraph-scoped (awk RS="") to keep the window
+# tight enough that ordinary "second pass" prose stays out of it.
+routing=""
+for f in "$repo_root"/SYSTEM-OVERVIEW.md "$repo_root"/*/SKILL.md; do
+    paras="$(awk 'BEGIN { RS = "" } /\/fix-findings/ { gsub(/\n/, " "); print }' "$f")"
+    [[ -n "$paras" ]] || continue
+    bad="$(unresolved 'pass' "$paras")"
+    [[ -z "$bad" ]] || routing+="${f#"$repo_root"/}: $(tr '\n' ' ' <<<"$bad")"$'\n'
+done
+assert_eq "" "$routing" \
+    "no paragraph routing a reader into /fix-findings names an unresolvable pass"
+
+# Detector 4 — the positive claim the corrected handoff rests on: author-mode
+# reviews the WHOLE branch. That is why "hand it the range" was deletable rather
+# than implementable — there is no narrowed diff to hand it, so the fix commits
+# get covered by everything being covered. Read out of Phase 3's author-mode
+# bullet rather than restated.
+# shellcheck disable=SC2016  # both the pattern and the expected value are the skill's literal text — `$BASE_REF` and the backticks are markdown being matched, not expansions
+author_diff="$(grep -oE '^- \*\*Author-mode\*\* — the local `git diff "[^"]*"`' "$premerge_skill" | head -1 || true)"
+# shellcheck disable=SC2016
+assert_eq '- **Author-mode** — the local `git diff "$BASE_REF...HEAD"`' "$author_diff" \
+    "author-mode still reviews the whole branch, so the re-run needs no range"
 
 # -----------------------------------------------------------------------------
 

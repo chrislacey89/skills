@@ -98,6 +98,7 @@ install = "pnpm install"
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] TDD marker absent — `.claude/.tdd-active` and `.claude/.tdd-skipped` do not exist in the worktree (fresh slate; Step 3 creates them)
+- [ ] **Post-review lock flags absent** — `.claude/.review-stamped` and `.claude/.fix-findings-active` do not exist. Both belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete either one you find — you are at the start of a branch that has had no review, so neither can be describing this one
 
 **Issue-shape detection gate.** If the task is a GitHub issue, verify it is a slice (implementation-ready), not an undecomposed PRD. Run `gh issue view <n> --comments` and check for a comment matching `^Decomposed into: #\d+`.
 
@@ -131,7 +132,22 @@ Skip this gate for one-off tasks not tied to a GitHub issue.
 
 If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 until Ralph setup is complete or the conditions are not met.
 
-**Pipeline hooks gate.** If `.claude/hooks/enforce-classification.sh` does not exist in this project, invoke `/init-pipeline` now to scaffold enforcement hooks.
+**Pipeline hooks gate.** The hook file existing is not the same as the hook carrying the post-review edit lock, and this gate tests both. A project that ran `/init-pipeline` before the post-review edit lock shipped carries a hook that never reads `.claude/.review-stamped`: the lock is inert there, and a `/fix-findings` fixer holding `.claude/.fix-findings-active` is refused anyway — by the classification clause, under a message that names `/tdd` and never names the route the fixer is standing on. Both halves fail silently, which is why an existence-only check is not enough: an inert lock looks from the outside exactly like a branch nobody edited after review.
+
+```bash
+HOOK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/enforce-classification.sh"
+if [ ! -f "$HOOK" ]; then
+  echo "hooks-absent"
+elif ! grep -q '\.claude/\.review-stamped' "$HOOK"; then
+  echo "hooks-stale"
+else
+  echo "hooks-lock-present"
+fi
+```
+
+`hooks-absent` and `hooks-stale` both mean **invoke `/init-pipeline` now**, and do not proceed to Step 1 until it reports. The first scaffolds enforcement hooks into a project that has none. The second re-scaffolds § 2's hook body over an existing install and re-runs § 6's `.gitignore` append, which that install never ran for the lock's two flags — without it both land as untracked files that can be committed, holding the lock shut or open across every future branch in that repo. `/init-pipeline` § 2 carries an existing `IMPL_PATTERNS` line through a re-scaffold rather than re-asking, so an upgrade does not reset a trigger surface the project customized. `hooks-lock-present` proceeds.
+
+**What this gate cannot see, since its third verdict would otherwise read as a claim it does not make.** The term it greps for is the lock's own flag path, so it recognizes exactly one version boundary and reports which side of it an install is on. That is sound in one direction only. A hook with no `.claude/.review-stamped` term is provably pre-lock, so `hooks-stale` is right whenever it fires; but once a project has been upgraded the term is there forever, so every *later* change to `/init-pipeline` § 2's hook body also reports `hooks-lock-present` and is never distributed by this gate — including another one of exactly the kind the lock's own ordering fix was. The third verdict is therefore named for the term it found rather than for currency, which the check cannot establish. A later hook change owns its own distribution: give the boundary it introduces its own `elif` term above, in the commit that introduces it. This narrowness is declared here and not self-tested.
 
 **TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes both markers after commit.
 
@@ -411,9 +427,7 @@ The deeper fix usually lives upstream in `/tdd`: a seam that had to be mocked to
 
 **Scope check on set-claims.** Before writing any sentence that quantifies over a set, name the set, the enumeration that produced it, and the members not covered. If every member found shares one wording or one kind of file, the enumeration stopped early — see [references/restated-claims.md](references/restated-claims.md).
 
-**Then mutate at the point of consumption (only when this slice ships a test that claims to hold a property).** Skip it when the slice ships no such test — prose, config, and styling work have nothing for it to act on. A census enumerates occurrences of the **symbol** the test is written in terms of. It cannot enumerate the ways the **property** — the behavior the test exists to hold — can be broken, because a property is breakable at call sites where its symbol never appears. So name the property, produce the cheapest single edit that would revert it, and confirm a named test fails. If that edit lands at a site the census did not list, the census was over the wrong set. This is narrower than `/tdd`'s red-bar rule (§ *The operational check, at RED*), which mutates the value a test names; this one asks whether the test names the right thing.
-
-**Draw that edit from the corpus, not from your model of the failure.** A mutation you compose yourself is generated by the same model that generated the check — so it can only plant the shapes you already imagined, and it goes red on every one of them. That red is not evidence the check is general; it is evidence the check and the mutation agree, which they were always going to. The operative move is mechanical: take a **real line from the tree the check will run against**, perturb it minimally into a violation, and use that. Where the corpus holds no instance yet, take the nearest real line and say in the test's comment that the fixture is synthetic — a declared narrowness is checkable, and an undeclared one reads as coverage. The tell that you skipped this: every fixture in your battery is one you wrote, and each is simpler than anything the corpus actually contains.
+**Then mutate at the point of consumption (only when this slice ships a test that claims to hold a property).** Skip it when the slice ships no such test — prose, config, and styling work have nothing for it to act on. The rung itself, both readings of a green result, and the rule that the mutating edit must be drawn from the corpus rather than composed are stated once in [references/mutation-at-consumption.md](references/mutation-at-consumption.md).
 
 #### Bug-Fix Verification (when the task is a fix, not a feature)
 
@@ -584,5 +598,5 @@ This applies to AFK Ralph iterations only. HITL `/execute` runs are paced by use
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
 - **Produces:** verified code changes as compartmentalized commits (one per logical unit), and implementation context for the next reviewer or iteration
 - **May invoke:** `/tdd` for backend work and behavior-heavy frontend logic, plus stack-specific reference skills when the project stack warrants them
-- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo, and `/pre-merge` at the end of Step 6 — in author-mode when Step 5 ran and the user confirmed the "Ready for PR Review" checklist item, in loop-mode on AFK Ralph iterations
+- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, and equally when the installed hook exists but predates the post-review edit lock — Step 0's `hooks-absent` and `hooks-stale` verdicts both route here; `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo, and `/pre-merge` at the end of Step 6 — in author-mode when Step 5 ran and the user confirmed the "Ready for PR Review" checklist item, in loop-mode on AFK Ralph iterations
 - **Comes next by default:** `/pre-merge` — author-mode, auto-invoked after Step 5 user confirmation in HITL mode; loop-mode, auto-entered on AFK Ralph iterations; invoked manually by the user when they answered "no" to the PR review item or the trivial-task exception skipped Step 5

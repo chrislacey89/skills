@@ -206,6 +206,14 @@ jobs:
       - name: Run pipefail-safe matcher suite
         run: bash scripts/test-pipefail-safe-matchers.sh
 
+      # #327's lock is one hook clause plus four runnable blocks in four files,
+      # and nothing executed any of it: `rg -l review-stamped scripts/` and
+      # `rg -l "enforce-classification|IMPL_PATTERNS" scripts/` were both empty.
+      # Its silent failure direction is a lock that never engages, which from
+      # outside is indistinguishable from a branch nobody edited after review.
+      - name: Run post-review edit lock contract suite
+        run: bash scripts/test-post-review-edit-lock.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference
