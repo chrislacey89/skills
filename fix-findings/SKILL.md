@@ -165,7 +165,8 @@ the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
 1, handed to the breaker along with the finding. It is not `HEAD`, because by
 the time a breaker extracts, § *Cap* permits the next fixer to have already
 committed — and a verdict about the accumulated branch is not the verdict
-anybody asked for.
+anybody asked for. The block does not bind `FIX_SHA` itself — export it before
+running the block below: `export FIX_SHA=<the SHA the fixer reported>`.
 
 ```bash
 # pipefail is load-bearing: without it the pipeline reports tar's status, and a
