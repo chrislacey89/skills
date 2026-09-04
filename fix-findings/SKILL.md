@@ -257,20 +257,36 @@ is not load-bearing (#326).
 
 **`.review-stamped` also stands the classification clause down, which is what lets this skill's fixer write at all.** The same hook carries an earlier clause refusing implementation writes unless `.claude/.tdd-active` or `.claude/.tdd-skipped` exists — and `/execute` Step 6 removes both of those *before* `/pre-merge` stamps, so no fixer ever arrives holding one. Were the two clauses genuinely independent in that order, the flag the harness line writes above would be read too late to matter: every fixer would be refused by the classification clause, under a message naming `/tdd`. So on a stamped branch the classification clause does not fire and this lock is the sole decider. Do not remove that coupling on the grounds that it looks like a leak between two unrelated gates — `scripts/test-post-review-edit-lock.sh` § 5 drives the real lifecycle, Step 6's removal included, and fails if it goes.
 
-**Two exits from the lock, both visible.** Invoke this skill, or delete
-`.claude/.review-stamped` by hand. The second is a deliberate act that leaves a
-trace, which is the whole point: today's exit is silent (Norman — prospective
-memory fails silently, and "re-run the review after fixing" is exactly the
-prospective act the field record shows being skipped).
+**Two routes the refusal names — which is not the same as two ways out.** The
+refusal message names invoking this skill, and deleting `.claude/.review-stamped`
+by hand. That second choice is made silently today, and the message is what makes
+it visible (Norman — prospective memory fails silently, and "re-run the review
+after fixing" is exactly the prospective act the field record shows being
+skipped). Read that as a stop on the *default* post-review edit, not as an
+enclosure: the hook is registered on `PreToolUse` `"matcher": "Write|Edit"` and
+refuses only a path that matches `IMPL_PATTERNS` and survives the skip logic, so
+several routes are already past it and leave no trace at all. Writing
+`.claude/.fix-findings-active` opens the lock with no sub-agent behind it;
+writing `.claude/hooks/enforce-classification.sh` rewrites the gate (`.sh` is not
+an implementation pattern); writing `.claude/settings.json` deregisters it; and
+no `Bash` write reaches this hook, `rm .claude/.review-stamped` included.
+`scripts/test-post-review-edit-lock.sh` § 4 runs the three writes and records
+their exit statuses, and reads the registration for the fourth, so the list is
+measured rather than believed.
 
-**What the lock does not cover, stated rather than discovered.** The hook reuses
-the classification gate's `IMPL_PATTERNS` list and its `*test*` / `*spec*` /
-`*.d.ts` / `*.config.*` skip logic unchanged, so an edit to a test file, a type
-declaration, a config file, or any file outside the pattern list is **not**
-refused after a review. That is the same trigger surface the pack already
-accepts for the TDD gate, and widening it here would make the two gates disagree
-about what "implementation file" means. A post-review edit to a test file is a
-real gap in the lock; a `/pre-merge` re-run, not the hook, is what covers it.
+**What the lock does not cover, in the matcher's terms rather than a file's
+role.** The hook reuses the classification gate's `IMPL_PATTERNS` list and its
+`*test*` / `*spec*` / `*.d.ts` / `*.config.*` skip logic unchanged, and those
+patterns match a *substring of the whole path*. Claude Code hands the hook an
+absolute path, so the skips reach much further than "a test file, a type
+declaration, a config file": `src/latest-news.ts` and `src/respectful.ts` are
+skipped for containing `test` and `spec`, so is anything under a `testimonials/`
+directory, so is `src/app.config.local.ts`, and so is every file in any repo
+checked out beneath a path like `/Users/tester/`. Widening the patterns here
+would make the two gates disagree about what "implementation file" means, so
+they stay as they are and the consequence is stated: none of those edits is
+refused after a review, and a `/pre-merge` re-run, not this hook, is what
+covers them.
 
 ## Cap
 

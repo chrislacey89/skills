@@ -98,6 +98,19 @@ fenced_bash_block() {  # $1 = file, $2 = ERE matched against the block body
 
 # The hook body /init-pipeline tells a downstream agent to write to
 # .claude/hooks/enforce-classification.sh.
+# The same reader for the ```json fence, used below to read the hook's own
+# registration — which tool calls the harness presents it with — out of the
+# settings block /init-pipeline tells a downstream agent to write.
+fenced_json_block() {  # $1 = file, $2 = ERE matched against the block body
+    awk -v re="$2" '
+        /^```json$/        { buf = ""; inblock = 1; next }
+        inblock && /^```$/ { if (buf ~ re) { printf "%s", buf; found = 1; exit }
+                             inblock = 0; next }
+        inblock            { buf = buf $0 "\n" }
+        END                { exit(found ? 0 : 1) }
+    ' "$1"
+}
+
 hook_body="$(fenced_bash_block init-pipeline/SKILL.md 'IMPL_PATTERNS' || true)"
 [ -n "$hook_body" ] || fatal "no IMPL_PATTERNS hook body found in init-pipeline/SKILL.md — either the hook moved or its fence changed; update this suite with it"
 
@@ -356,12 +369,14 @@ done
 
 # -----------------------------------------------------------------------------
 
-section "4. the non-coverage /init-pipeline and /fix-findings both state in prose"
+section "4. what the lock does not refuse, which is more than the prose used to say"
 
-# Both skills say, in prose, that the lock reuses the classification gate's
-# *test* / *spec* / *.d.ts / *.config.* skip logic unchanged, so a post-review
-# edit to a test, a type declaration, a config file, or anything off the pattern
-# list is NOT refused. That is a measured claim now rather than an asserted one.
+# Both skills say, in prose, what the lock does NOT refuse. Everything below is
+# a measurement of that claim rather than a restatement of it, and the section
+# is cited by name from both skills, so the two halves stay attached: what the
+# skip logic lets through, what the substring matching lets through that a
+# reader of "a test file" would not predict, and which writes the armed lock
+# permits outright. #327's review found the prose wrong on the last two.
 
 set_context "" "$stamp_rel"
 
@@ -379,6 +394,72 @@ assert_eq 0 "$hook_status" "a stamped branch does not refuse a config file"
 
 run_hook "README.md"
 assert_eq 0 "$hook_status" "a stamped branch does not refuse a file off the pattern list"
+
+# --- The skip patterns match a SUBSTRING OF THE PATH, not a file's role ------
+#
+# #327's own review found both skills describing this surface in intent
+# vocabulary — "a test file", "a type declaration", "a config file" — while the
+# matcher does `[[ "$FILE_PATH" == *test* ]]` against whatever path the harness
+# hands it, which Claude Code makes ABSOLUTE. A reader of those sentences would
+# not predict any of the rows below, and the five assertions above could not
+# tell the two readings apart: every fixture in them was a file whose role
+# matched its name. These are the same clause, measured where the two readings
+# diverge.
+run_hook "src/latest-news.ts"
+assert_eq 0 "$hook_status" "…nor src/latest-news.ts, whose name contains 'test'"
+
+run_hook "src/respectful.ts"
+assert_eq 0 "$hook_status" "…nor src/respectful.ts, whose name contains 'spec'"
+
+run_hook "src/testimonials/Card.tsx"
+assert_eq 0 "$hook_status" "…nor a file under a testimonials/ directory"
+
+run_hook "src/app.config.local.ts"
+assert_eq 0 "$hook_status" "…nor src/app.config.local.ts, which carries '.config.' mid-name"
+
+run_hook "/Users/tester/proj/src/app.ts"
+assert_eq 0 "$hook_status" "…nor ANY file in a project checked out under a path containing 'test'"
+
+# The control that makes the row above a measurement of the substring rather
+# than of absoluteness: the same absolute shape, one directory name changed.
+run_hook "/Users/dev/proj/src/app.ts"
+assert_eq 2 "$hook_status" "…while the same absolute path under /Users/dev is refused"
+
+# --- Routes past the lock, three of which leave no trace ---------------------
+#
+# The prose in both skills used to say the lock had "two exits," "both
+# deliberate acts." It has more, because it is a PreToolUse hook on Write|Edit
+# over an implementation-pattern list, not an enclosure. Each row is a write
+# that the armed lock permits; the paths are derived, not typed, so a rename
+# that closes one of these routes fails here and the prose gets revisited.
+hook_command="$(fenced_json_block init-pipeline/SKILL.md 'enforce-classification' \
+    | jq -r '.hooks.PreToolUse[] | select(.hooks[].command | test("enforce-classification")) | .hooks[].command')"
+[ -n "$hook_command" ] || fatal "no enforce-classification hook registration found in /init-pipeline § 3"
+
+hook_rel="${hook_command#*\"/}"                       # strip the "$CLAUDE_PROJECT_DIR"/ prefix
+settings_rel="$(dirname "$(dirname "$hook_rel")")/settings.json"
+if [ -z "$hook_rel" ] || [ "$hook_rel" = "$hook_command" ]; then
+    fatal "could not read a project-relative hook path out of /init-pipeline's settings block"
+fi
+
+run_hook "$fixer_rel"
+assert_eq 0 "$hook_status" "the armed lock permits a write to $fixer_rel, which opens it with no sub-agent behind it"
+
+run_hook "$hook_rel"
+assert_eq 0 "$hook_status" "…and a write to $hook_rel, so the session can rewrite its own gate"
+
+run_hook "$settings_rel"
+assert_eq 0 "$hook_status" "…and a write to $settings_rel, which deregisters the hook"
+
+# The fourth route is not a path at all: the hook is only ever consulted for the
+# tool calls its matcher names, so anything done from Bash — `sed -i`, `tee`, a
+# heredoc, `printf >`, or `rm` on the stamp flag itself — is never presented to
+# it. That is a property of the registration, so the registration is what is
+# read.
+hook_matcher="$(fenced_json_block init-pipeline/SKILL.md 'enforce-classification' \
+    | jq -r '.hooks.PreToolUse[] | select(.hooks[].command | test("enforce-classification")) | .matcher')"
+assert_eq "Write|Edit" "$hook_matcher" \
+    "the hook is registered on Write|Edit only, so no Bash write is presented to it"
 
 # -----------------------------------------------------------------------------
 

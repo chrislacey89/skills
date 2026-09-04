@@ -88,20 +88,31 @@ fi
 exit 0
 ```
 
-**The lock's two exits are both deliberate acts.** Invoking `/fix-findings`
-routes the edit to a sub-agent that did not write the code; deleting
-`.claude/.review-stamped` by hand takes the edit anyway. Today that second choice
-is made silently and invisibly — this clause does not remove it, it makes it
-visible.
+**The two routes the refusal names, and what the clause actually refuses.**
+Invoking `/fix-findings` routes the edit to a sub-agent that did not write the
+code; deleting `.claude/.review-stamped` by hand takes the edit anyway. That
+second choice is made silently today, and printing it is what makes it visible.
+It is not the only way out, and the difference matters at install time: the hook
+is registered in § 3 below on `"matcher": "Write|Edit"`, so no `Bash` write is
+ever presented to it — `sed -i`, `tee`, a heredoc, `printf >`, or `rm
+.claude/.review-stamped` itself — and within Write/Edit it refuses only a path
+that matches `IMPL_PATTERNS` and survives the skip logic, which leaves
+`.claude/.fix-findings-active`, this hook script, and `.claude/settings.json`
+all writable while the lock is armed. Install it as a stop on the *default*
+post-review edit, not as an enclosure around the branch.
 
-**What the clause deliberately does not cover.** It reuses the `IMPL_PATTERNS`
-list and the `*test*` / `*spec*` / `*.d.ts` / `*.config.*` skip logic above,
-unchanged, so a post-review edit to a test file, a type declaration, a config
-file, or anything outside the pattern list is **not** refused. That is the same
-trigger surface the classification gate already uses, and giving the two clauses
-different definitions of "implementation file" would make the hook's behavior
-unreadable from its own source. A re-run of `/pre-merge`, not this hook, covers
-a post-review edit to a test.
+**What the clause does not cover, in the matcher's terms rather than a file's
+role.** It reuses the `IMPL_PATTERNS` list and the `*test*` / `*spec*` /
+`*.d.ts` / `*.config.*` skip logic above, unchanged, and those patterns match a
+*substring of the whole path*. Claude Code hands the hook an absolute path, so
+the skips reach further than the file roles they were named for:
+`src/latest-news.ts` and `src/respectful.ts` are skipped for containing `test`
+and `spec`, so is anything under a `testimonials/` directory, so is
+`src/app.config.local.ts`, and so is every file in a project checked out beneath
+a path like `/Users/tester/`. Giving the two clauses different definitions of
+"implementation file" would make the hook's behavior unreadable from its own
+source, so the patterns stay — a re-run of `/pre-merge`, not this hook, covers
+the edits they let through.
 
 After writing, run: `chmod +x .claude/hooks/enforce-classification.sh`
 
