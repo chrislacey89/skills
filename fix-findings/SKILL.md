@@ -99,6 +99,8 @@ exist and stop. Do not guess at intent, and do not silently fix the neighbors.
 
 ### Step 1. Per finding, spawn a fresh fixer
 
+**Spawn both sub-agents on the cheaper tier — `model: "sonnet"` on the `Agent` call.** What this skill buys is independence, not capability: the defect it exists to close is that the authoring session cannot see its own work, and a fresh Sonnet context removes that as completely as a fresh Opus one. Escalate to the session's own tier only on a signal — a fixer that returns `blocked`, or a finding that turns on a contract spanning several files. Per finding this skill spends two sub-agent runs, so the tier is where its cost actually lives. This is a default, not a rule anything enforces; issue #339 not add label: 'improve-pipeline' not found carries the hypothesis and the three signals that would refute it.
+
 **One sub-agent per finding, never one for all of them.** A single fixer holding
 every finding carries fix 1's reasoning into fix 2, which re-creates across
 findings the correlated blindness this skill exists to remove. Per-finding
@@ -139,7 +141,7 @@ evidence), or `blocked` (with what it needed and did not have). Nothing else.
 ### Step 2. Spawn a fresh breaker against the fix
 
 A second sub-agent, fresh, **read-only**, and working in a throwaway copy of the
-tree. It never edits the branch, never commits, never stamps, and never fixes
+tree. Spawn it on the same cheaper tier as the fixer, for the same reason and with the same escalation signal (Step 1). Its procedure is a checklist and its mutation is drawn from the corpus rather than composed, and the apparatus check gates the verdict — a breaker that cannot make its control go red reports `not-run` rather than false confidence. Neither sub-agent may drop below Sonnet: both read a real tree and run a real suite, and a breaker that misreports `killed` is worse than no breaker at all. It never edits the branch, never commits, never stamps, and never fixes
 what it finds — #249 is the incident that rule comes from: a review sub-agent
 mutated the tree it was reviewing.
 
