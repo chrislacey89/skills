@@ -346,16 +346,22 @@ ORIG_BYTES=$(wc -c < "$BODY_FILE")
 # never shorter than what was read. Shorter means the edit dropped content.
 [ "$(wc -c < "$BODY_FILE")" -ge "$ORIG_BYTES" ] || { echo "stamp aborted: edited body is shorter than the body read" >&2; rm -f "$BODY_FILE"; exit 1; }
 
-gh pr edit <pr-number> --body-file "$BODY_FILE"
+# Guard the write half too. Everything below this line — including the local
+# flag that locks the branch — runs only if the stamp actually landed in the PR.
+# An unchecked `gh pr edit` would leave the PR body unstamped and the flag on
+# disk, which locks the branch on the strength of a review nothing recorded.
+if ! gh pr edit <pr-number> --body-file "$BODY_FILE"; then
+  echo "stamp aborted: PR body write failed" >&2; rm -f "$BODY_FILE"; exit 1
+fi
 rm -f "$BODY_FILE"
 
 # The stamp's local twin. `.claude/.review-stamped` is read by
 # .claude/hooks/enforce-classification.sh, which refuses implementation writes
 # while it exists and .claude/.fix-findings-active does not — so a post-review
 # fix has to go through /fix-findings or through a visible hand deletion.
-# /closeout removes it at merge. Only touch it after the stamp write succeeded:
-# a flag written beside a stamp that aborted would lock the branch on the
-# strength of a review nothing recorded.
+# /closeout removes it at merge. The guard on the `gh pr edit` above is what
+# makes this line reachable only after the stamp write succeeded; without it the
+# touch would run on an aborted stamp too.
 # $CLAUDE_PROJECT_DIR is unset outside a Claude Code session, and an unguarded
 # expansion would resolve to "/.claude" — a silent no-write that leaves the
 # lock disengaged while everything above reports success.
@@ -363,7 +369,7 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
 ```
 
-- **Both guards refuse rather than repair, and an abort is not a failed review.** Retry the fetch **once**; if the second attempt also aborts, report it and hand back with the findings you already presented standing. The bound matters — an unbudgeted retry loop against a flaking API was an untimed contributor to the incident this guard came from. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of.
+- **All three guards refuse rather than repair, and an abort is not a failed review.** Retry the fetch **once**, and a failed write **once** — the write sets the body from a file rather than appending, so a retry cannot double-stamp; if the second attempt also aborts, report it and hand back with the findings you already presented standing. The bound matters — an unbudgeted retry loop against a flaking API was an untimed contributor to the incident this guard came from. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of.
 - **`$SHORT_SHA` is pinned to 7 characters rather than taken from `git rev-parse --short`.** The abbreviation `--short` picks is variable-width and grows as a repo does, so a re-stamp could swap an 8-character short form for a 7-character one and leave the body one byte shorter than what was read — which the write guard would correctly refuse, on a write that was correct. Pinning the width is what makes the guard's "never shorter" premise true rather than nearly true.
 
 - **The HTML comment carries the full 40-character SHA — never the short form.** The two placeholders sit on adjacent lines and are not interchangeable: `<full-sha>` is the untruncated `git rev-parse HEAD` output, `<short-sha>` is the abbreviated form and belongs *only* in the visible prose line. `/closeout` compares the extracted marker against `headRefOid`, which is always 40 characters, so a short SHA in the comment can never compare equal — the gate would then report divergence on a PR whose head never moved, and a gate that cries wolf is one that gets clicked through. `/closeout`'s parser requires exactly 40 hex characters, so a swapped placeholder does not degrade quietly into a prefix match; it fails to parse. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this contract by round-tripping this template through `/closeout`'s own extraction, so the two skills cannot drift apart silently.

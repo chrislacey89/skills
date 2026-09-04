@@ -42,7 +42,7 @@
 # the `/fix-findings` fixer is refused despite holding the flag written for it,
 # and the human is refused by a message naming `/tdd` that never names the route
 # the lock exists to offer. Every assertion was green. Section 3 now drives both
-# contexts, section 5 runs Step 6's removal in sequence, and section 8's second
+# contexts, section 5 runs Step 6's removal in sequence, and section 9's second
 # control rebuilds that exact hook and requires both halves to come back.
 #
 # NOT COVERED, stated so nobody over-trusts it. Whether Claude Code actually
@@ -104,7 +104,10 @@ hook_body="$(fenced_bash_block init-pipeline/SKILL.md 'IMPL_PATTERNS' || true)"
 # The stamp flag's writer (/pre-merge Phase 4) and remover (/closeout Step 3).
 # Both sit at the tail of a larger fenced block, so the slice is anchored on the
 # PROJECT_DIR assignment that opens them rather than on their content.
-stamp_write="$(fenced_bash_block pre-merge/SKILL.md 'review-stamped' | sed -n '/^PROJECT_DIR=/,$p' || true)"
+stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'review-stamped' || true)"
+[ -n "$stamp_block" ] || fatal "no stamp block found in pre-merge/SKILL.md"
+
+stamp_write="$(sed -n '/^PROJECT_DIR=/,$p' <<<"$stamp_block")"
 [ -n "$stamp_write" ] || fatal "no PROJECT_DIR-anchored stamp-flag write found in pre-merge/SKILL.md"
 
 stamp_remove="$(fenced_bash_block closeout/SKILL.md 'review-stamped' | sed -n '/^PROJECT_DIR=/,$p' || true)"
@@ -179,7 +182,7 @@ printf '%s' "$hook_body" > "$hook_file"
 hook_status=0
 hook_err=""
 # Feed the hook the PreToolUse payload shape it reads with jq, and capture the
-# refusal it writes to stderr. $hook_file is a variable because section 8 points
+# refusal it writes to stderr. $hook_file is a variable because section 9 points
 # it at a mutant and re-runs these same assertions through this same reader.
 run_hook() {  # $1 = the file path the harness would present
     hook_status=0
@@ -521,7 +524,78 @@ fi
 
 # -----------------------------------------------------------------------------
 
-section "7. the breaker's copy is structurally unable to write to the branch"
+section "7. the stamp flag is written only if the PR body write succeeded"
+
+# The comment beside /pre-merge's touch says the flag is written only after the
+# stamp write succeeded, because "a flag written beside a stamp that aborted
+# would lock the branch on the strength of a review nothing recorded." That
+# sentence was half true. The READ half was guarded — `if ! gh pr view … ; then
+# … exit 1; fi` — and the write half was a bare `gh pr edit` whose exit status
+# nothing looked at, so a failing edit left no stamp in the PR body and a
+# .review-stamped flag on disk. From outside, a branch locked by that flag is
+# indistinguishable from one locked by a review that actually happened.
+#
+# So the block is RUN, whole and extracted verbatim, against a `gh` stub — once
+# with an edit that fails and once with an edit that succeeds. `gh pr view`
+# always answers with a non-empty body, so the read half's two guards pass and
+# both runs reach the write half, which is the only half under test here.
+
+stamprepo="$scratch/stamprepo"
+mkdir -p "$stamprepo"
+if ! git -C "$stamprepo" init -q; then fatal "could not git init the stamp scratch repo"; fi
+printf 'export const x = 1\n' > "$stamprepo/service.ts"
+if ! git -C "$stamprepo" add -A; then fatal "could not stage the stamp scratch repo"; fi
+if ! git -C "$stamprepo" -c user.email=t@example.invalid -c user.name=Test -c commit.gpgsign=false \
+        commit -q --no-verify -m "fixture"; then
+    fatal "could not commit in the stamp scratch repo"
+fi
+
+ghbin="$scratch/ghbin"
+mkdir -p "$ghbin"
+
+stamp_block_status=0
+run_stamp_block() {  # $1 = the exit status the stub's `pr edit` reports
+    cat > "$ghbin/gh" <<STUB
+#!/usr/bin/env bash
+case "\$2" in
+  view) printf '## Summary\n\nfixture body\n' ;;
+  edit) exit $1 ;;
+  *)    exit 9 ;;
+esac
+STUB
+    chmod +x "$ghbin/gh"
+    rm -f "$stamprepo/$stamp_rel"
+    stamp_block_status=0
+    ( cd "$stamprepo" \
+        && PATH="$ghbin:$PATH" CLAUDE_PROJECT_DIR="$stamprepo" \
+           bash -c "${stamp_block//<pr-number>/1}" ) >/dev/null 2>&1 || stamp_block_status=$?
+}
+
+run_stamp_block 1
+assert_eq 1 "$stamp_block_status" "a failing \`gh pr edit\` aborts the block instead of running on"
+
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "no flag" "flag written" "…and leaves no $stamp_rel behind, so nothing locks the branch on a stamp the PR never received"
+else
+    assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind, so nothing locks the branch on a stamp the PR never received"
+fi
+
+# The control. "No flag was written" would pass just as well for a block that
+# never writes one, or for a run that died before it got there for some unrelated
+# reason — so the same block, same fixture, with the edit succeeding, must write
+# the flag. Without this run the assertion above measures nothing.
+run_stamp_block 0
+assert_eq 0 "$stamp_block_status" "a succeeding \`gh pr edit\` runs the block through to the flag"
+
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "flag written" "flag written" "…and the flag is written on that path, which is what makes the abort above a measurement"
+else
+    assert_eq "flag written" "no flag" "…and the flag is written on that path, which is what makes the abort above a measurement"
+fi
+
+# -----------------------------------------------------------------------------
+
+section "8. the breaker's copy is structurally unable to write to the branch"
 
 # /fix-findings chooses `git archive` over `git worktree add` on the stated
 # ground that it "writes a plain directory with no .git inside it, so 'the
@@ -546,7 +620,7 @@ rm -rf "$breaker_dir"
 
 # -----------------------------------------------------------------------------
 
-section "8. apparatus: the refusal in section 3 measures the clause"
+section "9. apparatus: the refusal in section 3 measures the clause"
 
 # A green suite proves nothing until a known-killable control has gone red
 # through it. Point the lock's condition at a path that cannot exist — by
@@ -628,7 +702,7 @@ assert_eq 0 "$hook_status" "and the shipped hook lets that same fixer write on t
 
 # -----------------------------------------------------------------------------
 
-section "9. neither flag can be committed into this repo"
+section "10. neither flag can be committed into this repo"
 
 # Both flags are transient by construction, which is the condition under which
 # this pack tolerates filesystem state at all. A committed copy would hold the
