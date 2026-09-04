@@ -303,12 +303,27 @@ section "3. the lock's truth table (clause 2), in both classification contexts"
 # The two refusal messages, read out of the hook rather than typed here, so that
 # "which clause refused this" is a measurement and not a guess. Clause 1's echo
 # precedes clause 2's in the body.
+#
+# WHAT THESE TWO CANNOT ANSWER, and the reason the route below is read from
+# somewhere else. Both are copies of the strings under test, so matching a
+# refusal against them measures only WHICH clause spoke — never WHAT it said.
+# Deleting `Either invoke /fix-findings <numbers>, or ` from clause 2's message
+# leaves a hook that still refuses, still refuses with clause 2's remaining
+# bytes, and no longer names the one route out; every row here stayed green
+# through exactly that edit. So the route is derived from /fix-findings' own
+# frontmatter name, which is not the text under test and which a rename of the
+# skill moves in lockstep with every other inventory surface.
 class_msg="$(grep -o '"reason":"BLOCKED:[^"]*"' <<<"$hook_body" | sed -n 1p)"
 lock_msg="$(grep -o '"reason":"BLOCKED:[^"]*"' <<<"$hook_body" | sed -n 2p)"
 if [ -z "$class_msg" ] || [ -z "$lock_msg" ]; then
     fatal "could not read two BLOCKED reasons out of the hook body"
 fi
 [ "$class_msg" != "$lock_msg" ] || fatal "the hook's two refusals are byte-identical — 'which clause refused' is unmeasurable"
+
+fixer_route="/$(sed -n 's/^name: *//p' fix-findings/SKILL.md | sed -n 1p)"
+if [ "$fixer_route" = "/" ]; then
+    fatal "could not read a skill name out of fix-findings/SKILL.md frontmatter"
+fi
 
 set_context() {  # $1 = classification marker, or "" for none; rest = extra flags
     local marker="$1"; shift
@@ -336,12 +351,18 @@ for context in "$tdd_active" ""; do
     run_hook "src/service.ts"
     assert_eq 2 "$hook_status" "stamped, no fixer flag, $where: the write is refused"
 
-    if grep -qF "$lock_msg" <<<"$hook_err"; then
-        assert_eq "the lock refused it" "the lock refused it" \
-            "the refusal routes the human to /fix-findings, $where"
+    # The label claims two things and both are checked: the LOCK is what
+    # refused (matched against $lock_msg), and the refusal names the route the
+    # human is supposed to take (matched against $fixer_route, which comes from
+    # the skill rather than from the message). Dropping the second term is what
+    # made this row vacuous once — see the note beside $lock_msg above.
+    if grep -qF "$lock_msg" <<<"$hook_err" && grep -qF "$fixer_route" <<<"$hook_err"; then
+        assert_eq "the lock refused it, naming $fixer_route" \
+            "the lock refused it, naming $fixer_route" \
+            "the refusal routes the human to $fixer_route, $where"
     else
-        assert_eq "the lock refused it" "$hook_err" \
-            "the refusal routes the human to /fix-findings, $where"
+        assert_eq "the lock refused it, naming $fixer_route" "$hook_err" \
+            "the refusal routes the human to $fixer_route, $where"
     fi
 
     if grep -qF "$class_msg" <<<"$hook_err"; then
@@ -793,12 +814,17 @@ assert_eq 2 "$hook_status" "without the stand-down: the /fix-findings fixer is r
 
 set_context "" "$stamp_rel"
 run_hook "src/service.ts"
-if grep -qF "$class_msg" <<<"$hook_err"; then
-    assert_eq "clause 1's message" "clause 1's message" \
-        "without the stand-down: the human is refused by the wrong clause, and /fix-findings is never named"
+# Same two halves as section 3's row, in the negative: clause 1 is what answers,
+# and the route never appears. The second term is checked for the same reason it
+# is checked there — a $class_msg match alone says which clause spoke, not what
+# the human was left holding, and "never named" is the half of this label that
+# describes the harm.
+if grep -qF "$class_msg" <<<"$hook_err" && ! grep -qF "$fixer_route" <<<"$hook_err"; then
+    assert_eq "clause 1's message, naming no route" "clause 1's message, naming no route" \
+        "without the stand-down: the human is refused by the wrong clause, and $fixer_route is never named"
 else
-    assert_eq "clause 1's message" "$hook_err" \
-        "without the stand-down: the human is refused by the wrong clause, and /fix-findings is never named"
+    assert_eq "clause 1's message, naming no route" "$hook_err" \
+        "without the stand-down: the human is refused by the wrong clause, and $fixer_route is never named"
 fi
 
 hook_file="$real_hook"
