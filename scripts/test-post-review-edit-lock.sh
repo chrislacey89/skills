@@ -803,13 +803,32 @@ section "8. the breaker's copy is structurally unable to write to the branch"
 # breaker cannot write to the branch' is structural rather than promised."
 # Structural is a checkable word.
 
-breaker_dir="$( cd "$gitrepo" && bash -c "$archive_block"$'\n''printf "%s" "$BREAKER_DIR"' )"
+# The block archives the SHA the controller hands it in $FIX_SHA, not HEAD (#341).
+# That distinction only exists once the two differ, so give the fixture a second
+# commit standing in for a later fix that landed while this breaker was working,
+# and archive the FIRST one. A block that went back to `git rev-parse HEAD` would
+# extract the later tree and fail the content assertion below — which is why this
+# section needs no separate guard against that regression.
+fix_sha="$(git -C "$gitrepo" rev-parse HEAD)"
+printf 'export const x = 2\n' > "$gitrepo/src/service.ts"
+if ! git -C "$gitrepo" -c user.email=t@example.invalid -c user.name=Test -c commit.gpgsign=false \
+        commit -aq --no-verify -m "a later fix, landed while the breaker ran"; then
+    fatal "could not add a second commit to the scratch repo"
+fi
+if [ "$fix_sha" = "$(git -C "$gitrepo" rev-parse HEAD)" ]; then
+    fatal "the fixture's two commits share a SHA — the HEAD-vs-FIX_SHA distinction is untestable"
+fi
+
+breaker_dir="$( cd "$gitrepo" && FIX_SHA="$fix_sha" bash -c "$archive_block"$'\n''printf "%s" "$BREAKER_DIR"' )"
 
 if [ -f "$breaker_dir/src/service.ts" ]; then
     assert_eq "extracted" "extracted" "the archive block extracts the committed tree"
 else
     assert_eq "extracted" "empty" "the archive block extracts the committed tree"
 fi
+
+assert_eq "export const x = 1" "$(cat "$breaker_dir/src/service.ts" 2>/dev/null)" \
+    "the copy carries the tree at \$FIX_SHA, not the later commit at HEAD"
 
 if [ -e "$breaker_dir/.git" ]; then
     assert_eq "no .git" "a .git is present" "the copy has no .git, so the breaker has no branch to write to"
@@ -827,17 +846,35 @@ rm -rf "$breaker_dir"
 # for a reason nobody checked, in the one skill whose thesis is that such a
 # result is not self-validating.
 #
-# The revision is swapped for one that cannot resolve, which is the finding's own
-# reproduction. Everything else about the block is the shipped text.
-bogus_archive="${archive_block//git rev-parse HEAD/echo deadbeef}"
-if [ "$bogus_archive" = "$archive_block" ]; then
-    fatal "the archive block no longer resolves its revision with \`git rev-parse HEAD\` — update this control with it"
-fi
-
+# Since #341 the revision arrives in $FIX_SHA, so the control needs no textual
+# mutation of the block at all: hand the SHIPPED text a revision that cannot
+# resolve. That is strictly better than the substitution this control used to
+# make — there is no edited copy to drift from the subject, and nothing to
+# re-point when the block's wording changes.
 status=0
-bogus_out="$( cd "$gitrepo" && bash -c "$bogus_archive"$'\n''printf "%s" "$BREAKER_DIR"' 2>/dev/null )" || status=$?
+bogus_out="$( cd "$gitrepo" && FIX_SHA=deadbeef bash -c "$archive_block"$'\n''printf "%s" "$BREAKER_DIR"' 2>/dev/null )" || status=$?
 assert_eq 1 "$status" "an unresolvable revision aborts the extraction rather than reporting success"
 assert_eq "" "$bogus_out" "…and no directory path reaches the breaker, so there is no empty tree to run a mutation in"
+
+# The other way to arrive with no revision, which #341 introduced: a controller
+# that spawned a breaker and never wired the fixer's SHA through. /fix-findings
+# claims the existing guard already covers it — that an unset $FIX_SHA expands to
+# the empty string and `git archive ""` rejects it, reaching the same fail-closed
+# path as the unresolvable-revision case above. That is a claim about what a
+# command does under a condition nobody will reproduce by hand, so it is run
+# rather than believed. What the assertion below measures, and no more: the
+# unset case aborts with the same status (1) as the unresolvable case, so the
+# fail-closed path is reached with nothing wired through for it. It cannot see
+# whether a separate check exists in the block — a guard written in the
+# block's own `exit 1` idiom would abort with that same status and pass here
+# unnoticed.
+status=0
+# shellcheck disable=SC2016  # `$BREAKER_DIR` must expand in the inner `bash -c`, not here — same
+# single-quoting as the two runs above, which shellcheck reads as a nested script only because
+# `bash -c` is the first word there and `env -u FIX_SHA` displaces it here.
+unset_out="$( cd "$gitrepo" && env -u FIX_SHA bash -c "$archive_block"$'\n''printf "%s" "$BREAKER_DIR"' 2>/dev/null )" || status=$?
+assert_eq 1 "$status" "an unset \$FIX_SHA aborts with the same status as an unresolvable revision"
+assert_eq "" "$unset_out" "…and likewise reaches the breaker with no directory to run a mutation in"
 
 # -----------------------------------------------------------------------------
 

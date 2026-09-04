@@ -149,18 +149,53 @@ evidence), or `blocked` (with what it needed and did not have). Nothing else.
 A second sub-agent, fresh, **read-only**, and working in a throwaway copy of the
 tree. Spawn it on the same cheaper tier as the fixer, for the same reason and with the same escalation signal (Step 1). Its procedure is a checklist and its mutation is drawn from the corpus rather than composed, and the apparatus check gates the verdict — a breaker that cannot make its control go red reports `not-run` rather than false confidence. Neither sub-agent may drop below Sonnet: both read a real tree and run a real suite, and a breaker that misreports `killed` is worse than no breaker at all. It never edits the branch, never commits, never stamps, and never fixes
 what it finds — #249 is the incident that rule comes from: a review sub-agent
-mutated the tree it was reviewing.
+mutated the tree it was reviewing. **And its subject has to be a snapshot that
+nothing can change under it.** While a breaker works, § *Cap* permits the next
+fixer to be editing the original working tree and committing to the branch, so
+whatever the breaker reads there is another agent's in-flight state — that is
+the #338 slip, and it is what makes this restriction the thing that makes the
+overlap safe rather than a tidiness rule. So the ban is on what moves, not on
+what a read is for: **it never reads the original working tree and never
+resolves a moving ref** — not `git status`, not the working files, not `HEAD`.
+"Only for orientation" is not an exception, because orientation taken off a
+moving tree is precisely what went wrong.
 
-**Where the copy lives: `git archive`, not a second worktree.**
+What it may read is what cannot move: the extracted copy, and the commit
+`$FIX_SHA` names. A commit that already exists cannot be perturbed by an
+in-flight fixer, so the `git archive "$FIX_SHA"` extraction below is not a
+violation of this — and a breaker that needs to see what the fix changed runs
+`git show "$FIX_SHA"` from the original repo, since the extracted copy has no
+`.git`, rather than inferring the diff from the working files, which move.
+Nor does it infer the diff from the fixer's report, on a different axis: that
+report cannot move, but relying on it would make the breaker's verdict a
+restatement of the fixer's own account of its fix rather than an independent
+read of the fix, and independence is the reason this sub-agent exists at all.
+Carrying dependencies into the copy is permitted on the same mutability axis:
+a fixer repairing a review finding does not edit a dependency tree or
+`.env.local` and its siblings, so symlinking the tree in and copying those
+files brings over the test command's apparatus, not anything that moves.
+
+PR and issue bodies are on the other side of that line. Nothing in a
+`/fix-findings` run edits them — this skill opens no PRs and edits no bodies,
+and fixers only commit — so they are durable state the breaker reads at its
+source, on the same footing Step 1 gives the fixer for the slice or PRD issue.
+
+**Where the copy lives: `git archive`, not a second worktree — and it archives
+the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
+1, handed to the breaker along with the finding. It is not `HEAD`, because by
+the time a breaker extracts, § *Cap* permits the next fixer to have already
+committed — and a verdict about the accumulated branch is not the verdict
+anybody asked for. The block does not bind `FIX_SHA` itself — export it before
+running the block below: `export FIX_SHA=<the SHA the fixer reported>`.
 
 ```bash
 # pipefail is load-bearing: without it the pipeline reports tar's status, and a
 # `git archive` that resolved nothing exits 0 having extracted an empty tree.
 set -o pipefail
 BREAKER_DIR="$(mktemp -d)"
-if ! git archive "$(git rev-parse HEAD)" | tar -x -C "$BREAKER_DIR"; then
+if ! git archive "$FIX_SHA" | tar -x -C "$BREAKER_DIR"; then
   rm -rf "$BREAKER_DIR"
-  echo "breaker aborted: could not extract HEAD into a throwaway copy" >&2
+  echo "breaker aborted: could not extract $FIX_SHA into a throwaway copy" >&2
   exit 1
 fi
 ```
@@ -180,6 +215,14 @@ would run its mutation against no tree at all and could still report a verdict.
 That is the exact failure this skill is built to refuse: a green result that is
 green for a reason nobody checked. If the block aborts, the breaker reports
 **`not-run`** with the abort message and no verdict.
+
+The same guard covers the new way to get this wrong: a controller that forgot to
+hand the breaker a SHA. An unset `FIX_SHA` expands to the empty string, `git
+archive ""` rejects it as `fatal: not a valid object name`, and under `pipefail`
+the pipeline exits 128 — so the missing SHA aborts the extraction rather than
+producing a verdict about nothing. No separate check is needed for it, and one
+should not be added on the assumption that unset behaves differently from
+unresolvable here; it does not.
 
 The cost is that the copy has no git history and none of the repo's ignored
 files. Bring over what the test command needs — symlink a read-only dependency
@@ -211,16 +254,24 @@ nothing.
 ### Step 3. Report, then release the lock
 
 Print one block per finding — number, the fixer's verdict and commit SHA, the
-breaker's verdict, and the command behind each. No conclusions the human cannot
-re-run.
+breaker's verdict **and the SHA it archived**, and the command behind each. No
+conclusions the human cannot re-run.
 
 ```
 Finding 3 — fixed at a1b2c3d
   fixer:   `pnpm run test` → 0
-  breaker: survived — `pnpm run test -- guards.test.ts` → 0 with
+  breaker: survived, against a1b2c3d — `pnpm run test -- guards.test.ts` → 0 with
            OVER_FETCH_MULTIPLIER left at 4 and the use site edited to `topK * 137`
            (control went red first: same file, deleted assertion → exit 1)
 ```
+
+The archived SHA is on the breaker's line because it is the one thing that says
+what the verdict is *about*. With overlap permitted, a report that names only the
+verdict leaves a `survived` attributable to whatever the branch had accumulated
+by then — and a `survived` misattributed to the wrong fix sends the human back to
+code that was never the subject. When the two SHAs match, as they do above, the
+line is redundant and should still be printed: a reader cannot tell a match from
+an omission.
 
 Then remove `.claude/.fix-findings-active`, resolving it through the same
 fallback the harness line above used, so the removal reaches the file that line
@@ -305,15 +356,38 @@ mutation survived and the human wants it addressed, that is a new invocation wit
 the human's decision behind it. Without the cap this is the fix-review-fix cycle
 #253 recorded, with the loop half now also committing.
 
+**Order and concurrency.** The cap says how many times each sub-agent runs; this
+says in what order, because leaving that to the session is the same silence the
+lock exists to close, one level down. Process the numbers in the order the human
+typed them. **Fixers run one at a time, never in parallel** — each edits one
+working tree and commits to one branch, so two at once is a race on both, and
+"exactly one commit per fix" stops being something either can guarantee. Giving
+each fixer its own worktree would trade that race for merge conflicts on exactly
+the findings most likely to collide, since findings routinely land in one file
+(three of five in one round of #338 landed in `/init-pipeline` § 2); at three to
+eight findings that is not a trade worth making. **Breakers may run in parallel**
+with each other, and a breaker may run while the next fixer works. The two
+conditions that make that safe are stated in Step 2 and are deliberately not
+restated here — the `$FIX_SHA` the extraction archives, and the restriction on
+reading the original working tree or resolving a moving ref — because a rule
+written at two sites is a rule that will later be changed at one. Neither is a
+tidiness rule. On #338 a breaker was backgrounded while the next fixer was
+still committing, read the real repo, and
+had to disclaim edits that were not its subject; nothing was corrupted, because
+breakers write nothing, but the report was confused by state it had never been
+told to stay out of. And the overlap is the only concurrency worth having here:
+wall clock is dominated by the fixers, so a breaker that waits for them buys
+nothing.
+
 ## Handoff
 
 - **Expected input:** the finding numbers a human chose from a `/pre-merge`
   review, plus the findings themselves (terminal output or the PR's ledger), on a
   clean branch that has been reviewed.
 - **Produces:** one commit per accepted finding, each authored by a context that
-  did not write the code under repair; a per-finding breaker verdict with the
-  command behind it; and `refuted` reports for findings the tree did not confirm.
-  It produces no stamp, no PR edit, and no merge.
+  did not write the code under repair; a per-finding breaker verdict, the SHA it
+  archived, and the command behind it; and `refuted` reports for findings the
+  tree did not confirm. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode, which
   re-runs the review dimensions and replaces the existing stamp. Hand it the
   breaker verdicts as evidence. There is nothing to hand it a *range*:
