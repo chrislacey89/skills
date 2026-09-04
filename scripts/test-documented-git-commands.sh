@@ -1781,5 +1781,80 @@ fi
 
 # -----------------------------------------------------------------------------
 
+section "/closeout's Step 8 remote-branch check, run in both polarities"
+
+# #344's second finding: `gh pr merge --delete-branch` aborted at its LOCAL step
+# in a multi-worktree checkout ('main' is already used by worktree) *after* the
+# remote merge succeeded, and the remote branch stayed alive. Every check
+# /closeout had passed in that state — Step 3 confirms the PR reports MERGED,
+# Step 6 prunes local and remote-TRACKING refs, and Step 8's "Branch pruned"
+# reads `git branch`, which is local. Nothing asked the remote.
+#
+# So Step 8 grew a line that does, and it is run here rather than believed,
+# because its whole contract is an exit status: `--exit-code` is what makes
+# "found" and "not found" distinguishable at all, and a line that lost the flag
+# would exit 0 in BOTH states and read as permanently clean. Both polarities are
+# exercised for exactly that reason — a one-sided test passes on a broken flag.
+#
+# The line is extracted from the skill, never restated here (header rule).
+ls_remote_line="$(grep -m1 '^git ls-remote ' "$repo_root/closeout/SKILL.md" || true)"
+[[ -n "$ls_remote_line" ]] || fatal "no 'git ls-remote' line found in closeout/SKILL.md"
+[[ "$ls_remote_line" == *'<feature-branch>'* ]] \
+    || fatal "placeholder <feature-branch> is gone from /closeout's 'git ls-remote' line"
+printf 'ls-remote (closeout/SKILL.md): %s\n' "$ls_remote_line"
+
+remote_sandbox="$(mktemp -d)"
+trap 'rm -rf "$sandbox" "$base_sandbox" "$remote_sandbox"' EXIT
+
+git init -q --bare "$remote_sandbox/origin.git"
+git init -q "$remote_sandbox/work"
+(
+    cd "$remote_sandbox/work"
+    git remote add origin "$remote_sandbox/origin.git"
+    printf 'x\n' > f.txt
+    git add f.txt
+    git -c user.email=t@example.invalid -c user.name=Test -c commit.gpgsign=false \
+        commit -q --no-verify -m "seed"
+    git branch -m closeout-fixture-base
+    git push -q origin closeout-fixture-base
+    git switch -qc issue-9-widget
+    git push -q origin issue-9-widget
+)
+# Check the fixture's OUTCOME, not the subshell's status: `set -e` is suppressed
+# in the left operand of `||`, so a `) || fatal` here could not report a failure
+# that happened inside (scripts/test-guards-can-fire.sh detector A). What the
+# polarity runs below actually depend on is the branch being on the remote.
+git -C "$remote_sandbox/origin.git" show-ref --verify --quiet refs/heads/issue-9-widget \
+    || fatal "the ls-remote fixture never got issue-9-widget onto the fixture remote; the polarity runs would measure nothing"
+
+# Polarity 1 — the branch is still on the remote. This is the state the field
+# incident left behind, and the check must NOT read as clean here.
+alive_status=0
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || alive_status=$?
+if [[ "$alive_status" -eq 0 ]]; then
+    printf '  ok   the check exits 0 while the branch is still on the remote (a surviving branch is visible)\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits %d on a branch that IS on the remote; it cannot see the failure it exists for\n' "$alive_status"
+    fail=$((fail + 1))
+fi
+
+# Polarity 2 — the branch is gone from the remote, which is what a successful
+# --delete-branch leaves. A non-zero exit is the pass condition, and it is the
+# half that dies silently if --exit-code is ever dropped.
+git -C "$remote_sandbox/work" push -q origin --delete issue-9-widget \
+    || fatal "could not delete the fixture branch from the fixture remote"
+gone_status=0
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || gone_status=$?
+if [[ "$gone_status" -ne 0 ]]; then
+    printf '  ok   the check exits non-zero (%d) once the branch is gone from the remote\n' "$gone_status"
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits 0 on a branch that is NOT on the remote; both states look alike and it asserts nothing\n'
+    fail=$((fail + 1))
+fi
+
+# -----------------------------------------------------------------------------
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1
