@@ -1,9 +1,9 @@
 ---
 date: 2026-08-18
-updated: 2026-08-28
+updated: 2026-09-04
 category: architecture-decisions
 problem_type: corrective commit re-introduces the defect class it was written to remove
-components: [pre-merge, execute, compound, tdd, docs, skill-references, scripts]
+components: [pre-merge, execute, compound, tdd, fix-findings, docs, skill-references, scripts]
 technologies: [markdown, bash, git]
 severity: medium
 volatility: stable
@@ -81,18 +81,39 @@ And then the mechanism written for *this* observation did it once more. Detector
 
 **Four rounds, four fresh instances, in executable code rather than prose.** The count is the same as observation one; the medium is not.
 
+## Fourth observation (2026-09-04, PR #342 / issue #341) — three independent authors, one clause
+
+The first three observations all had the same author writing each correction, and the Root Cause below leans on that: *"the author's just-falsified model is the one authoring the fix."* This observation removes that condition. Every round was written by a **different fresh sub-agent** under `/fix-findings`, none of which had seen the others' work, the authoring session's reasoning, or any prior round. The structure held anyway.
+
+The subject was one paragraph of `fix-findings/SKILL.md` — the rule governing what a breaker may read.
+
+| Round | What it correctly fixed | What it introduced | Caught by |
+|---|---|---|---|
+| `a2efa0e` | — (introduced the rule) an absolute ban: *"never reads the original tree — not `git status`, not the working files, not for orientation"* | Contradicted a standing instruction 48 lines below telling the breaker to copy `.env.local` and symlink a dependency tree — every project with a lockfile loses its breaker pass | review 1 |
+| `8565487` | Scoped the head clause to *"for evidence about the fix"*, un-blocking the dependency carry | Left the enumerated tail standing. "Not for orientation" no longer followed from the clause it hung off, and the new carve-out's own stated test cleared `git status` for orientation — reopening the exact incident the rule exists to close | review 2 |
+| `3ac8980` | Re-derived the rule from the hazard — mutability, not purpose. The ban's tail now follows: *"never reads the original working tree and never resolves a moving ref — not `git status`, not the working files, not `HEAD`"* | A **new** two-item tail in the permission paragraph: *"rather than inferring the diff from the working files or from the fixer's report."* The report cannot move, so under the rewrite's own rule it is permitted — a purpose-scoped ban left inside a mutability-scoped rule | the breaker for round 3 |
+
+**The unit was a clause, not a site.** Rule Scope's second bullet describes a sweep "enumerated by search," and observation 3 already loosened the conjunction. This loosens it further: there was no enumeration, no query, no second site. One sentence, edited at the head, with the tail left behind. The structure does not need multiplicity — it needs an *unchecked relation between two parts of one statement*, and a head clause and its enumerated tail are two parts.
+
+**Round 3's fixer was briefed on the exact failure mode and reproduced it anyway.** It was handed `git show` of the commit that caused the defect, told that narrowing a head clause while leaving its tail standing was what went wrong, and given four named cases to check its output against. It checked all four correctly — and wrote the fifth instance into a sentence explaining the fix. This is the sharpest evidence yet that the existing Solution's move 2 (*"does the text I just wrote satisfy the rule I am applying?"*) is necessary but not sufficient: the fixer applied it to the four cases it was given and not to the prose it authored around them.
+
+**No mechanism could have caught any round, and this is the correct outcome rather than a gap.** A breaker verified it by reversion rather than inspection: reverting each fix in turn produced zero change in suite outcome, and deleting the entire 1,464-character rule left all 28 suites green. The defect is the semantic relation between a clause and its tail, which is exactly the meaning-claim `#340` rules out sending to a grep — and which `prose-contract-tests-are-restated-claims-2026-08-27.md` says becomes a second restatement if you try. The mitigation here is procedural, not mechanical.
+
 ## Symptoms
 
 - A commit message credibly says "swept every instance," and a later reviewer finds one it missed **in the file that references the ones it fixed**.
 - The missed instance is in a different *kind* of file from the fixed ones — a `SKILL.md` when the sweep was over `docs/`, a test when the sweep was over prose.
 - The fix for defect X is written in the idiom that produced X. A path-prefix fix uses the wrong path prefix. A "state the rule numerically" fix states a second rule in prose.
 - Consecutive commits on one branch each carry a `Refs #N` and each fix the previous one.
+- A rule's **head clause is re-scoped and its enumerated tail is not**, so one item in the list no longer follows from the clause it hangs off. The tail still reads as true, because it was true under the old scope.
 
 ## Root Cause
 
 Not carelessness, and not insufficient rigor — each sweep enumerated deliberately and each was checked. Two structural causes:
 
 **The sweeper edits in the idiom that produced the defect.** Fixing a wrong path prefix means *writing path prefixes*, at the moment the author's model of "which prefix is right" is the model that was just shown to be wrong. The correction and the defect are drawn from the same well.
+
+**The author condition is not necessary (2026-09-04).** Observation 4's three corrections were written by three fresh sub-agents with no shared context, and reproduced the structure regardless. So the first cause above describes a *sufficient* aggravator, not the mechanism. What survives is the artifact: a statement with two parts and nothing relating them holds its defect open for whoever edits it next, however clean their context. Read the first cause as raising the rate, not as the cause.
 
 **Grep finds the shape you already understand.** A sweep is scoped by the query that found the known instances. `rg 'docs/next-step-menu.md'` cannot find `references/visual-recap-design.md`, and `rg 'the one model-authored'` over `docs/` cannot find the `SKILL.md` that points at `docs/`. The instances that escape are the ones in a *different* shape or a *different file class* — precisely the ones the enumeration was blind to.
 
@@ -107,6 +128,8 @@ Not carelessness, and not insufficient rigor — each sweep enumerated deliberat
   - The defect is **not caught by a compiler, type system, or schema** — so nothing mechanically relates the correction to the property it is supposed to establish. Observations 1 and 2 read this as *textual and multi-site* (the same claim restated across files); observation 3 widened it, because a contract test is a single site with no restatement and reproduced the structure anyway. The general condition is the absence of a checking relation, not the presence of duplicated text.
   - The sweep is **enumerated by search** rather than by a structural list, so its completeness is bounded by the query's shape. In the executable case the query is the check's own matcher, and its blind spots are invisible in its output: a check reports on the population it could parse, never on the population it was pointed at.
   - The correction is written in **the same medium** as the defect (prose fixing prose, a path fixing a path, a check fixing a check), so the author's just-falsified model is the one authoring the fix.
+  - **Multiplicity is not required (2026-09-04).** Observations 1–3 all had N sites; observation 4 had one sentence. The operative condition is an *unchecked relation between two parts of a statement* — head clause and enumerated tail, rule and carve-out, claim and citation — not a count of files. A single-site correction is in scope.
+
 - **Inverts or does not apply when:**
   - A compiler, type checker, or schema relates the sites. Renaming a symbol across a typed codebase is not this shape — the tool enumerates, and a miss fails the build rather than shipping.
   - The sweep is over a **generated or synced** surface. The ten `<skill>/references/` mirrors in this PR were never at risk; `sync-skill-references.sh --check` makes a partial sweep impossible by construction. **This is the exemption to engineer into, not merely to note.** PR #282 spent three corrections restating a rule across two skills that could both have taken a synced copy — the exemption was one manifest row away and was reached for only on the fourth attempt. Before sweeping a textual multi-site defect, ask first whether every consumer can accept a generated copy; if so, the sweep is the wrong move entirely.
@@ -166,6 +189,8 @@ Mutation-testing found two holes in a 27-assertion suite written by an author wh
 
 **Process-level, third observation — the reviewable unit is the correction, not the branch.** Observation 2's Prevention already proposed the question *"does the corrective hunk itself satisfy the rule it enforces?"* Observation 3 is the case for making it unconditional after **every** corrective commit, not once per branch: three consecutive corrections each carried a fresh instance, and each was found only because something re-examined the correction specifically. Note what did the finding, in order: a fresh-context sub-agent (round 2), the repo's existing `test-guards-can-fire.sh` (round 3's fixture), and the new detector's own self-tests (round 3's detector). The trend is the point — mechanisms caught what review caught in observations 1 and 2, and they caught it at authoring time rather than one pass late. That is the delay this entry's feedback-loop note says review cannot remove.
 
+**Process-level, fourth observation — count corrective rounds against the seam, not against the session.** Observation 4's mitigation cannot be a mechanism (see above), and it cannot be the existing per-branch or per-commit question either, because each of its three sessions made exactly one fix attempt and succeeded at what it was asked. The thrashing was visible only one level up, across sessions, at the seam. `chrislacey89/skills#202` proposes a fix-shape circuit breaker and scopes its trigger to a session; this observation is filed there as its first incurred field incident, arguing the trigger belongs on the **seam** instead, persisted where it survives a session — the `/pre-merge` ledger row or the PR body already hold that state. A fresh agent per round is what `/fix-findings` sells, and it does **not** reset this risk; it hides it, because each session's local view is one clean success. The operator's stop after round 3 was the "rely on someone to notice" path, which is the path that failed in observations 1–3.
+
 The loop-mode ledger is what made this visible at all. Four passes with durable rows showed *findings introduced by the previous fix* as a countable series (8 → 5 → 3 → 3); in a single advisory pass each would have read as an unrelated miss.
 
 ## Planning / Calibration Notes
@@ -214,7 +239,12 @@ Split the decision by consumer, not by count:
 - `docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md` — why detector C is a third detector and not a widened first one. **Its Shelf Life clause was considered and declined here:** it asks whether a third recording in a new shape means the family should be consolidated. Declined for now because the four rungs still have genuinely different matchers and different self-tests, and merging them would produce one detector whose narrowings are harder to state than four whose narrowings are each one paragraph — the readability of the disclosed boundary is the thing this family is about. Revisit if a fifth rung appears.
 - `docs/solutions/testing-patterns/dead-guards-report-coverage-they-do-not-have-2026-08-27.md` — the nearest neighbor in `testing-patterns/`, and deliberately not the home for this: it names one artifact class (a guard that cannot fire), where the structure recorded here is that the *correction* reliably carries the defect, whatever the artifact
 - `docs/solutions/architecture-decisions/self-review-blind-to-composition-2026-08-13.md` — why a fresh context caught every instance
+- PR #342, issue #341 — the fourth observation, and the first where each correction had a different author
+- `chrislacey89/skills#202` — the mechanism for the fourth observation: the fix-shape circuit breaker, carrying this run's field incident and the argument for a seam-scoped rather than session-scoped trigger. **Not a test**, and the entry says why: the defect is a semantic relation between a clause and its tail, which `#340` rules out sending to a grep and which `prose-contract-tests-are-restated-claims-2026-08-27.md` shows becomes a second restatement if you try. Of the five Q4 names, a contract test came closest and was rejected on that ground; a planning-checklist item was rejected as the discipline-shaped fix the Key Decision below already retires
+- `docs/solutions/testing-patterns/prose-contract-tests-are-restated-claims-2026-08-27.md` — why observation 4 ships no pin
 
 ## Shelf Life
 
 Stable, and now evidenced across three branches and two media (prose, executable checks) — the promotion condition below is met, so it is no longer pending. Supersede if the repo adopts generation for cross-file restatements (which would make the enumeration structural rather than search-scoped), or if a later sample shows sweeps landing clean without a pinning test. (A clause here reading "this is one branch and one author, which is why Rule Scope calls it Pattern and not Structure" was stale from the 2026-08-26 promotion and survived the observation-3 rewrite that contradicted it two clauses earlier — this entry, committing this entry's defect class, for the third time. Caught by the review sub-agent, not by the sweep.) The 2026-08-26 note asked for two or three more branches before the claim could be about how corrections are authored generally rather than about this repo's prose surfaces. Observation 3 supplies the third branch and, more usefully, the second medium: the structure held where there was no prose, no second site, and nothing to sync. Treat the claim as general. What would still falsify it: a branch whose corrective commits land clean under the same review intensity, or a mechanism class that reliably catches these at authoring time — detector C and the round-3 self-tests are the first evidence that the second is possible.
+
+Observation 4 (2026-09-04) removes the last author-shaped reading: three corrections, three independent fresh contexts, same structure. It also narrows what would falsify the claim — a branch landing clean is no longer enough if its corrections were authored by one context, since that is the condition observation 4 shows is not load-bearing. The falsifier is now a *seam* that survives several independent corrective rounds clean.
