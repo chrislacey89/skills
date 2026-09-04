@@ -1840,17 +1840,46 @@ else
 fi
 
 # Polarity 2 — the branch is gone from the remote, which is what a successful
-# --delete-branch leaves. A non-zero exit is the pass condition, and it is the
-# half that dies silently if --exit-code is ever dropped.
+# --delete-branch leaves. `--exit-code`'s own documented contract (git-ls-remote(1))
+# names exactly one status for this — 2, "no matching refs" — and it is the half
+# that dies silently if --exit-code is ever dropped. The assertion checks for 2
+# specifically, not merely non-zero: #345's finding is that "non-zero" is not one
+# outcome (see polarity 3), so the pass condition here has to be as narrow as the
+# contract it is standing in for.
 git -C "$remote_sandbox/work" push -q origin --delete issue-9-widget \
     || fatal "could not delete the fixture branch from the fixture remote"
 gone_status=0
 ( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || gone_status=$?
-if [[ "$gone_status" -ne 0 ]]; then
-    printf '  ok   the check exits non-zero (%d) once the branch is gone from the remote\n' "$gone_status"
+if [[ "$gone_status" -eq 2 ]]; then
+    printf '  ok   the check exits 2 (git-ls-remote'"'"'s documented "no matching refs" status) once the branch is gone from the remote\n'
     pass=$((pass + 1))
 else
-    printf '  FAIL the check exits 0 on a branch that is NOT on the remote; both states look alike and it asserts nothing\n'
+    printf '  FAIL the check exits %d, not 2, on a branch that is NOT on the remote; confirmed-gone is not distinguishable from other outcomes\n' "$gone_status"
+    fail=$((fail + 1))
+fi
+
+# Polarity 3 — the check itself cannot run, because the remote cannot be reached.
+# #345's finding: `--exit-code` only documents status 2; every other status it can
+# exit with is still non-zero and, under a bare "expect non-zero" reading, reads as
+# the confirmed-gone case in polarity 2 above — an expired credential, a renamed
+# `origin`, or a transient network blip would silently pass the same check a real
+# deletion passes. This polarity proves the command's own exit status is actually
+# distinguishable in the two cases, which is what the prose fix in closeout/SKILL.md
+# now depends on. Pointed at a missing local path rather than a live unreachable
+# host: same "could not access the remote" failure git-ls-remote takes, with no
+# network dependency in the suite (validate-the-instrument-not-only-the-subject:
+# prefer an instrument with fewer preconditions). git-ls-remote(1) documents status
+# 2 for --exit-code but no fixed status for this path, so the assertion below only
+# pins "not 0, not 2" — distinguishable from confirmed-gone — not a specific number.
+unreachable_status=0
+git -C "$remote_sandbox/work" remote set-url origin "$remote_sandbox/does-not-exist.git" \
+    || fatal "could not repoint the fixture's origin at a missing path"
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || unreachable_status=$?
+if [[ "$unreachable_status" -ne 0 && "$unreachable_status" -ne 2 ]]; then
+    printf '  ok   the check exits %d (non-zero, not 2) when the remote cannot be reached — distinguishable from confirmed-gone\n' "$unreachable_status"
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits %d when the remote cannot be reached; that is indistinguishable from confirmed-gone (2) or from success (0)\n' "$unreachable_status"
     fail=$((fail + 1))
 fi
 
