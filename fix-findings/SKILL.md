@@ -149,16 +149,27 @@ evidence), or `blocked` (with what it needed and did not have). Nothing else.
 A second sub-agent, fresh, **read-only**, and working in a throwaway copy of the
 tree. Spawn it on the same cheaper tier as the fixer, for the same reason and with the same escalation signal (Step 1). Its procedure is a checklist and its mutation is drawn from the corpus rather than composed, and the apparatus check gates the verdict — a breaker that cannot make its control go red reports `not-run` rather than false confidence. Neither sub-agent may drop below Sonnet: both read a real tree and run a real suite, and a breaker that misreports `killed` is worse than no breaker at all. It never edits the branch, never commits, never stamps, and never fixes
 what it finds — #249 is the incident that rule comes from: a review sub-agent
-mutated the tree it was reviewing. **It also never *reads* the original tree for
-evidence about the fix** — not `git status`, not the working files, not for
-orientation. Its subject is the extracted copy and nothing else for that
-purpose; § *Cap* explains why that restriction is what makes a breaker safe to
-overlap with the next fixer. That is narrower than "never touches the original
-tree at all": the `git archive` extraction below has to run against it to stand
-the copy up, and carrying dependencies into the copy — symlinking a read-only
-dependency tree, copying `.env.local` and its siblings — is bringing over what
-the test command needs, not gathering evidence about the fix, so neither is
-banned by this sentence.
+mutated the tree it was reviewing. **And its subject has to be a snapshot that
+nothing can change under it.** While a breaker works, § *Cap* permits the next
+fixer to be editing the original working tree and committing to the branch, so
+whatever the breaker reads there is another agent's in-flight state — that is
+the #338 slip, and it is what makes this restriction the thing that makes the
+overlap safe rather than a tidiness rule. So the ban is on what moves, not on
+what a read is for: **it never reads the original working tree and never
+resolves a moving ref** — not `git status`, not the working files, not `HEAD`.
+"Only for orientation" is not an exception, because orientation taken off a
+moving tree is precisely what went wrong.
+
+What it may read is what cannot move: the extracted copy, and the commit
+`$FIX_SHA` names. A commit that already exists cannot be perturbed by an
+in-flight fixer, so the `git archive "$FIX_SHA"` extraction below is not a
+violation of this — and a breaker that needs to see what the fix changed runs
+`git show "$FIX_SHA"` from the original repo, since the extracted copy has no
+`.git`, rather than inferring the diff from the working files or from the
+fixer's report. Carrying dependencies into the copy is permitted for a different
+reason: symlinking a read-only dependency tree, copying `.env.local` and its
+siblings, brings over the test command's apparatus rather than the breaker's
+subject, and a fixer repairing a review finding is not editing those.
 
 **Where the copy lives: `git archive`, not a second worktree — and it archives
 the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
