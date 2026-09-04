@@ -339,16 +339,17 @@ each fixer its own worktree would trade that race for merge conflicts on exactly
 the findings most likely to collide, since findings routinely land in one file
 (three of five in one round of #338 landed in `/init-pipeline` § 2); at three to
 eight findings that is not a trade worth making. **Breakers may run in parallel**
-with each other, and a breaker may run while the next fixer works, on two
-conditions that Step 2 already states: it archives that fix's own SHA, and it
-never reads the original tree — not `git status`, not the working files — for any
-purpose. Both conditions are load-bearing rather than tidy. On #338 a breaker was
-backgrounded while the next fixer was still committing, read `git status` in the
-real repo, and had to disclaim edits that were not its subject; nothing was
-corrupted, because breakers write nothing, but the report was confused by state
-it had never been told to stay out of. The overlap is the only concurrency worth
-having here: wall clock is dominated by the fixers, so a breaker that waits for
-them buys nothing.
+with each other, and a breaker may run while the next fixer works. The two
+conditions that make that safe are stated in Step 2 and are deliberately not
+restated here — the `$FIX_SHA` the extraction archives, and the restriction on
+reading the original tree — because a rule written at two sites is a rule that
+will later be changed at one. Neither is a tidiness rule. On #338 a breaker was
+backgrounded while the next fixer was still committing, read the real repo, and
+had to disclaim edits that were not its subject; nothing was corrupted, because
+breakers write nothing, but the report was confused by state it had never been
+told to stay out of. And the overlap is the only concurrency worth having here:
+wall clock is dominated by the fixers, so a breaker that waits for them buys
+nothing.
 
 ## Handoff
 
