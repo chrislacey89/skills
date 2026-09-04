@@ -1,6 +1,6 @@
 ---
 name: init-pipeline
-description: "Infrastructure skill for scaffolding pipeline enforcement into a project. Sets up Claude Code hooks (TDD classification gate, git guardrails, optional quality gate), pre-commit hooks (detects existing tools, defaults to Lefthook + Biome + pnpm if none found). Run once per project, auto-invoked by /execute if hooks are missing."
+description: "Infrastructure skill for scaffolding pipeline enforcement into a project. Sets up Claude Code hooks (TDD classification gate, git guardrails, optional quality gate), pre-commit hooks (detects existing tools, defaults to Lefthook + Biome + pnpm if none found). Run when setting up a project for pipeline work, and again to re-scaffold a hook that predates the post-review edit lock; /execute Step 0 auto-invokes it when the hook is missing or pre-lock."
 ---
 
 # Init Pipeline
