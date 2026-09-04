@@ -73,23 +73,64 @@
 # cause #2 of
 # docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md:
 # zero hits is the mechanism's healthy state, so its silence carries no signal.
-# That entry rules out widening the matcher past what
-# it can do accurately and names the escape — make the narrowness DECLARED AND
-# SELF-TESTED — so section 11 takes it in three moves: /execute Step 0's third
-# verdict is named for the term it found rather than for currency and states the
-# limit in prose; the blindness is asserted here against a post-lock hook that
-# differs from the shipped body; and the shipped body is digested, which is the
-# signal at the crossover the entry says a green run does not carry.
+# /execute Step 0's third verdict is named for the term it found rather than
+# for currency and states this limit in prose. See "WHAT THIS SUITE
+# DELIBERATELY DOES NOT PIN" below for what used to self-test that limit here
+# and no longer does.
 #
-# AND WHAT SECTION 14 ADDS, which is about the sentence rather than the gate.
-# Section 11 gave Step 0 a SECOND reason to call /init-pipeline. Adding a
-# condition to a prose contract does not delete the sentence stating the old
-# one, so the commit that added it updated seven sites and left six restating
-# absence-alone — docs/restated-claims.md § "Why an additive edit is not a
-# replacement", with that file's census tell attached: every site the first
-# pass found shared one wording. Section 14 walks every tracked file for
-# sentences that DO the job — name the skill, say /execute invokes it, state
-# the absence half — and requires the pre-lock half beside them.
+# -----------------------------------------------------------------------------
+#
+# WHAT THIS SUITE DELIBERATELY DOES NOT PIN, AND WHY THE GAP IS HONEST.
+#
+# Everything below executes something: it runs the hook body, drives the five
+# documented commands, or runs /execute Step 0's gate against a real install.
+# An earlier revision also carried four sections asserting what a PARAGRAPH
+# MEANS -- that Path C skips the sections that ask a human, that no loose
+# IMPL_PATTERNS instruction sits in section 2, that every site states both
+# halves of the auto-invoke condition, that Path C's surgery span starts where
+# it says. Fourteen independent breaker passes ran one corpus-drawn mutation
+# each against this branch. All fourteen returned `survived`, and four of them
+# did it by restoring the exact defect the fix had removed:
+#
+#   "skip section 4"            -> "run section 4 in full"      127 passed, 0 failed
+#   loose paragraph above paths -> same paragraph below them    127 passed, 0 failed
+#   surgery start anchor        -> a different real comment     127 passed, 0 failed
+#   "predates the lock"         -> "already carries the lock"   127 passed, 0 failed
+#
+# The cause is structural, not carelessness. A grep over prose decides whether
+# a TERM is present. The properties above are about what the sentence SAYS of
+# that term, and "skip" and "run in full" contain the same term. So the check
+# passed for a reason unrelated to its own label -- which is the class
+# scripts/test-guards-can-fire.sh exists for, and which this repo treats as
+# worse than no check, because the label is what a future reader trusts.
+#
+# So those sections were deleted rather than patched. The prose they guarded is
+# correct as written; it is guarded by review, not by this file. That absence is
+# declared here so a later reader does not mistake silence for coverage.
+#
+# ALSO DELETED, AND NOT A PROSE-MEANING CHECK: four properties that executed or
+# compared values by string identity -- the same standard the kept material
+# meets -- removed anyway because they lived in the same sections as the
+# prose-meaning checks above:
+#
+#   - section 11's required non-match, which ran /execute Step 0's gate against
+#     a fourth installed hook (the post-lock control) and compared the verdict
+#     token it returned;
+#   - section 11's sha256 digest of the shipped hook body;
+#   - section 12's counts of marker-check clauses over the pre-lock and shipped
+#     hook bodies;
+#   - section 14c's string-absence check of "once per project" against
+#     /init-pipeline's frontmatter.
+#
+# 8f260dc's commit message said "Kept: everything that executes" -- that
+# overstated. These four executed or compared by identity, the line the rest
+# of this file draws to justify what it keeps, and were removed with the rest.
+#
+# The line worth keeping: pin a claim here when the subject can be EXECUTED or
+# compared by STRING IDENTITY. Do not pin one whose subject is what a sentence
+# means.
+#
+# -----------------------------------------------------------------------------
 
 set -euo pipefail
 
@@ -1044,42 +1085,6 @@ while read -r verdict; do
         assert_eq "documented" "unmentioned" "Step 0's prose says what to do with $verdict, which its gate emits"
     fi
 done <<<"$gate_verdicts"
-
-# -----------------------------------------------------------------------------
-#
-# WHAT THIS SUITE DELIBERATELY DOES NOT PIN, AND WHY THE GAP IS HONEST.
-#
-# Everything above executes something: it runs the hook body, drives the five
-# documented commands, or runs /execute Step 0's gate against a real install.
-# An earlier revision also carried four sections asserting what a PARAGRAPH
-# MEANS -- that Path C skips the sections that ask a human, that no loose
-# IMPL_PATTERNS instruction sits in section 2, that every site states both
-# halves of the auto-invoke condition, that Path C's surgery span starts where
-# it says. Fourteen independent breaker passes ran one corpus-drawn mutation
-# each against this branch. All fourteen returned `survived`, and four of them
-# did it by restoring the exact defect the fix had removed:
-#
-#   "skip section 4"            -> "run section 4 in full"      127 passed, 0 failed
-#   loose paragraph above paths -> same paragraph below them    127 passed, 0 failed
-#   surgery start anchor        -> a different real comment     127 passed, 0 failed
-#   "predates the lock"         -> "already carries the lock"   127 passed, 0 failed
-#
-# The cause is structural, not carelessness. A grep over prose decides whether
-# a TERM is present. The properties above are about what the sentence SAYS of
-# that term, and "skip" and "run in full" contain the same term. So the check
-# passed for a reason unrelated to its own label -- which is the class
-# scripts/test-guards-can-fire.sh exists for, and which this repo treats as
-# worse than no check, because the label is what a future reader trusts.
-#
-# So those sections were deleted rather than patched. The prose they guarded is
-# correct as written; it is guarded by review, not by this file. That absence is
-# declared here so a later reader does not mistake silence for coverage.
-#
-# The line worth keeping: pin a claim here when the subject can be EXECUTED or
-# compared by STRING IDENTITY. Do not pin one whose subject is what a sentence
-# means.
-#
-# -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1

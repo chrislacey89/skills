@@ -99,7 +99,7 @@ exist and stop. Do not guess at intent, and do not silently fix the neighbors.
 
 ### Step 1. Per finding, spawn a fresh fixer
 
-**Spawn both sub-agents on the cheaper tier — `model: "sonnet"` on the `Agent` call.** What this skill buys is independence, not capability: the defect it exists to close is that the authoring session cannot see its own work, and a fresh Sonnet context removes that as completely as a fresh Opus one. Escalate to the session's own tier only on a signal — a fixer that returns `blocked`, or a finding that turns on a contract spanning several files. Per finding this skill spends two sub-agent runs, so the tier is where its cost actually lives. This is a default, not a rule anything enforces; issue #339 not add label: 'improve-pipeline' not found carries the hypothesis and the three signals that would refute it.
+**Spawn both sub-agents on the cheaper tier — `model: "sonnet"` on the `Agent` call.** What this skill buys is independence, not capability: the defect it exists to close is that the authoring session cannot see its own work, and a fresh Sonnet context removes that as completely as a fresh Opus one. Escalate to the session's own tier only on a signal — a fixer that returns `blocked`, or a finding that turns on a contract spanning several files. Per finding this skill spends two sub-agent runs, so the tier is where its cost actually lives. This is a default, not a rule anything enforces; issue #339 carries the hypothesis and the three signals that would refute it.
 
 **One sub-agent per finding, never one for all of them.** A single fixer holding
 every finding carries fix 1's reasoning into fix 2, which re-creates across
