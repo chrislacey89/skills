@@ -147,8 +147,15 @@ mutated the tree it was reviewing.
 **Where the copy lives: `git archive`, not a second worktree.**
 
 ```bash
+# pipefail is load-bearing: without it the pipeline reports tar's status, and a
+# `git archive` that resolved nothing exits 0 having extracted an empty tree.
+set -o pipefail
 BREAKER_DIR="$(mktemp -d)"
-git archive "$(git rev-parse HEAD)" | tar -x -C "$BREAKER_DIR"
+if ! git archive "$(git rev-parse HEAD)" | tar -x -C "$BREAKER_DIR"; then
+  rm -rf "$BREAKER_DIR"
+  echo "breaker aborted: could not extract HEAD into a throwaway copy" >&2
+  exit 1
+fi
 ```
 
 A `git worktree add` would register an entry in a git directory that other
@@ -158,6 +165,14 @@ which is real here, because parallel-workspace hosts share one git directory
 across sessions. `git archive` writes a plain directory with no `.git` inside it,
 so "the breaker cannot write to the branch" is structural rather than promised.
 Clean up with `rm -rf "$BREAKER_DIR"` when the breaker reports.
+
+**The extraction fails closed, and the guard is not decoration.** An unguarded
+`git archive <bad-rev> | tar -x` prints its `fatal:` to stderr and exits **0**,
+leaving an empty directory behind — so a breaker that trusted the exit status
+would run its mutation against no tree at all and could still report a verdict.
+That is the exact failure this skill is built to refuse: a green result that is
+green for a reason nobody checked. If the block aborts, the breaker reports
+**`not-run`** with the abort message and no verdict.
 
 The cost is that the copy has no git history and none of the repo's ignored
 files. Bring over what the test command needs — symlink a read-only dependency

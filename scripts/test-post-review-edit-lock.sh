@@ -618,6 +618,26 @@ fi
 
 rm -rf "$breaker_dir"
 
+# …and it fails CLOSED. `git archive <unresolvable-rev> | tar -x` prints its
+# `fatal:` to stderr and exits 0: without `pipefail` the pipeline reports tar's
+# status, and tar succeeded at unpacking nothing. The block then hands the
+# breaker an empty directory and a success, and a breaker that ran its mutation
+# there could report a verdict on no tree at all — a green result that is green
+# for a reason nobody checked, in the one skill whose thesis is that such a
+# result is not self-validating.
+#
+# The revision is swapped for one that cannot resolve, which is the finding's own
+# reproduction. Everything else about the block is the shipped text.
+bogus_archive="${archive_block//git rev-parse HEAD/echo deadbeef}"
+if [ "$bogus_archive" = "$archive_block" ]; then
+    fatal "the archive block no longer resolves its revision with \`git rev-parse HEAD\` — update this control with it"
+fi
+
+status=0
+bogus_out="$( cd "$gitrepo" && bash -c "$bogus_archive"$'\n''printf "%s" "$BREAKER_DIR"' 2>/dev/null )" || status=$?
+assert_eq 1 "$status" "an unresolvable revision aborts the extraction rather than reporting success"
+assert_eq "" "$bogus_out" "…and no directory path reaches the breaker, so there is no empty tree to run a mutation in"
+
 # -----------------------------------------------------------------------------
 
 section "9. apparatus: the refusal in section 3 measures the clause"
