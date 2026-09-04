@@ -1065,6 +1065,51 @@ assert_eq 1 "$n_stale"  "exactly one path in § 2 is keyed to $v_stale"
 assert_eq 0 "$n_both"   "no single path claims both verdicts — the antecedent that covered both is what shipped the conflict"
 assert_eq 0 "$n_loose"  "no unlabeled paragraph above the paths instructs on IMPL_PATTERNS"
 
+# --- Path C's surgery instruction, checked against the hook it operates on ---
+#
+# The instruction is the only thing telling a downstream agent what to look for
+# in the file already installed, and it shipped a count the pre-lock hook does
+# not have: "replace only the two marker-check clauses" when that hook carries
+# one. The second clause is what the upgrade ADDS. A count is unanchorable in
+# somebody else's repo anyway — the agent cannot tell a miscount from a hook
+# that was customized — so the prose now names a start anchor and an end anchor,
+# and both are read back out of it here and required to exist in the pre-lock
+# hook section 11 rebuilt AND in the shipped hook the surgery installs. Naming a
+# landmark the installed file does not have fails here rather than stranding an
+# agent mid-edit in a project nobody in this repo can see.
+
+surgery="$(grep -o 'Replace everything from[^.]*\.' <<<"$install_block" || true)"
+[ -n "$surgery" ] || fatal "no 'Replace everything from …' surgery instruction found in § 2's Path C — reword it back or update this suite with it"
+
+# shellcheck disable=SC2016  # the backticks are markdown code-span delimiters being matched in prose, not command substitution
+surgery_spans="$(grep -o '`[^`]*`' <<<"$surgery" | tr -d '`')"
+surgery_start="$(sed -n 1p <<<"$surgery_spans")"
+surgery_end="$(sed -n 2p <<<"$surgery_spans")"
+if [ -z "$surgery_start" ] || [ -z "$surgery_end" ]; then
+    fatal "Path C's surgery instruction no longer names two backticked anchors"
+fi
+
+for subject in "the pre-lock hook the instruction operates on:$prelock_body" "the shipped hook it installs:$hook_body"; do
+    label="${subject%%:*}"
+    text="${subject#*:}"
+    if grep -qF -- "$surgery_start" <<<"$text"; then
+        assert_eq "present" "present" "$label starts at the '$surgery_start' anchor Path C names"
+    else
+        assert_eq "present" "absent" "$label starts at the '$surgery_start' anchor Path C names"
+    fi
+    assert_eq "$surgery_end" "$(sed -n '$p' <<<"$text")" "…and ends at the '$surgery_end' Path C names"
+done
+
+# The replaced/added split the instruction now states instead of a bare count.
+# A marker-check clause is an `if` testing a flag under $CLAUDE_PROJECT_DIR.
+# shellcheck disable=SC2016  # `$CLAUDE_PROJECT_DIR` is the literal text being counted in the hook, not an expansion
+count_marker_clauses() { grep -c '^if \[.*\$CLAUDE_PROJECT_DIR' <<<"$1" || true; }
+
+assert_eq 1 "$(count_marker_clauses "$prelock_body")" \
+    "the pre-lock hook carries one marker-check clause — the count Path C used to call two"
+assert_eq 2 "$(count_marker_clauses "$hook_body")" \
+    "…and the shipped hook carries two, so the surgery replaces one and adds one"
+
 # -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
