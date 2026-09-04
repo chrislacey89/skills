@@ -127,11 +127,17 @@ The fixer's instructions, in order:
    finding's own claim requires. If it cannot be reproduced, report
    **`refuted`** with the evidence and make **no commit**. A refuted finding is
    reported to the human, not argued into existence and not fixed anyway.
-2. **Write the smallest fix that closes the finding**, following the project's
+2. **Grep `docs/solutions/` for the class of thing you are about to write** — the same
+   move `/execute` Step 1 makes before implementation — and read any entry that
+   matches before touching the tree. The corpus is a list of shapes that have
+   already failed here; on this skill's own PR, four fixers wrote grep-based
+   assertions over prose eight days after an entry named that exact shape and
+   said not to. A fixer that reads the entry first does not write the pin.
+3. **Write the smallest fix that closes the finding**, following the project's
    conventions. Do not fix anything the finding does not name; scope creep in a
    post-review commit is invisible to the review that has already run.
-3. **Run the project's test command** and report the exit status verbatim.
-4. **Commit exactly one commit**, whose message says what the finding was and
+4. **Run the project's test command** and report the exit status verbatim.
+5. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does. One commit per fix — a fix squashed together with another
    is a fix nobody can read separately.
 
