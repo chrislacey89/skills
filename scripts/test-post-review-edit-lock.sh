@@ -137,8 +137,17 @@ stamp_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$stamp_write")"
 stamp_rel="${stamp_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
 [ -n "$stamp_rel" ] && [ "$stamp_rel" != "$stamp_arg" ] || fatal "could not read a project-relative stamp-flag path out of /pre-merge's touch"
 
-fixer_rel="$(sed -n 's|.*touch \([^ ]*\).*|\1|p' <<<"$fixer_write")"
-[ -n "$fixer_rel" ] || fatal "could not read a project-relative fixer-flag path out of /fix-findings' harness line"
+fixer_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$fixer_write")"
+fixer_rel="${fixer_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
+if [ -z "$fixer_rel" ] || [ "$fixer_rel" = "$fixer_arg" ]; then
+    fatal "could not read a project-relative fixer-flag path out of /fix-findings' harness line"
+fi
+
+# The fixer flag's THIRD site: the path Step 3's removal aims at. Read, not
+# typed, for the same reason the other two are — the flag had three different
+# path resolutions when this suite first went green, and nothing compared them.
+# shellcheck disable=SC2016  # `$PROJECT_DIR` is the literal text being searched for in the extracted block, not an expansion
+fixer_remove_rel="$(grep -o '\$PROJECT_DIR/[^" ]*' <<<"$fixer_remove" | sed 's|^\$PROJECT_DIR/||' | sort -u || true)"
 
 # Every "$CLAUDE_PROJECT_DIR/…" path the hook tests, project-relative.
 # shellcheck disable=SC2016  # `$CLAUDE_PROJECT_DIR` is the literal text being searched for in the hook, not an expansion
@@ -220,6 +229,16 @@ if grep -qxF "$fixer_rel" <<<"$hook_paths"; then
 else
     assert_eq "$fixer_rel" "(absent from the hook)" "the hook reads the same fixer-flag path /fix-findings writes"
 fi
+
+# Three sites, one path. The harness line's `touch`, the hook's `-f` test, and
+# Step 3's `rm` each resolve the fixer flag independently, and the first version
+# of this lock had them resolving to three different files: a cwd-relative
+# create, a `$CLAUDE_PROJECT_DIR` read, and an unguarded `$CLAUDE_PROJECT_DIR`
+# removal. Either end of that spread is a silent failure — the flag lands where
+# the hook does not look and the lock refuses its own fixer, or the removal
+# misses and the lock stands open with nothing to say so.
+assert_eq "$fixer_rel" "$fixer_remove_rel" \
+    "/fix-findings' Step 3 removal aims at the same fixer-flag path its harness line writes"
 
 # -----------------------------------------------------------------------------
 
@@ -454,6 +473,50 @@ if [ -f "$gitrepo/$stamp_rel" ]; then
     assert_eq "gone" "still present" "/closeout's removal reaches the same path /pre-merge's write created"
 else
     assert_eq "gone" "gone" "/closeout's removal reaches the same path /pre-merge's write created"
+fi
+
+# The fixer flag runs the same gauntlet, and it is the one that failed it. Its
+# harness line used to be cwd-relative (`mkdir -p .claude && touch
+# .claude/.fix-findings-active`), so run from a subdirectory it wrote a flag the
+# hook — which only ever looks under $CLAUDE_PROJECT_DIR — could not see. Every
+# assertion in sections 3 and 5 stayed green, because both run with the variable
+# set and the cwd already at the project root. Only the fallback case, from a
+# subdirectory, can tell the two resolutions apart.
+
+status=0
+run_documented "$gitrepo/src" "$fixer_write" "" || status=$?
+assert_eq 0 "$status" "/fix-findings' harness line runs with CLAUDE_PROJECT_DIR unset"
+
+if [ -f "$gitrepo/$fixer_rel" ]; then
+    assert_eq "at the repo root" "at the repo root" "the harness line lands the fixer flag where the hook would look, not beside \$PWD"
+else
+    assert_eq "at the repo root" "not written there" "the harness line lands the fixer flag where the hook would look, not beside \$PWD"
+fi
+
+status=0
+remove_out="$( cd "$gitrepo/src" && env -u CLAUDE_PROJECT_DIR bash -c "$fixer_remove" 2>&1 >/dev/null )" || status=$?
+assert_eq 0 "$status" "/fix-findings' Step 3 removal runs with CLAUDE_PROJECT_DIR unset"
+
+if [ -f "$gitrepo/$fixer_rel" ]; then
+    assert_eq "gone" "still present" "/fix-findings' removal reaches the same path its harness line created"
+else
+    assert_eq "gone" "gone" "/fix-findings' removal reaches the same path its harness line created"
+fi
+
+assert_eq "" "$remove_out" "…and says nothing on stderr when the flag was really there"
+
+# A miss must be sayable. `rm -f` reports success on a removal that removed
+# nothing, which reads identically to a removal that worked — and the state it
+# hides is the open lock, the silent direction this whole mechanism exists to
+# close. Run the same removal a second time, with the flag already gone.
+status=0
+miss_out="$( cd "$gitrepo/src" && env -u CLAUDE_PROJECT_DIR bash -c "$fixer_remove" 2>&1 >/dev/null )" || status=$?
+
+if [ -n "$miss_out" ] && grep -qF "$fixer_rel" <<<"$miss_out"; then
+    assert_eq "reported" "reported" "removing a fixer flag that is not there reports the miss, naming the path it looked at"
+else
+    assert_eq "reported" "silent (exit $status, stderr: ${miss_out:-empty})" \
+        "removing a fixer flag that is not there reports the miss, naming the path it looked at"
 fi
 
 # -----------------------------------------------------------------------------

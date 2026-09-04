@@ -14,7 +14,7 @@ sources:
 
 # Fix Findings
 
-!`mkdir -p .claude && touch .claude/.fix-findings-active && echo "fix-findings marker created — post-review edit lock open for this run"`
+!`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" && mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.fix-findings-active" && echo "fix-findings marker created at $PROJECT_DIR/.claude/.fix-findings-active — post-review edit lock open for this run"`
 
 Take the review findings a human has already chosen, have a **fresh** sub-agent
 write each fix, have a **second** fresh sub-agent try to break it, and report
@@ -199,15 +199,29 @@ Finding 3 — fixed at a1b2c3d
            (control went red first: same file, deleted assertion → exit 1)
 ```
 
-Then remove `.claude/.fix-findings-active`:
+Then remove `.claude/.fix-findings-active`, resolving it through the same
+fallback the harness line above used, so the removal reaches the file that line
+actually created:
 
 ```bash
-rm -f "$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+if [ -e "$PROJECT_DIR/.claude/.fix-findings-active" ]; then
+  rm "$PROJECT_DIR/.claude/.fix-findings-active"
+  echo "fix-findings marker removed — post-review edit lock shut"
+else
+  echo "fix-findings marker NOT FOUND at $PROJECT_DIR/.claude/.fix-findings-active — the lock may still be standing open somewhere else; report this rather than assuming it is shut" >&2
+fi
 ```
 
 Remove it on every exit path, including an abort — a leaked flag leaves the
 post-review edit lock silently open, which is the failure this whole mechanism
-exists to close. Leave `.claude/.review-stamped` alone; `/closeout` removes it at
+exists to close. **Report the not-found line if it prints.** `rm -f` would have
+been shorter and would have reported success on a removal that removed nothing,
+which is indistinguishable from the failure above; the branch is what makes a
+miss sayable. All three sites — the harness line's `touch`, the hook's test, and
+this `rm` — resolve `$CLAUDE_PROJECT_DIR` the same way for the same reason: a
+flag written under `$PWD` in a subdirectory is a flag the hook never reads, so
+the fixer would be refused by the lock written for it. Leave `.claude/.review-stamped` alone; `/closeout` removes it at
 merge. The asymmetry is deliberate and is the fail-safe direction: a leaked
 `.fix-findings-active` is an open lock nobody can see, while a leaked
 `.review-stamped` is a closed lock that announces itself the moment someone tries
@@ -223,8 +237,8 @@ is not load-bearing (#326).
 
 | Flag | Written by | Read by | Removed by |
 |---|---|---|---|
-| `.claude/.review-stamped` | `/pre-merge` Phase 4, beside the review-currency stamp | `.claude/hooks/enforce-classification.sh` — refuses Write/Edit on implementation files while it exists and `.fix-findings-active` does not | `/closeout` Step 3 at merge; `/execute` Step 0's fresh-slate checklist |
-| `.claude/.fix-findings-active` | this skill, by the harness line at the top of this file, when it loads | the same hook clause — its presence is what re-opens the lock | Step 3 above, on every exit path; `/execute` Step 0's fresh-slate checklist |
+| `.claude/.review-stamped` | `/pre-merge` Phase 4, beside the review-currency stamp, under the same fallback | `.claude/hooks/enforce-classification.sh` — refuses Write/Edit on implementation files while it exists and `.fix-findings-active` does not | `/closeout` Step 3 at merge; `/execute` Step 0's fresh-slate checklist |
+| `.claude/.fix-findings-active` | this skill, by the harness line at the top of this file, when it loads, under `${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}` | the same hook clause, at `$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active` — its presence is what re-opens the lock | Step 3 above, on every exit path, resolving the same fallback and reporting a miss rather than swallowing one; `/execute` Step 0's fresh-slate checklist |
 
 **`.review-stamped` also stands the classification clause down, which is what lets this skill's fixer write at all.** The same hook carries an earlier clause refusing implementation writes unless `.claude/.tdd-active` or `.claude/.tdd-skipped` exists — and `/execute` Step 6 removes both of those *before* `/pre-merge` stamps, so no fixer ever arrives holding one. Were the two clauses genuinely independent in that order, the flag the harness line writes above would be read too late to matter: every fixer would be refused by the classification clause, under a message naming `/tdd`. So on a stamped branch the classification clause does not fire and this lock is the sole decider. Do not remove that coupling on the grounds that it looks like a leak between two unrelated gates — `scripts/test-post-review-edit-lock.sh` § 5 drives the real lifecycle, Step 6's removal included, and fails if it goes.
 
