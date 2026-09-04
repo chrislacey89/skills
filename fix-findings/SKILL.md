@@ -357,9 +357,9 @@ nothing.
   review, plus the findings themselves (terminal output or the PR's ledger), on a
   clean branch that has been reviewed.
 - **Produces:** one commit per accepted finding, each authored by a context that
-  did not write the code under repair; a per-finding breaker verdict with the
-  command behind it; and `refuted` reports for findings the tree did not confirm.
-  It produces no stamp, no PR edit, and no merge.
+  did not write the code under repair; a per-finding breaker verdict, the SHA it
+  archived, and the command behind it; and `refuted` reports for findings the
+  tree did not confirm. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode, which
   re-runs the review dimensions and replaces the existing stamp. Hand it the
   breaker verdicts as evidence. There is nothing to hand it a *range*:
