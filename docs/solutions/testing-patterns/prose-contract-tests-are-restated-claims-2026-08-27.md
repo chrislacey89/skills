@@ -162,6 +162,12 @@ corrective hunk against the rule it enforces.
 
 ## Related
 
+- `a-planted-term-cannot-discriminate-meaning-2026-09-04.md` — the second
+  recording, eight days later, with the measurement: fourteen independent
+  breaker passes, fourteen `survived`, four by restoring the fix's exact
+  inverse; a planted-positive self-test fell with the rest. Ships the two
+  mechanisms this entry's Prevention could only prescribe.
+
 - PR #297 (round 3, the negative-space refinement) — and its review trail:
   chrislacey89/skills#300 (widen detectors against found misses),
   chrislacey89/skills#301 (procedure/applicability restatements matched by
