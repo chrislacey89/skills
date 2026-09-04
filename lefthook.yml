@@ -84,6 +84,8 @@ pre-push:
       run: bash scripts/test-decision-card-grounding.sh
     post-review-edit-lock-tests:
       run: bash scripts/test-post-review-edit-lock.sh
+    delta-review-scope-tests:
+      run: bash scripts/test-delta-review-scope.sh
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the

@@ -128,7 +128,7 @@ Three outcomes, and only one of them interrupts:
 
   Then ask once, with a single `AskUserQuestion`, recommended option first:
 
-  - **→ Re-review the delta with `/pre-merge` (recommended)** — put the added commits through the review dimensions, then re-stamp and return here.
+  - **→ Re-review the delta with `/pre-merge` (recommended)** — put the added commits through the review dimensions, then re-stamp and return here. `/pre-merge` reads this same stamp itself and takes the post-stamp delta as its subject (its Phase 1 step 4), so there is no range to pass it; it falls back to the whole branch on the force-push case above and when a merge commit landed after the stamp.
   - **Merge anyway — I've seen these commits** — an explicit acknowledgement. Repeat it in the Step 3 merge confirmation so the choice is on the record rather than implicit.
   - **Stop — I want to look at this first** — leaves the PR unmerged and the workspace untouched.
 

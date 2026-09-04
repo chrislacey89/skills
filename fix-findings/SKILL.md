@@ -96,6 +96,11 @@ exist and stop. Do not guess at intent, and do not silently fix the neighbors.
       red, say so and stop — a fixer cannot tell its own regression from the
       pre-existing failure, and a breaker cannot distinguish `killed` from
       "already broken."
+- [ ] A run id is fixed for this invocation, once, before any fixer starts:
+      `FIX_FINDINGS_RUN=$(date -u +%Y%m%dT%H%M%SZ)`. Every fixer commit in this
+      run ends with the line `Fix-Findings-Run: $FIX_FINDINGS_RUN`. That line is
+      how § Handoff counts the rounds already on the branch — from the tree,
+      not from anyone's memory of how many times this skill has run.
 
 ### Step 1. Per finding, spawn a fresh fixer
 
@@ -138,8 +143,9 @@ The fixer's instructions, in order:
    post-review commit is invisible to the review that has already run.
 4. **Run the project's test command** and report the exit status verbatim.
 5. **Commit exactly one commit**, whose message says what the finding was and
-   what the fix does. One commit per fix — a fix squashed together with another
-   is a fix nobody can read separately.
+   what the fix does, and whose last line is `Fix-Findings-Run: <run id>` — the
+   id Step 0 fixed, passed in the brief verbatim. One commit per fix — a fix
+   squashed together with another is a fix nobody can read separately.
 
 The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
@@ -459,24 +465,42 @@ stop.
   did not write the code under repair; a per-finding breaker verdict, the SHA it
   archived, and the command behind it; and `refuted` reports for findings the
   tree did not confirm. It produces no stamp, no PR edit, and no merge.
-- **Comes next by default:** a re-run of `/pre-merge` in author-mode, which
-  re-runs the review dimensions and replaces the existing stamp. Hand it the
-  breaker verdicts as evidence. There is nothing to hand it a *range*:
-  author-mode reviews `git diff "$BASE_REF...HEAD"` — the whole branch — and
-  `/pre-merge` defines no mode that takes a range or scopes itself to what is
-  past the stamp (`pre-merge/SKILL.md` § *Modes*). These fix commits are covered
-  because everything is, so no step has to work out where the stamp fell. Then
+- **Comes next by default:** a re-run of `/pre-merge` in author-mode. It reads
+  the stamp off the PR itself (`pre-merge/SKILL.md` Phase 1 step 4), takes the
+  post-stamp delta — these fix commits — as its subject, runs the review
+  dimensions on that delta with the tree readable around it, and replaces the
+  existing stamp at the new head. Hand it the breaker verdicts as evidence and
+  the finding numbers each commit closes. There is no range to hand it: it
+  derives the range from the stamp, and falls back to the whole branch when the
+  stamp is missing, rewritten away, or followed by a merge commit. Then
   `/compound` if a lesson emerged, then `/closeout`.
 
 **Next-step menu.** This is a branch point, so offer it as a single
 `AskUserQuestion` rather than leaving the user to retype a command (see
-[references/next-step-menu.md](references/next-step-menu.md)), recommended option
-first: **→ Re-run `/pre-merge` (recommended — review the fixes and re-stamp)**,
-**Fix another finding — `/fix-findings <numbers>`**,
-**Stop here — leave the fixes unreviewed on the branch**. Include a run-specific
-follow-up when the breaker returned `survived` or `not-run`: **Show the surviving
-mutation for finding N**. The platform's free-text "Other" option is the escape
-hatch — don't add one.
+[references/next-step-menu.md](references/next-step-menu.md)). Which option leads
+depends on how many rounds this branch has already had, and that number is read
+from the tree — the `Fix-Findings-Run:` line Step 1 writes — never recalled:
+
+```bash
+# $BASE_REF: the base branch's ref, derived as /pre-merge Phase 1 step 3 derives it.
+ROUNDS=$(git log --format=%B "$BASE_REF..HEAD" | sed -n 's/^Fix-Findings-Run: //p' | sort -u | wc -l | tr -d ' ')
+```
+
+**Below two rounds**, recommended option first: **→ Re-run `/pre-merge`
+(recommended — review the fixes and re-stamp)**, **Fix another finding —
+`/fix-findings <numbers>`**, **Stop here — leave the fixes unreviewed on the
+branch**. **At two or more**, this branch has already been through a fix round
+and a re-review, and across three repos the third round found a new
+contradiction more often than it closed one (#347 — skills #345 counted its own
+rounds to five before deleting the rule it was patching). Lead with **→ Hand
+the remaining findings off as issues (recommended — `/qa` or
+`/request-refactor-plan`), then re-run `/pre-merge` on what is here**, then
+**Re-run `/pre-merge` — review the fixes and re-stamp**, then **Stop here**.
+The count changes the order, not the set: nothing is taken off the menu, and
+the human still chooses. Include a run-specific follow-up when the breaker
+returned `survived` or `not-run`: **Show the surviving mutation for finding
+N**. The platform's free-text "Other" option is the escape hatch — don't add
+one.
 
 Print the runtime handoff line either way:
 
