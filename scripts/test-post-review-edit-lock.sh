@@ -859,17 +859,21 @@ assert_eq "" "$bogus_out" "…and no directory path reaches the breaker, so ther
 # The other way to arrive with no revision, which #341 introduced: a controller
 # that spawned a breaker and never wired the fixer's SHA through. /fix-findings
 # claims the existing guard already covers it — that an unset $FIX_SHA expands to
-# the empty string, `git archive ""` rejects it, and no separate check is needed.
-# That is a claim about what a command does under a condition nobody will
-# reproduce by hand, so it is run rather than believed. If it ever stops holding,
-# the skill's paragraph telling the next author NOT to add a check is the thing
-# that has gone wrong.
+# the empty string and `git archive ""` rejects it, reaching the same fail-closed
+# path as the unresolvable-revision case above. That is a claim about what a
+# command does under a condition nobody will reproduce by hand, so it is run
+# rather than believed. What the assertion below measures, and no more: the
+# unset case aborts with the same status (1) as the unresolvable case, so the
+# fail-closed path is reached with nothing wired through for it. It cannot see
+# whether a separate check exists in the block — a guard written in the
+# block's own `exit 1` idiom would abort with that same status and pass here
+# unnoticed.
 status=0
 # shellcheck disable=SC2016  # `$BREAKER_DIR` must expand in the inner `bash -c`, not here — same
 # single-quoting as the two runs above, which shellcheck reads as a nested script only because
 # `bash -c` is the first word there and `env -u FIX_SHA` displaces it here.
 unset_out="$( cd "$gitrepo" && env -u FIX_SHA bash -c "$archive_block"$'\n''printf "%s" "$BREAKER_DIR"' 2>/dev/null )" || status=$?
-assert_eq 1 "$status" "an unset \$FIX_SHA aborts on the same guard, with no extra check for it"
+assert_eq 1 "$status" "an unset \$FIX_SHA aborts with the same status as an unresolvable revision, via the guard the skill claims already covers it"
 assert_eq "" "$unset_out" "…and likewise reaches the breaker with no directory to run a mutation in"
 
 # -----------------------------------------------------------------------------
