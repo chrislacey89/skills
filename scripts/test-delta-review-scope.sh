@@ -59,10 +59,12 @@ scope_block="$(awk '
 [[ -n "$scope_block" ]] || fatal "no scope block found in $premerge_skill"
 # A string test rather than piping into a quiet grep: under pipefail a ban on that shape passes
 # precisely when the banned thing is present (test-pipefail-safe-matchers.sh).
+# shellcheck disable=SC2016  # the pattern is the skill's literal text — $REVIEWED_SHA is markdown being matched, not an expansion
 [[ "$scope_block" == *'SCOPE_FROM="$REVIEWED_SHA"'* ]] \
     || fatal "scope block extracted from $premerge_skill does not assign SCOPE_FROM from the stamp"
 
 # The round-count line from /fix-findings' next-step menu.
+# shellcheck disable=SC2016  # the grep pattern is the skill's literal text — $(git log is markdown being matched, not a command substitution
 rounds_line="$(grep -m1 '^ROUNDS=\$(git log' "$fixfindings_skill" || true)"
 [[ -n "$rounds_line" ]] || fatal "no ROUNDS= line found in $fixfindings_skill"
 
@@ -131,9 +133,11 @@ section "no stamp: a first review reads the whole branch"
 assert_eq "review scope: whole branch, from main|four.txt one.txt three.txt two.txt" \
     "$(run_scope '## Summary'$'\n''no stamp here')" \
     "no stamp in the body: scope is the whole branch and the diff names every branch file"
-grep -q -- '--json body' "$GH_STUB_ARGV_LOG" \
-    && { printf '  ok   the block asked gh for the PR body\n'; pass=$((pass + 1)); } \
-    || { printf '  FAIL the block never asked gh for the PR body (argv: %s)\n' "$(cat "$GH_STUB_ARGV_LOG")"; fail=$((fail + 1)); }
+if grep -q -- '--json body' "$GH_STUB_ARGV_LOG"; then
+    printf '  ok   the block asked gh for the PR body\n'; pass=$((pass + 1))
+else
+    printf '  FAIL the block never asked gh for the PR body (argv: %s)\n' "$(cat "$GH_STUB_ARGV_LOG")"; fail=$((fail + 1))
+fi
 
 # --- 2. Stamp behind HEAD, linear history → post-stamp delta ---------------------
 section "stamp is an ancestor of HEAD with linear history after it: the delta is the subject"
