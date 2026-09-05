@@ -197,12 +197,27 @@ run_scope() {
     : > "$GH_STUB_ARGV_LOG"
     : > "$GIT_STUB_ARGV_LOG"
     out="$(cd "$repo" && GH_STUB_BODY="$body" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    # Exposed for callers that need the raw combined stdout+stderr rather than
+    # the parsed "<scope>|<files>" pair (#348 review, finding 5's stderr-noise
+    # assertion below).
+    LAST_SCOPE_RAW="$out"
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
-    files="$(printf '%s\n' "$out" | grep -oE '^ [a-z]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
+    files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
     printf '%s|%s' "$scope" "$files"
 }
 
-stamped_body() { printf '## Summary\n\nbody\n\n## Review Currency\n\n<!-- reviewed-at: %s -->\nReviewed.\n' "$1"; }
+# stamped_body <sha>... — a PR body carrying one marker per argument, in the
+# order given (earlier arg = earlier in the body). Mirrors
+# test-review-currency-marker.sh's pr_body helper, which does the same for
+# /closeout's reader.
+stamped_body() {
+    printf '## Summary\n\nbody\n\n## Review Currency\n\n'
+    local sha
+    for sha in "$@"; do
+        printf '<!-- reviewed-at: %s -->\n' "$sha"
+    done
+    printf 'Reviewed.\n'
+}
 
 # --- 1. No stamp → whole branch -------------------------------------------------
 section "no stamp: a first review reads the whole branch"
@@ -251,6 +266,19 @@ ghost_sha="$(printf '%040d' 7)"
 assert_eq "review scope: whole branch, from main" \
     "$(run_scope "$(stamped_body "$ghost_sha")" | cut -d'|' -f1)" \
     "an unresolvable stamp falls back to the whole branch rather than aborting"
+# (#348 review, finding 5): dropping ` 2>/dev/null` from the ancestor check
+# leaks git's `fatal: Not a valid object name '<ghost_sha>'` into the readout.
+# The assertion above pins the DECISION (falls back to whole branch) but the
+# mutation doesn't touch the decision — `git merge-base --is-ancestor` still
+# fails and the `if` chain still falls through — so it survives that string
+# check. Pin the separate property at the point of consumption: the combined
+# output this case produces carries no fatal:/error: line.
+run_scope "$(stamped_body "$ghost_sha")" > /dev/null
+if [[ "$LAST_SCOPE_RAW" == *'fatal:'* || "$LAST_SCOPE_RAW" == *'error:'* ]]; then
+    printf '  FAIL unresolvable stamp: readout leaked stderr noise:\n%s\n' "$LAST_SCOPE_RAW"; fail=$((fail + 1))
+else
+    printf '  ok   unresolvable stamp: readout carries no fatal:/error: line\n'; pass=$((pass + 1))
+fi
 
 # --- 5. Merge commit after the stamp → whole branch ------------------------------
 section "a merge commit landed after the stamp: whole branch, so base's own changes are not the delta"
@@ -263,6 +291,7 @@ section "a merge commit landed after the stamp: whole branch, so base's own chan
     git merge -q --no-edit main
 )
 assert_fixture_merged "$repo" "fixture merge"
+merge_sha="$(git -C "$repo" rev-parse HEAD)"   # captured for the two-stamp fixture below
 assert_eq "review scope: whole branch, from main" \
     "$(run_scope "$(stamped_body "$stamp_sha")" | cut -d'|' -f1)" \
     "a merge after the stamp falls back to the whole branch"
@@ -281,6 +310,7 @@ before_count="$(git -C "$repo" rev-list --count HEAD)"
         && git commit -q -m "$(printf 'fix: finding 3\n\nFix-Findings-Run: 20260904T200000Z')"
 )
 assert_fixture_committed "$repo" "fixture round-1 commits" "$before_count" 2 r1a.txt r1b.txt
+r1a_sha="$(git -C "$repo" rev-parse HEAD~1)"   # the r1a commit, one before r1b at HEAD; captured for the two-stamp fixture below
 assert_eq "1" "$(run_rounds)" "two fixer commits from one run count as one round"
 before_count="$(git -C "$repo" rev-list --count HEAD)"
 (
@@ -298,6 +328,19 @@ before_count="$(git -C "$repo" rev-list --count HEAD)"
 )
 assert_fixture_committed "$repo" "fixture hand commit" "$before_count" 1 plain.txt
 assert_eq "2" "$(run_rounds)" "a mid-line mention is not a trailer line and does not count"
+
+# --- 7. Two stamps in the body → the last one wins -------------------------------
+section "two stamps in the body: the last one wins, and the two decisions differ observably (#348 review, finding 5)"
+# (#348 review, finding 5): dropping ` | tail -1` from the stamp-reading
+# pipeline is untested here (test-review-currency-marker.sh's "a duplicated
+# stamp resolves to the newer SHA, never the stale one" case covers /closeout's
+# reader, not this one). $merge_sha and $r1a_sha are both real ancestors of
+# HEAD, in that commit order, so the newer stamp's diff is missing r1a.txt
+# relative to the older stamp's diff — a wrong pick (first stamp, or falling
+# back to the whole branch) is observable in the file set, not just the SHA.
+assert_eq "review scope: post-stamp delta, from $r1a_sha|plain.txt r1b.txt r2.txt" \
+    "$(run_scope "$(stamped_body "$merge_sha" "$r1a_sha")")" \
+    "an older stamp above a newer one resolves SCOPE_FROM to the newer, and its diff excludes the older-but-still-post-stamp r1a.txt"
 
 # -----------------------------------------------------------------------------
 
