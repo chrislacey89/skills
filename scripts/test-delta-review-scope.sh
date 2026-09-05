@@ -132,8 +132,33 @@ printf '%s\n' "$*" >> "${GH_STUB_ARGV_LOG:?}"
 printf '%s' "${GH_STUB_BODY-}"
 STUB
 chmod +x "$stub_bin/gh"
+
+# A `git` that logs every argv it was called with, then execs the real git.
+# (#348 review, finding 3): a mutation changing the scope block's
+# `if [ -n "$REVIEWED_SHA" ]` to `if [ -n "$SCOPE_FROM" ]` keeps every
+# string-shaped assertion above green, because `$SCOPE_FROM` was already set
+# to `$BASE_REF` (always non-empty) two lines earlier, so the guard's
+# `git merge-base --is-ancestor` call stops being conditioned on there being a
+# stamp at all — it fires even with an empty `$REVIEWED_SHA`, and the "no
+# stamp -> whole branch" outcome only happens to survive because that call
+# then fails safely. Grepping the skill's prose for the string
+# `$REVIEWED_SHA` would pin the term, not the property
+# (docs/solutions/testing-patterns/a-planted-term-cannot-discriminate-meaning-2026-09-04.md);
+# logging the real git process's argv pins the property directly: whether
+# `merge-base --is-ancestor` was invoked at all.
+real_git="$(command -v git)"
+export REAL_GIT="$real_git"
+cat > "$stub_bin/git" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${GIT_STUB_ARGV_LOG:?}"
+exec "${REAL_GIT:?}" "$@"
+STUB
+chmod +x "$stub_bin/git"
+
 export PATH="$stub_bin:$PATH"
 export GH_STUB_ARGV_LOG="$sandbox/gh-argv.log"
+export GIT_STUB_ARGV_LOG="$sandbox/git-argv.log"
+: > "$GIT_STUB_ARGV_LOG"
 
 repo="$sandbox/repo"
 mkdir -p "$repo"
@@ -170,6 +195,7 @@ head_sha="$(git -C "$repo" rev-parse HEAD)"
 run_scope() {
     local body="$1" out files scope
     : > "$GH_STUB_ARGV_LOG"
+    : > "$GIT_STUB_ARGV_LOG"
     out="$(cd "$repo" && GH_STUB_BODY="$body" BASE_REF=main bash -c "$scope_block" 2>&1)"
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(printf '%s\n' "$out" | grep -oE '^ [a-z]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -188,12 +214,30 @@ if grep -q -- '--json body' "$GH_STUB_ARGV_LOG"; then
 else
     printf '  FAIL the block never asked gh for the PR body (argv: %s)\n' "$(cat "$GH_STUB_ARGV_LOG")"; fail=$((fail + 1))
 fi
+# #348 review, finding 3: the guard's stated purpose is to skip the ancestor
+# check when there is no stamp, not merely to land on "whole branch" by some
+# route. Pin that `merge-base --is-ancestor` itself never ran, from the real
+# git process's own argv log, not from the skill's text.
+if grep -q -- 'merge-base' "$GIT_STUB_ARGV_LOG"; then
+    printf '  FAIL no stamp: git merge-base --is-ancestor ran even though there is no stamp to check (argv: %s)\n' "$(cat "$GIT_STUB_ARGV_LOG")"; fail=$((fail + 1))
+else
+    printf '  ok   no stamp: git merge-base --is-ancestor never ran (the ancestor check is skipped, not merely outrun)\n'; pass=$((pass + 1))
+fi
 
 # --- 2. Stamp behind HEAD, linear history → post-stamp delta ---------------------
 section "stamp is an ancestor of HEAD with linear history after it: the delta is the subject"
 assert_eq "review scope: post-stamp delta, from $stamp_sha|four.txt three.txt" \
     "$(run_scope "$(stamped_body "$stamp_sha")")" \
     "the diff names only the two post-stamp files, and the scope line names the stamped SHA"
+# The control side of the same pin: when there IS a stamp, the ancestor check
+# must actually run (a suite whose git shim never observed a merge-base call
+# in any case would report "ok" above on a broken apparatus, not a working
+# guard — docs/mutation-at-consumption.md's not-run/killed distinction).
+if grep -q -- 'merge-base' "$GIT_STUB_ARGV_LOG"; then
+    printf '  ok   stamp behind HEAD: git merge-base --is-ancestor ran to check it\n'; pass=$((pass + 1))
+else
+    printf '  FAIL stamp behind HEAD: git merge-base --is-ancestor never ran (argv: %s)\n' "$(cat "$GIT_STUB_ARGV_LOG")"; fail=$((fail + 1))
+fi
 
 # --- 3. Stamp == HEAD → whole branch --------------------------------------------
 section "stamp equals HEAD: nothing new to scope to, whole branch"
