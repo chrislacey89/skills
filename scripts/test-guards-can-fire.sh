@@ -282,7 +282,11 @@ section "the scan covers a real file list"
 # caught by THIS file. That is the accepted price of letting a suite carry
 # executable examples of what it forbids — and the self-tests are what make the
 # exclusion survivable, since they exercise the detectors directly.
-suites="$(git ls-files 'scripts/test-*.sh' | grep -v -x -- "$self")"
+# Tracked plus untracked-and-not-ignored: a suite being written is in the
+# population before it is staged, so a dead guard in a new file is caught on
+# the first run rather than on the first run after `git add` (PR #348 shipped
+# one that way; scripts/test-population-covers-untracked.sh pins this set).
+suites="$(git ls-files --cached --others --exclude-standard 'scripts/test-*.sh' | grep -v -x -- "$self")"
 suite_count="$(printf '%s\n' "$suites" | grep -c . || true)"
 [ "${suite_count:-0}" -ge 10 ] \
     || fatal "found only ${suite_count:-0} contract suite(s) — the glob is wrong, and an empty list passes every assertion below vacuously."

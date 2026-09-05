@@ -1318,8 +1318,10 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # that arm existed the line matched nothing, dropped out of the census, and the
 # raw-`..HEAD` reconciliation below is the only reason that was visible at all
 # rather than a silently unchecked endpoint — which is the exact failure this
-# section exists to prevent.
-range_pattern='git (diff|log)( +--?[a-z-]+(=[A-Za-z0-9,._-]+)?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# section exists to prevent. The value class carries `%` for the same reason:
+# #347's `--format=%H` and `--format=%B` were the first valued flags with one,
+# and without it both lines dropped out and the reconciliation caught it again.
+range_pattern='git (diff|log)( +--?[a-z-]+(=[A-Za-z0-9%,._-]+)?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies
@@ -1368,11 +1370,17 @@ while IFS= read -r hit; do
     endpoint="$(printf '%s' "$hit" | sed -E 's/.*[ "]([^ ".]*)\.\.\.?HEAD$/\1/')"
     dots="$(printf '%s' "$hit" | grep -oE '\.\.\.?HEAD$')"
 
-    if [[ "$endpoint" != "${d}BASE_REF" ]]; then
-        printf '  FAIL %s uses %q as a range endpoint; only %sBASE_REF is a ref — a name is frozen at checkout time\n' \
-            "$verb" "$endpoint" "$d"
-        bad_endpoint=$((bad_endpoint + 1))
-    fi
+    # #347 adds two endpoints. $REVIEWED_SHA is the stamped 40-hex OID, read by
+    # the sed script test-review-currency-marker.sh pins (a name cannot come out
+    # of `[0-9a-f]\{40\}`). $SCOPE_FROM is assigned only from $BASE_REF or
+    # $REVIEWED_SHA, and the same suite pins that assignment set. Both are refs
+    # by construction, never names.
+    case "$endpoint" in
+        "${d}BASE_REF"|"${d}SCOPE_FROM"|"${d}REVIEWED_SHA") ;;
+        *) printf '  FAIL %s uses %q as a range endpoint; only %sBASE_REF, %sSCOPE_FROM and %sREVIEWED_SHA are refs — a name is frozen at checkout time\n' \
+               "$verb" "$endpoint" "$d" "$d" "$d"
+           bad_endpoint=$((bad_endpoint + 1)) ;;
+    esac
     # Three-dot diffs from the merge base; two-dot subtracts base-side work and
     # reports it as deletions this branch never made. `git log` is the mirror:
     # two-dot is the commits on this branch, three-dot is the symmetric
@@ -1385,6 +1393,15 @@ while IFS= read -r hit; do
 done <<< "$range_hits"
 
 assert_eq 0 "$bad_endpoint" "every documented range endpoint is a ref, not a branch name"
+# $SCOPE_FROM may only appear in the skill that assigns it. A second skill
+# writing `$SCOPE_FROM...HEAD` would inherit the permission above without the
+# assignment the permission rests on.
+# shellcheck disable=SC2086
+scope_users="$(cd "$repo_root" && { grep -lE 'SCOPE_FROM\.\.\.?HEAD' $scan_files || true; } | sed 's|^\./||' | sort | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "pre-merge/SKILL.md" "$scope_users" "only /pre-merge, which assigns \$SCOPE_FROM, documents a range against it"
+# shellcheck disable=SC2086
+stamp_users="$(cd "$repo_root" && { grep -lE 'REVIEWED_SHA\.\.\.?HEAD' $scan_files || true; } | sed 's|^\./||' | sort | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "pre-merge/SKILL.md" "$stamp_users" "only /pre-merge, which reads \$REVIEWED_SHA with the pinned sed, documents a range against it"
 assert_eq 0 "$bad_operator" "every documented range uses the operator its verb requires"
 
 # -----------------------------------------------------------------------------

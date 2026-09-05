@@ -214,6 +214,19 @@ jobs:
       - name: Run post-review edit lock contract suite
         run: bash scripts/test-post-review-edit-lock.sh
 
+      # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
+      # from branch state by a block in Phase 1 step 4, and /fix-findings' menu
+      # counts rounds from a commit line. Both are executable prose; this runs
+      # them in a fixture for every branch state the skill names as a fallback.
+      - name: Run delta review scope contract suite
+        run: bash scripts/test-delta-review-scope.sh
+
+      # #347's round: two instruments keyed on a bare `git ls-files` reported
+      # clean on an unstaged file. This runs their extracted populations in a
+      # fixture with a tracked, an untracked, and an ignored file.
+      - name: Run population-covers-untracked contract suite
+        run: bash scripts/test-population-covers-untracked.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

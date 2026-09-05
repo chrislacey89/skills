@@ -61,13 +61,25 @@ reader_expr="$(printf '%s' "$reader_line" \
     | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
     | sed "s/^sed -n '//; s/'\$//")"
 
+# /pre-merge Phase 1 step 4 reads the same marker to decide its scope (#347).
+# Two readers of one marker are a drift pair; this pulls the second one out the
+# same way and § below asserts the two sed scripts are byte-identical.
+premerge_reader_line="$(grep "sed -n 's/[^']*reviewed-at" "$premerge_skill" | head -1 || true)"
+premerge_reader_expr="$(printf '%s' "$premerge_reader_line" \
+    | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
+    | sed "s/^sed -n '//; s/'\$//")"
+
 # Whatever /closeout pipes the sed output into — everything past the sed
 # script's closing quote, minus the trailing ")" of the command substitution.
 reader_filter="$(printf '%s' "$reader_line" \
     | sed "s/.*'[[:space:]]*|[[:space:]]*//; s/)[[:space:]]*\$//")"
 
 # The marker template /pre-merge Phase 4 substitutes the reviewed SHA into.
-writer_template="$(grep -o '<!-- reviewed-at: [^ ]* -->' "$premerge_skill" | head -1 || true)"
+# Scoped to Phase 4, where the writer lives. Since #347 the skill also carries a
+# READER of the marker in Phase 1 step 4 — the same sed as /closeout's — and an
+# unscoped first-match grep picked that regex up as the template, which made
+# every round-trip check below run the reader against itself.
+writer_template="$(awk '/^### Phase 4/ { on = 1 } on' "$premerge_skill" | grep -o '<!-- reviewed-at: [^ ]* -->' | head -1 || true)"
 
 if [[ -z "$reader_expr" ]]; then
     printf 'FATAL: no sed -n reviewed-at extraction found in %s\n' "$closeout_skill" >&2
@@ -305,16 +317,32 @@ done
 assert_eq "" "$routing" \
     "no paragraph routing a reader into /fix-findings names an unresolvable pass"
 
-# Detector 4 — the positive claim the corrected handoff rests on: author-mode
-# reviews the WHOLE branch. That is why "hand it the range" was deletable rather
-# than implementable — there is no narrowed diff to hand it, so the fix commits
-# get covered by everything being covered. Read out of Phase 3's author-mode
-# bullet rather than restated.
-# shellcheck disable=SC2016  # both the pattern and the expected value are the skill's literal text — `$BASE_REF` and the backticks are markdown being matched, not expansions
+# Detector 4 — the positive claim the handoff rests on, as of #347: author-mode
+# reads `$SCOPE_FROM...HEAD`, where Phase 1 step 4 sets `$SCOPE_FROM` from the
+# stamp. Before #347 this detector pinned the opposite ("author-mode still
+# reviews the whole branch, so the re-run needs no range"), and that pin was
+# correct for the text it guarded: /fix-findings' handoff said no range existed,
+# and it did not. #347 built the scope, so the pin follows the text. Read out of
+# Phase 3's author-mode bullet rather than restated.
+# shellcheck disable=SC2016  # both the pattern and the expected value are the skill's literal text — `$SCOPE_FROM` and the backticks are markdown being matched, not expansions
 author_diff="$(grep -oE '^- \*\*Author-mode\*\* — the local `git diff "[^"]*"`' "$premerge_skill" | head -1 || true)"
 # shellcheck disable=SC2016
-assert_eq '- **Author-mode** — the local `git diff "$BASE_REF...HEAD"`' "$author_diff" \
-    "author-mode still reviews the whole branch, so the re-run needs no range"
+assert_eq '- **Author-mode** — the local `git diff "$SCOPE_FROM...HEAD"`' "$author_diff" \
+    "author-mode reads \$SCOPE_FROM...HEAD — the stamp decides the scope, so the re-run needs no range handed to it"
+
+# The variable the bullet names has to be the one Phase 1 step 4 assigns, and it
+# may take exactly two values: the base ref (whole branch) and the stamped SHA
+# (delta). Any third assignment is a scope nobody specified.
+scope_assignments="$(grep -oE '^ *SCOPE_FROM="[^"]*"' "$premerge_skill" | sed 's/^ *//' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+# shellcheck disable=SC2016
+assert_eq 'SCOPE_FROM="$BASE_REF" SCOPE_FROM="$REVIEWED_SHA"' "$scope_assignments" \
+    "SCOPE_FROM is assigned from exactly the base ref and the stamped SHA"
+
+# Two readers, one marker. /pre-merge's Phase 1 reader and /closeout's Step 2
+# reader must be the same sed script, or the scope decision and the merge gate
+# can disagree about which SHA was reviewed.
+assert_eq "$reader_expr" "$premerge_reader_expr" \
+    "pre-merge Phase 1 step 4 reads the stamp with closeout's exact sed script (two readers, byte-identical)"
 
 # -----------------------------------------------------------------------------
 
