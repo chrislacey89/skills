@@ -25,7 +25,7 @@ This skill *orchestrates existing tools* (`gh pr merge`, `wt remove` / `git work
 This is a primary pipeline skill that owns the `merge → cleanup` tail of the default delivery path:
 
 ```
-… → /pre-merge → /compound (in-PR, when a lesson exists) → [merge + worktree teardown — THIS SKILL] → [issue-closing — Step 9 prose]
+… → /pre-merge → /compound (in-PR, when a lesson exists) → /pre-merge (re-run over the compound commit; re-stamps) → [merge + worktree teardown — THIS SKILL] → [issue-closing — Step 9 prose]
 ```
 
 Use `/closeout` when:

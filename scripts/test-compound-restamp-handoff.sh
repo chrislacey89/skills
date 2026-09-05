@@ -38,6 +38,21 @@
 #      the blocks; they extract them verbatim and RUN them, in both directions,
 #      against a fixture that carries one compound commit of each kind.
 #
+# THE LIMIT OF THAT, FOUND BY MUTATING THIS SUITE'S OWN SUBJECT. Restoring the
+# `grep -qv` draft into /pre-merge/SKILL.md and re-running leaves this suite
+# GREEN. The blocks execute under `bash -c`, and the ugrep wrapper is an
+# interactive-shell function that does not reach a non-interactive bash — so the
+# runner sees real grep, where `-q -v` is correct. The behavioral tests verify
+# the blocks' LOGIC; they cannot see the environment the defect actually fires
+# in, and reproducing that environment on a GitHub runner is not possible
+# because the wrapper is not there either. So the shape is BANNED rather than
+# its behavior tested (the same move scripts/test-pipefail-safe-matchers.sh
+# makes, and for the overlapping reason — `grep -q` is also an early-exiting
+# reader that gives `pipefail` a second exit status to misreport). That
+# assertion is decidable from the text and runs anywhere. Without it this
+# suite would have reported a validated instrument over the exact draft that
+# shipped the bug.
+#
 # WHY A FIXTURE OF EACH KIND. #298's lesson 4 — a fixture that cannot express
 # the fault proves nothing about it. The fault here is a code-carrying commit
 # being waved through on the strength of its `docs: compound` subject, so the
@@ -229,6 +244,45 @@ assert_eq "delta is a /compound entry — do not re-recommend /compound; the exi
 # a wrong answer here hides a code commit behind a docs-shaped subject.
 assert_eq "" "$(run_premerge "$WITH_CODE_SHA" "$REVIEWED_SHA")" \
     "/pre-merge does NOT suppress it when the delta carries a path outside docs/solutions/"
+
+# --- the banned shape ---------------------------------------------------------
+
+# Neither block may ask an early-exiting reader for its verdict. Two independent
+# reasons, and the ban covers both at once: under `pipefail` the producer dies of
+# SIGPIPE and the pipeline reports "no match" from a pipeline that matched; and
+# under the ugrep wrapper on a Claude Code shell's PATH, `-q -v` returns the
+# inverse answer outright. The behavioral tests above cannot see either — they
+# run the blocks under `bash -c`, with real grep and no `pipefail` — which is
+# precisely why this one is a text assertion and not another fixture run.
+#
+# Every spelling GNU and BSD grep accept, taken from test-pipefail-safe-matchers.sh's
+# own reach note: clustered short flags in either order, and the long forms.
+banned_reader='grep +(-[a-zA-Z]*q[a-zA-Z]*|--quiet|--silent)'
+for pair in "pre-merge:$premerge_block" "closeout:$closeout_block"; do
+    who="${pair%%:*}"
+    body="${pair#*:}"
+    # Drop comment lines first: both blocks explain in prose why they avoid the
+    # banned form, and a scanner that reads the explanation as the offense would
+    # make the explanation unwritable. Full-line comments only, which is all
+    # either block carries — a future block with a trailing `# …` on a code line
+    # would need this widened.
+    code="$(grep -v '^[[:space:]]*#' <<<"$body" || true)"
+    hits="$(grep -oE "$banned_reader" <<<"$code" | tr '\n' ' ' | sed 's/ $//' || true)"
+    assert_eq "" "$hits" \
+        "/$who's block asks no early-exiting reader for its verdict (pipefail-safe, and ugrep-safe)"
+done
+
+# Non-vacuity: the pattern must actually match the shape it bans, or the two
+# assertions above are a pair of guards that cannot fire (#296). The sample is
+# assembled around a printf'd pipe rather than written as one literal, because
+# scripts/test-pipefail-safe-matchers.sh scans committed suites for the text
+# `| grep -q` and cannot tell a fixture string from a live pipeline — a sample
+# that trips a sibling detector is a sample nobody can keep.
+# shellcheck disable=SC2016  # the format string is the fixture's literal text, not an expansion
+banned_sample="$(printf 'outside=$(git diff --name-only %s grep -qv "^docs/")' '|')"
+assert_eq "grep -qv" \
+    "$(grep -oE "$banned_reader" <<<"$banned_sample" || true)" \
+    "the banned-reader pattern matches the draft that shipped the bug"
 
 # -----------------------------------------------------------------------------
 
