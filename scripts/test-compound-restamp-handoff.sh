@@ -114,6 +114,19 @@ extract_block() {
     ' "$1"
 }
 
+# extract_section <file> <exact heading line> — everything between that
+# heading and the next `#`-prefixed line (any level), exclusive of both. Used
+# below to scope the "only writer" assertion to Phase 5 specifically, rather
+# than the whole file — see the comment at that assertion for why a file-wide
+# match is the wrong shape here.
+extract_section() {
+    awk -v heading="$2" '
+        $0 == heading { inside = 1; next }
+        inside && /^#/ { exit }
+        inside { print }
+    ' "$1"
+}
+
 # -----------------------------------------------------------------------------
 
 section "the in-PR path hands to /pre-merge, not /closeout"
@@ -140,11 +153,24 @@ assert_eq "1" "$next_session_count" \
 # owns the single-writer contract itself; this asserts the reason is written
 # down where the handoff is read, so a future editor deleting the handoff has to
 # confront why it exists.
-if grep -qF "only writer" "$compound_skill"; then
-    ok "/compound states that it is not the stamp's writer, which is why it hands back"
+#
+# Scoped to Phase 5, not grep -qF over the whole file. "only writer" also
+# appears in the Invocation Position paragraph (a summary of the same fact,
+# written before Phase 5 exists to state it operationally) — a file-wide grep
+# is satisfied by that summary alone and stays green with the Phase 5 hand-back
+# sentence deleted outright. That is root cause 4 of
+# docs/solutions/testing-patterns/battery-that-only-perturbs-what-is-present-2026-08-28.md,
+# "a needle too generic to die with its sentence": the phrase survives its own
+# sentence being deleted because a decorative copy lives elsewhere in the file.
+# Extracting the Phase 5 section first and matching only inside it makes the
+# assertion die with the sentence it is meant to pin.
+phase5="$(extract_section "$compound_skill" "### Phase 5: Commit")"
+[[ -n "$phase5" ]] || fatal "no '### Phase 5: Commit' section in $compound_skill"
+if grep -qF "only writer" <<<"$phase5"; then
+    ok "/compound's Phase 5 states that it is not the stamp's writer, which is why it hands back"
 else
-    bad "/compound no longer says why it cannot re-stamp itself" \
-        "the phrase 'only writer'" "absent"
+    bad "/compound's Phase 5 no longer says why it cannot re-stamp itself" \
+        "the phrase 'only writer' inside ### Phase 5: Commit" "absent"
 fi
 
 # -----------------------------------------------------------------------------
