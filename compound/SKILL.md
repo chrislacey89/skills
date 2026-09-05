@@ -22,15 +22,17 @@ When the work surfaced planning or estimation surprises, capture those too. McCo
 
 This is a primary pipeline skill that closes the compounding loop. It runs near the tail of the default delivery path, after `/pre-merge` has created the PR.
 
-**Default — capture the lesson in the PR, before merge.** When a durable lesson is already known at PR time, run `/compound` on the open PR branch so the `docs/solutions/` entry rides the same PR as the code that taught it — reviewed in the same pass and merged atomically with it. This places `/compound` between `/pre-merge` and `/closeout`:
+**Default — capture the lesson in the PR, before merge.** When a durable lesson is already known at PR time, run `/compound` on the open PR branch so the `docs/solutions/` entry rides the same PR as the code that taught it — reviewed before the same merge and merged atomically with it. This places `/compound` between `/pre-merge` and `/closeout`, and returns through `/pre-merge` once:
 
 ```
-… → /pre-merge → /compound (in-PR, when a lesson exists) → /closeout (merge + teardown) → cleanup
+… → /pre-merge → /compound (in-PR, when a lesson exists) → /pre-merge (re-run: the compound commit is the post-stamp delta; re-stamps) → /closeout (merge + teardown) → cleanup
 ```
+
+The return leg is not decoration. Committing onto the branch moves the head past the stamp `/pre-merge` Phase 4 wrote, and `/pre-merge` is the stamp's only writer — so without the re-run the entry is merged with the code and read by nobody, which is the one thing the in-PR default was chosen to avoid. Phase 5 states the handoff; this is why it exists.
 
 **Fallback — capture post-merge.** Some lessons only surface during or after the merge: integration surprises, QA findings, behavior seen once it ships. For those, run `/compound` after `/closeout` has merged. This is the fallback path, not the default.
 
-Either way, `/compound` never performs the merge or worktree teardown itself — that is `/closeout`. Capturing in-PR means committing onto the open PR branch so the lesson is reviewed like any other change; it does not mean merging.
+Either way, `/compound` never performs the merge or worktree teardown itself — that is `/closeout` — and never writes the review-currency stamp, which is `/pre-merge`'s alone. Capturing in-PR means committing onto the open PR branch and handing back for the review that covers it; it does not mean merging.
 
 Do not use it for trivial edits or for lessons that belong entirely in a higher-fidelity artifact like a test, linter rule, or code comment without any durable project-level learning. Whether in-PR or post-merge, the "When NOT to Use" guard below still applies — most PRs carry no durable lesson, and there is no standing per-PR `docs/solutions/` slot to fill.
 
@@ -370,13 +372,21 @@ gh issue view -R chrislacey89/skills <n> --json number,title,state
 
 A non-zero exit means the entry cites an issue that is not there — do not commit it. This is weaker than a contract test and deliberately so: the citation lives in a downstream repo's `docs/solutions/` file, which this repo's CI cannot read, so there is nothing for a `scripts/test-*.sh` to assert against. What the suite *can* pin is that this command is still here, and `scripts/test-q4-mechanism-names.sh` does — the check runs where the claim is made, and the pin stops the check itself from being quietly dropped.
 
+**Then hand to a `/pre-merge` re-run — that push just moved the head past the review stamp.** `/pre-merge` Phase 4 recorded the SHA its review actually covered, and the commit above lands after it. `/compound` cannot fix that itself: `/pre-merge` is the stamp's only writer — pinned by `scripts/test-review-currency-marker.sh` — and a skill that stamped its own commit would certify as reviewed the one commit nothing independent read. So the in-PR path's terminal step is a review, not a merge.
+
+Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the post-stamp delta — this commit — as its subject, and re-stamps at the new head (its Phase 1 step 4). `/closeout` follows from `/pre-merge`'s own next-step menu; **the in-PR path never hands to `/closeout` directly.**
+
+**Why this is not ceremony on the docs-only case.** The in-PR default exists so the entry is "reviewed and merged with the code that taught it" — Phase 5's own words. Skipping the re-run makes the second half of that true and the first half false, which is worse than the post-merge fallback, because the fallback at least does not claim the review. And the case is not reliably docs-only: this commit stages Phase 4's mechanism alongside the entry, and in the measurement behind #336 — four `docs: compound` commits across seventeen stamped merges — two carried code (a contract test rewritten to derive its coverage from the schema, and a new test file), both under a subject beginning `docs: compound`. The subject line is not evidence of what the commit contains, and the mechanism file is exactly the kind of guard `/compound` Phase 4 found vacuous when self-authored.
+
+**The re-run terminates here; it does not bounce back.** Its subject is the entry that captured the lesson, so no *uncaptured* lesson can emerge from reading it — `/pre-merge` Phase 4's closing recommendation is conditioned on that and does not re-offer `/compound`. There is one re-run per in-PR capture, and its exit is `/closeout`.
+
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
 
 ### Phase 6: Report
 
 Tell the user what was captured, then print the closing block that matches the path you took.
 
-**In-PR path (default)** — the lesson now rides the open PR; the loop closes when `/closeout` merges it. Hand off to the merge step:
+**In-PR path (default)** — the lesson now rides the open PR, one commit past the stamp `/pre-merge` Phase 4 wrote. Hand off to the re-run that reviews it and moves the stamp; `/closeout` merges after that, from `/pre-merge`'s menu:
 
 ```
 Compounded onto PR #<n>: docs/solutions/<category>/<filename>.md
@@ -384,10 +394,10 @@ Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, fi
 
 Key lesson: [One sentence summary of the most important takeaway]
 
-This rides the PR — reviewed and merged with the code that taught it — and will be consulted automatically during future /research and /write-a-prd sessions.
+This rides the PR and will be consulted automatically during future /research and /write-a-prd sessions. It is not yet reviewed: it landed after the stamp, so the re-run below is what makes "reviewed and merged with the code that taught it" true rather than asserted.
 
-**Next session:** /closeout
-**Input:** PR #<n>
+**Next session:** /pre-merge
+**Input:** PR #<n> — the post-stamp delta is this compound commit; review it and re-stamp, then /closeout
 ```
 
 **Post-merge path (fallback)** — the work already shipped; this is the end of the loop:
@@ -403,7 +413,7 @@ This will be consulted automatically during future /research and /write-a-prd se
 **Loop closed.** Next: /help when you return to this repo.
 ```
 
-On the in-PR path `/closeout` still follows — it performs the merge — so `/compound` hands to it with a `**Next session:**` line. On the post-merge path `/compound` is the end of the loop, so it prints the loop-closed line instead. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
+On the in-PR path two steps still follow — `/pre-merge` re-reads the delta and re-stamps, then `/closeout` performs the merge — so `/compound` hands to the first of them with a `**Next session:**` line. On the post-merge path `/compound` is the end of the loop, so it prints the loop-closed line instead. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
 
 ## Maintenance
 
@@ -428,6 +438,6 @@ During review, check each document's **Shelf Life** section. If the expiration c
 
 - **Expected input:** a durable lesson worth reusing — known at PR time (the in-PR default) or surfacing during/after merge (the post-merge fallback), plus solved bugs or meaningful lessons from implementation, QA, or review
 - **Produces:** durable `docs/solutions/` knowledge that feeds future `/research` and `/write-a-prd` sessions — riding the PR on the in-PR path, committed to base (or a small doc PR) on the post-merge path
-- **Comes after:** `/pre-merge` on the in-PR default path (capture onto the PR branch, then `/closeout` merges code + lesson together); `/closeout` on the post-merge fallback path. `/compound` captures the lesson — it never merges
+- **Comes after:** `/pre-merge` on the in-PR default path (capture onto the PR branch, hand back for a re-run that reviews the new commit and re-stamps, then `/closeout` merges code + lesson together); `/closeout` on the post-merge fallback path. `/compound` captures the lesson — it never merges, and it never writes the review-currency stamp
 - **Closes the loop on:** `/pre-merge`, `/closeout`, and shipped implementation work
-- **What comes next:** in-PR, `/closeout` merges the PR carrying the lesson; post-merge, the loop is closed. Either way, future features consult the compounded knowledge during discovery, research, and shaping
+- **What comes next:** in-PR, a `/pre-merge` re-run in author-mode reviews the compound commit as the post-stamp delta and re-stamps, then `/closeout` merges the PR carrying the lesson; post-merge, the loop is closed. Either way, future features consult the compounded knowledge during discovery, research, and shaping
