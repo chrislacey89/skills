@@ -413,10 +413,17 @@ mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
 **Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta consists only of `docs/solutions/` paths, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed:
 
 ```bash
-# Process substitution, not a pipe: `grep -q` exits at the first match and the
-# producer dies of SIGPIPE, which `pipefail` would report as "no match" from a
-# pipeline that matched (scripts/test-pipefail-safe-matchers.sh).
-if ! grep -qv '^docs/solutions/' < <(git diff --name-only "$SCOPE_FROM...HEAD"); then
+# Capture and test for empty rather than asking `grep -qv` for the verdict.
+# Two reasons, and the second is why this shape is not optional: `grep -q` exits
+# at the first match and the producer dies of SIGPIPE, which `pipefail` reports
+# as "no match" from a pipeline that matched (scripts/test-pipefail-safe-matchers.sh);
+# and the `grep` on PATH in a Claude Code shell is a function wrapping ugrep,
+# whose `-q -v` returns 1 on input that *does* contain a non-matching line —
+# the exact inversion of the verdict, in the direction that suppresses the
+# recommendation on a delta carrying code. `grep -v` without `-q` is correct
+# under both.
+outside=$(git diff --name-only "$SCOPE_FROM...HEAD" | grep -v '^docs/solutions/' || true)
+if [ -z "$outside" ]; then
   echo "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout"
 fi
 ```

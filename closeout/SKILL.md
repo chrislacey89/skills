@@ -126,6 +126,24 @@ Three outcomes, and only one of them interrupts:
 
   If `$REVIEWED_SHA` is not present locally — the branch was force-pushed and the reviewed commit was rewritten away — say so. The reviewed diff is unrecoverable, which is a *stronger* divergence signal than a measurable delta, not a weaker one.
 
+  **Name a `docs: compound` commit for what it contains, not for its subject line.** One post-stamp commit has a standing explanation available — the `docs/solutions/` entry `/compound`'s in-PR path commits onto the branch — and that explanation is the one most likely to get the menu below clicked through. It is only ever *half* available: `/compound` Phase 5 stages Phase 4's mechanism in the same commit, so a `docs: compound` subject covers both a docs-only entry and a commit that ships code. In the measurement behind #336, four of ten past-stamp merges on one repo were compound commits and two of the four shipped code — a contract test rewritten to derive its coverage from the schema, and a new test file. Read the paths rather than the subject:
+
+  ```bash
+  git log --format='%H %s' "$REVIEWED_SHA".."$HEAD_SHA" \
+    | sed -n 's/^\([0-9a-f]*\) \(docs: compound.*\)$/\1/p' \
+    | while read -r sha; do
+        outside=$(git show --name-only --format= "$sha" | grep -v '^docs/solutions/' || true)
+        if [ -z "$outside" ]; then
+          echo "$sha  docs-only /compound entry"
+        else
+          echo "$sha  'docs: compound' subject, but also touches:"
+          printf '%s\n' "$outside" | sed 's/^/    /'
+        fi
+      done
+  ```
+
+  A commit the loop prints as a **docs-only `/compound` entry** is the expected post-stamp delta on the in-PR path, and saying so is worth one line — a divergence the operator cannot account for and one they can are different situations, and describing them identically is how the gate becomes wallpaper. It is still *unreviewed* unless the `/compound` handoff's `/pre-merge` re-run ran; naming it explains the delta, it does not discharge it. A commit that prints **paths outside `docs/solutions/`** is a code delta like any other and gets no discount at all: say that the subject line is misleading and show the paths, so the menu below is answered on the diff rather than on the prefix.
+
   Then ask once, with a single `AskUserQuestion`, recommended option first:
 
   - **→ Re-review the delta with `/pre-merge` (recommended)** — put the added commits through the review dimensions, then re-stamp and return here. `/pre-merge` reads this same stamp itself and takes the post-stamp delta as its subject (its Phase 1 step 4), so there is no range to pass it; it falls back to the whole branch on the force-push case above and when a merge commit landed after the stamp.
