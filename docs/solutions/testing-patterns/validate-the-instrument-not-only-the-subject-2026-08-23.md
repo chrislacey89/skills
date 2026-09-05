@@ -1,6 +1,6 @@
 ---
 date: 2026-08-23
-updated: 2026-09-03
+updated: 2026-09-04
 category: testing-patterns
 problem_type: a reviewer's own measuring instrument fails while reporting normally, so a false result is read as a finding about the subject
 components: [scripts, lefthook, validate-skills, pre-merge, compound]
@@ -87,6 +87,14 @@ happened to emit, and a *second* message (SC2317, the same defect one level in)
 got through anyway. CI went red. The red sat on the PR through four rounds. Both
 reviewers ran a local binary that disagreed with the gate and believed the local
 one.
+
+## Second observation (2026-09-04, PR #348) — the instrument's population excluded the subject
+
+Two instruments reported clean on a new 200-line contract suite, and both claims went into the PR body's Review Notes: `scripts/shellcheck-pinned.sh` exit 0 (three real findings, two SC2016 and one SC2015) and `scripts/test-guards-can-fire.sh` green (six `( … ) || fatal` guards that cannot fire). Neither had read the file. Both derive their population from a bare `git ls-files`, which lists tracked files only, and the suite was untracked when the author ran them. Staging it made both red, and a reviewer sub-agent found the shellcheck one; the guards one surfaced at `/fix-findings` Step 0 as a red baseline.
+
+This is the family's shape exactly — the instrument failed while reporting normally, and the false result was read as a finding about the subject — with a different mechanism from the first observation: not a wrong operator or an unvalidated grep, but a *population* that did not contain the subject. It was not the first time. PR #337's review found an SC2001 hit the same way eight days earlier, and `scripts/test-compound-clustering-single-source.sh`'s header records its own first draft red on a clean tree for the same reason (its incident 3). Both recorded it as a procedure — "run this suite AFTER staging" — which is a reminder, and the third instance is what reminders produce.
+
+**Mechanism.** The two populations that bit now read `git ls-files --cached --others --exclude-standard`, so a file being written is in the set before it is staged and ignored files stay out. `scripts/test-population-covers-untracked.sh` extracts both expressions from the real files and runs them in a fixture holding a tracked, an untracked, and an ignored file, asserting the set each returns — and runs the tracked-only variant as a control so the assertion is shown to discriminate. Three other instruments key their population on `git ls-files` (`test-bundled-pointer-resolution.sh`, `test-per-unit-series-contract.sh`, `test-compound-clustering-single-source.sh`); none has an incident, each carries its own accounting comments, and they are named here rather than swept, per `sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md`.
 
 ## Learning Level
 
@@ -266,6 +274,9 @@ repo-wide conversion it reports on). Prose for instances 1–4, with the narrowe
 reason stated above.
 
 ## Related
+
+- PR #348 — the second observation: two `git ls-files` populations reporting clean on an unstaged file; `scripts/test-population-covers-untracked.sh` is its mechanism
+- `docs/solutions/architecture-decisions/sweep-commits-reintroduce-their-own-defect-class-2026-08-18.md` — the other recurrence on the same branch, and why the three remaining `git ls-files` sites are named rather than swept
 
 - PR #271 — the branch this surfaced on
 - #268 — the issue whose thesis this generalizes

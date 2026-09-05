@@ -101,6 +101,19 @@ The subject was one paragraph of `fix-findings/SKILL.md` — the rule governing 
 
 **No mechanism could have caught any round, and this is the correct outcome rather than a gap.** A breaker verified it by reversion rather than inspection: reverting each fix in turn produced zero change in suite outcome, and deleting the entire rule left all 28 suites green. The defect is the semantic relation between a clause and its tail, which is exactly the meaning-claim `#340` rules out sending to a grep — and which `prose-contract-tests-are-restated-claims-2026-08-27.md` says becomes a second restatement if you try. The mitigation here is procedural, not mechanical.
 
+## Fifth observation (2026-09-04, PR #348 / issue #347) — the branch built to end the churn restated its own rule short
+
+#347 diagnosed the post-fix review loop as non-terminating and scoped the `/pre-merge` re-run to the post-stamp delta. Its implementing commit stated the scope rule's four whole-branch fallbacks at the canonical site (`pre-merge/SKILL.md` Phase 1 step 4) and restated them at two others — `fix-findings/SKILL.md` § Handoff and the `SYSTEM-OVERVIEW.md` handoff row — with three of the four. The dropped state, *stamp equal to `HEAD`*, is reachable: a `/fix-findings` round in which every fixer returns `refuted` lands no commit.
+
+| Round | What it correctly fixed | What it introduced | Caught by |
+|---|---|---|---|
+| `7979b3c` | — (introduced the scope rule, with all four fallbacks at the canonical site) | Two restatements one state short, written in the same commit as the canonical list | review 1, sub-agent A, restated-claims census |
+| `c200849` | Replaced both restatements with pointers at the canonical site | — (clean at the two sites) — but the pointer carries two new claims, that the step exists and that it names four states, and nothing holds either | the breaker for that fix: "Three states" at the target, or renumbering the step, leaves every suite green |
+
+**Two things are new here.** First, the restatement was written *in the same commit* as the canonical text, by the session that had just enumerated all four — not a later sweep that missed a site. Observation 2 recorded that shape once; this is the second time, and both were in prose about the same seam (`/fix-findings` → `/pre-merge`). Second, the pointer remedy `docs/restated-claims.md` prescribes moves the drift rather than removing it: a pointer cannot drift *short*, but its target can, and the breaker demonstrated both directions green. The mechanism shipped with this observation pins the structural half only — the numbered anchor exists once and each pointer names it — and states plainly that the meaning half (four states at the target) is a reader's job.
+
+**The same PR carried the second observation of `validate-the-instrument-not-only-the-subject-2026-08-23.md`** — two instruments reporting clean on a file they had never read — which is a different pattern with the same author-side cause: the PR body's verification claims were written from runs whose ground did not include the new file. Recorded there, cross-referenced here because both surfaced on one branch and both were found by fresh readers, none by a suite.
+
 ## Symptoms
 
 - A commit message credibly says "swept every instance," and a later reviewer finds one it missed **in the file that references the ones it fixed**.
@@ -192,6 +205,10 @@ Mutation-testing found two holes in a 27-assertion suite written by an author wh
 
 **Process-level, fourth observation — count corrective rounds against the seam, not against the session.** Observation 4's mitigation cannot be a mechanism (see above), and it cannot be the existing per-branch or per-commit question either, because each of its three sessions made exactly one fix attempt and succeeded at what it was asked. The thrashing was visible only one level up, across sessions, at the seam. `chrislacey89/skills#202` proposes a fix-shape circuit breaker; a 2026-08-27 comment on that issue already argued its counter has to persist across sessions, on the PR rather than in a session-scoped variable. This observation is the issue's **third** field incident, not its first — a 2026-09-04 comment was corrected in place after an earlier draft miscounted itself — and its narrower contribution is that the counted unit must be the **seam**, not the session and not the branch: the seam is the paragraph, function, or contract under correction, and three one-shot sessions on one paragraph would read as three clean successes unless the count is keyed to what is being fixed rather than to who is fixing it. A fresh agent per round is what `/fix-findings` sells, and it does **not** reset this risk; it hides it, because each session's local view is one clean success. The operator's stop after round 3 was the "rely on someone to notice" path, which is the path that failed in observations 1–3.
 
+**Code-level, fifth observation.** `scripts/test-delta-review-scope.sh` § 8 pins that `pre-merge/SKILL.md` carries exactly one `4. **Decide the scope` anchor and that both pointer sites name "Phase 1 step 4" — the renumbering drift the breaker demonstrated goes red. It does not pin that the target names four states; a count of clauses over prose is the planted-term pin `a-planted-term-cannot-discriminate-meaning-2026-09-04.md` rules out.
+
+**Process-level, fifth observation — the restated-claims census has to run on the commit that writes the canonical text, not only on later sweeps.** Both same-commit instances (observations 2 and 5) were written by the session holding the full list, in the same edit. `/execute` Step 4's census and `/pre-merge`'s detector both fired correctly here; what did not exist was an author-time check *before* the first commit. `/fix-findings` Step 1's "grep `docs/solutions/` before writing" is the nearest hook, and it is scoped to fixers.
+
 The loop-mode ledger is what made this visible at all. Four passes with durable rows showed *findings introduced by the previous fix* as a countable series (8 → 5 → 3 → 3); in a single advisory pass each would have read as an unrelated miss.
 
 ## Planning / Calibration Notes
@@ -243,6 +260,8 @@ Split the decision by consumer, not by count:
 - PR #342, issue #341 — the fourth observation, and the first where each correction had a different author
 - `chrislacey89/skills#202` — the filed record where the fix-shape circuit-breaker prescription lives, pending implementation, not a shipped mechanism. This observation is its **third** incurred field incident; its contribution is the argument that the trigger's counted unit must be the seam (the paragraph, function, or contract under correction) rather than the session — a 2026-08-27 comment on the issue already argued for cross-session, PR-persisted state. **Not a test**, and the entry says why: the defect is a semantic relation between a clause and its tail, which `#340` rules out sending to a grep and which `prose-contract-tests-are-restated-claims-2026-08-27.md` shows becomes a second restatement if you try. Of the five Q4 names, a contract test came closest and was rejected on that ground; a planning-checklist item was rejected as the discipline-shaped fix the Key Decision above already retires
 - `docs/solutions/testing-patterns/prose-contract-tests-are-restated-claims-2026-08-27.md` — why observation 4 ships no pin
+- PR #348, issue #347 — the fifth observation: the scope-rule fallbacks restated one short in the same commit as the canonical list, repaired by pointers, whose target is pinned structurally by `scripts/test-delta-review-scope.sh` § 8
+- `docs/solutions/testing-patterns/validate-the-instrument-not-only-the-subject-2026-08-23.md` — the other recurrence on the same branch, a different pattern with the same author-side cause
 
 ## Shelf Life
 

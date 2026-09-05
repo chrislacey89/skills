@@ -29,14 +29,21 @@ pinned_file="$root/.shellcheck-version"
 pinned="$(tr -d '[:space:]' < "$pinned_file")"
 [ -n "$pinned" ] || { echo "shellcheck-pinned: $pinned_file is empty" >&2; exit 1; }
 
-# The file set is every tracked *.sh, wherever it lives — the same set CI
-# lints — and an empty set is an error, not a clean run: xargs on empty input
-# runs nothing and exits 0, which would report "linted" having linted nothing.
+# The file set is every *.sh in the tree, wherever it lives, whether or not it
+# has been staged yet — tracked plus untracked-and-not-ignored. CI sees only
+# tracked files because everything there is committed, so the two sets agree
+# there; locally they differ by exactly the file being written. Keying on
+# tracked files alone reported "clean" on PR #348's new suite twice, having
+# never read it — the same blind spot PR #337 hit and the compound-clustering
+# suite's header records. scripts/test-population-covers-untracked.sh runs the
+# expression below in a fixture and pins that an unstaged file is in the set.
+# An empty set is an error, not a clean run: xargs on empty input runs nothing
+# and exits 0, which would report "linted" having linted nothing.
 lint() {
     local n
-    n="$(cd "$root" && git ls-files "*.sh" | grep -c .)" || true
+    n="$(cd "$root" && git ls-files --cached --others --exclude-standard "*.sh" | grep -c .)" || true
     [ "$n" -gt 0 ] || { echo "shellcheck-pinned: git ls-files found no *.sh files to lint" >&2; return 1; }
-    (cd "$root" && git ls-files -z "*.sh" | xargs -0 "$1")
+    (cd "$root" && git ls-files -z --cached --others --exclude-standard "*.sh" | xargs -0 "$1")
 }
 
 # Fast path: the PATH shellcheck already is the gate's instrument.

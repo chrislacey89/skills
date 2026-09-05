@@ -381,6 +381,29 @@ assert_eq "review scope: post-stamp delta, from $r1a_sha|plain.txt r1b.txt r2.tx
     "$(run_scope "$(stamped_body "$merge_sha" "$r1a_sha")")" \
     "an older stamp above a newer one resolves SCOPE_FROM to the newer, and its diff excludes the older-but-still-post-stamp r1a.txt"
 
+# --- 8. The pointer sites' target resolves ---------------------------------------
+# Finding 4 of #348's review replaced two short restatements of the fallback
+# list with pointers at "Phase 1 step 4". A pointer cannot drift short, but its
+# breaker showed the target is held by nothing: renumber the step and every
+# pointer dangles, green. This pins the structural half — the numbered anchor
+# exists exactly once and each pointer names it — and leaves the meaning half
+# (that the target still names four states) to a reader, which is the ceiling
+# docs/solutions/testing-patterns/prose-contract-tests-are-restated-claims-2026-08-27.md
+# records for prose claims.
+section "the 'Phase 1 step 4' pointer sites resolve to one numbered anchor (#348 compound, sweep-commits fifth observation)"
+step4_count="$(grep -c '^4\. \*\*Decide the scope' "$premerge_skill" || true)"
+assert_eq "1" "$step4_count" "pre-merge/SKILL.md carries exactly one step '4. **Decide the scope' anchor"
+for site in "$fixfindings_skill" "$repo_root/SYSTEM-OVERVIEW.md"; do
+    folded="$(tr '\n' ' ' < "$site")"
+    if [[ "$folded" == *"Phase 1 step 4 names"* ]]; then
+        printf '  ok   %s points at Phase 1 step 4\n' "${site#"$repo_root"/}"
+        pass=$((pass + 1))
+    else
+        printf '  FAIL %s no longer points at Phase 1 step 4 — the pointer form was the fix for restating the list short\n' "${site#"$repo_root"/}"
+        fail=$((fail + 1))
+    fi
+done
+
 # -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
