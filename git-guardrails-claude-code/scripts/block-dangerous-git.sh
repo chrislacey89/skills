@@ -304,6 +304,262 @@ inspect_git() {
     return 0
 }
 
+# --- gh pr merge: the review-currency refusal --------------------------------
+#
+# /pre-merge Phase 4 stamps the SHA it reviewed into the PR body; /closeout
+# Step 2 reads that stamp back and compares it to the PR's current head before
+# merging. The read is correct and it is skippable: a merge typed by hand, or
+# issued by an AFK loop, never passes through /closeout, and that unattended
+# case is exactly where nobody notices the reviewed diff is not the merged
+# diff. This makes the read unskippable at the one command that performs the
+# merge (#327, Lock 2).
+#
+# The sed expression below is byte-identical to /closeout's by contract, not by
+# intent: scripts/test-review-currency-marker.sh extracts it from this file and
+# from closeout/SKILL.md and requires the two to be equal, so a change to
+# either one that is not made to the other fails CI.
+#
+# THE DIRECTION OF ERROR IS DIFFERENT HERE THAN FOR git, and the asymmetry is
+# the whole design. The git rules above fail closed: quotes are stripped, a
+# `git` token is inspected wherever it appears, and a force push written as
+# search text is refused, because a blocked grep costs one rephrase and a
+# missed force push costs history. Neither half of that reasoning transfers.
+# The words `gh pr merge` appear in ordinary prose, in this pack's own skills,
+# in a commit message, and in every grep for them — and a miss here is caught
+# a second time by /closeout Step 2, which performs the same read. So this
+# check fails OPEN at every point it cannot be certain, and refuses only when
+# it has resolved a specific PR and read two well-formed, unequal OIDs.
+
+STALE_STAMP_OPT_OUT=ALLOW_STALE_STAMP_MERGE
+
+# gh_invocation_index — index of the `gh` token in $tokens when this segment
+# INVOKES gh, or empty when gh merely appears as an argument or as text.
+#
+# Command position, not any position. `echo gh pr merge`, `# gh pr merge`, and
+# `grep -rn 'gh pr merge' .` all mention the words without running them, and
+# this hook runs before every Bash call in every repo it is installed into. An
+# earlier draft matched the words anywhere in the command and refused all three
+# (#332); a hook that refuses `echo` is a hook that gets uninstalled.
+#
+# Leading environment assignments and the wrappers below keep the following
+# word in command position. The list is short and every entry is probed in
+# scripts/test-git-guardrails.sh rather than trusted from memory; a wrapper it
+# does not know produces a miss, which is the safe direction.
+#
+# `bash -c`, `sh -c`, and `eval` are in the list because the quote stripping
+# above has already flattened their argument into ordinary tokens by the time
+# this runs — the same property that lets the git rules see into
+# `bash -c "git push -f"`. An independent probe walked all three of them, plus
+# `xargs -I{} bash -c '…'`, past a draft that had only the process wrappers.
+gh_invocation_index() {
+    GH_INDEX=""
+    local i=0 tok
+    while [ "$i" -lt "${#tokens[@]}" ]; do
+        tok=${tokens[$i]}
+        case "$tok" in
+            gh|*/gh)
+                GH_INDEX=$i
+                return 0
+                ;;
+            [A-Za-z_]*=*)            ;;  # VAR=value prefix
+            sudo|doas|env|command|exec|nohup|time|xargs) ;;
+            bash|sh|zsh|dash|eval)                        ;;
+            if|then|elif|else|do|while|until|!|\{)       ;;
+            -*)                      ;;  # a wrapper's own flags
+            *) return 1 ;;
+        esac
+        i=$((i + 1))
+    done
+    return 1
+}
+
+# heredoc_delimiter — the delimiter word when this segment opens a heredoc, so
+# the lines that follow can be treated as data. `<<EOF`, `<< EOF`, `<<-EOF`
+# and `<<'EOF'` all arrive here as one shape, because the normalizer has
+# already removed the quotes.
+#
+# Tracked for the gh check only. Applying it to the git rules above would
+# narrow them, and their suite pins the current reach — including the
+# deliberate over-block on quoted search text.
+heredoc_delimiter() {
+    local i=0 tok
+    while [ "$i" -lt "${#tokens[@]}" ]; do
+        tok=${tokens[$i]}
+        case "$tok" in
+            "<<"|"<<-")
+                if [ $((i + 1)) -lt "${#tokens[@]}" ]; then
+                    printf '%s' "${tokens[$((i + 1))]}"
+                    return 0
+                fi
+                ;;
+            "<<"*)
+                tok=${tok#<<}
+                tok=${tok#-}
+                if [ -n "$tok" ]; then
+                    printf '%s' "$tok"
+                    return 0
+                fi
+                ;;
+        esac
+        i=$((i + 1))
+    done
+    return 1
+}
+
+# gh_merge_target — resolve which PR `gh pr merge` would act on, from the
+# tokens after `merge`. Sets GH_SELECTOR and GH_REPO, and returns 1 when the
+# target cannot be determined without guessing.
+#
+# Two facts resolve this without re-authoring gh's flag table, which would be
+# a paraphrase of another tool's option list and a permanent drift liability
+# this repo would then own (CLAUDE.md § "Commands a skill documents", rule (a)):
+# `gh pr merge` takes at most one positional argument, and a flag's value
+# always follows the flag it belongs to. So an operand that appears BEFORE any
+# flag cannot be a value, and is the positional:
+#
+#   no operands                        -> the PR for the current branch
+#   one operand, before any flag       -> that operand IS the positional
+#   one operand, after some flag       -> unresolvable; the command runs
+#   anything else                      -> unresolvable; the command runs
+#
+# An earlier draft accepted an all-digits operand anywhere on the grounds that
+# no gh flag takes a number. That was a claim about gh's option list made
+# without reading it, and it is false: an independent probe read
+# `gh pr merge --help` and found five value-taking flags, so
+# `gh pr merge --subject 4821` was resolving to PR 4821 while the merge it
+# would permit targets the current branch's PR. Looking up the wrong pull
+# request is worse than not looking one up, because it reaches a confident
+# verdict about a PR nobody asked about — so the rule above is the sound one,
+# and `gh pr merge --squash 4821` is a documented miss rather than a guess.
+#
+# A `#` token starts a shell comment. Everything after it is prose, not
+# operands — without this, `gh pr merge # ship it` counted three operands,
+# fell through to unresolvable, and let the barest form of the command through.
+#
+# `-R` / `--repo` is read rather than dropped, and forwarded to the lookup.
+# Dropping it was a real defect in the first version of this check: it made
+# `gh pr merge 123 -R other/repo` refuse on PR 123 of the *current* repo.
+gh_merge_target() {
+    GH_SELECTOR=""
+    GH_REPO=""
+    local tok next_is_repo=0 other_flags=0 operand_count=0 first_operand=""
+
+    while [ $# -gt 0 ]; do
+        tok=$1
+        shift
+
+        if [ "$next_is_repo" -eq 1 ]; then
+            GH_REPO=$tok
+            next_is_repo=0
+            continue
+        fi
+
+        case "$tok" in
+            \#*)       break ;;
+            --repo=*)  GH_REPO=${tok#--repo=} ; continue ;;
+            --repo|-R) next_is_repo=1         ; continue ;;
+            -R?*)      GH_REPO=${tok#-R}      ; continue ;;
+            -*)        other_flags=1          ; continue ;;
+        esac
+
+        operand_count=$((operand_count + 1))
+        if [ "$operand_count" -eq 1 ] && [ "$other_flags" -eq 0 ]; then
+            first_operand=$tok
+        fi
+    done
+
+    [ "$operand_count" -le 1 ] || return 1
+    [ "$operand_count" -eq 0 ] && return 0
+    [ -n "$first_operand" ]    || return 1
+    GH_SELECTOR=$first_operand
+    return 0
+}
+
+# check_gh_merge — the refusal itself. Returns 1 with the message on stderr
+# already printed by the caller's contract: it fills GH_BLOCK_MSG instead of
+# writing, so the caller owns the one exit path.
+check_gh_merge() {
+    local i=$GH_INDEX json head_oid reviewed_sha ahead shortstat delta
+    local -a view_args
+
+    # `gh pr merge` exactly — gh's own global options are only --help and
+    # --version, so nothing legitimately sits between `gh` and `pr`.
+    [ "$((i + 2))" -lt "${#tokens[@]}" ] || return 0
+    [ "${tokens[$((i + 1))]}" = "pr" ]    || return 0
+    [ "${tokens[$((i + 2))]}" = "merge" ] || return 0
+
+    # The opt-out, in both spellings that can actually reach this process: an
+    # inline assignment in the command being inspected, and an exported
+    # variable in the hook's own environment (a settings.json `env` entry).
+    # The refusal message names the inline form because that is the one a
+    # reader can act on immediately.
+    #
+    # Command position, and the exact value. Only the tokens BEFORE the `gh`
+    # this segment invokes are a prefix a real shell would apply to it; a draft
+    # that scanned the whole array read `gh pr merge 4821 # OPT=1` as consent
+    # while the command that actually ran was the bare, unblocked merge, and
+    # that string is plausible in a trailing note with nobody intending a
+    # bypass. Matching the assignment's name alone had the same shape of
+    # defect one level down: `OPT=false` reads as "do not allow" and disarmed
+    # the check. Anything but 1 leaves it armed, because a wrong guess there
+    # costs one retype and the other direction costs an unreviewed merge.
+    local t j=0
+    while [ "$j" -lt "$i" ]; do
+        t=${tokens[$j]}
+        if [ "$t" = "$STALE_STAMP_OPT_OUT=1" ]; then
+            return 0
+        fi
+        j=$((j + 1))
+    done
+    if [ "${ALLOW_STALE_STAMP_MERGE:-}" = 1 ]; then
+        return 0
+    fi
+
+    command -v gh >/dev/null 2>&1 || return 0
+
+    gh_merge_target "${tokens[@]:$((i + 3))}" || return 0
+
+    view_args=(pr view)
+    [ -z "$GH_SELECTOR" ] || view_args+=("$GH_SELECTOR")
+    [ -z "$GH_REPO" ]     || view_args+=(--repo "$GH_REPO")
+    view_args+=(--json "body,headRefOid")
+
+    json=$(gh "${view_args[@]}" 2>/dev/null) || return 0
+    [ -n "$json" ] || return 0
+
+    head_oid=$(printf '%s' "$json" | jq -r '.headRefOid // empty' 2>/dev/null)
+    reviewed_sha=$(printf '%s' "$json" | jq -r '.body // empty' 2>/dev/null | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
+
+    # An absent stamp is not evidence of an unreviewed diff — a hand-authored
+    # PR, an external contribution, a PR that predates the stamp, and a
+    # malformed marker the expression rejects all land here. /closeout treats
+    # this identically, and refusing on every unstamped PR is the alarm fatigue
+    # that gets a gate defeated on purpose.
+    [ -n "$reviewed_sha" ] || return 0
+    [ -n "$head_oid" ]     || return 0
+    [ "$reviewed_sha" != "$head_oid" ] || return 0
+
+    if git cat-file -e "$reviewed_sha^{commit}" 2>/dev/null \
+       && git cat-file -e "$head_oid^{commit}" 2>/dev/null; then
+        ahead=$(git rev-list --count "$reviewed_sha..$head_oid" 2>/dev/null)
+        shortstat=$(git diff --shortstat "$reviewed_sha..$head_oid" 2>/dev/null)
+        delta="${ahead:-an unknown number of} commit(s) past the stamp;${shortstat}"
+    else
+        # /closeout says this outright and it bears repeating: an unmeasurable
+        # delta is a stronger divergence signal than a measurable one, not a
+        # weaker one. The reviewed commit was rewritten away, was never
+        # fetched here, or lives in another repository.
+        delta="not measurable in this checkout — the reviewed commit is not present (force-pushed away, never fetched, or in another repo)"
+    fi
+
+    GH_BLOCK_MSG="BLOCKED: '$COMMAND' would merge a PR whose head has moved past the commit /pre-merge reviewed.
+  reviewed-at: $reviewed_sha
+  PR head:     $head_oid
+  delta:       $delta
+Re-review the delta with /pre-merge, which re-stamps at the new head — or, to accept the diff as it stands, run the merge again with $STALE_STAMP_OPT_OUT=1 in front of it."
+    return 1
+}
+
 # Quotes and backslashes are removed rather than honored, so a wrapped
 # invocation like `bash -c "git push -f"` still tokenizes into inspectable
 # words. Removed, not replaced with a space: the shell joins `g''it` and
@@ -331,6 +587,8 @@ normalized=${normalized//\`/$'\n'}
 normalized=${normalized//(/$'\n'}
 normalized=${normalized//)/$'\n'}
 
+heredoc_delim=""
+
 while IFS= read -r segment; do
     [ -n "$segment" ] || continue
 
@@ -355,6 +613,24 @@ while IFS= read -r segment; do
         esac
         index=$((index + 1))
     done
+
+    # gh is inspected only where it is being INVOKED, and never inside a
+    # heredoc body. Both narrowings are deliberate and neither applies to the
+    # git rules above — see the asymmetry note above check_gh_merge.
+    if [ -n "$heredoc_delim" ]; then
+        if [ "$count" -eq 1 ] && [ "${tokens[0]}" = "$heredoc_delim" ]; then
+            heredoc_delim=""
+        fi
+    else
+        if gh_invocation_index; then
+            GH_BLOCK_MSG=""
+            if ! check_gh_merge; then
+                printf '%s\n' "$GH_BLOCK_MSG" >&2
+                exit 2
+            fi
+        fi
+        heredoc_delim=$(heredoc_delimiter)
+    fi
 done <<EOF
 $normalized
 EOF

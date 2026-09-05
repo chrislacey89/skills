@@ -379,7 +379,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 ├── init-pipeline/SKILL.md          # Scaffold all enforcement: Claude Code hooks, git guardrails, pre-commit, pnpm (auto-invoked by /execute)
 ├── setup-pre-commit/SKILL.md       # Lefthook + detected formatter/linter, supports ESLint/Prettier/Biome (enhanced)
 ├── setup-ralph-loop/SKILL.md       # Generates ralph-once.sh and bounded ralph.sh for HITL-to-AFK /execute execution
-├── git-guardrails-claude-code/     # Block dangerous git commands (from Matt, unmodified)
+├── git-guardrails-claude-code/     # Block dangerous git commands; refuse a merge past its review stamp
 │   ├── SKILL.md
 │   └── scripts/block-dangerous-git.sh
 │
