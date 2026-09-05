@@ -353,7 +353,7 @@ Name the pattern in the entry as well (e.g., "both auth integration bugs were sp
 
 ### Phase 5: Commit
 
-**In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR and is reviewed and merged with the code that taught it:
+**In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR. Committing does not review it — the hand-back below is what makes it reviewed and merged with the code that taught it:
 
 ```bash
 git add docs/solutions/<category>/<filename>.md
