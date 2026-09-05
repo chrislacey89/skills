@@ -498,7 +498,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Investigate a specific bug deeply | Start with `/qa` — its Step 3.5 depth check delegates to `/triage-issue` for root-cause analysis, structural diagnosis, and a TDD fix plan that flows into `/execute` |
 | Plan a refactor | `/request-refactor-plan` — tiny commits RFC as GitHub issue, then implement via `/execute` |
 | Find architecture improvements | `/improve-codebase-architecture` — surface deepening opportunities that can become refactor work |
-| Capture lessons learned | `/compound` — by default onto the open PR before `/closeout` merges, so the lesson is reviewed and merged with the code that taught it; post-merge as the fallback for lessons that surface at/after merge |
+| Capture lessons learned | `/compound` — by default onto the open PR, then a `/pre-merge` re-run re-stamps before `/closeout` merges, so the lesson is reviewed and merged with the code that taught it; post-merge as the fallback for lessons that surface at/after merge |
 | Define domain terms | `/ubiquitous-language` to build or update the glossary + decisions register, then reuse that language in shaping, QA, and issue writing |
 | Record a decision | Add a row to the decisions register in ubiquitous language doc |
 | Clean up after ship | Close the PRD issue and any remaining slice issues; the research artifact persists (archive file outside the repo, or closed spike issue in GitHub) and is never deleted — supersede with a new dated artifact if research changes |
