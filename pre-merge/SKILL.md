@@ -413,6 +413,13 @@ mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
 **Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta consists only of `docs/solutions/` paths, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed:
 
 ```bash
+# This block runs in its own shell — $SCOPE_FROM was assigned in Phase 1 step
+# 4's fenced block and does not survive here. Unset, the range below makes git
+# diff HEAD against itself and print nothing, and the guard below would
+# misread that empty diff as "delta is a /compound entry" on a delta that was
+# never read. Same failure BASE_REF's guard at review-checklist.md:114 exists
+# to catch.
+: "${SCOPE_FROM:?resolve it with the Phase 1 step 4 scope-decision block before running this}"
 # Capture and test for empty rather than asking `grep -qv` for the verdict.
 # Two reasons, and the second is why this shape is not optional: `grep -q` exits
 # at the first match and the producer dies of SIGPIPE, which `pipefail` reports
