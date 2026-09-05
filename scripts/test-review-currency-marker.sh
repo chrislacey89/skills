@@ -65,7 +65,7 @@ reader_line="$(grep "sed -n 's/[^']*reviewed-at" "$closeout_skill" | head -1 || 
 # The sed script /closeout Step 2 pipes the PR body through.
 reader_expr="$(printf '%s' "$reader_line" \
     | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
-    | sed "s/^sed -n '//; s/'\$//")"
+    | sed "s/^sed -n '//; s/'\$//" || true)"
 
 # /pre-merge Phase 1 step 4 reads the same marker to decide its scope (#347).
 # Two readers of one marker are a drift pair; this pulls the second one out the
@@ -73,7 +73,7 @@ reader_expr="$(printf '%s' "$reader_line" \
 premerge_reader_line="$(grep "sed -n 's/[^']*reviewed-at" "$premerge_skill" | head -1 || true)"
 premerge_reader_expr="$(printf '%s' "$premerge_reader_line" \
     | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
-    | sed "s/^sed -n '//; s/'\$//")"
+    | sed "s/^sed -n '//; s/'\$//" || true)"
 
 # Whatever /closeout pipes the sed output into — everything past the sed
 # script's closing quote, minus the trailing ")" of the command substitution.
@@ -90,11 +90,11 @@ writer_template="$(awk '/^### Phase 4/ { on = 1 } on' "$premerge_skill" | grep -
 # The second reader: the same extraction, inside the git guardrail hook. Pulled
 # out with the same two expressions used on /closeout above, so a reader that
 # stops having this shape fails the FATAL below rather than passing vacuously.
-guard_line="$(grep "sed -n 's/[^']*reviewed-at" "$guard_script" | head -1)"
+guard_line="$(grep "sed -n 's/[^']*reviewed-at" "$guard_script" | head -1 || true)"
 
 guard_expr="$(printf '%s' "$guard_line" \
     | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
-    | sed "s/^sed -n '//; s/'\$//")"
+    | sed "s/^sed -n '//; s/'\$//" || true)"
 
 guard_filter="$(printf '%s' "$guard_line" \
     | sed "s/.*'[[:space:]]*|[[:space:]]*//; s/)[[:space:]]*\$//")"

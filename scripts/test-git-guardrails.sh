@@ -599,7 +599,7 @@ fi
 # The escape hatch is only an escape hatch if the message says how to use it,
 # at the moment it is needed. Both exits are named, and the variable is spelled
 # the same way the script tests for it.
-opt_out_name="$(grep -o 'STALE_STAMP_OPT_OUT=[A-Z_]*' "$script" | head -1 | cut -d= -f2)"
+opt_out_name="$(grep -o 'STALE_STAMP_OPT_OUT=[A-Z_]*' "$script" | head -1 | cut -d= -f2 || true)"
 [[ -n "$opt_out_name" ]] || fatal "no STALE_STAMP_OPT_OUT assignment found in $script"
 if [[ "$stderr_gh" == *"/pre-merge"* && "$stderr_gh" == *"$opt_out_name=1"* ]]; then
     printf '  ok   the refusal names both exits: /pre-merge and %s=1\n' "$opt_out_name"
