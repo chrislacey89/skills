@@ -493,13 +493,27 @@ check_gh_merge() {
     # variable in the hook's own environment (a settings.json `env` entry).
     # The refusal message names the inline form because that is the one a
     # reader can act on immediately.
-    local t
-    for t in "${tokens[@]}"; do
-        case "$t" in
-            "$STALE_STAMP_OPT_OUT"=*) return 0 ;;
-        esac
+    #
+    # Command position, and the exact value. Only the tokens BEFORE the `gh`
+    # this segment invokes are a prefix a real shell would apply to it; a draft
+    # that scanned the whole array read `gh pr merge 4821 # OPT=1` as consent
+    # while the command that actually ran was the bare, unblocked merge, and
+    # that string is plausible in a trailing note with nobody intending a
+    # bypass. Matching the assignment's name alone had the same shape of
+    # defect one level down: `OPT=false` reads as "do not allow" and disarmed
+    # the check. Anything but 1 leaves it armed, because a wrong guess there
+    # costs one retype and the other direction costs an unreviewed merge.
+    local t j=0
+    while [ "$j" -lt "$i" ]; do
+        t=${tokens[$j]}
+        if [ "$t" = "$STALE_STAMP_OPT_OUT=1" ]; then
+            return 0
+        fi
+        j=$((j + 1))
     done
-    [ -z "${ALLOW_STALE_STAMP_MERGE:-}" ] || return 0
+    if [ "${ALLOW_STALE_STAMP_MERGE:-}" = 1 ]; then
+        return 0
+    fi
 
     command -v gh >/dev/null 2>&1 || return 0
 

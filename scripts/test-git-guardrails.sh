@@ -405,18 +405,16 @@ section "the conditional gh pr merge lists are executed, not asserted"
 # is a `git commit` whose message merely contains the words.
 #
 # The cost of reading every span is that a parenthetical `like this` in a list
-# item would be extracted as if it were a command. The floor below rejects any
-# entry that is not at least two words, so such a span fails loudly here rather
-# than quietly joining a list as an assertion about nothing.
+# item is extracted as if it were a command. What catches that is the
+# EXPECTED_STALE_* count pin below, not this extractor: the `grep -o` pattern is
+# `\`[^\`]* [^\`]*\``, which requires a literal space inside the span, so every
+# entry it can emit already has one. An earlier draft guarded the same worry
+# with a two-word floor here and described that floor as the mechanism; the
+# floor's reject branch was unreachable for exactly this reason, and it is
+# deleted rather than kept as reassurance. Adding a stray two-word span to a
+# list moves the count and the pin says so by name.
 conditional_commands() {
-    local heading="$1" entry
-    while IFS= read -r entry; do
-        [ -n "$entry" ] || continue
-        case "$entry" in
-            *" "*) printf '%s\n' "$entry" ;;
-            *) fatal "'$entry' under '$heading' in $skill is a single token, not a command. If it is prose, take it out of the list item; if it is a command, this extractor cannot tell." ;;
-        esac
-    done < <(section_commands "$heading" '[^`]*')
+    section_commands "$1" '[^`]*'
 }
 
 stale_blocked=()
@@ -639,6 +637,34 @@ write_gh_stub "$stale_body" "$head_oid"
 assert_verdict_gh "$ALLOWED" "$opt_out_name=1 gh pr merge 4821" \
     'the inline opt-out assignment is honored'
 
+# The opt-out is an ASSIGNMENT IN COMMAND POSITION, which is the only place a
+# real shell would let it reach the process. An earlier draft scanned the whole
+# token stream for the name, so any mention of it anywhere in the line disarmed
+# the check while the command that actually ran was the bare, unblocked merge.
+# The tokenizer already stops at `#` for operands; the opt-out scan did not, and
+# the string is plausible in a trailing note without anyone intending a bypass.
+assert_verdict_gh "$BLOCKED" "gh pr merge 4821 # $opt_out_name=1" \
+    'the opt-out named in a trailing comment is not an opt-out'
+assert_verdict_gh "$BLOCKED" "gh pr merge # $opt_out_name=1" \
+    'the same, on the current-branch form that takes no operand'
+assert_verdict_gh "$BLOCKED" "gh pr merge 4821 # see docs on $opt_out_name=1" \
+    'the name inside prose in a comment is not an opt-out'
+assert_verdict_gh "$BLOCKED" "gh pr merge $opt_out_name=1" \
+    'an assignment after the command word is an operand, not an opt-out'
+assert_verdict_gh "$ALLOWED" "gh pr merge 4821 $opt_out_name=1" \
+    'and with a real operand already present it is a second one, so the target is unresolvable'
+
+# And it is the VALUE the refusal message promises, not merely the name. A
+# reader typing `=false` means "do not allow"; matching on the assignment alone
+# reads that as consent. Anything but 1 leaves the check armed, which is the
+# direction that cannot silently lose a review.
+assert_verdict_gh "$BLOCKED" "$opt_out_name=0 gh pr merge 4821" \
+    'the opt-out set to 0 does not opt out'
+assert_verdict_gh "$BLOCKED" "$opt_out_name=false gh pr merge 4821" \
+    'the opt-out set to false does not opt out'
+assert_verdict_gh "$BLOCKED" "$opt_out_name= gh pr merge 4821" \
+    'the opt-out set to nothing does not opt out'
+
 # The exported spelling, for a repo that wants the check advisory. Asserted
 # separately because it reaches the script by a different route — the hook's
 # own environment rather than the command being inspected — and the refusal
@@ -646,6 +672,14 @@ assert_verdict_gh "$ALLOWED" "$opt_out_name=1 gh pr merge 4821" \
 env_status="$(jq -nc --arg c 'gh pr merge 4821' '{tool_input: {command: $c}}' \
     | PATH="$gh_stub_dir:$PATH" ALLOW_STALE_STAMP_MERGE=1 bash "$script" >/dev/null 2>&1; printf '%s' "$?")"
 assert_eq 0 "$env_status" "an exported $opt_out_name makes the check advisory"
+
+# The exported spelling carries the same value contract as the inline one. Left
+# unasserted, a change that widened it back to "any non-empty value" passed the
+# whole suite — the three value cases above all use the inline spelling, so they
+# hold one of the two routes into this check and say nothing about the other.
+env_status_false="$(jq -nc --arg c 'gh pr merge 4821' '{tool_input: {command: $c}}' \
+    | PATH="$gh_stub_dir:$PATH" ALLOW_STALE_STAMP_MERGE=false bash "$script" >/dev/null 2>&1; printf '%s' "$?")"
+assert_eq 2 "$env_status_false" "an exported $opt_out_name=false does not opt out"
 
 # A gh that fails — unauthenticated, offline, or pointed at a PR that does not
 # exist. The check has nothing to read and must not guess.
@@ -904,6 +938,29 @@ assert_eq 2 "$nojq_status" "a force push is refused when jq is unavailable"
 nojq_benign="$(printf '%s' '{"tool_input":{"command":"ls -la"}}' \
     | PATH="$jq_stub_dir:/usr/bin:/bin" bash "$script" >/dev/null 2>&1; printf '%s' "$?")"
 assert_eq 0 "$nojq_benign" "a non-git command still runs when jq is unavailable"
+
+# The same condition reaching a `gh pr merge`, which the section above never
+# exercised: it removes jq and then runs only `git`. `gh` is present here and
+# jq alone is missing.
+#
+# The mechanism is worth naming, because it is not the stale-stamp check
+# choosing to fail open — that check never runs. Without a working jq the hook
+# returns at the top, before any rule, and refuses only input matching `*git*`
+# so a session is not halted wholesale. `gh pr merge 4821` carries no such
+# substring, so it is allowed. The consequence is real and asymmetric: a stale
+# merge typed alone is unguarded when jq is broken, while the same merge in a
+# chain that also names git is refused with the jq message.
+nojq_gh_dir="$(mktemp -d)"
+cp "$jq_stub_dir/jq" "$nojq_gh_dir/jq"
+cat > "$nojq_gh_dir/gh" <<GH_STUB
+#!/bin/sh
+printf '{"body":"<!-- reviewed-at: $stamp_sha -->","headRefOid":"$head_oid"}'
+GH_STUB
+chmod +x "$nojq_gh_dir/gh"
+nojq_merge="$(printf '%s' '{"tool_input":{"command":"gh pr merge 4821"}}' \
+    | PATH="$nojq_gh_dir:/usr/bin:/bin" bash "$script" >/dev/null 2>&1; printf '%s' "$?")"
+assert_eq 0 "$nojq_merge" "a stale-stamp merge is allowed when jq is unavailable"
+rm -rf "$nojq_gh_dir"
 
 rm -rf "$jq_stub_dir"
 
