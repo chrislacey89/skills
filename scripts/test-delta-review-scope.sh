@@ -46,6 +46,52 @@ assert_eq() {
 section() { printf '\n== %s\n' "$1"; }
 fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 1; }
 
+# assert_fixture_committed <repo> <label> <before_count> <expected_new_commits> <file>...
+#
+# Checks the RESULT of a fixture-building subshell rather than the subshell's
+# own exit status. `set -e` is suppressed inside the left operand of `||`
+# (test-guards-can-fire.sh detector A), so `( … ) || fatal "…"` cannot report a
+# failure that happens anywhere but the subshell's LAST command — an earlier
+# `git commit` in the block could fail silently and this would still print
+# green. Called after the subshell has already run, with no `||` attached to
+# it, so a failure anywhere inside is caught here.
+#
+# A clean-working-tree check alone is not enough: if an earlier commit in the
+# block fails (e.g. `git commit -m ''`, which git refuses), the file it staged
+# stays staged and rides along into the NEXT `git add && git commit` in the
+# block, which then succeeds and leaves nothing uncommitted — the failure
+# leaves no dirt, only a commit graph with one commit too few. So the count of
+# new commits reachable from HEAD is checked against what the block should have
+# produced, and only then is the per-file presence in HEAD checked.
+assert_fixture_committed() {
+    local repo="$1" label="$2" before="$3" expected_new="$4"; shift 4
+    local after; after="$(git -C "$repo" rev-list --count HEAD 2>/dev/null || echo 0)"
+    local got_new=$((after - before))
+    [[ "$got_new" -eq "$expected_new" ]] \
+        || fatal "$label: expected $expected_new new commit(s), HEAD gained $got_new (before=$before after=$after) — a commit in the block likely failed and its staged content merged into a later commit instead"
+    local dirty; dirty="$(git -C "$repo" status --porcelain)"
+    [[ -z "$dirty" ]] || fatal "$label: working tree not clean after the fixture ran:"$'\n'"$dirty"
+    local f
+    for f in "$@"; do
+        git -C "$repo" cat-file -e "HEAD:$f" 2>/dev/null \
+            || fatal "$label: $f is not present in HEAD, so its commit did not land"
+    done
+}
+
+# assert_fixture_merged <repo> <label> — same idea, for the merge fixture: the
+# meaningful result is that HEAD actually became a merge commit (two parents)
+# whose first parent's tree really carries the "base: grew" content, not that
+# the subshell's last command happened to exit 0.
+assert_fixture_merged() {
+    local repo="$1" label="$2"
+    git -C "$repo" rev-parse -q --verify HEAD^2 >/dev/null \
+        || fatal "$label: HEAD is not a merge commit (no second parent)"
+    grep -q 'base grew' < <(git -C "$repo" show HEAD:base.txt 2>/dev/null) \
+        || fatal "$label: base.txt at HEAD does not contain the post-stamp 'base: grew' commit's content"
+    local dirty; dirty="$(git -C "$repo" status --porcelain)"
+    [[ -z "$dirty" ]] || fatal "$label: working tree not clean after the merge fixture ran:"$'\n'"$dirty"
+}
+
 # --- Extract the two blocks from the skills ---------------------------------
 
 # The scope block: from the stamp read to the log line, inside Phase 1 step 4's
@@ -91,8 +137,9 @@ export GH_STUB_ARGV_LOG="$sandbox/gh-argv.log"
 
 repo="$sandbox/repo"
 mkdir -p "$repo"
+before_count="$(git -C "$repo" rev-list --count HEAD 2>/dev/null || echo 0)"
 (
-    cd "$repo"
+    cd "$repo" || exit 1
     git init -q -b main .
     git config user.email t@example.com
     git config user.name t
@@ -103,16 +150,19 @@ mkdir -p "$repo"
     git add one.txt && git commit -q -m 'feature: one'
     printf 'two\n' > two.txt
     git add two.txt && git commit -q -m 'feature: two'
-) || fatal "fixture setup failed"
+)
+assert_fixture_committed "$repo" "fixture setup" "$before_count" 3 base.txt one.txt two.txt
 
 stamp_sha="$(git -C "$repo" rev-parse HEAD)"   # the reviewed commit
+before_count="$(git -C "$repo" rev-list --count HEAD)"
 (
-    cd "$repo"
+    cd "$repo" || exit 1
     printf 'three\n' > three.txt
     git add three.txt && git commit -q -m 'fix: three (after the stamp)'
     printf 'four\n' > four.txt
     git add four.txt && git commit -q -m 'fix: four (after the stamp)'
-) || fatal "fixture post-stamp commits failed"
+)
+assert_fixture_committed "$repo" "fixture post-stamp commits" "$before_count" 2 three.txt four.txt
 head_sha="$(git -C "$repo" rev-parse HEAD)"
 
 # run_scope <body> — runs the extracted block in the fixture with BASE_REF=main
@@ -161,13 +211,14 @@ assert_eq "review scope: whole branch, from main" \
 # --- 5. Merge commit after the stamp → whole branch ------------------------------
 section "a merge commit landed after the stamp: whole branch, so base's own changes are not the delta"
 (
-    cd "$repo"
+    cd "$repo" || exit 1
     git switch -q main
     printf 'base grew\n' >> base.txt
     git add base.txt && git commit -q -m 'base: grew'
     git switch -q feature
     git merge -q --no-edit main
-) || fatal "fixture merge failed"
+)
+assert_fixture_merged "$repo" "fixture merge"
 assert_eq "review scope: whole branch, from main" \
     "$(run_scope "$(stamped_body "$stamp_sha")" | cut -d'|' -f1)" \
     "a merge after the stamp falls back to the whole branch"
@@ -177,25 +228,31 @@ section "/fix-findings' round count is read from the tree"
 run_rounds() { (cd "$repo" && BASE_REF=main bash -c "$rounds_line; printf '%s' \"\$ROUNDS\""); }
 
 assert_eq "0" "$(run_rounds)" "no Fix-Findings-Run line on the branch: zero rounds"
+before_count="$(git -C "$repo" rev-list --count HEAD)"
 (
-    cd "$repo"
+    cd "$repo" || exit 1
     printf 'r1a\n' > r1a.txt && git add r1a.txt \
         && git commit -q -m "$(printf 'fix: finding 1\n\nFix-Findings-Run: 20260904T200000Z')"
     printf 'r1b\n' > r1b.txt && git add r1b.txt \
         && git commit -q -m "$(printf 'fix: finding 3\n\nFix-Findings-Run: 20260904T200000Z')"
-) || fatal "fixture round-1 commits failed"
+)
+assert_fixture_committed "$repo" "fixture round-1 commits" "$before_count" 2 r1a.txt r1b.txt
 assert_eq "1" "$(run_rounds)" "two fixer commits from one run count as one round"
+before_count="$(git -C "$repo" rev-list --count HEAD)"
 (
-    cd "$repo"
+    cd "$repo" || exit 1
     printf 'r2\n' > r2.txt && git add r2.txt \
         && git commit -q -m "$(printf 'fix: finding 2\n\nFix-Findings-Run: 20260904T213000Z')"
-) || fatal "fixture round-2 commit failed"
+)
+assert_fixture_committed "$repo" "fixture round-2 commit" "$before_count" 1 r2.txt
 assert_eq "2" "$(run_rounds)" "a fixer commit from a second run makes it two rounds"
+before_count="$(git -C "$repo" rev-list --count HEAD)"
 (
-    cd "$repo"
+    cd "$repo" || exit 1
     printf 'plain\n' > plain.txt && git add plain.txt \
         && git commit -q -m 'chore: mentions Fix-Findings-Run: 20260904T220000Z mid-line, not as a trailer line'
-) || fatal "fixture hand commit failed"
+)
+assert_fixture_committed "$repo" "fixture hand commit" "$before_count" 1 plain.txt
 assert_eq "2" "$(run_rounds)" "a mid-line mention is not a trailer line and does not count"
 
 # -----------------------------------------------------------------------------
