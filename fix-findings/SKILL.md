@@ -471,8 +471,8 @@ stop.
   dimensions on that delta with the tree readable around it, and replaces the
   existing stamp at the new head. Hand it the breaker verdicts as evidence and
   the finding numbers each commit closes. There is no range to hand it: it
-  derives the range from the stamp, and falls back to the whole branch when the
-  stamp is missing, rewritten away, or followed by a merge commit. Then
+  derives the range from the stamp, and falls back to the whole branch in the
+  four states `pre-merge/SKILL.md` Phase 1 step 4 names. Then
   `/compound` if a lesson emerged, then `/closeout`.
 
 **Next-step menu.** This is a branch point, so offer it as a single
