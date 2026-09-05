@@ -121,15 +121,39 @@ printf 'scope block (%s lines) and rounds line extracted\n' "$(printf '%s\n' "$s
 sandbox="$(mktemp -d)"
 trap 'rm -rf "$sandbox"' EXIT
 
-# A `gh` that answers `pr list ... -q '.[0].body // ""'` with whatever body the
-# case sets, and records its argv so the test can assert the block asked for the
-# body rather than getting it some other way.
+# A `gh` that answers `pr list --head feature --json body -q '.[0].body // ""'`
+# with whatever body the case sets, and records its argv so the test can
+# assert the block asked for the body rather than getting it some other way.
+#
+# (#348 review, finding 6): a stub that answers with the configured body
+# regardless of argv lets `grep -q -- '--json body' "$GH_STUB_ARGV_LOG"` pass
+# on any call carrying that flag — `gh pr view 1 --json body` (a different
+# PR's body entirely) logs a line containing `--json body` too, so the
+# assertion cannot tell "read this branch's PR body" from any other call
+# shaped like it. Pinning the string `--json body` pins a flag, not the
+# property (a-planted-term-cannot-discriminate-meaning-2026-09-04.md). The
+# fixture's current branch is always `feature` (set at fixture setup below and
+# restored after the merge fixture), so the stub answers with the configured
+# body only for that exact call shape; anything else — the wrong branch, the
+# wrong subcommand, a missing `--head` — gets nothing back. A block that asks
+# the wrong question then gets no stamp and falls back to the whole branch,
+# which the decision assertions in cases 2–7 below already catch (a stamp
+# that should have produced "post-stamp delta" instead reads "whole branch").
+# That turns the existing battery into the property check, rather than adding
+# a second hand-maintained restatement of it.
 stub_bin="$sandbox/bin"
 mkdir -p "$stub_bin"
 cat > "$stub_bin/gh" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${GH_STUB_ARGV_LOG:?}"
-printf '%s' "${GH_STUB_BODY-}"
+case "$*" in
+    "pr list --head feature --json body"*)
+        printf '%s' "${GH_STUB_BODY-}"
+        ;;
+    *)
+        printf '%s\n' "$*" >> "${GH_STUB_ARGV_MISS_LOG:?}"
+        ;;
+esac
 STUB
 chmod +x "$stub_bin/gh"
 
@@ -157,8 +181,10 @@ chmod +x "$stub_bin/git"
 
 export PATH="$stub_bin:$PATH"
 export GH_STUB_ARGV_LOG="$sandbox/gh-argv.log"
+export GH_STUB_ARGV_MISS_LOG="$sandbox/gh-argv-miss.log"
 export GIT_STUB_ARGV_LOG="$sandbox/git-argv.log"
 : > "$GIT_STUB_ARGV_LOG"
+: > "$GH_STUB_ARGV_MISS_LOG"
 
 repo="$sandbox/repo"
 mkdir -p "$repo"
@@ -195,6 +221,7 @@ head_sha="$(git -C "$repo" rev-parse HEAD)"
 run_scope() {
     local body="$1" out files scope
     : > "$GH_STUB_ARGV_LOG"
+    : > "$GH_STUB_ARGV_MISS_LOG"
     : > "$GIT_STUB_ARGV_LOG"
     out="$(cd "$repo" && GH_STUB_BODY="$body" BASE_REF=main bash -c "$scope_block" 2>&1)"
     # Exposed for callers that need the raw combined stdout+stderr rather than
@@ -224,10 +251,22 @@ section "no stamp: a first review reads the whole branch"
 assert_eq "review scope: whole branch, from main|four.txt one.txt three.txt two.txt" \
     "$(run_scope '## Summary'$'\n''no stamp here')" \
     "no stamp in the body: scope is the whole branch and the diff names every branch file"
-if grep -q -- '--json body' "$GH_STUB_ARGV_LOG"; then
-    printf '  ok   the block asked gh for the PR body\n'; pass=$((pass + 1))
+# (#348 review, finding 6): named `pr list`, `--head feature`, and `--json body`
+# together, not `--json body` alone, so a call for a different branch's PR (or
+# a different gh subcommand) that happens to carry the same flag does not
+# satisfy this. The stub above is the property check that actually
+# discriminates the wrong call from the right one — a mismatch gets no body
+# back and the decision assertions in cases 2-7 catch the fallout — this
+# assertion documents the shape of the call the stub requires.
+if grep -q -- 'pr list --head feature --json body' "$GH_STUB_ARGV_LOG"; then
+    printf '  ok   the block asked gh pr list --head <this branch> --json body for the PR body\n'; pass=$((pass + 1))
 else
-    printf '  FAIL the block never asked gh for the PR body (argv: %s)\n' "$(cat "$GH_STUB_ARGV_LOG")"; fail=$((fail + 1))
+    printf '  FAIL the block never asked gh pr list --head <this branch> --json body (argv: %s)\n' "$(cat "$GH_STUB_ARGV_LOG")"; fail=$((fail + 1))
+fi
+if [[ -s "$GH_STUB_ARGV_MISS_LOG" ]]; then
+    printf '  FAIL the block made a gh call the stub did not recognize as "this branch'\''s PR body" (miss log: %s)\n' "$(cat "$GH_STUB_ARGV_MISS_LOG")"; fail=$((fail + 1))
+else
+    printf '  ok   no misfired gh calls (every call matched the expected shape)\n'; pass=$((pass + 1))
 fi
 # #348 review, finding 3: the guard's stated purpose is to skip the ancestor
 # check when there is no stamp, not merely to land on "whole branch" by some
