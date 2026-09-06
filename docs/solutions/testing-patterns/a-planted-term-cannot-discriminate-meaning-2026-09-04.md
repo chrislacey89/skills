@@ -1,7 +1,7 @@
 ---
 date: 2026-09-04
 category: testing-patterns
-problem_type: a contract test written to guard a prose contract asserts what the prose means via substring matching, making the test itself a hand-maintained restatement of the prose's semantics — second recording, with the measurement that shows why a planted self-test does not close it
+problem_type: a contract test written to guard a prose contract asserts what the prose means via substring matching, making the test itself a hand-maintained restatement of the prose's semantics — second recording, with the measurement that shows why a planted self-test does not close it; third occurrence appended 2026-09-05, which fired through mechanism 1 and narrows the class to its executable subset
 components: [scripts/test-*.sh, contract-test suites, fix-findings, pre-merge, CLAUDE.md]
 technologies: [bash, grep, awk, contract-tests, mutation-testing, llm-skills]
 severity: high
@@ -125,6 +125,70 @@ independent sweep is gone.
 
 The property those sections guarded is still true. It is guarded by review.
 
+## Third occurrence — 2026-09-05, PR #350
+
+**Mechanism 1 fired and the pattern recurred anyway.** This entry's Prevention
+names two shipped mechanisms and says they are "what makes a third recording not
+a valid outcome." One of them is now measured under load and did not hold.
+
+PR #350 (chrislacey89/skills, `/compound` in-PR re-stamp ordering) ran
+`/fix-findings` over six findings. Every fixer brief carried instruction 2
+verbatim — grep `docs/solutions/` for the class before writing. Fixer 3
+**complied**: it read `battery-that-only-perturbs-what-is-present-2026-08-28.md`,
+cited root cause 4 in its commit message, and applied that entry's own remedy
+row by rescoping a file-wide `grep -qF "only writer"` to the `### Phase 5:
+Commit` section. A fresh breaker then defeated it in one mutation — delete the
+operative sentence, paste in the decorative sentence carrying the same phrase
+from 19 lines up, suite reports 14/14.
+
+Required-to-read was not enough either. The fixer read the right entry, drew the
+right remedy from it, and produced another instance of the class, because the
+remedy the corpus offered was *narrow the region* and the defect is *the
+comparison relation*. Narrowing a substring match's region leaves it a substring
+match.
+
+Six fixes, six independent breakers, one mutation each:
+
+| Fix | Subject of the assertion | Breaker |
+|---|---|---|
+| `${SCOPE_FROM:?}` guard | phrase present in a block | `survived` — `:?`→`:-` |
+| bold-run balance | nothing | `not-applicable` |
+| `only writer` rescope | phrase present in a section | `survived` — satisfy-from-elsewhere |
+| Handoff bullet ordering | nothing | `not-applicable` |
+| Phase 5 commit-block claim | phrase present in a section | `survived` — restore verbatim |
+| routing-table ordering | five files agree | `survived` — restore at canonical, re-sync |
+
+**The last row is the sharpest instance and was not visible in the first two
+recordings.** `scripts/sync-skill-references.sh --check` is not a substring
+match — it is a byte-for-byte `cmp` between each bundled copy and its canonical
+source, and it runs in CI and pre-commit. It is a *correct* mechanism that
+guarantees the wrong property: restoring the superseded ordering in canonical
+`SYSTEM-OVERVIEW.md` and re-running the sync propagates it to all four bundled
+copies, and `--check` exits 0. Green there entitles a reader to conclude the five
+copies agree with each other, never that any of them is right. A consistency
+check over N copies is the same class as a planted term over one file — both
+attest a relation between artifacts and neither reaches the claim.
+
+**What is new, and what it changes.** The discriminator this entry's mechanism 2
+(chrislacey89/skills#340) reaches for — *subjects that can be executed or
+compared by derived string* — is now measured rather than proposed. Of the six
+assertions above, exactly one had an executable subject: the `${SCOPE_FROM:?}`
+guard makes a claim about **tool behavior**, that an empty left endpoint makes
+`git diff` compare `HEAD` against itself, print nothing, and exit 0. That claim
+does not need a term planted in prose to be checked; it needs the block run with
+the variable absent.
+
+Building it closed both mutations that had survived:
+
+| Mutation | Before | After |
+|---|---|---|
+| delete the guard line outright | 14 passed, 0 failed | **14 passed, 2 failed** |
+| weaken `:?` to `:-` | 14 passed, 0 failed | **14 passed, 2 failed** |
+
+The other five assertions have no executable subject and are not fixable by
+trying harder. That is the line #340 should draw, and this is the measurement
+behind it.
+
 ## Prevention
 
 **Code-level:** none, and that is the finding. The class has no code-level
@@ -146,8 +210,16 @@ property and says review holds it.
    guess away. Verdict: proceed narrowly; no reply round — both checkable
    contradictions between Advocate and Skeptic resolved by reading the tree.
 
+3. **`scripts/test-compound-restamp-handoff.sh`, the executed-guard assertion**
+   (third occurrence, 2026-09-05): runs the documented block with
+   `env -u SCOPE_FROM` and requires it to abort, plus a non-vacuity check that
+   the abort message names the variable. This is the code-level guard the
+   "none, and that is the finding" line above correctly says the *general* class
+   cannot have — it exists only because this one subject is executable. Do not
+   read it as a template for the other five.
+
 **Defect clustering:** this is the second recording of the 2026-08-27 entry's
-pattern. Prose was the deliverable the first time and the pattern recurred
+pattern, with a third occurrence appended above. Prose was the deliverable the first time and the pattern recurred
 anyway — under an author who had read the pack's rules and followed them. The
 two mechanisms above are what makes a third recording not a valid outcome.
 
@@ -188,3 +260,8 @@ two mechanisms above are what makes a third recording not a valid outcome.
 ## Shelf Life
 
 Evergreen — no expiration condition. A grep will not learn to read.
+
+One condition would retire the *executable* half: if `CLAUDE.md` rule (b) is
+scoped per chrislacey89/skills#340 so that a claim with no executable subject is
+routed to review rather than to a test, the third occurrence's contribution
+becomes redundant with the rule itself.

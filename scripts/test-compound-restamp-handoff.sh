@@ -271,6 +271,47 @@ assert_eq "delta is a /compound entry — do not re-recommend /compound; the exi
 assert_eq "" "$(run_premerge "$WITH_CODE_SHA" "$REVIEWED_SHA")" \
     "/pre-merge does NOT suppress it when the delta carries a path outside docs/solutions/"
 
+# --- the guard, EXECUTED rather than matched ---------------------------------
+#
+# The two assertions above always hand the block a good $SCOPE_FROM, so neither
+# can tell a working fail-fast guard from a neutered one. Measured: deleting the
+# `: "${SCOPE_FROM:?...}"` line outright, or weakening `:?` to `:-`, leaves this
+# suite at 14/14 green. That is the third occurrence of the class in
+# docs/solutions/testing-patterns/a-planted-term-cannot-discriminate-meaning-2026-09-04.md
+# — a contract test asserting what prose MEANS by matching a string in a region.
+#
+# This assertion is different in kind, and the difference is the whole point.
+# The guard makes a checkable claim about TOOL BEHAVIOR: an empty left endpoint
+# makes `git diff` compare HEAD against itself, print nothing, and exit 0, so
+# every emptiness test downstream reads as a clean pass. CLAUDE.md rule (b)
+# routes exactly that to a mechanism, and a subject that can be EXECUTED does
+# not need a term planted in it to be checked. So run the block with the
+# variable genuinely unset in its own shell and require it to abort.
+#
+# `env -u` rather than a bare assignment: the block's whole failure mode is that
+# a fresh shell never received the Phase 1 assignment, so the test has to
+# reproduce absence, not emptiness.
+unset_exit=0
+unset_out="$( cd "$scratch/repo" \
+    && git -c advice.detachedHead=false checkout -q "$WITH_CODE_SHA" \
+    && env -u SCOPE_FROM bash -c "$premerge_block" 2>&1 )" || unset_exit=$?
+if [[ "$unset_exit" -ne 0 ]]; then
+    ok "/pre-merge's block aborts when \$SCOPE_FROM is absent from its own shell"
+else
+    bad "/pre-merge's block produced a verdict with \$SCOPE_FROM absent" \
+        "non-zero exit" "exit 0, output: ${unset_out:-<empty>}"
+fi
+
+# Non-vacuity: the abort must come from the guard, not from any other failure.
+# Without this, a block that aborted for an unrelated reason would satisfy the
+# assertion above and report a guard that is not there (#296's dead-guard shape).
+if grep -q 'SCOPE_FROM' <<<"$unset_out"; then
+    ok "the abort names \$SCOPE_FROM, so it is the guard firing and not an unrelated failure"
+else
+    bad "the block aborted without naming \$SCOPE_FROM" \
+        "a message naming the variable" "${unset_out:-<empty>}"
+fi
+
 # --- the banned shape ---------------------------------------------------------
 
 # Neither block may ask an early-exiting reader for its verdict. Two independent
