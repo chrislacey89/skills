@@ -307,15 +307,25 @@ all, so handing it the reconciliation would contradict the restriction that
 makes its read-only isolation mean anything.
 
 Then print one block per finding — number, the fixer's verdict and commit SHA,
-the breaker's verdict **and the SHA it archived**, and the command behind each.
-No conclusions the human cannot re-run.
+the breaker's verdict **and the SHA it archived**, the mutation recorded as an
+edit (file, line, before, after — for both the control and the mutant), and
+the command behind each. No conclusions the human cannot re-run.
 
 ```
 Finding 3 — fixed at a1b2c3d
   fixer:   `pnpm run test` → 0
-  breaker: survived, against a1b2c3d — `pnpm run test -- guards.test.ts` → 0 with
-           OVER_FETCH_MULTIPLIER left at 4 and the use site edited to `topK * 137`
-           (control went red first: same file, deleted assertion → exit 1)
+  breaker: survived, against a1b2c3d — control went red first, then the mutant
+           survived:
+
+           src/search/guards.test.ts:88
+           - expect(limit).toBeLessThanOrEqual(topK * OVER_FETCH_MULTIPLIER);
+           + (assertion deleted)
+           → `pnpm run test -- guards.test.ts` → exit 1
+
+           src/search/guards.ts:42
+           - const limit = topK * OVER_FETCH_MULTIPLIER;
+           + const limit = topK * 137;
+           → `pnpm run test -- guards.test.ts` → 0
 ```
 
 The archived SHA is on the breaker's line because it is the one thing that says
