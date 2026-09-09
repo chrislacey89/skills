@@ -1206,6 +1206,24 @@ assert_eq 0 "$set_status" "with BASE_REF set the checklist block is a valid invo
 assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$set_out")" \
     "with BASE_REF set the checklist block reports the planted deletion and rename"
 
+# Declared gap, not mechanized: this section cannot see the guard move below
+# the diff line. Measured — moving `: "${BASE_REF:?…}"` to after the `git
+# diff --diff-filter=DR` line in pre-merge/review-checklist.md and rerunning
+# this whole suite still reports 181 passed, 0 failed; none of the three
+# assertions above changes. The reason is specific to this block, not a
+# general property of guard placement: unset and empty are the only two
+# inputs that trip `:?`, and for both, git's own empty-left-endpoint behavior
+# ("...HEAD" against an empty BASE_REF diffs HEAD against itself) already
+# prints nothing before the relocated guard ever runs, so there is nothing
+# for a `^[DR]` mirror of guard *position* to catch — the diff output is
+# identical whichever line runs first. That is narrower than 7af34c0's
+# dropped comment, which read the same fact as true of every mutant; it holds
+# only for relocation. It is not true of a default-value mutant (weakening
+# `:?` to `:-origin/prod`), which the assertion above the empty-case block
+# already catches by a different route. See
+# dead-guards-report-coverage-they-do-not-have-2026-08-27.md on asserting
+# coverage a check does not have.
+
 # -----------------------------------------------------------------------------
 
 section "the reviewer-mode filter keeps removed and renamed rows and nothing else"
