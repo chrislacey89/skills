@@ -138,8 +138,9 @@ verbatim — grep `docs/solutions/` for the class before writing. Fixer 3
 cited root cause 4 in its commit message, and applied that entry's own remedy
 row by rescoping a file-wide `grep -qF "only writer"` to the `### Phase 5:
 Commit` section. A fresh breaker then defeated it in one mutation — delete the
-operative sentence, paste in the decorative sentence carrying the same phrase
-from 19 lines up, suite reports 14/14.
+operative sentence at `compound/SKILL.md:375`, paste in the decorative sentence
+carrying the same phrase from line 31's Invocation Position paragraph, outside
+the Phase 5 span the assertion had just been scoped to. Suite reports 14/14.
 
 Required-to-read was not enough either. The fixer read the right entry, drew the
 right remedy from it, and produced another instance of the class, because the
