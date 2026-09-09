@@ -1177,6 +1177,32 @@ fi
 assert_eq '' "$(printf '%s' "$unset_out" | grep -E '^[DR]' || true)" \
     "with BASE_REF unset the checklist block reports no deletions it could not have measured"
 
+# EMPTY is the second trigger, and the two assertions above read one capture
+# taken with `env -u`, so they exercise only absence. The `:` in `${BASE_REF:?}`
+# is what makes emptiness abort too; a bare `${BASE_REF?}` leaves this suite
+# green while BASE_REF="" reaches the same empty left endpoint by the other
+# door — which is exactly the silent clean pass the section above exists to
+# refuse. Phase 1 can produce empty as well as unset: its resolution is a
+# command substitution, and a `git symbolic-ref` that fails assigns "".
+set +e
+empty_out="$(cd "$deltrig" && BASE_REF="" bash -c "$check_block" 2>&1)"
+empty_status=$?
+set -e
+if [[ "$empty_status" -ne 0 ]]; then
+    printf '  ok   with BASE_REF empty the checklist block exits %s instead of printing an empty pass\n' "$empty_status"
+    pass=$((pass + 1))
+else
+    printf '  FAIL with BASE_REF empty the checklist block exited 0 with output %q — a silent clean pass\n' "$empty_out"
+    fail=$((fail + 1))
+fi
+# Only the exit status is asserted here, and deliberately: unlike /pre-merge's
+# re-recommend block (scripts/test-compound-restamp-handoff.sh), this block
+# emits no verdict of its own — its entire output is whatever `git diff`
+# printed. With the endpoint empty git prints nothing, so a guard relocated
+# below the diff would have nothing to leak and a `^[DR]` mirror of the
+# assertion above could not go red. Asserting it anyway would report coverage
+# it does not have (dead-guards-report-coverage-they-do-not-have-2026-08-27.md).
+
 set +e
 set_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$check_block" 2>&1)"
 set_status=$?

@@ -326,6 +326,28 @@ fi
 assert_eq "" "$(grep -F 'do not re-recommend /compound' <<<"$unset_out" || true)" \
     "with \$SCOPE_FROM absent the block's output carries no verdict it could not have measured"
 
+# EMPTY is a second trigger, and the three assertions above all read one capture
+# taken with `env -u`, so they exercise only absence. The `:` in `${SCOPE_FROM:?}`
+# is what makes emptiness abort too; weakening it to a bare `${SCOPE_FROM?}`
+# leaves this suite green while `SCOPE_FROM=""` sends an empty left endpoint to
+# `git diff ""...HEAD`, which compares HEAD against itself, prints nothing, and
+# exits 0 — so the emptiness test downstream reads as a clean pass and the block
+# emits the suppression verdict from a delta nobody read. That is #336's defect
+# reached by the other door. Capture separately rather than reusing run_premerge,
+# which discards the exit status inside `$(...)`.
+empty_exit=0
+empty_out="$( cd "$scratch/repo" \
+    && git -c advice.detachedHead=false checkout -q "$WITH_CODE_SHA" \
+    && SCOPE_FROM="" bash -c "$premerge_block" 2>&1 )" || empty_exit=$?
+if [[ "$empty_exit" -ne 0 ]]; then
+    ok "/pre-merge's block aborts when \$SCOPE_FROM is set but empty (the \`:\` in \`:?\`)"
+else
+    bad "/pre-merge's block produced a verdict with \$SCOPE_FROM empty" \
+        "non-zero exit" "exit 0, output: ${empty_out:-<empty>}"
+fi
+assert_eq "" "$(grep -F 'do not re-recommend /compound' <<<"$empty_out" || true)" \
+    "with \$SCOPE_FROM empty the block's output carries no verdict it could not have measured"
+
 # --- the banned shape ---------------------------------------------------------
 
 # Neither block may ask an early-exiting reader for its verdict. Two independent
