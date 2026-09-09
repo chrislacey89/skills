@@ -227,6 +227,9 @@ jobs:
       - name: Run population-covers-untracked contract suite
         run: bash scripts/test-population-covers-untracked.sh
 
+      - name: Run compound re-stamp handoff contract suite
+        run: bash scripts/test-compound-restamp-handoff.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

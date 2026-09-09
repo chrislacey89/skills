@@ -45,7 +45,7 @@ npx skills@latest update   # pull latest versions
 ## Canonical pipeline
 
 ```
-/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /compound (in-PR) → /closeout (merge + teardown) → cleanup
+/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /compound (in-PR) → /pre-merge (re-run: re-stamp) → /closeout (merge + teardown) → cleanup
 ```
 
 The pipeline is the default path, not a prison. Skills can backtrack when assumptions fail or branch to helper and side-route skills when the work demands it. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the normal pipeline at `/research`. `Ralph` is the AFK execution mode/persona for the `/execute` stage, not a separate pipeline step — it stops on repeated failure *or* repeated non-progress, whichever trips first.
@@ -96,7 +96,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [walk-commits](walk-commits/) | Interactive commit-by-commit comprehension walkthrough before merge — intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off (optional, recommended by `/pre-merge`; can render per-commit callouts via the shared visual-rendering core) |
 | [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML artifact in one of two modes — a scrolling recap (file-tree + change flags, annotated split diffs with line-anchored callouts, contract cards, UI wireframes, before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a walkthrough deck (premise → changes → mechanism → aftermath, one idea per screen); CSS-spine diagrams for trivial flows, Mermaid-via-CDN for multi-stage graphs, copy-text feedback loop (optional, never auto-invoked, transient artifact) |
 | [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
-| [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR before `/closeout` merges (default), or post-merge as the fallback |
+| [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR, handed back to `/pre-merge` so the entry is reviewed and re-stamped before `/closeout` merges (default), or post-merge as the fallback |
 | [improve-pipeline](improve-pipeline/) | File a Skill Kit improvement proposal as a GitHub issue when the lesson is about the pipeline rather than the project |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
 

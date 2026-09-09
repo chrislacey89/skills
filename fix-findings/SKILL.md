@@ -473,7 +473,9 @@ stop.
   the finding numbers each commit closes. There is no range to hand it: it
   derives the range from the stamp, and falls back to the whole branch in the
   four states `pre-merge/SKILL.md` Phase 1 step 4 names. Then
-  `/compound` if a lesson emerged, then `/closeout`.
+  `/compound` if a lesson emerged — which commits onto the branch and hands
+  back for a second re-run over that commit, on the same stamp mechanism — and
+  then `/closeout`.
 
 **Next-step menu.** This is a branch point, so offer it as a single
 `AskUserQuestion` rather than leaving the user to retype a command (see
