@@ -1195,13 +1195,8 @@ else
     printf '  FAIL with BASE_REF empty the checklist block exited 0 with output %q — a silent clean pass\n' "$empty_out"
     fail=$((fail + 1))
 fi
-# Only the exit status is asserted here, and deliberately: unlike /pre-merge's
-# re-recommend block (scripts/test-compound-restamp-handoff.sh), this block
-# emits no verdict of its own — its entire output is whatever `git diff`
-# printed. With the endpoint empty git prints nothing, so a guard relocated
-# below the diff would have nothing to leak and a `^[DR]` mirror of the
-# assertion above could not go red. Asserting it anyway would report coverage
-# it does not have (dead-guards-report-coverage-they-do-not-have-2026-08-27.md).
+assert_eq '' "$(printf '%s' "$empty_out" | grep -E '^[DR]' || true)" \
+    "with BASE_REF empty the checklist block reports no deletions it could not have measured"
 
 set +e
 set_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$check_block" 2>&1)"
