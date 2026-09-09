@@ -83,7 +83,7 @@ This costs nothing at the time — the edit was in the buffer either way — and
 is the difference between a measurement and an assertion. Measured on the
 incident behind it: four parties re-ran one mutation named as *"`:?` weakened to
 `:-origin/prod`"* and reported four counts, because three different edits are
-faithful readings of that phrase and two of them change a line the phrase never
+faithful readings of that phrase and one of them changes a line the phrase never
 mentions. Each party then used its own count to judge another's verdict, and two
 of those judgments were unsound. The counts were never in conflict; the mutants
 were.

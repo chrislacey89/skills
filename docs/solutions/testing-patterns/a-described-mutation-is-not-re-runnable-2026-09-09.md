@@ -46,8 +46,8 @@ Re-measured afterwards, holding the *edit* fixed rather than the phrase:
 | guard line deleted **and** the range changed to `"${BASE_REF:-origin/prod}...HEAD"` | 175 passed, 6 failed |
 | guard line → `: "${BASE_REF:=origin/prod}"` | 177 passed, 4 failed |
 
-All three are faithful readings of "weakening `:?` to `:-origin/prod`." Two of
-them are two-line edits the phrase does not mention. The numbers were never in
+All three are faithful readings of "weakening `:?` to `:-origin/prod`." One of
+them is a two-line edit the phrase does not mention. The numbers were never in
 conflict; the mutants were.
 
 ## Symptoms
