@@ -82,11 +82,14 @@ pre-merge/review-checklist.md:114
 This costs nothing at the time — the edit was in the buffer either way — and it
 is the difference between a measurement and an assertion. Measured on the
 incident behind it: four parties re-ran one mutation named as *"`:?` weakened to
-`:-origin/prod`"* and reported four counts, because three different edits are
-faithful readings of that phrase and one of them changes a line the phrase never
-mentions. Each party then used its own count to judge another's verdict, and two
-of those judgments were unsound. The counts were never in conflict; the mutants
-were.
+`:-origin/prod`"* and reported four counts. Three edits are faithful readings of
+that phrase — one of them changing a line the phrase never mentions — and they
+account for three of the counts. The fourth is not a fourth reading: it is one
+of the three, re-run in a `.git`-less copy that failed a ref-lookup test the
+mutation never touched. Two parties ran that identical edit and reported
+different counts — there the counts were the conflict, not the mutants. Each
+party then used its own count to judge another's verdict, and one of those
+judgments was unsound.
 
 Two properties follow from quoting rather than paraphrasing. A multi-line
 mutation is visibly multi-line, so it cannot be mistaken for the one-line edit

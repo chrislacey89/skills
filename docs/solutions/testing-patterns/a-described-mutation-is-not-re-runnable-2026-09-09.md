@@ -47,8 +47,16 @@ Re-measured afterwards, holding the *edit* fixed rather than the phrase:
 | guard line → `: "${BASE_REF:=origin/prod}"` | 177 passed, 4 failed |
 
 All three are faithful readings of "weakening `:?` to `:-origin/prod`." One of
-them is a two-line edit the phrase does not mention. The numbers were never in
-conflict; the mutants were.
+them is a two-line edit the phrase does not mention. Together they account for
+three of the four reported counts — the fixer's and the controller's `175/6`
+are the same two-line edit, and the delta reviewer's `179/2` is the first row.
+
+The breaker's `178/3` is not a fourth reading: it is the first row's edit
+re-run in a `git archive` copy with no `.git`, where a ref-lookup test that
+cannot resolve there fails on its own, one failure short of what the guard
+mutation adds. The breaker and the delta reviewer ran the identical edit and
+reported different counts — there the counts were the conflict, not the
+mutants.
 
 ## Symptoms
 
@@ -80,13 +88,18 @@ confirmation:
   overturned the breaker's `survived` verdict on that basis. The controller had
   mutated two lines; the phrase named one. The agreement was coincidence.
 - The breaker got `178/3` in a `git archive` copy with no `.git`, and diagnosed
-  the discrepancy as `origin/prod` failing to resolve there. Its verdict was
-  right and its diagnosis was wrong — the real cause is that `:-` substitutes
-  without assigning, so `$BASE_REF` is still empty on the next line and the
-  `^[DR]` assertions keep passing.
+  the discrepancy against the delta reviewer's `179/2` as `origin/prod` failing
+  to resolve there. That diagnosis was incomplete, not wrong: the `.git`-less
+  copy fails exactly one ref-lookup test before the mutation runs, which is the
+  whole delta between `178/3` and `179/2`. It does not reach why the guard
+  mutation survives at all — that `:-` substitutes without assigning, so
+  `$BASE_REF` is still empty on the next line and the `^[DR]` assertions keep
+  passing.
 
-Two of the four judgments in that chain were unsound, and both were made
-confidently by a party that had genuinely run a suite.
+One of the four judgments in that chain was unsound — the controller's, which
+overturned a correct verdict on a coincidental number match — and it was made
+confidently by a party that had genuinely run a suite. The breaker's verdict
+was right, and its diagnosis, while incomplete, was not unsound.
 
 ## Learning Level
 
@@ -108,16 +121,25 @@ confidently by a party that had genuinely run a suite.
   self-test hunks, a checked-in mutant file). There the artifact *is* the record
   and quoting it inline would be a second operative site — see
   `docs/restated-claims.md`. It also does not apply to a `not-applicable`
-  verdict, where no edit was made.
+  verdict, where no edit was made. And it does not reach an instrument
+  divergence: the breaker and the delta reviewer quoted the identical hunk and
+  still got different counts, because the breaker's copy lacked something the
+  check silently depends on and the delta reviewer's did not. Closing that gap
+  is `validate-the-instrument-not-only-the-subject-2026-08-23.md`'s job, not
+  this one's — recording the edit tells a reader what ran, not whether their
+  environment will reproduce the number.
 - **Sibling docs:**
   - `authored-mutations-inherit-the-authors-blind-spot-2026-08-28.md` — where the
     mutation's *content* comes from. Distinct: that entry is about a battery
     whose shapes are all imagined by one mind. This one is about a single
     mutation that was drawn correctly and reported irreproducibly.
   - `validate-the-instrument-not-only-the-subject-2026-08-23.md` — the breaker's
-    `.git`-less copy is an instance of that entry, and the misdiagnosis above
-    shows the two can co-occur: a real instrument fault can be offered as the
-    explanation for a divergence that a bad record actually caused.
+    `.git`-less copy is an instance of that entry, and the two co-occurred here
+    rather than one masquerading as the other: the instrument fault accounts
+    for the one-test gap between the breaker's `178/3` and the delta reviewer's
+    `179/2` on the identical edit; the ambiguous record accounts for the rest —
+    why three parties ran three different edits for one phrase in the first
+    place.
   - `dead-guards-report-coverage-they-do-not-have-2026-08-27.md` — a comment
     asserting a verification that was never run. Here the verification *was* run.
 
@@ -179,8 +201,10 @@ a rule being ignored but a rule not existing.
 ## Planning / Calibration Notes
 
 - **What widened the work:** one `/fix-findings` round and one delta review spent
-  disputing a number, when the disagreement was never about the number. Four
-  measurements, three of them correct, two judgments built on them unsound.
+  disputing a number, when most of the disagreement was about which edit had
+  run, not the arithmetic. Four measurements: one judgment built on them — the
+  controller's — was unsound, and one diagnosis of them — the breaker's — was
+  correct but incomplete.
 - **What tightened the work:** holding the *edit* fixed and re-running all three
   readings side by side settled it in a single command. That move — enumerate the
   readings, run each — is the general one when two parties disagree about a
