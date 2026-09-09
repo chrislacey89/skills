@@ -312,6 +312,20 @@ else
         "a message naming the variable" "${unset_out:-<empty>}"
 fi
 
+# Exit-nonzero-and-names-SCOPE_FROM is not the property either. Move the guard
+# line from the top of this block to just after the `fi` that closes the
+# verdict, and the block — run with $SCOPE_FROM genuinely absent — prints the
+# verdict FIRST (the empty range reads as "nothing outside docs/solutions/") and
+# only then reaches the relocated guard and aborts, naming SCOPE_FROM in the
+# same breath. Both assertions above go green on that output. #336 was never
+# about the exit code; it is that a verdict gets produced from a delta nobody
+# read. Match scripts/test-documented-git-commands.sh's sibling $BASE_REF guard
+# (its non-vacuity assertion at ~line 1177, "reports no deletions it could not
+# have measured") and require the captured output to carry none of the verdict
+# text, not only a nonzero exit with the right name in it.
+assert_eq "" "$(grep -F 'do not re-recommend /compound' <<<"$unset_out" || true)" \
+    "with \$SCOPE_FROM absent the block's output carries no verdict it could not have measured"
+
 # --- the banned shape ---------------------------------------------------------
 
 # Neither block may ask an early-exiting reader for its verdict. Two independent
