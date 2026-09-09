@@ -197,7 +197,7 @@ guard because the guard would have to read meaning. What *is* pinned is the
 boundary: `scripts/test-post-review-edit-lock.sh`'s header names each deleted
 property and says review holds it.
 
-**Process-level — two mechanisms, both shipped:**
+**Process-level — three mechanisms, all shipped:**
 
 1. **`fix-findings/SKILL.md` Step 1, instruction 2** (commit `153138b`): a
    fixer must grep `docs/solutions/` for the class of thing it is about to
@@ -220,9 +220,14 @@ property and says review holds it.
    read it as a template for the other five.
 
 **Defect clustering:** this is the second recording of the 2026-08-27 entry's
-pattern, with a third occurrence appended above. Prose was the deliverable the first time and the pattern recurred
-anyway — under an author who had read the pack's rules and followed them. The
-two mechanisms above are what makes a third recording not a valid outcome.
+pattern, with a third occurrence appended above. Prose was the deliverable the
+first time and the pattern recurred anyway — under an author who had read the
+pack's rules and followed them. The two mechanisms above were written as what
+makes a third recording not a valid outcome; the third occurrence above
+measured otherwise. Three mechanisms are shipped now — the first was measured
+under load and did not hold, and the third exists only for the executable
+subset. The entry no longer claims a further recording is impossible; it
+claims these narrow the class and name its boundary.
 
 ## Planning / Calibration Notes
 
