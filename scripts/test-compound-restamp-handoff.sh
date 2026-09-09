@@ -288,9 +288,10 @@ assert_eq "" "$(run_premerge "$WITH_CODE_SHA" "$REVIEWED_SHA")" \
 # not need a term planted in it to be checked. So run the block with the
 # variable genuinely unset in its own shell and require it to abort.
 #
-# `env -u` rather than a bare assignment: the block's whole failure mode is that
-# a fresh shell never received the Phase 1 assignment, so the test has to
-# reproduce absence, not emptiness.
+# `env -u` rather than a bare assignment: a bare assignment would leave
+# SCOPE_FROM declared with an empty value — the emptiness trigger, tested
+# separately below — not absent. This check models the other trigger: a
+# fresh shell that never received the Phase 1 assignment at all.
 unset_exit=0
 unset_out="$( cd "$scratch/repo" \
     && git -c advice.detachedHead=false checkout -q "$WITH_CODE_SHA" \
