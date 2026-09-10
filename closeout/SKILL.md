@@ -158,16 +158,19 @@ The git guardrail hook does hard-block, on the merge command rather than here, s
 
 ### 3. Merge the PR
 
-Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it:
+Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it, and **give the squash commit the PR body as its message**. Without `--body-file`, `gh` builds the squash message from the per-unit commit messages, so a reader who runs `git blame` months later lands on every fix-round message concatenated (bodies of 200–400 lines were measured across four repos on 2026-09-10) and never on the walkthrough `/pre-merge` Phase 2 wrote. That is also why authors put history in code comments: it was the only per-line record that survived the merge. `/execute` and `/compound` route incident history to the PR body on the promise that it lasts; this flag is what keeps the promise.
 
 ```bash
-gh pr merge <number> --squash --delete-branch   # or --merge / --rebase per repo convention
+BODY_FILE=$(mktemp)
+gh pr view <number> --json body -q .body > "$BODY_FILE"
+gh pr merge <number> --squash --delete-branch --body-file "$BODY_FILE"   # or --merge / --rebase per repo convention
+rm -f "$BODY_FILE"
 ```
 
 If the guardrail hook is installed and Step 2 found a stale stamp that the user chose to accept, this command is refused — the hook reads the same stamp and does not know a human just decided. Carry the decision across explicitly:
 
 ```bash
-ALLOW_STALE_STAMP_MERGE=1 gh pr merge <number> --squash --delete-branch
+ALLOW_STALE_STAMP_MERGE=1 gh pr merge <number> --squash --delete-branch --body-file "$BODY_FILE"
 ```
 
 Only after the user picked **Merge anyway** in Step 2. Reaching for the variable because a merge was refused, without going back through Step 2, is defeating the gate rather than passing it.
