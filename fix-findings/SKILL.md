@@ -140,7 +140,14 @@ The fixer's instructions, in order:
    said not to. A fixer that reads the entry first does not write the pin.
 3. **Write the smallest fix that closes the finding**, following the project's
    conventions. Do not fix anything the finding does not name; scope creep in a
-   post-review commit is invisible to the review that has already run.
+   post-review commit is invisible to the review that has already run. **When
+   the finding is about what a sentence claims rather than what something
+   does** — a claim in a prose contract, or any claim in a kind of text listed in [references/restated-claims.md](references/restated-claims.md) § *What is not a prose contract* — the fix is one of two
+   actions: delete the sentence that carries the claim, or replace that
+   sentence with a reference to the one place the claim is canonically stated.
+   Rewording the claim is not a fix; a reworded sentence is new text no review
+   has read. A finding that an instruction produces the wrong behavior is not
+   this case.
 4. **Run the project's test command** and report the exit status verbatim.
 5. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does, and whose last line is `Fix-Findings-Run: <run id>` — the
@@ -149,6 +156,23 @@ The fixer's instructions, in order:
 
 The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
+A `fixed` under item 3's prose-claim case also names the after-state of the
+site the finding anchored on:
+
+| After-state | Named by | What the anchored site holds at the fix commit |
+|---|---|---|
+| `deleted` | the fixer | nothing where the claim's sentence was |
+| `pointer → <target>` | the fixer | a reference to the canonical statement at `<target>`, which exists |
+| `rejected: reworded` | the controller | anything else |
+
+**The controller reads the after-state off the fix, not off the report.** Before
+spawning a breaker for a prose-claim finding, run `git show --word-diff
+"$FIX_SHA" -- <path>` on the anchored file and look at the site: a deletion adds
+no words there, and a pointer adds only the reference. If the site adds anything
+else, the after-state is `rejected: reworded` whatever the fixer reported. Revert
+the commit with `git revert --no-edit "$FIX_SHA"`, spawn no breaker, and leave
+the finding for § Handoff's menu — a reworded sentence left on the branch would
+be the next `/pre-merge` re-run's subject.
 
 ### Step 2. Spawn a fresh breaker against the fix
 
@@ -307,8 +331,8 @@ all, so handing it the reconciliation would contradict the restriction that
 makes its read-only isolation mean anything.
 
 Then print one block per finding — number, the fixer's verdict and commit SHA,
-the breaker's verdict **and the SHA it archived**, and the command behind each.
-No conclusions the human cannot re-run.
+the after-state on a prose-claim finding, the breaker's verdict **and the SHA it
+archived**, and the command behind each. No conclusions the human cannot re-run.
 
 ```
 Finding 3 — fixed at a1b2c3d
@@ -316,6 +340,17 @@ Finding 3 — fixed at a1b2c3d
   breaker: survived, against a1b2c3d — `pnpm run test -- guards.test.ts` → 0 with
            OVER_FETCH_MULTIPLIER left at 4 and the use site edited to `topK * 137`
            (control went red first: same file, deleted assertion → exit 1)
+
+Finding 4 — fixed at d4e5f6a, deleted
+  fixer:   `pnpm run test` → 0
+  breaker: not-applicable, against d4e5f6a — no executable check reads the deleted sentence
+
+Finding 5 — fixed at b7c8d9e, pointer → docs/architecture.md
+  fixer:   `pnpm run test` → 0
+  breaker: not-applicable, against b7c8d9e — no executable check reads the replaced sentence
+
+Finding 6 — rejected: reworded at 9f8e7d6, reverted at 5c4b3a2
+  controller: `git show --word-diff 9f8e7d6 -- src/retry.ts` → the site adds words that are not a reference
 ```
 
 The archived SHA is on the breaker's line because it is the one thing that says
@@ -463,8 +498,8 @@ stop.
   clean branch that has been reviewed.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it
-  archived, and the command behind it; and `refuted` reports for findings the
-  tree did not confirm. It produces no stamp, no PR edit, and no merge.
+  archived, and the command behind it; `refuted` reports for findings the
+  tree did not confirm; and a revert for any prose-claim fix Step 1 rejected. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode. It reads
   the stamp off the PR itself (`pre-merge/SKILL.md` Phase 1 step 4), takes the
   post-stamp delta — these fix commits — as its subject, runs the review
