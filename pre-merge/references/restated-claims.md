@@ -7,10 +7,24 @@ such a claim is stated at more than one **operative site** — a place a reader
 or a caller acts on, as opposed to a place that merely mentions it — changing
 the claim has a failure mode with no equivalent in code.
 
-This file is the canonical statement. `/tdd` § 4 Refactor points at it for the
-author-time move; `/pre-merge`'s Deep Modules dimension points at it for the
-review-time detector; `/execute` Step 4 points at it for the scope check on set-claims.
-None of them restates it.
+This file is the canonical statement. The skills that point at it are its rows
+in `scripts/skill-references.manifest`, and none of them restates it.
+
+## What is not a prose contract
+
+These kinds of text are not prose contracts, whatever they say:
+
+- a code comment
+- a commit message
+- a pull request body
+
+Nothing acts on a claim in one of them, so it is not an operative site and the
+census does not read it. A field a tool parses out of one — a lint directive in
+a comment, a trailer in a commit message, a marker in a pull request body — is
+a machine-read seam rather than prose, and is outside this file either way.
+
+The examples in the definition above are illustrative. This list is not: a kind
+of text missing from it is judged by the definition.
 
 ## Why an additive edit is not a replacement
 
@@ -57,7 +71,7 @@ in order:
 1. **Generate or sync the copies from one source**, so a partial edit cannot
    land. In this repo that is `scripts/skill-references.manifest` plus
    `scripts/sync-skill-references.sh`, enforced by the `check-skill-references`
-   CI job. This file reaches `/tdd` and `/pre-merge` that way.
+   CI job. This file reaches every skill that points at it that way.
 2. **Reference the canonical statement by name or section** rather than restate
    part of it. Reference by partial enumeration is the dangerous middle — it
    reads as a pointer and behaves as a copy. The phrase and the finding are

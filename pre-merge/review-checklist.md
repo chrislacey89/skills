@@ -286,3 +286,5 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 - **Suggestion:** A principle is partially stressed. Improvement is possible but the current code is defensible. Example: "Two test names describe implementation details ('calls API twice') — renaming to behavior descriptions would improve readability."
 
 - **Concern:** A clear principle violation with specific evidence from the diff. Cite the principle, show the code, explain why it matters. Example: "The `formatResponse` function in `utils/format.ts` is a pass-through that forwards its arguments to `buildResponse` with no transformation — this is a shallow wrapper (Deep Modules)."
+
+**A cap by kind of text, under every dimension.** A finding whose subject is a kind of text listed in [references/restated-claims.md](references/restated-claims.md) § *What is not a prose contract* is at most a Suggestion, whichever dimension raised it.
