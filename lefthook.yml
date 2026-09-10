@@ -90,6 +90,8 @@ pre-push:
       run: bash scripts/test-population-covers-untracked.sh
     compound-restamp-handoff-tests:
       run: bash scripts/test-compound-restamp-handoff.sh
+    prose-fix-disposition-tests:
+      run: bash scripts/test-prose-fix-disposition.sh
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the
