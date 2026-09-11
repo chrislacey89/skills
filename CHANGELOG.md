@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.27.0 — the squash commit carries the PR body, a comment is written to the file's next editor, and a review may not ask for one (#360)
+
+The first tree-wide comment cleanup ran on a downstream repo as a reader pass: 1,338 blocks, every one given a verdict, 529 removal-only edits, tests green. What it found was not length. The same sentence appeared two and three times in one block, and the register was defensive — capitalized REAL, SAME, DELIBERATE, "do not mistake it for the canonical path" — comments written to a reviewer about to object, not to the next person editing the file. Two things produce that. Review findings had been proposing "document it in a comment" as a fix, so authors learned to pre-empt. And every routing rule in the pack sends history to the PR body, while `/closeout`'s squash merge threw the PR body away and concatenated the per-unit messages instead, so a comment beside the line was the only account that survived `git blame`.
+
+### Changes
+
+- **`/closeout` Step 3 passes the PR body to `gh pr merge --squash --body-file` (#360)** — the squash commit's message is the walkthrough `/pre-merge` wrote, not every fix-round message concatenated. This is the destination the `/execute` and `/compound` routing rules always named and never had.
+- **`/execute` § *Comment the code, not the incident* names the comment's reader (#360)** — the file's next editor, never the diff's reviewer. Review-facing argument goes to the PR body; a sentence that repeats one already in the file is the copy to delete.
+- **`/pre-merge` Severity Classification: a comment is never the remedy (#360)** — a finding may not propose adding or expanding a comment as its fix, under any dimension. It names a code-shaped fix or a PR-body destination, or it is an Observation.
+
+Unchanged: the by-kind Suggestion cap, `docs/restated-claims.md`, `/fix-findings`, and every density figure — none enters the pack.
+
+## v1.26.0 — a finding about a sentence is fixed by deleting it or pointing it, never by rewording it (#358)
+
+`/fix-findings` hands each chosen finding to a fresh fixer told to write the smallest fix that closes it. For a finding whose subject is a sentence, the smallest fix was a reworded sentence, and the `/pre-merge` re-run that follows takes the fix commits as its subject — so it reviewed the new sentence. In the downstream incident behind #357 the second round raised more Concerns than the first, three of its four written by the first round's fixes, and none of the seven across both rounds was about code behavior. Nothing in the loop was built to stop; the human stopped it.
+
+### Changes
+
+- **`docs/restated-claims.md` lists the kinds of text that are not prose contracts (#358)** — the definition's examples read as illustrative, so reviewers extended them to any sentence a maintainer might read. The new section is closed: nothing acts on a claim in those kinds, so none of them is an operative site and the census does not read one. The reviewer classifies the kind of text, not whether someone might act on it.
+- **`/pre-merge`'s Severity Classification caps a finding on one of those kinds at Suggestion, under every dimension (#358)** — in pointer form, so the list keeps one operative site. The Deep Modules restated-claim bullet, its severity split, and the delta re-run's census are unchanged.
+- **`/fix-findings` has a closed action set for a finding about what a sentence claims (#358)** — delete the sentence, or replace it with a reference to the canonical statement. A finding that an instruction produces the wrong behavior is outside the case: in this pack a `SKILL.md` instruction is the executed artifact, and delete-or-point could not fix one.
+- **The after-state is read off the fix, not off the fixer's report (#358)** — the controller opens the anchored site with `git show --word-diff` before any breaker runs. A fix that added words other than a reference is reverted, so it never becomes the re-run's subject, and the Step 3 report block prints the after-state for every prose-claim finding.
+- **`scripts/test-prose-fix-disposition.sh` pins the literal half (#358)** — the after-state table and the report block carry the same vocabulary, every `restated-claims.md § *…*` citation names a real section, and no scanned line carries two of the list's bullets verbatim. It pins no count of kinds, because a count in the suite would be a second statement of the list. Whether a fixer refrains from rewording, and whether a reviewer applies the cap, is held by review.
+- **`docs/restated-claims.md` stopped naming its consumers (#358)** — two sentences listed which skills point at it, one of them was already short `/execute`, and this change would have made both short `/fix-findings`. They now point at the manifest rows.
+
 ## v1.25.0 — the review stamp is read at the merge, not only inside `/closeout` (#327, Lock 2)
 
 `/pre-merge` stamps the commit it reviewed into the PR body and `/closeout` Step 2 reads it back, so a branch that grew after its review is caught before it lands. The read is correct and it is skippable: `/closeout` is one route to a merge, and a merge typed by hand or issued by an AFK loop takes none of them. That unattended case is where nobody notices the reviewed diff is not the merged diff, which is the whole reason the stamp exists.
