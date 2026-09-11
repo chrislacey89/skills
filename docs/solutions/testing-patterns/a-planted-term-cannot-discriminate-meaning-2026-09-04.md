@@ -127,9 +127,10 @@ The property those sections guarded is still true. It is guarded by review.
 
 ## Third occurrence — 2026-09-05, PR #350
 
-**Mechanism 1 fired and the pattern recurred anyway.** This entry's Prevention
-names two shipped mechanisms and says they are "what makes a third recording not
-a valid outcome." One of them is now measured under load and did not hold.
+**Mechanism 1 fired and the pattern recurred anyway.** Before this section was
+appended, this entry's Prevention named two shipped mechanisms and said they were
+"what makes a third recording not a valid outcome." One of them is now measured
+under load and did not hold.
 
 PR #350 (chrislacey89/skills, `/compound` in-PR re-stamp ordering) ran
 `/fix-findings` over six findings. Every fixer brief carried instruction 2
@@ -197,7 +198,7 @@ guard because the guard would have to read meaning. What *is* pinned is the
 boundary: `scripts/test-post-review-edit-lock.sh`'s header names each deleted
 property and says review holds it.
 
-**Process-level — three mechanisms, all shipped:**
+**Process-level:**
 
 1. **`fix-findings/SKILL.md` Step 1, instruction 2** (commit `153138b`): a
    fixer must grep `docs/solutions/` for the class of thing it is about to
@@ -211,23 +212,26 @@ property and says review holds it.
    guess away. Verdict: proceed narrowly; no reply round — both checkable
    contradictions between Advocate and Skeptic resolved by reading the tree.
 
-3. **`scripts/test-compound-restamp-handoff.sh`, the executed-guard assertion**
-   (third occurrence, 2026-09-05): runs the documented block with
-   `env -u SCOPE_FROM` and requires it to abort, plus a non-vacuity check that
-   the abort message names the variable. This is the code-level guard the
-   "none, and that is the finding" line above correctly says the *general* class
-   cannot have — it exists only because this one subject is executable. Do not
-   read it as a template for the other five.
+3. **`scripts/test-compound-restamp-handoff.sh`, the executed-guard assertions**
+   (third occurrence, 2026-09-05): runs the documented block with `$SCOPE_FROM`
+   absent, and again set-but-empty, and requires each run to abort. The abort
+   status is not the property, and neither is the abort naming the variable — a
+   guard relocated below the verdict satisfies both while still emitting a
+   verdict from a delta nobody read. What pins it is the assertion that the
+   captured output carries none of the verdict text; the other two are the
+   non-vacuity checks around it. This is the code-level guard the "none, and
+   that is the finding" line above correctly says the *general* class cannot
+   have — it exists only because this one subject is executable. Do not read it
+   as a template for the other five.
 
 **Defect clustering:** this is the second recording of the 2026-08-27 entry's
 pattern, with a third occurrence appended above. Prose was the deliverable the
 first time and the pattern recurred anyway — under an author who had read the
-pack's rules and followed them. The two mechanisms above were written as what
-makes a third recording not a valid outcome; the third occurrence above
-measured otherwise. Three mechanisms are shipped now — the first was measured
-under load and did not hold, and the third exists only for the executable
-subset. The entry no longer claims a further recording is impossible; it
-claims these narrow the class and name its boundary.
+pack's rules and followed them. The Prevention's first two mechanisms were
+written as what makes a third recording not a valid outcome; the third
+occurrence above measured otherwise. The entry no longer claims a further
+recording is impossible; it claims these narrow the class and name its
+boundary.
 
 ## Planning / Calibration Notes
 

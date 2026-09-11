@@ -146,6 +146,12 @@ Also from the same pass, and the same idea one level up: a floor over a whole po
 
 ## Related
 
+- `a-described-mutation-is-not-re-runnable-2026-09-09.md` — the adjacent axis.
+  This entry is about where a mutation's *content* comes from; that one is about
+  how a mutation is *recorded*. A mutation can be drawn correctly from the corpus
+  and still be reported irreproducibly, and then no reader can tell the two
+  failures apart.
+
 - PR #311 / issue #310 — `/closeout` documented a base-branch command that emitted `origin/prod` where its comment said `prod`
 - #298 / PR #299 — the census and clone-bearing fixture this section extended
 - #261 — `/closeout`'s unpinned invocations; the deferred fallback-loop gap

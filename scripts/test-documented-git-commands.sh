@@ -1177,6 +1177,27 @@ fi
 assert_eq '' "$(printf '%s' "$unset_out" | grep -E '^[DR]' || true)" \
     "with BASE_REF unset the checklist block reports no deletions it could not have measured"
 
+# EMPTY is the second trigger, and the two assertions above read one capture
+# taken with `env -u`, so they exercise only absence. The `:` in `${BASE_REF:?}`
+# is what makes emptiness abort too; a bare `${BASE_REF?}` leaves this suite
+# green while BASE_REF="" reaches the same empty left endpoint by the other
+# door — which is exactly the silent clean pass the section above exists to
+# refuse. Phase 1 can produce empty as well as unset: its resolution is a
+# command substitution, and a `git symbolic-ref` that fails assigns "".
+set +e
+empty_out="$(cd "$deltrig" && BASE_REF="" bash -c "$check_block" 2>&1)"
+empty_status=$?
+set -e
+if [[ "$empty_status" -ne 0 ]]; then
+    printf '  ok   with BASE_REF empty the checklist block exits %s instead of printing an empty pass\n' "$empty_status"
+    pass=$((pass + 1))
+else
+    printf '  FAIL with BASE_REF empty the checklist block exited 0 with output %q — a silent clean pass\n' "$empty_out"
+    fail=$((fail + 1))
+fi
+assert_eq '' "$(printf '%s' "$empty_out" | grep -E '^[DR]' || true)" \
+    "with BASE_REF empty the checklist block reports no deletions it could not have measured"
+
 set +e
 set_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$check_block" 2>&1)"
 set_status=$?
@@ -1184,6 +1205,24 @@ set -e
 assert_eq 0 "$set_status" "with BASE_REF set the checklist block is a valid invocation"
 assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$set_out")" \
     "with BASE_REF set the checklist block reports the planted deletion and rename"
+
+# Declared gap, not mechanized: this section cannot see the guard move below
+# the diff line. Measured — moving `: "${BASE_REF:?…}"` to after the `git
+# diff --diff-filter=DR` line in pre-merge/review-checklist.md and rerunning
+# this whole suite still reports 181 passed, 0 failed; none of the three
+# assertions above changes. The reason is specific to this block, not a
+# general property of guard placement: unset and empty are the only two
+# inputs that trip `:?`, and for both, git's own empty-left-endpoint behavior
+# ("...HEAD" against an empty BASE_REF diffs HEAD against itself) already
+# prints nothing before the relocated guard ever runs, so there is nothing
+# for a `^[DR]` mirror of guard *position* to catch — the diff output is
+# identical whichever line runs first. That is narrower than 7af34c0's
+# dropped comment, which read the same fact as true of every mutant; it holds
+# only for relocation. It is not true of a default-value mutant (weakening
+# `:?` to `:-origin/prod`), which the assertion above the empty-case block
+# already catches by a different route. See
+# dead-guards-report-coverage-they-do-not-have-2026-08-27.md on asserting
+# coverage a check does not have.
 
 # -----------------------------------------------------------------------------
 

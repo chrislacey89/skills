@@ -63,6 +63,46 @@ undeclared one reads as coverage. The tell that you skipped this: every fixture
 in your battery is one you wrote, and each is simpler than anything the corpus
 actually contains.
 
+## Record the mutation as the edit, not as a description of it
+
+A verdict is only worth what a second party can reproduce, and a prose
+description of an edit is a specification with more than one implementation. So
+the record carries the **literal before and after text of the edited line**, with
+its file and line, beside the verdict. The verb — *weakening*, *relocating*,
+*deleting* — belongs in the surrounding prose; the two versions belong in the
+record.
+
+```
+pre-merge/review-checklist.md:114
+- : "${BASE_REF:?resolve it with the Phase 1 detection block before running this}"
++ : "${BASE_REF:-origin/prod}"
+→ scripts/test-documented-git-commands.sh: 179 passed, 2 failed
+```
+
+This costs nothing at the time — the edit was in the buffer either way — and it
+is the difference between a measurement and an assertion. Measured on the
+incident behind it: four parties re-ran one mutation named as *"`:?` weakened to
+`:-origin/prod`"* and reported four counts. Three edits are faithful readings of
+that phrase — one of them changing a line the phrase never mentions — and they
+account for three of the counts. The fourth is not a fourth reading: it is one
+of the three, re-run in a `.git`-less copy that failed a ref-lookup test the
+mutation never touched. Two parties ran that identical edit and reported
+different counts — there the counts were the conflict, not the mutants. Each
+party then used its own count to judge another's verdict, and one of those
+judgments was unsound.
+
+Two properties follow from quoting rather than paraphrasing. A multi-line
+mutation is visibly multi-line, so it cannot be mistaken for the one-line edit
+its description suggests. And a reader who disagrees can apply the recorded hunk
+instead of re-deriving it, which turns "you measured wrong" into a diff.
+
+`not-applicable` is the one verdict with nothing to record here — no edit was
+made. The other three all have an edit, including `not-run`, where the control
+is the edit that failed to go red.
+
+The full incident is
+`docs/solutions/testing-patterns/a-described-mutation-is-not-re-runnable-2026-09-09.md`.
+
 ## The apparatus check comes before the verdict
 
 A mutation whose conclusion rests on **red** is self-validating: the check fired,
