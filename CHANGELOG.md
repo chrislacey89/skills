@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.27.0 — the squash commit carries the PR body, a comment is written to the file's next editor, and a review may not ask for one (#360)
+
+The first tree-wide comment cleanup ran on a downstream repo as a reader pass: 1,338 blocks, every one given a verdict, 529 removal-only edits, tests green. What it found was not length. The same sentence appeared two and three times in one block, and the register was defensive — capitalized REAL, SAME, DELIBERATE, "do not mistake it for the canonical path" — comments written to a reviewer about to object, not to the next person editing the file. Two things produce that. Review findings had been proposing "document it in a comment" as a fix, so authors learned to pre-empt. And every routing rule in the pack sends history to the PR body, while `/closeout`'s squash merge threw the PR body away and concatenated the per-unit messages instead, so a comment beside the line was the only account that survived `git blame`.
+
+### Changes
+
+- **`/closeout` Step 3 passes the PR body to `gh pr merge --squash --body-file` (#360)** — the squash commit's message is the walkthrough `/pre-merge` wrote, not every fix-round message concatenated. This is the destination the `/execute` and `/compound` routing rules always named and never had.
+- **`/execute` § *Comment the code, not the incident* names the comment's reader (#360)** — the file's next editor, never the diff's reviewer. Review-facing argument goes to the PR body; a sentence that repeats one already in the file is the copy to delete.
+- **`/pre-merge` Severity Classification: a comment is never the remedy (#360)** — a finding may not propose adding or expanding a comment as its fix, under any dimension. It names a code-shaped fix or a PR-body destination, or it is an Observation.
+
+Unchanged: the by-kind Suggestion cap, `docs/restated-claims.md`, `/fix-findings`, and every density figure — none enters the pack.
+
 ## v1.26.0 — a finding about a sentence is fixed by deleting it or pointing it, never by rewording it (#358)
 
 `/fix-findings` hands each chosen finding to a fresh fixer told to write the smallest fix that closes it. For a finding whose subject is a sentence, the smallest fix was a reworded sentence, and the `/pre-merge` re-run that follows takes the fix commits as its subject — so it reviewed the new sentence. In the downstream incident behind #357 the second round raised more Concerns than the first, three of its four written by the first round's fixes, and none of the seven across both rounds was about code behavior. Nothing in the loop was built to stop; the human stopped it.
