@@ -192,7 +192,7 @@ For each user story in the PRD, classify and map it:
 - **Want clause — the mechanism.** The match this step already performed.
 - **So-that clause — invert it.** Ask what would make this actor unhappy at the end of a *successful* run, then check whether the answer is already true of the planned slices. If it is, the Must is **unmapped** however well the want clause matches.
 
-**Where flow rows exist under a Must, map at that granularity.** `/write-a-prd` attaches place/affordance rows to the Must-have story each realizes, so a Must carrying rows is covered only when the rows are, not merely when the sentence is. A row may sit under several Musts, and the PRD's unattributed residue (shared chrome, loading states) is not a commitment — do not treat an unattributed row as an unmapped Must.
+**Where flow rows exist under a Must, map at affordance granularity.** `/write-a-prd` attaches place/affordance rows to the Must-have story each realizes, so a Must carrying rows is covered only when the rows are, not merely when the sentence is. A row may sit under several Musts, and the PRD's unattributed residue (shared chrome, loading states) is not a commitment — do not treat an unattributed row as an unmapped Must.
 
 **A PRD with a standalone `## Flow Sketch` section still parses — read it, do not reject it.** PRDs authored before the rows moved under their stories carry the section instead, and an in-flight PRD is not a malformed one. Read its rows as belonging to the Musts they plainly realize, and where a row's parent is genuinely ambiguous, raise it at the Quiz step rather than guessing. The relocation changed where an author puts a row, not whether this step reads it.
 
