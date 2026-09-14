@@ -266,7 +266,7 @@ Explicit exclusions. Silence means "in scope," so anything the builder might rea
 
 [Include ONLY when flow rows exist AND some row serves no single Must — nav chrome, loading and empty states, global error surfaces. These are not commitments; `/prd-to-issues` does not read them as unmapped Musts. Leave the heading out entirely when every row found a parent.]
 
-Stories are bounded by the appetite. Must-haves define the minimum shippable version — what makes this better than the user's baseline today. Nice-to-haves are pre-authorized cuts: if the appetite runs tight, these get scope-hammered without debate. prd-to-issues maps each vertical slice back to these stories, and where a Must carries flow rows it maps at that granularity.
+Stories are bounded by the appetite. Must-haves define the minimum shippable version — what makes this better than the user's baseline today. Nice-to-haves are pre-authorized cuts: if the appetite runs tight, these get scope-hammered without debate. prd-to-issues maps each vertical slice back to these stories, and where a Must carries flow rows it maps at affordance granularity.
 
 ## API Contract Sketch
 

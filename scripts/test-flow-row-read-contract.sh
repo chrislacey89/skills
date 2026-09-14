@@ -161,5 +161,14 @@ assert_contains "$coverage" 'affordance granularity' \
 assert_contains "$coverage" 'prd-to-issues` Step 5' \
     "Coverage Matrix points at the operative test rather than restating it"
 
+section "one phrase for the granularity, at all three sites"
+
+# The three sites name the SAME granularity or they do not describe the same
+# check. "that granularity" in the template read fine in place and said less
+# than the other two; a reader comparing them could not tell whether the
+# difference was deliberate.
+assert_contains "$template" 'affordance granularity' \
+    "pitch template uses the same phrase as Step 5 and SYSTEM-OVERVIEW"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
