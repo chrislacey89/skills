@@ -114,7 +114,7 @@ Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot
 
 **Enhancement:** Now consults `docs/solutions/` for relevant past solutions and incorporates `research.md` recommendations. Surfaces relevant pitfalls during the interview. Validates the pitch is rough (room for builder judgment), solved (rabbit holes patched), bounded (appetite set, no-gos declared), and complete (omitted activities scan — checks for commonly missed work like error handling, auth changes, migrations, monitoring, and surfaces any that apply as Rabbit Holes) before writing. Includes conditional flow rows for multi-step UI features, attached to the Must-have story each realizes so `/prd-to-issues` can test coverage at affordance granularity. Auto-invokes `/design-an-interface` when a module interface is uncertain. For big-batch appetite (6 weeks), creates a lightweight container milestone and attaches the PRD issue to it — distinct from the planning milestone created by `/create-milestone` for multi-PRD tranches.
 
-**Output:** A GitHub issue containing the pitch (optionally attached to a container milestone for big-batch work) — problem story, appetite, solution, rabbit holes, no-gos, flow sketch (conditional), user stories (must-haves + nice-to-haves), implementation decisions, research reference, lessons from past solutions.
+**Output:** A GitHub issue containing the pitch (optionally attached to a container milestone for big-batch work) — problem story, appetite, solution, rabbit holes, no-gos, user stories (must-haves + nice-to-haves), implementation decisions, research reference, lessons from past solutions.
 
 **Time:** 10-15 min active.
 
