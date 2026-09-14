@@ -194,6 +194,8 @@ For each user story in the PRD, classify and map it:
 
 **Where flow rows exist under a Must, map at that granularity.** `/write-a-prd` attaches place/affordance rows to the Must-have story each realizes, so a Must carrying rows is covered only when the rows are, not merely when the sentence is. A row may sit under several Musts, and the PRD's unattributed residue (shared chrome, loading states) is not a commitment — do not treat an unattributed row as an unmapped Must.
 
+**A PRD with a standalone `## Flow Sketch` section still parses — read it, do not reject it.** PRDs authored before the rows moved under their stories carry the section instead, and an in-flight PRD is not a malformed one. Read its rows as belonging to the Musts they plainly realize, and where a row's parent is genuinely ambiguous, raise it at the Quiz step rather than guessing. The relocation changed where an author puts a row, not whether this step reads it.
+
 **This is not a widening of the matrix's input.** No new PRD section becomes coverage-bearing, and nothing here asks the PRD for content it does not already have. The derivation tests more of the one sentence it already reads.
 
 **Unmapped-Must backpressure.** Before proceeding to the Quiz step, halt if any Must is unmapped. Surface the list of unmapped Musts to the user and ask whether to (a) add a new slice covering them, (b) extend an existing slice to cover them, or (c) demote the commitment in the PRD (edit the PRD issue body, then regenerate this view). Do not create slice issues with unmapped Musts.
