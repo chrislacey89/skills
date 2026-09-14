@@ -116,7 +116,7 @@ Keep this compact. The goal is to improve shaping, not to turn the pitch into a 
 
 **Compare down to baseline, not up to ideal.** When evaluating whether a scope cut is acceptable, compare to what users have today (the baseline), not to the perfect version. Shipping something better than baseline is always better than shipping nothing because you aimed for ideal.
 
-**Conditional flow sketch.** If the feature introduces multi-step user-facing flows, new navigation, or significant UI state changes, produce a Flow Sketch during the interview — a bullet list of places (screens/dialogs), affordances (buttons/fields/actions on each), and connections (what leads where). This catches missing transitions and ambiguous states early. Skip for API-only, backend, or single-screen changes.
+**Conditional flow rows.** If the feature introduces multi-step user-facing flows, new navigation, or significant UI state changes, work out its places (screens/dialogs), affordances (buttons/fields/actions on each), and connections (what leads where) during the interview — and **attach each row to the Must-have story it realizes**, rather than collecting them in a section of their own. This catches missing transitions and ambiguous states early, and it is what lets `/prd-to-issues` Step 5 test coverage at affordance granularity instead of at the granularity of a whole sentence. A row may realize more than one Must, and rows that realize none (nav chrome, loading and empty states) belong in the unattributed residue the template provides — do not force every row under exactly one story, which is the overconstraint that gets rows dropped rather than placed. Skip for API-only, backend, or single-screen changes.
 
 During the interview, bring forward relevant lessons from past solutions and research:
 - "The research recommends Ably for presence — should we adopt that recommendation or revisit?"
@@ -176,6 +176,10 @@ A deep module (as opposed to a shallow module) is one which encapsulates a lot o
 
 For each module with complex internal state: identify the key invariant that, if violated, would produce a silent corruption rather than an immediate failure. Note it in the Implementation Decisions section — the implementor should add a precondition or `isValid()` check for it.
 
+**Every mechanism you named in prose gets a home.** Before leaving this step, walk §Solution and the Must-haves' flow rows and take each mechanism you named there — each data structure, pre-computed input, background job, cache, or seeded state. Each one gets exactly one of four dispositions: a **Modules entry** here, a **Rabbit Hole** with a stated resolution, a **No-go** line, or **its own Must-have story**.
+
+The fourth is the one authors miss. A prerequisite can be a full user goal in its own right rather than a part of some other goal — Cockburn's case is a customer who wants to *Rent a Video* but must *Set up a Membership* first, and he names it only so writers do not "fix" it into a false hierarchy (Ch. 5). When the mechanism is itself something a user is trying to accomplish, promote it to a story; that is what puts it in front of `/prd-to-issues` Step 5's unmapped-Must halt. A mechanism named in prose and given none of the four is invisible downstream: Step 4 reads §Implementation Decisions for locked contract shapes, so a mechanism with no module leaves the boundary-map derivation nothing to catch.
+
 Check with the user that these modules match their expectations. Check with the user which modules they want tests written for, and at what boundary.
 
 **If the user is uncertain about a module's interface** — or if there are multiple plausible designs with real tradeoffs (e.g., one method that does everything vs. three composable methods, or a callback API vs. an event emitter) — invoke `/design-an-interface` to generate 2-3 radically different options using parallel sub-agents. Present the options with tradeoffs and let the user choose. If the interface is obvious or the user has a clear preference, skip this and move on.
@@ -230,7 +234,7 @@ If the problem has a clear structural driver, state it briefly here — enough t
 
 If the solution designs against a library-provided callback (agent hooks, middleware, lifecycle methods, tool handlers), cite the **Library Callback Contracts** snapshot from `research.md` (Phase 1.25) by file:line. Do not describe the mechanism as "inject via X" or "pass Y" unless X and Y appear verbatim in the accepted return shape. An imagined mechanism that doesn't exist in the library's `.d.ts` is the class of drift `/research`'s Phase 1.25 exists to prevent.
 
-[Diagram suggestion: before leaving the Solution section, consider whether the content above would read more clearly as a diagram — a flowchart, sequence diagram, architecture sketch, state machine, decision tree, or before/after transformation. The lists and prose stay authoritative; a diagram is a reading aid for `/prd-to-issues` decomposition and `/execute` cold-start sessions. If yes, invoke `/mermaid`. When it is the *whole pitch* a reader will skim rather than one figure in it, `/visual-recap` renders a PRD forward — decision cards for the commitments this pitch makes, an options-comparison for a fork it leaves open, and this diagram, as one transient HTML file. Optional, never auto-invoked, and not a PRD requirement: the issue body stays the source of truth either way. Skip when the Solution is short and linear enough that the prose is already the cleanest rendering — the bar is whether a reader unfamiliar with the codebase would orient faster with the diagram than without it. This prompt is placed at Solution-end (not nested in Flow Sketch) so it fires regardless of whether the Solution took a UI-flow, architecture, refactor/swap, or state-machine shape — consolidating the prior Flow Sketch-gated trigger and the refactor/swap trigger proposed in #90 into a single shape-agnostic prompt.]
+[Diagram suggestion: before leaving the Solution section, consider whether the content above would read more clearly as a diagram — a flowchart, sequence diagram, architecture sketch, state machine, decision tree, or before/after transformation. The lists and prose stay authoritative; a diagram is a reading aid for `/prd-to-issues` decomposition and `/execute` cold-start sessions. If yes, invoke `/mermaid`. When it is the *whole pitch* a reader will skim rather than one figure in it, `/visual-recap` renders a PRD forward — decision cards for the commitments this pitch makes, an options-comparison for a fork it leaves open, and this diagram, as one transient HTML file. Optional, never auto-invoked, and not a PRD requirement: the issue body stays the source of truth either way. Skip when the Solution is short and linear enough that the prose is already the cleanest rendering — the bar is whether a reader unfamiliar with the codebase would orient faster with the diagram than without it. This prompt is placed at Solution-end (not nested in the conditional flow rows) so it fires regardless of whether the Solution took a UI-flow, architecture, refactor/swap, or state-machine shape — consolidating the prior Flow Sketch-gated trigger and the refactor/swap trigger proposed in #90 into a single shape-agnostic prompt.]
 
 ## Rabbit Holes
 
@@ -244,24 +248,25 @@ Explicit exclusions. Silence means "in scope," so anything the builder might rea
 
 - [Thing that's explicitly out]
 
-## Flow Sketch
-
-[Include ONLY when the feature has multi-step user-facing flows, new navigation, or significant UI state changes. Omit entirely for API-only, backend, or single-screen changes.]
-
-- **[Place Name]**: [affordance 1], [affordance 2] -> connects to [Other Place]
-- **[Other Place]**: [affordance 3] -> connects to ...
-
 ## User Stories
 
 ### Must-haves
 
 1. As a [actor], I want [feature], so that [benefit]
+   - **[Place Name]**: [affordance 1], [affordance 2] -> connects to [Other Place]
+   - **[Other Place]**: [affordance 3] -> connects to ...
+
+[The indented rows are the flow rows, and they are conditional: include them only when the feature has multi-step user-facing flows, new navigation, or significant UI state changes. Omit for API-only, backend, or single-screen changes. Repeat a row under each Must it realizes; put rows that realize none under *Shared affordances* below.]
 
 ### Nice-to-haves (~)
 
 1. ~As a [actor], I want [feature], so that [benefit]
 
-Stories are bounded by the appetite. Must-haves define the minimum shippable version — what makes this better than the user's baseline today. Nice-to-haves are pre-authorized cuts: if the appetite runs tight, these get scope-hammered without debate. prd-to-issues maps each vertical slice back to these stories.
+### Shared affordances (unattributed)
+
+[Include ONLY when flow rows exist AND some row serves no single Must — nav chrome, loading and empty states, global error surfaces. These are not commitments; `/prd-to-issues` does not read them as unmapped Musts. Leave the heading out entirely when every row found a parent.]
+
+Stories are bounded by the appetite. Must-haves define the minimum shippable version — what makes this better than the user's baseline today. Nice-to-haves are pre-authorized cuts: if the appetite runs tight, these get scope-hammered without debate. prd-to-issues maps each vertical slice back to these stories, and where a Must carries flow rows it maps at affordance granularity.
 
 ## API Contract Sketch
 

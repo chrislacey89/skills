@@ -1,6 +1,6 @@
 ---
 date: 2026-08-18
-updated: 2026-09-04
+updated: 2026-09-14
 category: architecture-decisions
 problem_type: corrective commit re-introduces the defect class it was written to remove
 components: [pre-merge, execute, compound, tdd, fix-findings, docs, skill-references, scripts]
@@ -113,6 +113,56 @@ The subject was one paragraph of `fix-findings/SKILL.md` — the rule governing 
 **Two things are new here.** First, the restatement was written *in the same commit* as the canonical text, by the session that had just enumerated all four — not a later sweep that missed a site. Observation 2 recorded that shape once; this is the second time, and both were in prose about the same seam (`/fix-findings` → `/pre-merge`). Second, the pointer remedy `docs/restated-claims.md` prescribes moves the drift rather than removing it: a pointer cannot drift *short*, but its target can, and the breaker demonstrated both directions green. The mechanism shipped with this observation pins the structural half only — the numbered anchor exists once and each pointer names it — and states plainly that the meaning half (four states at the target) is a reader's job.
 
 **The same PR carried the second observation of `validate-the-instrument-not-only-the-subject-2026-08-23.md`** — two instruments reporting clean on a file they had never read — which is a different pattern with the same author-side cause: the PR body's verification claims were written from runs whose ground did not include the new file. Recorded there, cross-referenced here because both surfaced on one branch and both were found by fresh readers, none by a suite.
+
+## Sixth observation (2026-09-14, PR #363 / issue #362) — the first one a shipped mechanism caught before it merged
+
+Every prior observation was caught by a *review pass* reading the corrective
+commit. This one was caught by `/fix-findings`' own after-state check, at the
+moment the fix was made — which is what that check was added for, and the first
+time the record shows it firing.
+
+The finding under repair: `CHANGELOG.md:11` restated a two-branch rule that the
+same branch had already replaced with a three-branch one. Because a CHANGELOG
+entry is **not** on `docs/restated-claims.md`'s closed exemption list (code
+comment, commit message, pull request body), the closed action set applied —
+delete the sentence, or point it at the canonical statement. Never reword.
+
+The fixer reported `pointer -> prd-to-issues/SKILL.md § 5`, and by the letter it
+was one:
+
+```
+before: the actor clause usually carries a precondition (Cockburn Ch. 6: …), so the
+        operative question is which slice guarantees it; … the Must is unmapped.
+after:  the actor clause carries a precondition test (see `prd-to-issues/SKILL.md` § 5).
+```
+
+The stale claim is gone and the reference is real. But the same edit silently
+deleted the hedge **`usually`** — and the section it now points at says *"The
+actor clause **usually** carries one."* So the repair for a restated claim that
+had drifted from its canonical site produced a restated claim that
+**contradicts** its canonical site. The defect class, reproduced by its own fix,
+inside the one sentence whose entire job was to stop restating.
+
+**What caught it.** `/fix-findings` Step 1 requires the *controller* to read the
+after-state off `git show --word-diff` on the anchored file rather than off the
+fixer's report, and to revert anything that is neither a deletion nor a bare
+reference. That ran, the site was seen to add words that were not the reference,
+and the commit was reverted (`3da2731`, reverted at `5a48d35`). No breaker was
+spawned, per the rule.
+
+**The transferable part.** The rule's stated test — *"a pointer adds only the
+reference"* — was already violated by an added connective word alone, before the
+hedge was noticed. Both readings reached the same verdict here, but they are not
+the same test, and the weaker-looking one was sufficient. A controller that
+waives the added-words test because the addition looks harmless gives up the
+cheap check and keeps only the expensive one, which requires reading the pointer
+target to notice a contradiction.
+
+**Disposition.** The finding was not re-attempted. The branch had reached two
+`/fix-findings` rounds — the threshold where the skill's own guidance flips
+toward filing — so it was filed as chrislacey89/skills#364 with the rejected
+attempt's diagnosis and three named dispositions, including the genuinely open
+question of whether CHANGELOG entries belong on the exemption list at all.
 
 ## Symptoms
 

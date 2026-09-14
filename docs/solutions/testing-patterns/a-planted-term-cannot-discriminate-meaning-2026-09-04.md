@@ -1,7 +1,7 @@
 ---
 date: 2026-09-04
 category: testing-patterns
-problem_type: a contract test written to guard a prose contract asserts what the prose means via substring matching, making the test itself a hand-maintained restatement of the prose's semantics — second recording, with the measurement that shows why a planted self-test does not close it; third occurrence appended 2026-09-05, which fired through mechanism 1 and narrows the class to its executable subset
+problem_type: a contract test written to guard a prose contract asserts what the prose means via substring matching, making the test itself a hand-maintained restatement of the prose's semantics — second recording, with the measurement that shows why a planted self-test does not close it; third occurrence appended 2026-09-05, which fired through mechanism 1 and narrows the class to its executable subset; fourth occurrence appended 2026-09-14, the first to arrive on the author path, where mechanism 1 does not reach
 components: [scripts/test-*.sh, contract-test suites, fix-findings, pre-merge, CLAUDE.md]
 technologies: [bash, grep, awk, contract-tests, mutation-testing, llm-skills]
 severity: high
@@ -190,6 +190,45 @@ The other five assertions have no executable subject and are not fixable by
 trying harder. That is the line #340 should draw, and this is the measurement
 behind it.
 
+## Fourth occurrence — 2026-09-14, PR #363
+
+**The first one mechanism 1 could not have caught, because no fixer wrote it.**
+The three prior occurrences were fixers writing the grep the first recording had
+already said not to write. This one is an author writing it because the rule on
+the author path still says to.
+
+`CLAUDE.md` rule (b) — "when a skill's prose *does* make a checkable claim about
+tool behavior, pin it with an executable contract test" — draws no line between a
+subject that can be executed and a claim about what prose means. The author of
+PR #363 read it, followed it, and wrote `scripts/test-flow-row-read-contract.sh`
+to pin a four-site prose contract: *flow rows are attached to the Must they
+realize, and `/prd-to-issues` Step 5 reads them.*
+
+Three breakers, each validating its apparatus before reporting:
+
+| Mutation (corpus-drawn, from the fix's own `-` side) | Control | Verdict |
+|---|---|---|
+| Three-branch precondition rule → back to two branches | red (deleted `precondition`) | **survived**, 18/18 |
+| A bullet's `**unmapped**` verdict → unstated | red (`So-that` → `Sothat`) | **survived**, 18/18 |
+| `Ask what guarantees it` → `Ask which slice guarantees it` | red (`precondition` → `prerequisite`) | **survived**, 18/18 |
+
+Every control killed, so the suite reads the right file and the right region. It
+asserts `Actor clause`, `Want clause`, `So-that clause`, `precondition` — and
+cannot distinguish the *two different bullets* that both open `Actor clause —`.
+Two of the three mutations restored the exact defect a fix had just removed,
+suite green: the second recording's signature, reproduced.
+
+**What it does add.** The suite is not worthless and was kept: it pins the
+vocabulary faithfully and caught a real mismatch on its first run, where two
+sites said `affordance granularity` and a third said `that granularity`. The
+defect is the gap between that and what rule (b) told the author to expect.
+
+**Where the mechanism now sits.** Mechanism 2 — chrislacey89/skills#340, which
+scopes rule (b) to executed or derived-string subjects — is **still open**, and
+this occurrence is recorded as a comment on it. Mechanism 1 was in force and is
+simply not addressed to this path. So the author path remains unguarded, and
+that is the whole of what this occurrence measures.
+
 ## Prevention
 
 **Code-level:** none, and that is the finding. The class has no code-level
@@ -227,7 +266,9 @@ makes a third recording not a valid outcome; the third occurrence above
 measured otherwise. Three mechanisms are shipped now — the first was measured
 under load and did not hold, and the third exists only for the executable
 subset. The entry no longer claims a further recording is impossible; it
-claims these narrow the class and name its boundary.
+claims these narrow the class and name its boundary. The fourth occurrence
+above is the boundary being read back: it landed on the author path, which
+mechanism 1 does not govern and mechanism 2 is still open against.
 
 ## Planning / Calibration Notes
 

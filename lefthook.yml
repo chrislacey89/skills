@@ -44,6 +44,9 @@ pre-push:
       run: bash scripts/test-loop-ledger-markers.sh
     context-block-contract-tests:
       run: bash scripts/test-context-block-contract.sh
+    flow-row-read-contract-tests:
+      run: bash scripts/test-flow-row-read-contract.sh
+
     selection-idiom-consistency-tests:
       run: bash scripts/test-selection-idiom-consistency.sh
     options-comparison-contract-tests:
