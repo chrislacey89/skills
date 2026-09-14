@@ -502,6 +502,7 @@ export const canon: CanonWork[] = [
 		author: "Alistair Cockburn",
 		type: "book",
 		citations: [
+			{ skill: "prd-to-issues", tier: "secondary" },
 			{ skill: "write-a-prd", tier: "secondary" },
 		],
 	},

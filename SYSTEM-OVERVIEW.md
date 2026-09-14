@@ -249,9 +249,9 @@ The pipeline described above is the forward path. This section covers what happe
 
 A companion to Boundary Maps. The Boundary Map answers *what flows between slices*; the Coverage Matrix answers *which PRD commitment is addressed by which slice*. Both are regenerated views over GitHub-native state — no local matrix file, no hand-maintained spec.
 
-- **Single source of truth:** the PRD issue body (user stories in Must-haves / Nice-to-haves (~)).
+- **Single source of truth:** the PRD issue body — its Must-haves / Nice-to-haves (~) section, read *whole*. The stories are the unit of classification, not the unit of checking: an As-a/I-want/So-that sentence is three requirements on one line, and where `/write-a-prd` has attached place/affordance rows to a story, those rows are part of the commitment too.
 - **Classification:** each PRD user story is Must, Want, or ~Tilde (drawn from the PRD's existing section structure).
-- **Coverage:** derived from each slice issue's `User Stories Addressed` field.
+- **Coverage:** derived from each slice issue's `User Stories Addressed` field, and tested against the **whole** story — actor, want, and so-that. Where flow rows exist under a Must, coverage is tested at affordance granularity. A row may serve several Musts, and a PRD's unattributed residue is not a commitment. `/prd-to-issues` Step 5 carries the operative test.
 - **Size gate:** single-slice PRDs skip the matrix. For them, the boundary map and the slice's `User Stories Addressed` field already serve the traceability job.
 - **Generation difficulty is a PRD-quality signal.** If the matrix is noisy to generate, report that to the user — do not push structure back into the PRD. PRDs stay rough (Shape Up).
 - **Regenerated, not stored.** Whenever a consumer needs the matrix (`/prd-to-issues` Step 5, `/pre-merge` Coverage Matrix Reconciliation), it derives the matrix on the spot from current PRD + slice issues. No stored artifact to drift out of sync.

@@ -10,6 +10,7 @@ sources:
     - "Software Requirements — Karl Wiegers & Joy Beatty"
     - "Living Documentation — Cyrille Martraire"
     - "The Programmer's Brain — Felienne Hermans"
+    - "Writing Effective Use Cases — Alistair Cockburn"
 ---
 
 # PRD to Issues
@@ -183,6 +184,17 @@ For each user story in the PRD, classify and map it:
 - **Must** — comes from the PRD's *Must-haves* section. Every Must needs at least one covering slice before issue creation.
 - **Want** — comes from the PRD's *Nice-to-haves (~)* section. Unmapped Wants are acceptable but get surfaced as a warning at the Quiz step.
 - **~Tilde** — a Nice-to-have the user is consciously cutting under the appetite. No coverage required; silent.
+
+**Coverage means the whole story, not the want clause.** An As-a/I-want/So-that sentence is three requirements on one line, so matching a slice against the middle clause certifies the middle clause and nothing else. Wiegers (Ch. 29) is exact about why that is not traceability: a requirement is traceable only when it has *"fine enough granularity to be linked unambiguously,"* and *"a large paragraph containing multiple requirements is untraceable regardless of how many link records exist."* Three slices listed against a story you only half-checked is three link records that pin to nothing. Test all three clauses before marking a Must covered:
+
+- **Actor clause — name the slice that guarantees the precondition.** The actor clause usually carries one: something the system must ensure is true *before* this actor can begin. Cockburn's definition is the test — a precondition is *"what the system will ensure is true before letting the use case start,"* not a condition that merely tends to hold for typical users. Ask which slice guarantees it. If the honest answer is "the actor arranges it themselves," the clause has been rewritten and the Must is **unmapped**.
+- **Actor clause — check who the slices actually serve.** Separate the story's actor from whoever operates the interface. Cockburn's *ultimate primary actor* is the one who cares about the outcome, and collapsing the two misdirects the build: a use case named for the clerk *"gets built around clerk convenience instead of the customer's actual need."* Slices that serve only the operator do not cover a story written for the recipient.
+- **Want clause — the mechanism.** The match this step already performed.
+- **So-that clause — invert it.** Ask what would make this actor unhappy at the end of a *successful* run, then check whether the answer is already true of the planned slices. If it is, the Must is **unmapped** however well the want clause matches.
+
+**Where flow rows exist under a Must, map at that granularity.** `/write-a-prd` attaches place/affordance rows to the Must-have story each realizes, so a Must carrying rows is covered only when the rows are, not merely when the sentence is. A row may sit under several Musts, and the PRD's unattributed residue (shared chrome, loading states) is not a commitment — do not treat an unattributed row as an unmapped Must.
+
+**This is not a widening of the matrix's input.** No new PRD section becomes coverage-bearing, and nothing here asks the PRD for content it does not already have. The derivation tests more of the one sentence it already reads.
 
 **Unmapped-Must backpressure.** Before proceeding to the Quiz step, halt if any Must is unmapped. Surface the list of unmapped Musts to the user and ask whether to (a) add a new slice covering them, (b) extend an existing slice to cover them, or (c) demote the commitment in the PRD (edit the PRD issue body, then regenerate this view). Do not create slice issues with unmapped Musts.
 
