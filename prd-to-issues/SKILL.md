@@ -196,7 +196,7 @@ For each user story in the PRD, classify and map it:
 
 **A PRD with a standalone `## Flow Sketch` section still parses — read it, do not reject it.** PRDs authored before the rows moved under their stories carry the section instead, and an in-flight PRD is not a malformed one. Read its rows as belonging to the Musts they plainly realize, and where a row's parent is genuinely ambiguous, raise it at the Quiz step rather than guessing. The relocation changed where an author puts a row, not whether this step reads it.
 
-**This is not a widening of the matrix's input.** No new PRD section becomes coverage-bearing, and nothing here asks the PRD for content it does not already have. The derivation tests more of the one sentence it already reads.
+**This is not prose scanning.** Nothing here makes a §Solution sentence coverage-bearing, and no PRD is asked for content it does not already have. Flow rows are a bounded enumeration of places and affordances the author already wrote — the derivation reads them wherever the PRD puts them, and otherwise tests more of the one sentence it was already reading. Shape Up's roughness discipline is intact: the fix for a noisy matrix is still PRD refinement, never PRD restructuring to feed the matrix.
 
 **Unmapped-Must backpressure.** Before proceeding to the Quiz step, halt if any Must is unmapped. Surface the list of unmapped Musts to the user and ask whether to (a) add a new slice covering them, (b) extend an existing slice to cover them, or (c) demote the commitment in the PRD (edit the PRD issue body, then regenerate this view). Do not create slice issues with unmapped Musts.
 
