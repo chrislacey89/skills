@@ -176,6 +176,10 @@ A deep module (as opposed to a shallow module) is one which encapsulates a lot o
 
 For each module with complex internal state: identify the key invariant that, if violated, would produce a silent corruption rather than an immediate failure. Note it in the Implementation Decisions section — the implementor should add a precondition or `isValid()` check for it.
 
+**Every mechanism you named in prose gets a home.** Before leaving this step, walk §Solution and the Must-haves' flow rows and take each mechanism you named there — each data structure, pre-computed input, background job, cache, or seeded state. Each one gets exactly one of four dispositions: a **Modules entry** here, a **Rabbit Hole** with a stated resolution, a **No-go** line, or **its own Must-have story**.
+
+The fourth is the one authors miss. A prerequisite can be a full user goal in its own right rather than a part of some other goal — Cockburn's case is a customer who wants to *Rent a Video* but must *Set up a Membership* first, and he names it only so writers do not "fix" it into a false hierarchy (Ch. 5). When the mechanism is itself something a user is trying to accomplish, promote it to a story; that is what puts it in front of `/prd-to-issues` Step 5's unmapped-Must halt. A mechanism named in prose and given none of the four is invisible downstream: Step 4 reads §Implementation Decisions for locked contract shapes, so a mechanism with no module leaves the boundary-map derivation nothing to catch.
+
 Check with the user that these modules match their expectations. Check with the user which modules they want tests written for, and at what boundary.
 
 **If the user is uncertain about a module's interface** — or if there are multiple plausible designs with real tradeoffs (e.g., one method that does everything vs. three composable methods, or a callback API vs. an event emitter) — invoke `/design-an-interface` to generate 2-3 radically different options using parallel sub-agents. Present the options with tradeoffs and let the user choose. If the interface is obvious or the user has a clear preference, skip this and move on.
