@@ -151,14 +151,7 @@ fi
 
 **TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes both markers after commit.
 
-**Trivial-task exception.** For single-commit cleanups unrelated to active feature work — typo fixes, dead code removal, comment-only changes, formatting-only changes, dependency version bumps without API surface changes — you may skip classification by creating `.claude/.tdd-skipped` directly. This exception applies only when **all** of the following are true:
-
-- The task is not tied to an open GitHub issue, PRD, slice issue, or QA bug
-- The task is not part of an active feature branch created for multi-slice work
-- The change is expected to be a single commit (not a sequence of logical units)
-- The change does not touch behavior — no new conditionals, no new state, no new exported symbols, no schema or migration changes
-
-If any of these is false, go through the normal classification gate. When in doubt, use the gate — the cost of one extra `/tdd` invocation is lower than the cost of an unverified behavior change slipping through as "trivial."
+**Trivial-task exception.** A single-commit cleanup unrelated to active feature work may skip classification by creating `.claude/.tdd-skipped` directly. The four conditions that all have to hold, and what to do when one does not, are stated once in [references/trivial-task-rule.md](references/trivial-task-rule.md).
 
 **Assumptions validation gate.** If the task is a GitHub issue with an "Assumptions from Parent PRD" section, spend 60 seconds checking each listed assumption against current reality before proceeding. For each:
 

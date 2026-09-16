@@ -43,3 +43,5 @@ docs/restated-claims.md         fix-findings
 docs/mutation-at-consumption.md  execute
 docs/mutation-at-consumption.md  fix-findings
 docs/next-step-menu.md          fix-findings
+docs/trivial-task-rule.md  execute
+docs/trivial-task-rule.md  lfg
