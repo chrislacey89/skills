@@ -264,8 +264,22 @@ printf 'fixer flag:     %s   (written and removed by /fix-findings)\n' "$fixer_r
 # editing this suite, and counted so that a derivation returning the wrong set
 # is loud rather than quietly reducing the fixture to nothing.
 tdd_flags="$(grep -vxF "$stamp_rel" <<<"$hook_paths" | grep -vxF "$fixer_rel" || true)"
-tdd_active="$(sed -n 1p <<<"$tdd_flags")"
-tdd_skipped="$(sed -n 2p <<<"$tdd_flags")"
+
+# The same set as an array, so every fixture below scales with the hook instead
+# of with a hand-maintained list of names. `some_marker` is one arbitrary member,
+# for the fixtures that need a single representative classification marker rather
+# than the whole set; WHICH member it is carries no meaning, because the hook
+# treats them interchangeably and section 2 is what measures that. It is named
+# for its role rather than for a marker because a name bound by sort position is
+# a name a new marker can silently reassign.
+markers=()
+while read -r marker; do
+    if [ -n "$marker" ]; then markers+=("$marker"); fi
+done <<<"$tdd_flags"
+[ "${#markers[@]}" -gt 0 ] || fatal "the hook tests no classification markers at all — the derivation above no longer matches its terms"
+some_marker="${markers[0]}"
+
+printf 'markers:        %s(created in /execute Step 3, removed in Step 6)\n' "$(printf '%s ' "${markers[@]}")"
 
 # --- Scratch project the hook and the four commands act on -------------------
 
@@ -316,8 +330,8 @@ status=0
 bash -n "$hook_file" || status=$?
 assert_eq 0 "$status" "the hook body /init-pipeline documents parses as bash"
 
-assert_eq 2 "$(grep -c '' <<<"$tdd_flags")" \
-    "the hook tests exactly two classification markers besides the lock's two flags"
+assert_eq 3 "$(grep -c '' <<<"$tdd_flags")" \
+    "the hook tests exactly three classification markers besides the lock's two flags"
 
 if grep -qxF "$stamp_rel" <<<"$hook_paths"; then
     assert_eq "$stamp_rel" "$stamp_rel" "the hook reads the same stamp-flag path /pre-merge writes"
@@ -353,13 +367,11 @@ set_flags
 run_hook "src/service.ts"
 assert_eq 2 "$hook_status" "an unclassified implementation write is refused"
 
-set_flags "$tdd_active"
-run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "a write under $tdd_active is allowed"
-
-set_flags "$tdd_skipped"
-run_hook "src/service.ts"
-assert_eq 0 "$hook_status" "a write under $tdd_skipped is allowed"
+for marker in "${markers[@]}"; do
+    set_flags "$marker"
+    run_hook "src/service.ts"
+    assert_eq 0 "$hook_status" "a write under $marker is allowed"
+done
 
 # -----------------------------------------------------------------------------
 
@@ -367,8 +379,8 @@ section "3. the lock's truth table (clause 2), in both classification contexts"
 
 # Driven TWICE, because the classification context is not incidental to it.
 #
-# Every row here used to run with `$tdd_active` present, and that state cannot
-# occur: /execute Step 6 removes both classification markers before it hands off
+# Every row here used to run with a classification marker present, and that
+# state cannot occur: /execute Step 6 removes both classification markers before it hands off
 # to /pre-merge, so a stamped branch is always markerless. Under a strictly
 # ordered pair of clauses that is the whole defect — clause 1 short-circuits, the
 # /fix-findings fixer is refused despite holding the flag written for it, and the
@@ -409,7 +421,7 @@ set_context() {  # $1 = classification marker, or "" for none; rest = extra flag
     if [ -n "$marker" ]; then set_flags "$marker" "$@"; else set_flags "$@"; fi
 }
 
-for context in "$tdd_active" ""; do
+for context in "${markers[@]}" ""; do
     if [ -n "$context" ]; then
         where="under $context"
     else
@@ -590,11 +602,20 @@ section "5. round trip: the five documented commands drive the hook"
 # after the stamp was answered by a marker that would not have been there. The
 # sequence below is now the sequence the pipeline actually performs.
 
-set_flags "$tdd_active"
+# Every marker at once, which is the state Step 6's removal has to clear. One
+# marker here would only measure the removal line against whichever name the
+# fixture happened to pick, and the drift this whole slice exists to close is a
+# marker the hook accepts that the removal line has never heard of.
+set_flags "${markers[@]}"
 run_hook "src/service.ts"
 assert_eq 0 "$hook_status" "classified, before anything else: open"
 
 run_documented "$proj" "$tdd_marker_remove" "$proj"
+leftover=""
+for marker in "${markers[@]}"; do
+    if [ -e "$proj/$marker" ]; then leftover="$leftover$marker "; fi
+done
+assert_eq "" "$leftover" "/execute Step 6's rm names every classification marker the hook tests"
 run_hook "src/service.ts"
 assert_eq 2 "$hook_status" "after /execute Step 6's rm: the branch is markerless, so the classification gate refuses"
 
@@ -633,7 +654,7 @@ else
         "…and the lock is released: the refusal is clause 1's, not the lock's"
 fi
 
-touch "$proj/$tdd_active"
+touch "$proj/$some_marker"
 run_hook "src/service.ts"
 assert_eq 0 "$hook_status" "…and re-classifying the next slice's work reopens the gate with no stamp left to fight"
 
@@ -927,7 +948,7 @@ status=0
 bash -n "$mutant" || status=$?
 assert_eq 0 "$status" "the control is still a valid script (a syntax error would fail for the wrong reason)"
 
-set_flags "$tdd_active" "$stamp_rel"
+set_flags "$some_marker" "$stamp_rel"
 if [ -f "$proj/$stamp_rel" ]; then
     assert_eq "stamped" "stamped" "the fixture reaches the state the control is about to be run against"
 else

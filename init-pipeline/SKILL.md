@@ -75,14 +75,14 @@ if [[ "$FILE_PATH" == *.config.* ]]; then
 fi
 # Check for classification markers — but stand down on a stamped branch, so the
 # post-review clause below is the one that decides there. /execute Step 6 removes
-# BOTH classification markers before it hands off to /pre-merge, so by the time
+# EVERY classification marker before it hands off to /pre-merge, so by the time
 # .review-stamped exists there is never a marker left for this test to find.
 # Without the .review-stamped term, this clause short-circuits every post-review
 # write: the /fix-findings fixer is refused outright, and the authoring session is
 # refused by the wrong clause, under a message that names /tdd and never names the
 # route the lock was built to offer.
-if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ]; then
-  echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy) or create .claude/.tdd-skipped (visual frontend)."}' >&2
+if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" ]; then
+  echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy), create .claude/.tdd-skipped (visual frontend), or invoke /lfg (proof-of-concept mode)."}' >&2
   exit 2
 fi
 # Post-review edit lock. /pre-merge Phase 4 touches .review-stamped beside the

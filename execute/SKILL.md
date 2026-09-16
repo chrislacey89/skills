@@ -514,7 +514,7 @@ All commits should already be done by this point. This step handles post-impleme
 Remove the classification markers:
 
 ```bash
-rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped"
+rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" "$CLAUDE_PROJECT_DIR/.claude/.lfg-active"
 ```
 
 **AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 — including both of its guards: check the fetch's exit status and refuse the write if the edited body came out shorter than what was read. AFK is the mode with nobody watching the write, so it is the one that most needs them. AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
