@@ -279,7 +279,10 @@ section "5. no prose describes the marker set as a proper subset of itself"
 # skips a file reports a coverage it does not have:
 #
 #   scanned    every tracked .md outside the exclusions below, bundled copies
-#              included — a stale copy is as readable as a stale source.
+#              included — a stale copy is as readable as a stale source. No
+#              bundled copy holds a multi-marker line today, so that half of the
+#              selection is untested against the corpus; what actually keeps the
+#              copies honest is scripts/sync-skill-references.sh --check.
 #   CHANGELOG.md          excluded. A past entry describing the set as it was is
 #                         correct as written; rewriting it would be a lie.
 #   docs/solutions/       excluded. Incident records, same reason.
