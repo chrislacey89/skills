@@ -72,7 +72,7 @@ bad() {
 }
 fatal() { printf '\nFATAL: %s\n' "$1" >&2; exit 2; }
 
-# --- One reader per shape, called by the live checks and by section 6 --------
+# --- One reader per shape, called by the live checks and by section 7 --------
 #
 # Both are pure filters over a file path: they print, and they never abort. A
 # helper that calls `fatal` from inside a command substitution exits only the
@@ -120,6 +120,27 @@ set_equal()  { [ "$1" = "$2" ]; }
 # a set holding one empty string, which `comm` would otherwise report as a
 # difference and which would make an empty-vs-empty comparison say "differs".
 set_minus() { comm -23 <(printf '%s\n' "$1" | awk 'NF') <(printf '%s\n' "$2" | awk 'NF'); }
+# The members $1 and $2 share.
+set_intersect() { comm -12 <(printf '%s\n' "$1" | awk 'NF') <(printf '%s\n' "$2" | awk 'NF'); }
+
+# Lines in <file> that name two or more members of the marker set but not all of
+# it. A sentence describing the set is a prose contract with an operative reader,
+# and an additive edit to the set leaves every such sentence quietly false — see
+# docs/restated-claims.md. Prints `<lineno>:<named…>` per offender, and nothing
+# for a line that names one marker (a legitimate reference to a single one) or
+# all of them.
+partial_enumerations() {  # $1 = file. $markers must already be bound.
+    local numbered lineno text named
+    while IFS= read -r numbered; do
+        [ -n "$numbered" ] || continue
+        lineno="${numbered%%:*}"
+        text="${numbered#*:}"
+        named="$(set_intersect "$(path_set <<<"$text")" "$markers")"
+        if [ "$(grep -c . <<<"$named" || true)" -ge 2 ] && ! set_equal "$named" "$markers"; then
+            printf '%s:%s\n' "$lineno" "$(tr '\n' ' ' <<<"$named")"
+        fi
+    done < <(grep -n '\.claude/\.' "$1" || true)
+}
 
 # --- The four sources -------------------------------------------------------
 
@@ -245,7 +266,62 @@ fi
 
 # -----------------------------------------------------------------------------
 
-section "5. extra sources name no marker the set does not hold"
+section "5. no prose describes the marker set as a proper subset of itself"
+
+# The sites above are LISTS a mechanism reads. These are SENTENCES a person
+# reads, and they go stale the same way: "Step 6 removes both markers", "the
+# hook checks for either X or Y", a worktree checklist item naming the two
+# markers that must be absent. Each is an operative site — a reader acts on it —
+# and an additive edit to the set leaves every one of them false while it still
+# reads fluently. Nothing counts.
+#
+# WHAT IS SCANNED, and what is excluded and why, since a scan that silently
+# skips a file reports a coverage it does not have:
+#
+#   scanned    every tracked .md outside the exclusions below, bundled copies
+#              included — a stale copy is as readable as a stale source.
+#   CHANGELOG.md          excluded. A past entry describing the set as it was is
+#                         correct as written; rewriting it would be a lie.
+#   docs/solutions/       excluded. Incident records, same reason.
+#   scripts/              excluded. These suites quote marker names as fixtures
+#                         and as controls, deliberately in partial sets.
+#
+# A line naming exactly one marker is not an offender: a reference to one member
+# is not a claim about the set. Only two-or-more-but-not-all is.
+
+prose_files="$(git ls-files '*.md' | grep -v -e '^scripts/' -e '^CHANGELOG\.md$' -e '^docs/solutions/' || true)"
+[ -n "$prose_files" ] || fatal "the prose-file scan selected no files at all — the exclusion list or git ls-files changed shape"
+
+scanned=0
+offenders=""
+while IFS= read -r prose_file; do
+    [ -f "$prose_file" ] || continue
+    scanned=$((scanned + 1))
+    while IFS= read -r hit; do
+        [ -n "$hit" ] || continue
+        offenders="$offenders$prose_file:$hit"$'\n'
+    done <<<"$(partial_enumerations "$prose_file")"
+done <<<"$prose_files"
+
+MIN_PROSE_FILES=20
+if [ "$scanned" -ge "$MIN_PROSE_FILES" ]; then
+    ok "scanned $scanned markdown file(s) for partial enumerations (floor: $MIN_PROSE_FILES)"
+else
+    bad "scanned only $scanned markdown file(s), below the floor of $MIN_PROSE_FILES" \
+        "the selection stopped matching the repo, so a clean result here means nothing."
+fi
+
+if [ -z "$(awk 'NF' <<<"$offenders")" ]; then
+    ok "no sentence names part of the marker set as though it were the whole"
+else
+    bad "prose names some of the classification markers where it means all of them" \
+        "$(awk 'NF' <<<"$offenders")
+each line names two or more markers but not every one; adding a marker made it false."
+fi
+
+# -----------------------------------------------------------------------------
+
+section "6. extra sources name no marker the set does not hold"
 
 # The extension point. `/lfg` does not exist yet; when #371 writes it, this suite
 # is invoked with `lfg/SKILL.md` and every `.claude/` path in that skill's fenced
@@ -283,7 +359,7 @@ fi
 
 # -----------------------------------------------------------------------------
 
-section "6. apparatus: the readers read, and the comparisons can fail"
+section "7. apparatus: the readers read, and the comparisons can fail"
 
 # Every check above is a comparison between two derived sets, and its healthy
 # state is silence. scripts/test-guards-can-fire.sh's Prevention #2 is the rule
@@ -368,6 +444,34 @@ if [ -z "$(set_minus "$fixture_clause" "$fixture_reserved")" ]; then
 else
     bad "set_minus reported a member missing from a superset that holds it" \
         "section 4's containment checks cannot pass."
+fi
+
+# --- the partial-enumeration detector, on a set whose answers are known ------
+#
+# Section 5's healthy state is an empty offender list, which is also what a
+# detector reading nothing produces. `$markers` is rebound to a fixture set and
+# the SAME function is called, so what is validated is the reader the suite runs
+# rather than a copy of it (scripts/test-duplicate-guard-programs.sh).
+
+real_markers="$markers"
+markers=".claude/.alpha
+.claude/.beta
+.claude/.gamma"
+cat > "$scratch/prose.md" <<'PROSE'
+one member only, which is a reference and not a claim: .claude/.alpha
+all three, which is the whole set: .claude/.alpha .claude/.beta .claude/.gamma
+two of the three: .claude/.alpha and .claude/.beta
+a path that is not a marker at all: .claude/.delta
+PROSE
+fixture_offenders="$(partial_enumerations "$scratch/prose.md")"
+markers="$real_markers"
+
+if [ "$fixture_offenders" = "3:.claude/.alpha .claude/.beta " ]; then
+    ok "partial_enumerations flags the two-of-three line and only that line"
+else
+    bad "partial_enumerations did not read the planted prose fixture" \
+        "expected line 3 alone; got: ${fixture_offenders:-nothing}
+a single-marker line, a whole-set line, and a non-marker path are all controls here."
 fi
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
