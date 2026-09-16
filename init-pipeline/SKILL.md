@@ -316,10 +316,13 @@ Append these lines if not already present:
 ```
 .claude/.tdd-active
 .claude/.tdd-skipped
+.claude/.lfg-active
 .claude/.ralph-checked
 .claude/.review-stamped
 .claude/.fix-findings-active
 ```
+
+`.claude/.lfg-active` is the third classification marker the hook's first clause accepts, created by `/lfg` and removed by `/execute` Step 6 alongside the two `.tdd-*` markers. It is reserved here rather than created: `/init-pipeline` scaffolds the gate, never a classification.
 
 `.claude/.ralph-checked` is reserved here but created by `/setup-ralph-loop`, which is auto-invoked by `/execute` when a multi-slice task needs AFK bounds or may be run manually. `/init-pipeline` does not create the marker itself.
 
