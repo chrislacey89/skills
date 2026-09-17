@@ -97,11 +97,19 @@ fatal() { printf '\nFATAL: %s\n' "$1" >&2; exit 2; }
 # every subsequent block is captured inverted. Toggling on all fences and
 # filtering by the recorded info string is what makes an empty <lang> mean
 # "a fence with no language" instead of "any ``` line at all".
+#
+# A fence may open at any indentation, not only column 0 — `/lfg`'s tiny path
+# sits both of its fences under a numbered list item. The anchor allows leading
+# whitespace and `match()` finds where the backticks actually start, so the info
+# string is read from just past them regardless of how far in the fence sits.
+# Body lines are read as-is, indentation included; nothing downstream of this
+# reader cares about a body line's leading whitespace.
 fenced_blocks() {  # $1 = file, $2 = fence language (may be empty), $3 = ERE
     awk -v lang="$2" -v re="$3" '
-        /^```/ {
+        /^[[:space:]]*```/ {
             if (inblock) { if (info == lang && buf ~ re) printf "%s", buf; inblock = 0 }
-            else         { info = substr($0, 4); gsub(/[[:space:]]/, "", info)
+            else         { match($0, /^[[:space:]]*```/)
+                           info = substr($0, RSTART + RLENGTH); gsub(/[[:space:]]/, "", info)
                            buf = ""; inblock = 1 }
             next
         }
@@ -504,6 +512,40 @@ if [ -z "$(set_minus '.claude/.decoy-in-prose' "$fixture_reserved")" ]; then
         "the fixture plants .claude/.decoy-in-prose in prose; a whole-file grep would read it."
 else
     ok "…and neither reader picks up a .claude/ path written in prose"
+fi
+
+# The near-miss this suite itself lacked (#377 Review Notes): a fence indented
+# under a list item, the exact shape lfg/SKILL.md's tiny path uses for
+# `.claude/.tdd-skipped`. A reader anchored to column 0 alone reads nothing
+# here — docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md
+# Prevention #2 is why this is a planted case and not left to the live check.
+cat > "$scratch/indented.md" <<'INDENTED'
+1. Create the marker:
+   ```bash
+   touch "$CLAUDE_PROJECT_DIR/.claude/.delta"
+   ```
+INDENTED
+
+fixture_indented="$(path_set <<<"$(fenced_blocks "$scratch/indented.md" bash '.')")"
+if [ "$fixture_indented" = ".claude/.delta" ]; then
+    ok "fenced_blocks reads a fence indented under a list item"
+else
+    bad "fenced_blocks did not read the fence indented under a list item" \
+        "expected .claude/.delta, got: ${fixture_indented:-nothing}"
+fi
+
+# Same shape, no removal anywhere in the file: unremoved_markers has to see the
+# indented `touch` to have anything to flag as a leak.
+real_markers="$markers"
+markers=".claude/.delta"
+indented_leaked="$(unremoved_markers "$scratch/indented.md")"
+markers="$real_markers"
+
+if [ "$indented_leaked" = ".claude/.delta" ]; then
+    ok "unremoved_markers flags a marker touched only inside an indented fence"
+else
+    bad "unremoved_markers did not flag the indented leak fixture" \
+        "expected .claude/.delta alone; got: ${indented_leaked:-nothing}"
 fi
 
 if set_equal "$fixture_clause" "$fixture_clause"; then
