@@ -293,7 +293,7 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/closeout`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`, `/fix-findings` (the one that is *user*-invoked rather than skill-invoked — the human types it after choosing findings; `disable-model-invocation: true`)
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`, `/re-pitch`
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`, `/re-pitch`, `/lfg` (user-invoked only; `disable-model-invocation: true`)
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Handoff Table
@@ -329,6 +329,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/correct-course` | Invalidated artifact or changed assumption | Blast-radius diagnosis and artifact cleanup plan | The earliest skill that needs to re-run |
 | `/handoff` | Long session with no natural compression artifact — mid-skill, exploratory, side-route, or non-pipeline work | Transient handoff doc at a `mktemp` path; references existing artifacts by path, URL, or issue number | Fresh session opened by the user with the doc as input |
 | `/re-pitch` | An explanation that did not land, plus the user's signal of non-comprehension | A replacement explanation in the conversation — diagnosed cause, one-sentence anchor, capped sentences, every domain term glossed at first use. No durable artifact | Returns control to whatever was in flight; may recommend `/ubiquitous-language` when the same terms keep needing glosses |
+| `/lfg` | An ask typed as `/lfg <ask>`, plus a user present for a short shaping conversation (feature path only) | A stamped PR whose body opens with a proof-of-concept banner and carries the recap (decisions taken without the user, stop tally, proof paths), a PRD-lite issue, and gap issues for everything cut; `open` ledger rows moved to `filed` | The user, who demos and then promotes or discards; `/closeout` to keep it |
 | `/init-pipeline` | Project that will use `/execute` | Claude Code hooks, git guardrails, pre-commit setup | `/execute` (auto-invokes it) |
 | `/setup-pre-commit` | Repo needing commit-time quality gates | Lefthook config plus formatter/linter wiring | Normal feature work, now gated at commit |
 | `/setup-ralph-loop` | Repo wanting repeatable Ralph execution | `ralph-once.sh` and bounded `ralph.sh` | `/execute`, first HITL then bounded AFK |
