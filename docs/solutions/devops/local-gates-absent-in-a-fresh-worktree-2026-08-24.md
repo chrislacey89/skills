@@ -135,6 +135,7 @@ Considered and rejected: a check that fails when `.git/hooks` is empty. It canno
 - PR #271 / `scripts/check-shellcheck-version.sh` — the warner this incident bypassed by not running it
 - `../testing-patterns/validate-the-instrument-not-only-the-subject-2026-08-23.md` — inverted axis; see Rule Scope
 - `../architecture-decisions/by-construction-claims-need-a-mechanism-2026-08-11.md` — mirror shape; see Rule Scope
+- `../testing-patterns/scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md` — a second route to the same symptom: a suite run from a worktree hook writes a dead `core.hooksPath` into the shared config, disabling hooks in every worktree
 
 ## Shelf Life
 

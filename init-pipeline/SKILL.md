@@ -28,11 +28,11 @@ The list is deliberately not restated in this file. It was, and the copy was wro
 
 Create `.claude/hooks/enforce-classification.sh` and make it executable. This blocks Write/Edit to implementation files unless the `/execute` Step 3 classification gate has been passed.
 
-The hook checks for either `.claude/.tdd-active` (TDD invoked) or `.claude/.tdd-skipped` (visual frontend, explicitly opted out). No path checking beyond the trigger surface — it enforces "did you go through the gate?"
+The hook checks for any of `.claude/.tdd-active` (TDD invoked), `.claude/.tdd-skipped` (visual frontend, explicitly opted out), or `.claude/.lfg-active` (`/lfg` proof-of-concept mode). No path checking beyond the trigger surface — it enforces "did you go through the gate?"
 
 It carries a second clause on the same trigger surface: the **post-review edit lock**, which refuses an implementation write while `.claude/.review-stamped` exists and `.claude/.fix-findings-active` does not. The first clause asks "was this work classified?"; the second asks "is this edit landing after a review, authored by the session the review went around?" Both are one script because both key off the same file-pattern decision.
 
-**The two clauses are ordered, not independent — read the `.review-stamped` term in the first one before editing either.** The classification clause stands down on a stamped branch, so the post-review clause is the only one that decides there. This is not a stylistic preference: `/execute` Step 6 removes `.claude/.tdd-active` and `.claude/.tdd-skipped` *before* it hands off to `/pre-merge`, so a stamped branch never carries a classification marker. Two independent clauses in this order therefore never reach the second one — the `/fix-findings` fixer is refused despite holding the flag written for it, and the authoring session is refused by the wrong clause, told to invoke `/tdd` and never told that `/fix-findings` is the route. A lock whose designed affordance never prints is a lock nobody can use, and it was described here as "independent" while behaving this way. `scripts/test-post-review-edit-lock.sh` now drives `/execute` Step 6's removal as part of the round trip, so the ordering is measured rather than asserted.
+**The two clauses are ordered, not independent — read the `.review-stamped` term in the first one before editing either.** The classification clause stands down on a stamped branch, so the post-review clause is the only one that decides there. This is not a stylistic preference: `/execute` Step 6 removes `.claude/.tdd-active`, `.claude/.tdd-skipped`, and `.claude/.lfg-active` *before* it hands off to `/pre-merge`, so a stamped branch never carries a classification marker. Two independent clauses in this order therefore never reach the second one — the `/fix-findings` fixer is refused despite holding the flag written for it, and the authoring session is refused by the wrong clause, told to invoke `/tdd` and never told that `/fix-findings` is the route. A lock whose designed affordance never prints is a lock nobody can use, and it was described here as "independent" while behaving this way. `scripts/test-post-review-edit-lock.sh` now drives `/execute` Step 6's removal as part of the round trip, so the ordering is measured rather than asserted.
 
 **Install-time: the trigger surface is settled on one of three paths, and at most one of them applies to a given run.** Read `.claude/hooks/enforce-classification.sh` in the target project before writing anything. What is already installed there decides the path — not how this skill was invoked, because `/execute` Step 0 routes both of its verdicts (`hooks-absent` and `hooks-stale`) to the same auto-invocation. Take no instruction from a path you are not on.
 
@@ -75,14 +75,14 @@ if [[ "$FILE_PATH" == *.config.* ]]; then
 fi
 # Check for classification markers — but stand down on a stamped branch, so the
 # post-review clause below is the one that decides there. /execute Step 6 removes
-# BOTH classification markers before it hands off to /pre-merge, so by the time
+# EVERY classification marker before it hands off to /pre-merge, so by the time
 # .review-stamped exists there is never a marker left for this test to find.
 # Without the .review-stamped term, this clause short-circuits every post-review
 # write: the /fix-findings fixer is refused outright, and the authoring session is
 # refused by the wrong clause, under a message that names /tdd and never names the
 # route the lock was built to offer.
-if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ]; then
-  echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy) or create .claude/.tdd-skipped (visual frontend)."}' >&2
+if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" ]; then
+  echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy), create .claude/.tdd-skipped (visual frontend), or invoke /lfg (proof-of-concept mode)."}' >&2
   exit 2
 fi
 # Post-review edit lock. /pre-merge Phase 4 touches .review-stamped beside the
@@ -316,10 +316,13 @@ Append these lines if not already present:
 ```
 .claude/.tdd-active
 .claude/.tdd-skipped
+.claude/.lfg-active
 .claude/.ralph-checked
 .claude/.review-stamped
 .claude/.fix-findings-active
 ```
+
+`.claude/.lfg-active` is the third classification marker the hook's first clause accepts, created by `/lfg` and removed by `/execute` Step 6 alongside the two `.tdd-*` markers. It is reserved here rather than created: `/init-pipeline` scaffolds the gate, never a classification.
 
 `.claude/.ralph-checked` is reserved here but created by `/setup-ralph-loop`, which is auto-invoked by `/execute` when a multi-slice task needs AFK bounds or may be run manually. `/init-pipeline` does not create the marker itself.
 
