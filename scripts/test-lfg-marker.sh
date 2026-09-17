@@ -57,6 +57,14 @@
 
 set -euo pipefail
 
+# A caller that reached this suite via a git hook (pre-push, run from a
+# worktree) has GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE set in its environment.
+# Section 4's `git init -q "$reserved_repo"` would inherit them and
+# re-initialize whatever they point at instead of the scratch directory,
+# writing `core.bare=true` into the real repo's shared config. Unset before
+# any git call, and before repo_root's own `cd`.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
