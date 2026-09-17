@@ -123,6 +123,32 @@ set_minus() { comm -23 <(printf '%s\n' "$1" | awk 'NF') <(printf '%s\n' "$2" | a
 # The members $1 and $2 share.
 set_intersect() { comm -12 <(printf '%s\n' "$1" | awk 'NF') <(printf '%s\n' "$2" | awk 'NF'); }
 
+# Whether git itself — not a grep over the text — would refuse to track <path>
+# inside the git repo rooted at <dir>. `-c core.excludesFile=/dev/null` is set
+# on every call, in both directions this is used (this repo's live .gitignore
+# and a scratch copy of /init-pipeline § 6's block): without it, a machine-local
+# global excludes file naming `.claude/` could make a marker read as ignored
+# for a reason that has nothing to do with the .gitignore under test, and the
+# check would pass here while failing on a clean machine.
+marker_ignored() {  # $1 = git repo dir, $2 = path relative to it
+    git -C "$1" -c core.excludesFile=/dev/null check-ignore -q -- "$2"
+}
+
+# Every member of $1 (newline-separated markers) that marker_ignored refuses for
+# <repo-dir>, space-joined. Empty output means every marker is actually ignored
+# there — not merely named in a .gitignore-shaped file, which grep alone cannot
+# tell apart from a marker that is commented out, mistyped, or simply absent.
+unignored_markers() {  # $1 = repo dir, $2 = newline-separated markers
+    local repo_dir="$1" marker result=""
+    while IFS= read -r marker; do
+        [ -n "$marker" ] || continue
+        if ! marker_ignored "$repo_dir" "$marker"; then
+            result="$result$marker "
+        fi
+    done <<<"$2"
+    printf '%s' "$result"
+}
+
 # Lines in <file> that name two or more members of the marker set but not all of
 # it. A sentence describing the set is a prose contract with an operative reader,
 # and an additive edit to the set leaves every such sentence quietly false — see
@@ -178,6 +204,14 @@ repo_ignored="$(path_set < .gitignore)"
 
 printf 'markers (hook clause 1, less the stand-down flag):\n%s\n' "$markers"
 printf 'stand-down flag: %s\n' "$stamp_rel"
+
+# One scratch root for the whole suite (section 4's downstream-gitignore probe
+# and section 7's fixtures both live under it), one trap, created early so
+# section 4 can use it before section 7 would otherwise have created its own —
+# a second `trap … EXIT` here would silently replace this one and stop
+# section 7's directory from being cleaned up.
+scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch"' EXIT
 
 # -----------------------------------------------------------------------------
 
@@ -237,21 +271,40 @@ fi
 
 section "4. every marker is reserved, downstream and here"
 
-missing_downstream="$(set_minus "$markers" "$reserved")"
-if [ -z "$missing_downstream" ]; then
+# Both checks below ask git itself whether a marker is ignored
+# (scripts/test-post-review-edit-lock.sh's ~line 1030 is the precedent, for the
+# lock's own two flags), not whether its name merely appears in the text. Text
+# containment is necessary but not sufficient — a marker whose line is
+# commented out, mistyped, or otherwise inert still shows up in a `grep`, and a
+# suite that stops at `grep` reports the marker safe while `git` would still
+# track it into a commit.
+
+# /init-pipeline § 6's block is documentation: the literal lines a downstream
+# project pastes into ITS OWN .gitignore, not this repo's. The only way to ask
+# git whether that paste would work is to perform it — so the block is written
+# verbatim into a scratch repo's .gitignore and checked there.
+reserved_repo="$scratch/reserved-gitignore"
+mkdir -p "$reserved_repo"
+if ! git init -q "$reserved_repo"; then
+    fatal "could not git init the scratch repo for /init-pipeline § 6's block"
+fi
+printf '%s' "$reserved_block" > "$reserved_repo/.gitignore"
+
+unreserved="$(unignored_markers "$reserved_repo" "$markers")"
+if [ -z "$unreserved" ]; then
     ok "/init-pipeline § 6 reserves every classification marker"
 else
     bad "/init-pipeline § 6 does not reserve every classification marker" \
-        "unreserved: $(tr '\n' ' ' <<<"$missing_downstream")
+        "not ignored when that block is pasted verbatim into a .gitignore: $unreserved
 a downstream project scaffolded from that block can commit the marker, which holds the gate open on every future branch there."
 fi
 
-missing_here="$(set_minus "$markers" "$repo_ignored")"
-if [ -z "$missing_here" ]; then
+unignored_here="$(unignored_markers "$repo_root" "$markers")"
+if [ -z "$unignored_here" ]; then
     ok "this repo's .gitignore ignores every classification marker"
 else
     bad "this repo's .gitignore does not ignore every classification marker" \
-        "unignored: $(tr '\n' ' ' <<<"$missing_here")"
+        "unignored: $unignored_here"
 fi
 
 # The edge that keeps the two containments above from being satisfiable by one
@@ -371,9 +424,9 @@ section "7. apparatus: the readers read, and the comparisons can fail"
 # run against planted fixtures whose answers are known — not copies of them,
 # because a self-test exercising its own copy proves nothing about the reader the
 # suite runs (scripts/test-duplicate-guard-programs.sh).
-
-scratch="$(mktemp -d)"
-trap 'rm -rf "$scratch"' EXIT
+#
+# $scratch itself was created before section 4, which needs it too; see the
+# comment there.
 
 cat > "$scratch/fixture.md" <<'FIXTURE'
 Prose that mentions .claude/.decoy-in-prose and must not be read.
