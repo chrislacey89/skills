@@ -52,7 +52,7 @@
 # skills document; it cannot see whether any downstream project installed that
 # text, which is a property of that project and not of this repo. And it says
 # nothing about WHICH skill creates which marker — `/tdd` writes one by harness
-# preprocessing and `/lfg` will write another, and neither creation site is
+# preprocessing and `/lfg` writes another, and neither creation site is
 # reachable from a marker's name.
 
 set -euo pipefail
@@ -97,11 +97,19 @@ fatal() { printf '\nFATAL: %s\n' "$1" >&2; exit 2; }
 # every subsequent block is captured inverted. Toggling on all fences and
 # filtering by the recorded info string is what makes an empty <lang> mean
 # "a fence with no language" instead of "any ``` line at all".
+#
+# A fence may open at any indentation, not only column 0 — `/lfg`'s tiny path
+# sits both of its fences under a numbered list item. The anchor allows leading
+# whitespace and `match()` finds where the backticks actually start, so the info
+# string is read from just past them regardless of how far in the fence sits.
+# Body lines are read as-is, indentation included; nothing downstream of this
+# reader cares about a body line's leading whitespace.
 fenced_blocks() {  # $1 = file, $2 = fence language (may be empty), $3 = ERE
     awk -v lang="$2" -v re="$3" '
-        /^```/ {
+        /^[[:space:]]*```/ {
             if (inblock) { if (info == lang && buf ~ re) printf "%s", buf; inblock = 0 }
-            else         { info = substr($0, 4); gsub(/[[:space:]]/, "", info)
+            else         { match($0, /^[[:space:]]*```/)
+                           info = substr($0, RSTART + RLENGTH); gsub(/[[:space:]]/, "", info)
                            buf = ""; inblock = 1 }
             next
         }
@@ -118,6 +126,19 @@ claude_paths() {
 }
 
 path_set() { claude_paths | sort -u; }
+
+# The markers <file>'s fenced bash blocks create with `touch` that no fenced bash
+# block in it removes with `rm -f`, one per line. Empty output means every marker
+# the file creates, it also removes. Only marker-set members count: `$markers`
+# must already be bound, so a skill touching a lock flag it never owns is not
+# read as a leak.
+unremoved_markers() {  # $1 = file
+    local blocks touched removed
+    blocks="$(fenced_blocks "$1" bash '.')"
+    touched="$(set_intersect "$(grep 'touch ' <<<"$blocks" | path_set)" "$markers")"
+    removed="$(grep 'rm -f' <<<"$blocks" | path_set)"
+    set_minus "$touched" "$removed"
+}
 
 # --- Set algebra, one implementation, used live and in the self-test ---------
 #
@@ -387,9 +408,9 @@ fi
 
 section "6. extra sources name no marker the set does not hold"
 
-# The extension point. `/lfg` does not exist yet; when #371 writes it, this suite
-# is invoked with `lfg/SKILL.md` and every `.claude/` path in that skill's fenced
-# bash blocks has to be one the four sources above already know about — which is
+# The extension point. CI and lefthook invoke this suite with `lfg/SKILL.md`, and
+# every `.claude/` path in that skill's fenced bash blocks has to be one the four
+# sources above already know about — which is
 # how a typo'd `.lfg-actve`, or a marker invented in a skill and registered
 # nowhere, becomes a red run instead of a gate that silently never engages.
 #
@@ -417,6 +438,16 @@ else
         else
             bad "$extra names .claude/ paths no source declares" \
                 "unknown: $(tr '\n' ' ' <<<"$unknown")"
+        fi
+        # A marker a skill creates and never removes outlives the run, and the
+        # next review stamp lands on a branch still carrying it — the state
+        # Step 6's equality above exists to prevent, reached by a different door.
+        leaked="$(unremoved_markers "$extra")"
+        if [ -z "$(awk 'NF' <<<"$leaked")" ]; then
+            ok "$extra removes every classification marker it creates"
+        else
+            bad "$extra creates a classification marker it never removes" \
+                "touched with no \`rm -f\` in any fenced bash block: $(tr '\n' ' ' <<<"$leaked")"
         fi
     done
 fi
@@ -483,6 +514,40 @@ else
     ok "…and neither reader picks up a .claude/ path written in prose"
 fi
 
+# The near-miss this suite itself lacked (#377 Review Notes): a fence indented
+# under a list item, the exact shape lfg/SKILL.md's tiny path uses for
+# `.claude/.tdd-skipped`. A reader anchored to column 0 alone reads nothing
+# here — docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md
+# Prevention #2 is why this is a planted case and not left to the live check.
+cat > "$scratch/indented.md" <<'INDENTED'
+1. Create the marker:
+   ```bash
+   touch "$CLAUDE_PROJECT_DIR/.claude/.delta"
+   ```
+INDENTED
+
+fixture_indented="$(path_set <<<"$(fenced_blocks "$scratch/indented.md" bash '.')")"
+if [ "$fixture_indented" = ".claude/.delta" ]; then
+    ok "fenced_blocks reads a fence indented under a list item"
+else
+    bad "fenced_blocks did not read the fence indented under a list item" \
+        "expected .claude/.delta, got: ${fixture_indented:-nothing}"
+fi
+
+# Same shape, no removal anywhere in the file: unremoved_markers has to see the
+# indented `touch` to have anything to flag as a leak.
+real_markers="$markers"
+markers=".claude/.delta"
+indented_leaked="$(unremoved_markers "$scratch/indented.md")"
+markers="$real_markers"
+
+if [ "$indented_leaked" = ".claude/.delta" ]; then
+    ok "unremoved_markers flags a marker touched only inside an indented fence"
+else
+    bad "unremoved_markers did not flag the indented leak fixture" \
+        "expected .claude/.delta alone; got: ${indented_leaked:-nothing}"
+fi
+
 if set_equal "$fixture_clause" "$fixture_clause"; then
     ok "set_equal holds on two identical sets"
 else
@@ -536,6 +601,34 @@ else
     bad "partial_enumerations did not read the planted prose fixture" \
         "expected line 3 alone; got: ${fixture_offenders:-nothing}
 a single-marker line, a whole-set line, and a non-marker path are all controls here."
+fi
+
+# --- the create-without-remove detector, same rebinding -----------------------
+
+real_markers="$markers"
+markers=".claude/.alpha
+.claude/.beta"
+cat > "$scratch/leak.md" <<'LEAK'
+```bash
+touch "$CLAUDE_PROJECT_DIR/.claude/.alpha"
+touch "$CLAUDE_PROJECT_DIR/.claude/.beta"
+touch "$CLAUDE_PROJECT_DIR/.claude/.not-a-marker"
+```
+
+Prose that removes it does not count: rm -f .claude/.beta
+
+```bash
+rm -f "$CLAUDE_PROJECT_DIR/.claude/.alpha"
+```
+LEAK
+fixture_leaked="$(unremoved_markers "$scratch/leak.md")"
+markers="$real_markers"
+
+if [ "$fixture_leaked" = ".claude/.beta" ]; then
+    ok "unremoved_markers flags a marker removed only in prose, and ignores a non-marker"
+else
+    bad "unremoved_markers did not read the planted leak fixture" \
+        "expected .claude/.beta alone; got: ${fixture_leaked:-nothing}"
 fi
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

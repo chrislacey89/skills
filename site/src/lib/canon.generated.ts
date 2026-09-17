@@ -199,6 +199,7 @@ export const canon: CanonWork[] = [
 		type: "book",
 		citations: [
 			{ skill: "execute", tier: "secondary" },
+			{ skill: "lfg", tier: "primary" },
 			{ skill: "pre-merge", tier: "secondary" },
 			{ skill: "tdd", tier: "secondary" },
 		],
@@ -299,6 +300,7 @@ export const canon: CanonWork[] = [
 		type: "book",
 		citations: [
 			{ skill: "create-milestone", tier: "primary" },
+			{ skill: "lfg", tier: "secondary" },
 			{ skill: "write-a-prd", tier: "primary" },
 		],
 	},
@@ -391,6 +393,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "The Good News Factory — Kent Beck",
+		title: "The Good News Factory",
+		author: "Kent Beck",
+		type: "book",
+		citations: [
+			{ skill: "lfg", tier: "secondary" },
+		],
+	},
+	{
 		full: "The Mom Test — Rob Fitzpatrick",
 		title: "The Mom Test",
 		author: "Rob Fitzpatrick",
@@ -405,6 +416,7 @@ export const canon: CanonWork[] = [
 		author: "Andrew Hunt & David Thomas",
 		type: "book",
 		citations: [
+			{ skill: "lfg", tier: "primary" },
 			{ skill: "prd-to-issues", tier: "primary" },
 			{ skill: "prototype", tier: "secondary" },
 		],

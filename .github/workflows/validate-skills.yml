@@ -225,7 +225,7 @@ jobs:
       # a .gitignore misses is committable. Pass source files as arguments to
       # also scan their fenced bash blocks for markers no source declares.
       - name: Run classification-marker set contract suite
-        run: bash scripts/test-lfg-marker.sh
+        run: bash scripts/test-lfg-marker.sh lfg/SKILL.md
 
       # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
       # from branch state by a block in Phase 1 step 4, and /fix-findings' menu
