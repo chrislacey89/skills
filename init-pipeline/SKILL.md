@@ -332,7 +332,7 @@ Append these lines if not already present:
 
 `/execute` Step 0 and `/closeout` consult an optional `.claude/settings.json` key, `worktree.provisioning`, to decide whether the *pipeline* owns worktree provisioning and teardown or whether the *host* environment does. It mirrors the existing `research.storage` precedent — a single, in-repo, authoritative representation of an environment fact (Hunt/Thomas, DRY) rather than env-sniffing scattered across skills.
 
-- `"auto"` (default when the key is absent) — `/execute` stands down if a host env var is present (`CONDUCTOR_WORKSPACE_PATH`, `CODESPACES`, `REMOTE_CONTAINERS`) or the current tree is not the repo's primary working tree; otherwise it provisions via worktrunk or plain git.
+- `"auto"` (default when the key is absent) — `/execute` stands down if a host env var describes the current tree (the block below) or the current tree is not the repo's primary working tree; otherwise it provisions via worktrunk or plain git.
 - `"host"` — isolation is always host-owned. `/execute` works in place; `/closeout` merges but cedes worktree teardown and branch pruning to the host.
 - `"pipeline"` — the pipeline always provisions and tears down (the pre-host behavior).
 
@@ -344,15 +344,23 @@ Append these lines if not already present:
 }
 ```
 
-**Scaffold `host` when running inside a host environment.** If `/init-pipeline` runs while a host env var is set, write `worktree.provisioning: "host"` explicitly — the env var that disambiguates is available at scaffold time, and an explicit setting is more robust than re-deriving it on every `/execute`:
+**Do not scaffold this key — leave it unset.** Whether a tree is host-provisioned is a fact about the machine and the checkout, and `.claude/settings.json` is committed: a `"host"` written from one Conductor workspace travels to every other clone, including the maintainer's own plain checkout and other contributors', where `/execute` would then stand down permanently and `/closeout` would cede teardown to a host that is not there. `auto` re-derives the answer on every run from the tree it is standing in:
 
 ```bash
-if [ -n "$CONDUCTOR_WORKSPACE_PATH" ] || [ -n "$CODESPACES" ] || [ -n "$REMOTE_CONTAINERS" ]; then
-  : # merge {"worktree":{"provisioning":"host"}} into .claude/settings.json
+# host-signal: does a host env var describe THIS tree, not just this shell?
+host_owned=no
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+if [ -n "${CONDUCTOR_WORKSPACE_PATH:-}" ]; then
+  ws=$(cd "$CONDUCTOR_WORKSPACE_PATH" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) host_owned=yes ;; esac
+  fi
 fi
+if [ -n "${CODESPACES:-}" ] || [ -n "${REMOTE_CONTAINERS:-}" ]; then host_owned=yes; fi
+echo "host_owned=$host_owned"
 ```
 
-Merge into existing settings — do not overwrite. When no host env var is present, leave the key unset (`auto` is the safe default for un-hosted repos, where the pipeline should provision).
+The bare presence of a host env var does not answer the question: `CONDUCTOR_WORKSPACE_PATH` is inherited by any shell started under Conductor and can name a workspace of a different repository entirely, so it counts only when it contains the current toplevel. `"host"` and `"pipeline"` remain for a user who sets them by hand, knowing every clone of the repo shares the answer.
 
 ## Verification
 
@@ -366,7 +374,7 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] Hook manager config exists (e.g. `lefthook.yml`)
 - [ ] Pre-commit hooks run successfully
 - [ ] `.gitignore` has marker entries
-- [ ] If running inside a host environment (Conductor/Codespaces/devcontainer), `.claude/settings.json` has `worktree.provisioning: "host"`; otherwise the key is left unset (`auto`)
+- [ ] `.claude/settings.json` has no `worktree.provisioning` key written by this run (`auto`), whether or not a host env var is set
 - [ ] No existing project settings were overwritten
 
 ## Handoff

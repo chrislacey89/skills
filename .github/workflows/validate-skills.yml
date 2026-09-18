@@ -227,6 +227,13 @@ jobs:
       - name: Run classification-marker set contract suite
         run: bash scripts/test-lfg-marker.sh lfg/SKILL.md
 
+      # #378: four skills decide "is this tree host-provisioned?" from the
+      # environment. A bare CONDUCTOR_WORKSPACE_PATH leaks into shells and can
+      # name another repo's workspace; this pins one shared containment block
+      # across all four sites and executes it against a leaked-var scenario.
+      - name: Run host-signal containment suite
+        run: bash scripts/test-host-signal-containment.sh
+
       # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
       # from branch state by a block in Phase 1 step 4, and /fix-findings' menu
       # counts rounds from a commit line. Both are executable prose; this runs

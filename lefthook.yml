@@ -89,6 +89,8 @@ pre-push:
       run: bash scripts/test-post-review-edit-lock.sh
     lfg-marker-tests:
       run: bash scripts/test-lfg-marker.sh lfg/SKILL.md
+    host-signal-containment-tests:
+      run: bash scripts/test-host-signal-containment.sh
     delta-review-scope-tests:
       run: bash scripts/test-delta-review-scope.sh
     population-covers-untracked-tests:
