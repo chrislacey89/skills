@@ -94,9 +94,26 @@ State the verdict and the condition that decided it in one line, then proceed
 without asking.
 
 **Branch.** Mirror `/execute` Step 0. If the host provisioned the worktree
-(`CONDUCTOR_WORKSPACE_PATH`, `CODESPACES`, or `.claude/settings.json`
-`worktree.provisioning: host`), build on the current branch. Otherwise, create
-`lfg/<slug>` from the default branch. This skill provisions no worktree of its own.
+(`.claude/settings.json` `worktree.provisioning: host`, or the block below prints
+`host_owned=yes`), build on the current branch. Otherwise, create `lfg/<slug>`
+from the default branch. This skill provisions no worktree of its own.
+
+```bash
+# host-signal: does a host env var describe THIS tree, not just this shell?
+host_owned=no
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+if [ -n "${CONDUCTOR_WORKSPACE_PATH:-}" ]; then
+  ws=$(cd "$CONDUCTOR_WORKSPACE_PATH" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) host_owned=yes ;; esac
+  fi
+fi
+if [ -n "${CODESPACES:-}" ] || [ -n "${REMOTE_CONTAINERS:-}" ]; then host_owned=yes; fi
+echo "host_owned=$host_owned"
+```
+
+A bare `CONDUCTOR_WORKSPACE_PATH` is not enough: it leaks into shells started
+under Conductor and can name another repository's workspace.
 
 ### Tiny path
 

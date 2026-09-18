@@ -42,8 +42,24 @@ Resolve the provisioning mode from `.claude/settings.json` `worktree.provisionin
 - **`host`** — isolation is host-owned. Stand down unconditionally.
 - **`pipeline`** — the pipeline provisions. Skip this stand-down and run the numbered gate below.
 - **`auto`** (default) — stand down if *either* signal fires:
-  - a host environment variable is present — `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`. This is the cheapest, primary discriminator: the pipeline's only detection mechanism is Bash, and these vars are visible in the agent's shell. (Do **not** detect via a `.conductor` directory in the cwd — Conductor keeps it under `$CONDUCTOR_ROOT_PATH`, not the workspace.)
+  - a host environment variable describes *this* tree — the block below prints `host_owned=yes`. This is the cheapest, primary discriminator: the pipeline's only detection mechanism is Bash, and these vars are visible in the agent's shell. Presence alone is not enough: `CONDUCTOR_WORKSPACE_PATH` is inherited by any shell started under Conductor and can name a workspace of a different repository, so it counts only when it contains the current toplevel. (Do **not** detect via a `.conductor` directory in the cwd — Conductor keeps it under `$CONDUCTOR_ROOT_PATH`, not the workspace.)
   - the current working tree is not the repo's primary working tree — `git rev-parse --show-toplevel` differs from the first path in `git worktree list --porcelain`.
+
+```bash
+# host-signal: does a host env var describe THIS tree, not just this shell?
+host_owned=no
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+if [ -n "${CONDUCTOR_WORKSPACE_PATH:-}" ]; then
+  ws=$(cd "$CONDUCTOR_WORKSPACE_PATH" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) host_owned=yes ;; esac
+  fi
+fi
+if [ -n "${CODESPACES:-}" ] || [ -n "${REMOTE_CONTAINERS:-}" ]; then host_owned=yes; fi
+echo "host_owned=$host_owned"
+```
+
+`CODESPACES` and `REMOTE_CONTAINERS` carry no path to compare and are read for presence; they are container-scoped, so a shell that sees them is inside the container whose repos they describe. The same block appears in `/closeout`, `/lfg`, and `/init-pipeline`, byte-identical, pinned by `scripts/test-host-signal-containment.sh` in the pack's own repo.
 
 When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so most of the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. **Its git-hooks item is the exception and still applies.** Hosts provision *tracked* files plus dependencies; git hooks live in `.git/hooks`, which is per-worktree and untracked, so a host-provisioned workspace characteristically has none. Check that item even when standing down. Continue to the issue-shape gate.
 

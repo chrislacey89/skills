@@ -55,9 +55,23 @@ Outflow detection is **stricter than `/execute`'s inflow check** and must *not* 
 
 - **`host`** — cede teardown unconditionally.
 - **`pipeline`** — the pipeline owns teardown. Run the full Steps 4–6 below *even if a host env var is present* — an explicit `pipeline` setting means `/execute` provisioned the worktree itself, so `/closeout` must tear it down (the pre-host behavior). A host env var does not override an explicit `pipeline` choice.
-- **`auto`** (default) — cede teardown only if a host environment variable is present: `[ -n "$CONDUCTOR_WORKSPACE_PATH" ]`, `[ -n "$CODESPACES" ]`, or `[ -n "$REMOTE_CONTAINERS" ]`. Never cede on the generic "toplevel ≠ primary" signal alone.
+- **`auto`** (default) — cede teardown only if a host environment variable describes *this* tree: the block below prints `host_owned=yes`. Never cede on the generic "toplevel ≠ primary" signal alone, and never on the bare presence of `CONDUCTOR_WORKSPACE_PATH` — a shell started under Conductor inherits it and can carry one naming a different repository's workspace, and ceding on that leaves a pipeline-made worktree with no one to tear it down.
 
-If teardown is not ceded (including `worktree.provisioning: "auto"` with no host env var), the pipeline owns it — run the full Steps 4–6 below as written.
+```bash
+# host-signal: does a host env var describe THIS tree, not just this shell?
+host_owned=no
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+if [ -n "${CONDUCTOR_WORKSPACE_PATH:-}" ]; then
+  ws=$(cd "$CONDUCTOR_WORKSPACE_PATH" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) host_owned=yes ;; esac
+  fi
+fi
+if [ -n "${CODESPACES:-}" ] || [ -n "${REMOTE_CONTAINERS:-}" ]; then host_owned=yes; fi
+echo "host_owned=$host_owned"
+```
+
+If teardown is not ceded (including `worktree.provisioning: "auto"` with `host_owned=no`), the pipeline owns it — run the full Steps 4–6 below as written.
 
 When isolation is host-owned, `/closeout` runs a reduced sequence:
 
