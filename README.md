@@ -77,7 +77,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
 | [ts-audit](ts-audit/) | Audit TypeScript code against 9 bundled TypeScript library references |
-| [lfg](lfg/) | Take an ask to a proof of concept: short shaping conversation, then unattended build of tracer-bullet slices to a stamped PR with a recap and gap issues. User-invoked only, never merges, never stamps |
+| [lfg](lfg/) | Take an ask to a proof of concept: short shaping conversation, then unattended build of tracer-bullet slices to a stamped PR with a recap and gap issues. User-invoked only, never merges, never stamps. Send `/lfg` as its own message — typed as the first message of a fresh Conductor workspace it is not parsed as a command, and the run proceeds without the skill |
 
 ### Tooling & Setup
 

@@ -29,10 +29,20 @@ Expand is a call someone else makes).
 
 **Side-route, user-invoked only.** It fires when a human types `/lfg <ask>`;
 `disable-model-invocation: true` keeps its description out of every other
-session's context.
- Use it when a demo window is closing, such
+session's context. Use it when a demo window is closing, such
 as a hackathon or a spike you want to show someone, and the full pipeline's
 human gates would cost more than the build.
+
+**Send it as its own message, not as the first message of a fresh workspace.**
+A slash command is recognized only at the start of a message, and a host that
+prepends anything to your first one — Conductor prepends a workspace preamble —
+displaces it. The command is then read as ordinary prose, and because this skill
+is hidden from the model by the flag above, the model cannot look it up: three of
+the first six field invocations were lost this way, and the runs that followed
+had no shape-lite, no marker, and no ledger. Nothing in this file can catch that,
+because this file is what failed to load. If a session did work that looks like
+an `/lfg` run but has none of those artifacts, this is why; retype `/lfg` and
+start over (#383).
 
 It stands beside `/shape` → `/research` → `/write-a-prd` → `/prd-to-issues` →
 `/execute` and **reconnects to the main workflow at `/pre-merge --loop`**. From
