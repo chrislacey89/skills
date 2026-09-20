@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# test-lfg-marker.sh — the classification-marker set is declared in four places,
-# and until this suite nothing made the four agree.
+# test-lfg-marker.sh — the classification-marker set is declared in five places,
+# and until this suite nothing made the five agree.
 #
 # THE DRIFT CLASS. `/execute` Step 3 creates one classification marker, the
-# hook's first clause accepts any of them, Step 6 removes them, and two
-# `.gitignore` surfaces keep them out of a commit. Four independent lists of the
-# same set, none derived from another. Add a marker to the hook and miss one of
-# the other three and the failure is silent in both directions that matter:
+# hook's first clause accepts any of them, Step 6 removes them, two
+# `.gitignore` surfaces keep them out of a commit, and `/execute` Step 0's
+# staleness gate decides whether an installed hook is old enough to need
+# re-scaffolding. Five independent lists of the same set, none derived from
+# another. Add a marker to the hook and miss one of the other four and the
+# failure is silent in both directions that matter:
 #
 #   missed in Step 6's `rm -f`  -> the marker outlives the branch's review stamp,
 #                                  so the state the post-review edit lock is
@@ -42,15 +44,27 @@
 #                                    and `.claude/.ralph-checked`, none of which
 #                                    is a classification marker.
 #   M subset of this repo's .gitignore   same reason.
+#   clause 1's paths subset of /execute Step 0's gate
+#                                    containment only, and over clause 1 WHOLE
+#                                    rather than over M: the gate's job is to
+#                                    recognize an installed hook that predates a
+#                                    term, and the stand-down flag is the term
+#                                    the gate was built around. A marker the
+#                                    hook accepts and the gate never greps for
+#                                    is a marker no existing install is ever
+#                                    upgraded to understand — #370 shipped
+#                                    exactly that, and #385 is the incident.
 #   this repo's .claude/ entries subset of /init-pipeline § 6
 #                                    the edge that keeps the two containments
 #                                    from being satisfiable by one over-broad
 #                                    list: anything this repo learned to ignore
 #                                    must also be taught to downstream projects.
 #
-# WHAT THIS DOES NOT PIN, so nobody over-trusts it. It reads the text four
+# WHAT THIS DOES NOT PIN, so nobody over-trusts it. It reads the text these
 # skills document; it cannot see whether any downstream project installed that
-# text, which is a property of that project and not of this repo. And it says
+# text, which is a property of that project and not of this repo. The gate row
+# is the narrowest of the five for that reason: it pins that the gate asks the
+# question, never that any install answered it. And it says
 # nothing about WHICH skill creates which marker — `/tdd` writes one by harness
 # preprocessing and `/lfg` writes another, and neither creation site is
 # reachable from a marker's name.
@@ -197,7 +211,7 @@ partial_enumerations() {  # $1 = file. $markers must already be bound.
     done < <(grep -n '\.claude/\.' "$1" || true)
 }
 
-# --- The four sources -------------------------------------------------------
+# --- The five sources -------------------------------------------------------
 
 hook_block="$(fenced_blocks init-pipeline/SKILL.md bash 'IMPL_PATTERNS')"
 [ -n "$hook_block" ] || fatal "no IMPL_PATTERNS hook body found in init-pipeline/SKILL.md — the hook moved or its fence changed"
@@ -231,6 +245,12 @@ reserved="$(path_set <<<"$reserved_block")"
 [ -f .gitignore ] || fatal "this repo has no .gitignore"
 repo_ignored="$(path_set < .gitignore)"
 
+# /execute Step 0's staleness gate. Anchored on the verdict it prints rather
+# than on a marker name, so the anchor does not move when the set it tests does.
+gate_block="$(fenced_blocks execute/SKILL.md bash 'hooks-stale')"
+[ -n "$gate_block" ] || fatal "no staleness-gate block found in execute/SKILL.md Step 0"
+gate_terms="$(path_set <<<"$gate_block")"
+
 printf 'markers (hook clause 1, less the stand-down flag):\n%s\n' "$markers"
 printf 'stand-down flag: %s\n' "$stamp_rel"
 
@@ -244,7 +264,7 @@ trap 'rm -rf "$scratch"' EXIT
 
 # -----------------------------------------------------------------------------
 
-section "1. the four sources are findable and none of them is empty"
+section "1. the five sources are findable and none of them is empty"
 
 # Each FATAL above turns a moved anchor into a loud stop. These rows are the
 # other half: an anchor that still matches but yields nothing would sail past
@@ -254,7 +274,8 @@ section "1. the four sources are findable and none of them is empty"
 for named in "hook clause 1:$markers" \
              "/execute Step 6's rm -f:$step6_markers" \
              "/init-pipeline § 6's reserved list:$reserved" \
-             "this repo's .gitignore:$repo_ignored"; do
+             "this repo's .gitignore:$repo_ignored" \
+             "/execute Step 0's staleness gate:$gate_terms"; do
     label="${named%%:*}"
     value="${named#*:}"
     if [ -n "$value" ]; then
@@ -454,7 +475,35 @@ fi
 
 # -----------------------------------------------------------------------------
 
-section "7. apparatus: the readers read, and the comparisons can fail"
+section "7. the staleness gate greps for every path clause 1 names"
+
+# THE ROW #370 NEEDED AND DID NOT HAVE. /execute Step 0 decides whether an
+# installed hook predates the pack's current enforcement, and it decides by
+# grepping the hook for terms it names literally. A term the gate does not name
+# is a boundary the gate cannot see: every project installed before that term
+# shipped keeps reporting current, forever, and the marker it was given is inert
+# there. Step 0's own prose has always said so and prescribed the remedy — "give
+# the boundary it introduces its own term, in the commit that introduces it" —
+# which is a rule held in the next author's memory. 2c12eca added .lfg-active to
+# clause 1 and not to the gate, and nothing failed. This row is that rule moved
+# out of memory and into the suite.
+#
+# Containment, over clause 1 whole rather than over M: the stand-down flag is a
+# legitimate gate term (it is the boundary the gate was built for), so the gate
+# naming it is right, not an extra. The gate may also name terms from neither
+# set — section 6's extension point is where an invented path is caught.
+
+gate_missing="$(set_minus "$clause_paths" "$gate_terms")"
+if [ -z "$(awk 'NF' <<<"$gate_missing")" ]; then
+    ok "/execute Step 0 greps for every path the hook's clause 1 tests ($(tr '\n' ' ' <<<"$gate_terms"))"
+else
+    bad "/execute Step 0's staleness gate names no term for a path clause 1 tests" \
+        "missing: $(tr '\n' ' ' <<<"$gate_missing") — an install predating any of these reports \`hooks-lock-present\` and is never re-scaffolded, so the marker stands down nothing there."
+fi
+
+# -----------------------------------------------------------------------------
+
+section "8. apparatus: the readers read, and the comparisons can fail"
 
 # Every check above is a comparison between two derived sets, and its healthy
 # state is silence. scripts/test-guards-can-fire.sh's Prevention #2 is the rule
