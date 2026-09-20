@@ -223,7 +223,14 @@ archive_block="$(fenced_bash_block fix-findings/SKILL.md 'git archive' || true)"
 # of section 5 is what let the two clauses' ordering defect ship green: the round
 # trip stamped a branch that still carried .tdd-active, a state /execute has
 # already destroyed by the time /pre-merge runs.
-tdd_marker_remove="$(fenced_bash_block execute/SKILL.md 'tdd-active' || true)"
+#
+# Anchored on the `rm -f` and not on the marker name alone: Step 0's staleness
+# gate names every marker too, in an earlier fenced block, and a bare
+# `tdd-active` anchor selects THAT one — silently running the gate here instead
+# of the removal, which leaves every marker in place and fails four rows below
+# with no hint that the extractor picked the wrong block. The sibling suite
+# scripts/test-lfg-marker.sh anchors the same block the same way.
+tdd_marker_remove="$(fenced_bash_block execute/SKILL.md 'rm -f.*tdd-active' || true)"
 [ -n "$tdd_marker_remove" ] || fatal "no classification-marker removal found in execute/SKILL.md Step 6"
 
 # --- The flag paths, read out of the writers rather than typed here ----------
