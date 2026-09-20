@@ -152,18 +152,32 @@ If all three are true, invoke `/setup-ralph-loop` now. Do not proceed to Step 1 
 
 ```bash
 HOOK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/enforce-classification.sh"
+# Every path the hook's own clause 1 tests. A path missing from this list is a
+# boundary this gate cannot see, so an install predating it reports current
+# forever. scripts/test-lfg-marker.sh section 7 pins this list against that
+# clause; add a path here in the commit that adds it there, or the suite fails.
+GATE_TERMS=".claude/.review-stamped .claude/.tdd-active .claude/.tdd-skipped .claude/.lfg-active"
 if [ ! -f "$HOOK" ]; then
   echo "hooks-absent"
-elif ! grep -q '\.claude/\.review-stamped' "$HOOK"; then
-  echo "hooks-stale"
 else
-  echo "hooks-lock-present"
+  missing=""
+  for term in $GATE_TERMS; do
+    grep -qF -- "$term" "$HOOK" || missing="$missing $term"
+  done
+  if [ -n "$missing" ]; then
+    echo "hooks-stale"
+    echo "missing:$missing" >&2
+  else
+    echo "hooks-lock-present"
+  fi
 fi
 ```
 
 `hooks-absent` and `hooks-stale` both mean **invoke `/init-pipeline` now**, and do not proceed to Step 1 until it reports. The first scaffolds enforcement hooks into a project that has none. The second re-scaffolds § 2's hook body over an existing install and re-runs § 6's `.gitignore` append, which that install never ran for the lock's two flags — without it both land as untracked files that can be committed, holding the lock shut or open across every future branch in that repo. `/init-pipeline` § 2 carries an existing `IMPL_PATTERNS` line through a re-scaffold rather than re-asking, so an upgrade does not reset a trigger surface the project customized. `hooks-lock-present` proceeds.
 
-**What this gate cannot see, since its third verdict would otherwise read as a claim it does not make.** The term it greps for is the lock's own flag path, so it recognizes exactly one version boundary and reports which side of it an install is on. That is sound in one direction only. A hook with no `.claude/.review-stamped` term is provably pre-lock, so `hooks-stale` is right whenever it fires; but once a project has been upgraded the term is there forever, so every *later* change to `/init-pipeline` § 2's hook body also reports `hooks-lock-present` and is never distributed by this gate — including another one of exactly the kind the lock's own ordering fix was. The third verdict is therefore named for the term it found rather than for currency, which the check cannot establish. A later hook change owns its own distribution: give the boundary it introduces its own `elif` term above, in the commit that introduces it. This narrowness is declared here and not self-tested.
+**What this gate cannot see, since its third verdict would otherwise read as a claim it does not make.** It greps for every path the hook's own clause 1 tests, so it recognizes one version boundary per path and reports which side of each an install is on. That is sound in one direction only. A hook missing any of those terms provably predates it, so `hooks-stale` is right whenever it fires; but once a project has been upgraded the terms are there forever, so a *later* change to `/init-pipeline` § 2's hook body that adds no new path — a reordering, a rewritten refusal message, a fix to a clause's logic — still reports `hooks-lock-present` and is never distributed by this gate. The third verdict is therefore named for the terms it found rather than for currency, which the check cannot establish.
+
+`GATE_TERMS` is the whole of that claim, and `scripts/test-lfg-marker.sh` section 7 pins it against the hook's clause 1, so a marker added to the hook and not to this list fails the suite in the commit that adds it. That replaces the rule this paragraph used to state in prose — *give the boundary its own term, in the commit that introduces it* — which #370 read and did not follow, shipping `.claude/.lfg-active` with no distribution term and leaving it inert in every project installed before it (#385). A distribution boundary that is not a new path still has no mechanism, and still owns its own distribution.
 
 **TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`; `/lfg` creates `.claude/.lfg-active`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes every one of them after commit.
 
@@ -607,5 +621,5 @@ This applies to AFK Ralph iterations only. HITL `/execute` runs are paced by use
 - **Expected input:** a concrete task, issue, or slice with enough scope clarity to implement safely, plus durable upstream artifacts if this is being run AFK
 - **Produces:** verified code changes as compartmentalized commits (one per logical unit), and implementation context for the next reviewer or iteration
 - **May invoke:** `/tdd` for backend work and behavior-heavy frontend logic, plus stack-specific reference skills when the project stack warrants them
-- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, and equally when the installed hook exists but predates the post-review edit lock — Step 0's `hooks-absent` and `hooks-stale` verdicts both route here; `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo, and `/pre-merge` at the end of Step 6 — in author-mode when Step 5 ran and the user confirmed the "Ready for PR Review" checklist item, in loop-mode on AFK Ralph iterations
+- **Auto-invokes:** `/init-pipeline` when enforcement hooks are missing, and equally when the installed hook exists but predates any term in Step 0's `GATE_TERMS` — the lock's stamp flag or a classification marker — Step 0's `hooks-absent` and `hooks-stale` verdicts both route here; `/setup-ralph-loop` when the task comes from a multi-slice GitHub issue and no Ralph scripts exist in the repo, and `/pre-merge` at the end of Step 6 — in author-mode when Step 5 ran and the user confirmed the "Ready for PR Review" checklist item, in loop-mode on AFK Ralph iterations
 - **Comes next by default:** `/pre-merge` — author-mode, auto-invoked after Step 5 user confirmation in HITL mode; loop-mode, auto-entered on AFK Ralph iterations; invoked manually by the user when they answered "no" to the PR review item or the trivial-task exception skipped Step 5

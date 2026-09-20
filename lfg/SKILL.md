@@ -33,6 +33,17 @@ session's context. Use it when a demo window is closing, such
 as a hackathon or a spike you want to show someone, and the full pipeline's
 human gates would cost more than the build.
 
+**Send it as its own message, not as the first message of a fresh workspace.**
+A slash command is recognized only at the start of a message, and a host that
+prepends anything to your first one — Conductor prepends a workspace preamble —
+displaces it. The command is then read as ordinary prose, and because this skill
+is hidden from the model by the flag above, the model cannot look it up: three of
+the first six field invocations were lost this way, and the runs that followed
+had no shape-lite, no marker, and no ledger. Nothing in this file can catch that,
+because this file is what failed to load. If a session did work that looks like
+an `/lfg` run but has none of those artifacts, this is why; retype `/lfg` and
+start over (#383).
+
 It stands beside `/shape` → `/research` → `/write-a-prd` → `/prd-to-issues` →
 `/execute` and **reconnects to the main workflow at `/pre-merge --loop`**. From
 there the PR is an ordinary stamped PR: the user settles its ledger, and
@@ -164,8 +175,17 @@ the PR body's `Closes #N` closes it.
 Invoke `/init-pipeline` and **declare Path B** in the invocation: say that no user
 is present and that the trigger-surface question takes its default. Invoke it only
 now, after shape-lite has ended. Otherwise it sees a present user, takes Path A,
-and asks the trigger-surface question. If a hook is already installed,
-`/init-pipeline`'s own path detection applies. Git guardrails stay on.
+and asks the trigger-surface question. If a hook is already installed, run
+`/execute` Step 0's pipeline hooks gate and hand its verdict to `/init-pipeline`:
+`hooks-stale` is Path C. Run the gate, do not restate it — it is the list of
+terms that decides this, and a second copy of that list here is the drift
+`docs/restated-claims.md` describes. Git guardrails stay on.
+
+This matters more to this skill than to any other, because `.claude/.lfg-active`
+is the newest marker: a project whose hook predates it accepts every other marker
+and not this one, so the stand-down this step is about is exactly the one missing.
+An inert marker does not fail loudly — the hook goes on refusing implementation
+writes, and the refusal names `/tdd`, which the feature path does not use.
 
 When `/init-pipeline` returns, create the run marker. This is the only
 marker-creation block in this skill:
