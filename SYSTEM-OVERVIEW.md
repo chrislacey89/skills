@@ -331,7 +331,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 | `/re-pitch` | An explanation that did not land, plus the user's signal of non-comprehension | A replacement explanation in the conversation — diagnosed cause, one-sentence anchor, capped sentences, every domain term glossed at first use. No durable artifact | Returns control to whatever was in flight; may recommend `/ubiquitous-language` when the same terms keep needing glosses |
 | `/lfg` | An ask typed as `/lfg <ask>`, plus a user present for a short shaping conversation (feature path only) | A stamped PR whose body opens with a proof-of-concept banner and carries the recap (decisions taken without the user, stop tally, proof paths), a PRD-lite issue, and gap issues for everything cut; `open` ledger rows moved to `filed` | The user, who demos and then promotes or discards; `/closeout` to keep it |
 | `/init-pipeline` | Project that will use `/execute` | Claude Code hooks, git guardrails, pre-commit setup | `/execute` (auto-invokes it) |
-| `/setup-pre-commit` | Repo needing commit-time quality gates | Lefthook config plus formatter/linter wiring | Normal feature work, now gated at commit |
+| `/setup-pre-commit` | Repo needing commit-time quality gates | Lefthook config; see `/setup-pre-commit` for the gates | Normal feature work, now gated at commit |
 | `/setup-ralph-loop` | Repo wanting repeatable Ralph execution | `ralph-once.sh` and bounded `ralph.sh` | `/execute`, first HITL then bounded AFK |
 | `/git-guardrails-claude-code` | Project or user environment needing git safety | Installed guardrail hooks blocking destructive commands | Normal workflow with guardrails in place |
 

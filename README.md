@@ -84,7 +84,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | Skill | Description |
 |-------|-------------|
 | [init-pipeline](init-pipeline/) | Scaffold pipeline enforcement — Claude Code hooks, git guardrails, pre-commit setup (auto-invoked by `/execute`) |
-| [setup-pre-commit](setup-pre-commit/) | Lefthook + Biome pre-commit hooks (detects existing tools) |
+| [setup-pre-commit](setup-pre-commit/) | Commit-time quality gates via Lefthook; see its `SKILL.md` |
 | [setup-ralph-loop](setup-ralph-loop/) | Generate `ralph-once.sh` and a bounded `ralph.sh` for HITL-to-AFK `/execute` runs (auto-invoked by `/execute` for multi-slice work) |
 | [git-guardrails-claude-code](git-guardrails-claude-code/) | Block dangerous git commands |
 
