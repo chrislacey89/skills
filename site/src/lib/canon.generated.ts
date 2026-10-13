@@ -83,20 +83,12 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
-		full: "Code Reading — Diomidis Spinellis",
-		title: "Code Reading",
-		author: "Diomidis Spinellis",
-		type: "book",
-		citations: [
-			{ skill: "excavate", tier: "secondary" },
-		],
-	},
-	{
 		full: "Code Reading: The Open Source Perspective — Diomidis Spinellis",
 		title: "Code Reading: The Open Source Perspective",
 		author: "Diomidis Spinellis",
 		type: "book",
 		citations: [
+			{ skill: "excavate", tier: "secondary" },
 			{ skill: "walk-commits", tier: "primary" },
 		],
 	},

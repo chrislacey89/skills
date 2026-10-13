@@ -7,7 +7,7 @@ sources:
     - "Your Code as a Crime Scene — Adam Tornhill"
   secondary:
     - "Working Effectively with Legacy Code — Michael Feathers"
-    - "Code Reading — Diomidis Spinellis"
+    - "Code Reading: The Open Source Perspective — Diomidis Spinellis"
     - "Engineering a Safer World — Nancy Leveson"
     - "Fundamentals of Software Architecture — Mark Richards & Neal Ford"
     - "The Programmer's Brain — Felienne Hermans"
