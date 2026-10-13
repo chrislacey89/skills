@@ -2087,7 +2087,7 @@ done
 
 # --- The fixture -------------------------------------------------------------
 #
-# Position p (1..19) is the in-window commit's place in history; the quartile
+# Position p (1..20) is the in-window commit's place in history; the quartile
 # points the trend block samples are therefore positions 5, 10, 15, 19. Hot
 # changes sit on both sides of each point so its LOC and indentation move
 # strictly between samples.
@@ -2103,7 +2103,9 @@ done
 #   p3,5,6,8,10,11,13        churny.txt only (2 lines, under the LOC floor)
 #   p15 big.txt (200 lines)  p16 bulk/f01..f40.txt (> MAXFILES)
 #   p18 git mv old_dir/x.txt new_dir/x.txt    p19 A adds a dependency
-excavate_dates=(2020-07-01 2020-07-10 2020-07-20 2020-08-01 2020-08-10 2020-08-20 2020-09-01 2020-09-10 2020-09-20 2020-10-01 2020-10-08 2020-10-15 2020-10-22 2020-11-01 2020-11-08 2020-11-15 2020-11-22 2020-11-28 2020-12-01)
+#   p20 "configure dependabot alerts"  B  ci-notes.txt     a HUMAN whose SUBJECT
+#                            names a bot; the bot filter must read the author field only
+excavate_dates=(2020-07-01 2020-07-10 2020-07-20 2020-08-01 2020-08-10 2020-08-20 2020-09-01 2020-09-10 2020-09-20 2020-10-01 2020-10-08 2020-10-15 2020-10-22 2020-11-01 2020-11-08 2020-11-15 2020-11-22 2020-11-28 2020-12-01 2020-12-05)
 excavate_in_window="${#excavate_dates[@]}"
 excavate_planted_fix_commits=3   # FIX: null guard, Revert "add flag", tidy (via its body)
 excavate_planted_hot_revs=6      # human commits touching hot.txt (the bot's seventh is filtered)
@@ -2185,13 +2187,15 @@ bot_name='dependabot[bot]'
                 xc_commit "$d" "$author_a" "move x" ;;
             19) printf '{"dependencies":{"bot-dep":"2.0.0","left-pad":"1.0.0"}}\n' > package.json; git add package.json
                 xc_commit "$d" "$author_a" "add left-pad dependency" ;;
+            20) printf 'alerts on\n' > ci-notes.txt; git add ci-notes.txt
+                xc_commit "$d" "$author_b" "configure dependabot alerts" ;;
             *)  echo "fixture has no step for position $p" >&2; exit 1 ;;
         esac
     done
 )
 # Outcome checks, not the subshell's status (see the /closeout fixture above).
 [[ "$(git -C "$excavate_sandbox" rev-list --count HEAD)" -eq "$((excavate_in_window + 1))" ]] \
-    || fatal "the /excavate fixture did not produce $((excavate_in_window + 1)) commits (19 planned positions + 1 pre-window root)"
+    || fatal "the /excavate fixture did not produce $((excavate_in_window + 1)) commits (20 planned positions + 1 pre-window root)"
 [[ "$(git -C "$excavate_sandbox" rev-list --count --since=2020-06-01 HEAD)" -eq "$excavate_in_window" ]] \
     || fatal "the /excavate fixture's in-window commits are not all dated after 2020-06-01"
 git clone -q --depth 1 "file://$excavate_sandbox" "$excavate_sandbox.shallow" \
@@ -2383,10 +2387,17 @@ assert_eq "$author_a
 $author_b" "$(cat "$names_file")" "names: the scrub list is exactly the two planted human authors, one per line"
 assert_eq 0 "$(grep -c -e '^$' -e 'dependabot' "$names_file" || true)" "names: no blank line and no bot in the scrub list"
 
+# The bot filter reads the author field, not the whole header: a human commit
+# whose SUBJECT names a bot (p20) keeps its header in the shared log.
+log_file="$excavate_out/main/work/log.txt"
+assert_eq 1 "$(awk -F'\t' -v a="$author_b" '/^@@/ && $2 == a && $4 == "configure dependabot alerts"' "$log_file" | wc -l | tr -d ' ')" "log: the human commit whose subject says dependabot keeps its header in the shared log"
+assert_eq 0 "$(awk -F'\t' '/^@@/ && $2 ~ /bot/' "$log_file" | wc -l | tr -d ' ')" "log: no header carries the bot as its author"
+
 # freq.txt
 freq_file="$excavate_out/main/work/freq.txt"
 assert_eq "$excavate_planted_hot_revs" "$(count_for "$freq_file" hot.txt)" "freq: hot.txt has exactly its $excavate_planted_hot_revs human in-window revisions (bot filtered, pre-window excluded)"
 assert_eq "$excavate_planted_churny" "$(count_for "$freq_file" churny.txt)" "freq: churny.txt has its $excavate_planted_churny revisions"
+assert_eq 1 "$(count_for "$freq_file" ci-notes.txt)" "freq: ci-notes.txt counts once (the human commit whose subject names a bot)"
 assert_eq "" "$(count_for "$freq_file" package-lock.json)" "freq: package-lock.json is absent (NONDOMAIN)"
 assert_eq 0 "$(grep -Fc 'bulk/' "$freq_file" || true)" "freq: no bulk/ file (the 40-file commit exceeds MAXFILES)"
 
@@ -2607,6 +2618,18 @@ excavate_blocks[b_contrib]="$mut"
 m4=0; xc_run "$excavate_out/m4" 3 hot.txt "$b_contrib" || m4=$?
 excavate_blocks[b_contrib]="$orig_contrib"
 assert_eq 124 "$m4" "M4: without HEAD and </dev/null the contributors block hangs on stdin and is killed (shortlog read stdin)"
+
+# M5: test the bots regex against the whole header instead of the author field.
+m5_from='h[2] ~ bots'
+# shellcheck disable=SC2016  # literal awk text, not an expansion
+m5_to='$0 ~ bots'
+mut="${orig_log//"$m5_from"/$m5_to}"
+[[ "$mut" != "$orig_log" ]] || fatal "mutation M5 did not change the shared-log block; the author-field test moved"
+excavate_blocks[b_log]="$mut"
+m5=0; xc_run "$excavate_out/m5" 120 UNUSED "$b_log" "$b_freq" || m5=$?
+excavate_blocks[b_log]="$orig_log"
+assert_eq 0 "$m5" "M5 (whole-header bot test) still runs"
+assert_eq "" "$(count_for "$excavate_out/m5/work/freq.txt" ci-notes.txt)" "M5: a whole-header bot test drops the human commit, so the ci-notes.txt assertion bites"
 
 # -----------------------------------------------------------------------------
 

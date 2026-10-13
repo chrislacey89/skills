@@ -221,10 +221,11 @@ exclusions cannot drift between them:
 
 ```bash
 git log --since="$SINCE" --no-merges --name-only --date=short --pretty=format:'@@%H%x09%aN%x09%ad%x09%s' -- . "${NONDOMAIN[@]}" </dev/null \
-  | awk -v bots="$BOTS" '/^@@/ { skip = ($0 ~ bots) } !skip' > "$WORK/log.txt"
+  | awk -v bots="$BOTS" '/^@@/ { split($0, h, "\t"); skip = (h[2] ~ bots) } !skip' > "$WORK/log.txt"
 ```
 
-`%aN` reads `.mailmap` ([gitmailmap](https://git-scm.com/docs/gitmailmap)), so
+The bot test reads the author field only, so a human commit whose subject
+mentions a bot survives. `%aN` reads `.mailmap` ([gitmailmap](https://git-scm.com/docs/gitmailmap)), so
 two spellings of one person collapse if the repo maps them; if it does not,
 note the duplicates in the dossier rather than guessing which are the same
 person.
