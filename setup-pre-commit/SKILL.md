@@ -200,11 +200,11 @@ pre-push:
 Merge these into the config rather than appending a second `pre-commit:` key. The audit calls the registry, which makes it too slow for every commit, so it runs on pre-push.
 
 - **Secret scan.** The command's flags are documented in `gitleaks git --help` and [gitleaks § Commands](https://github.com/gitleaks/gitleaks#commands). When the scan flags a fixture or a test key, suppress that one finding with the scanner's own mechanism — [`gitleaks:allow`](https://github.com/gitleaks/gitleaks#gitleaksallow), [`.gitleaksignore`](https://github.com/gitleaks/gitleaks#gitleaksignore), or an allowlist in [`.gitleaks.toml`](https://github.com/gitleaks/gitleaks#configuration). Do not narrow the command to make a finding go away.
-- **Dependency audit.** Each manager documents its own severity threshold, ignore list, and exit codes: [npm](https://docs.npmjs.com/cli/commands/npm-audit), [pnpm](https://pnpm.io/cli/audit), [bun](https://bun.sh/docs/pm/cli/audit), [yarn classic](https://classic.yarnpkg.com/en/docs/cli/audit). Yarn 2 and later spell the command [`yarn npm audit`](https://yarnpkg.com/cli/npm/audit); check `yarn --version` before writing the line.
+- **Dependency audit.** Each manager documents its own severity threshold, ignore list, and exit codes: [npm](https://docs.npmjs.com/cli/commands/npm-audit), [pnpm](https://pnpm.io/cli/audit), [bun](https://bun.sh/docs/pm/cli/audit), [yarn classic](https://classic.yarnpkg.com/en/docs/cli/audit). The yarn exception is under *Adapt the config* below.
 - **Both gates fail closed.** A finding blocks the commit or push. So does a scanner missing from `PATH`, and so does an npm, pnpm, or bun audit that cannot reach the registry. Leave it that way: no `|| true`, no wrapper that skips when the tool is absent. A gate that passes when it could not run reports the same green as one that ran and found nothing.
 
 **Adapt the config:**
-- Replace `{package_manager}` with the detected package manager (pnpm, npm, yarn, bun)
+- Replace `{package_manager}` with the detected package manager (pnpm, npm, yarn, bun). The one exception is the `dependency-audit` line under yarn 2 and later, where the command is [`yarn npm audit`](https://yarnpkg.com/cli/npm/audit), not `yarn audit`; check `yarn --version` before writing it (yarn 1 keeps [`yarn audit`](https://classic.yarnpkg.com/en/docs/cli/audit))
 - If the repo has no `typecheck` script in package.json, omit that command and tell the user
 - If the repo has no `test` script in package.json, omit that command and tell the user
 - Adjust `glob` patterns to match the project's file types
