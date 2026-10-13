@@ -275,6 +275,17 @@ trap 'rm -rf "$sandbox"' EXIT
 export GIT_CONFIG_GLOBAL=/dev/null
 export GIT_CONFIG_SYSTEM=/dev/null
 
+# A caller that reached this suite via a git hook (pre-push, run from a linked
+# worktree) has GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE set in its environment.
+# The fixture below runs `git init -q .` and `git config` in $sandbox, and would
+# inherit them: git prefers an explicit GIT_DIR to discovering a repository from
+# the working directory, so the fixture would re-initialize and configure the
+# real repository instead, writing `core.bare=true` and the fixture identity
+# into the shared .git/config while the suite still reports green. See
+# docs/solutions/testing-patterns/scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md.
+# Unset before the first fixture git call.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 (
     cd "$sandbox"
     git init -q .
