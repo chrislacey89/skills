@@ -482,6 +482,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "Threat Modeling — Adam Shostack",
+		title: "Threat Modeling",
+		author: "Adam Shostack",
+		type: "book",
+		citations: [
+			{ skill: "write-a-prd", tier: "secondary" },
+		],
+	},
+	{
 		full: "Total TypeScript — Matt Pocock",
 		title: "Total TypeScript",
 		author: "Matt Pocock",

@@ -10,6 +10,7 @@ sources:
     - "Software Requirements — Karl Wiegers & Joy Beatty"
     - "Thinking in Bets — Annie Duke"
     - "Thinking in Systems — Donella Meadows"
+    - "Threat Modeling — Adam Shostack"
     - "Writing Effective Use Cases — Alistair Cockburn"
 ---
 
