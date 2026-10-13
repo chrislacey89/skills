@@ -118,8 +118,13 @@ it comes from; none is restated elsewhere in this file.
 
 ## Process
 
-Every fenced block below runs as written. Shared variables are set once in
-Step 0 and reused; `<path>` is the one placeholder, substituted per hotspot.
+Every fenced block below runs as written. Each Bash tool call is a fresh shell,
+so no variable survives from one call to the next: the Step 0 variables block
+is idempotent, and you re-run it at the top of every shell a later block runs
+in (`WORK` is a path derived from the repo, so every re-run lands on the same
+directory). The miners are handed the absolute `$WORK` path in their brief
+rather than inheriting the variable. `<path>` is the one placeholder,
+substituted per hotspot.
 Flag semantics are the tool's own documentation
 ([git-log](https://git-scm.com/docs/git-log),
 [git-shortlog](https://git-scm.com/docs/git-shortlog),
@@ -137,8 +142,8 @@ every block below). Then set the shared variables:
 
 ```bash
 SINCE='12 months ago'
-WORK=$(mktemp -d)
-trap 'rm -rf "$WORK"' EXIT
+WORK="${TMPDIR:-/tmp}/excavate-$(git rev-parse --show-toplevel | cksum | cut -d' ' -f1)"
+mkdir -p -m 700 "$WORK"
 START=$(git log --since="$SINCE" --no-merges --format=%cs HEAD </dev/null | tail -1)
 NONDOMAIN=(':(exclude)*.lock' ':(exclude)*package-lock.json' ':(exclude)*pnpm-lock.yaml' ':(exclude)*yarn.lock' ':(exclude)*.min.*' ':(exclude)*.snap' ':(exclude)*.generated.*' ':(exclude)CHANGELOG.md' ':(exclude)*/vendor/*' ':(exclude)*/node_modules/*')
 BOTS='[[]bot[]]|dependabot|renovate'
@@ -152,6 +157,11 @@ and mirrored paths before Step 1 (check `git check-attr linguist-generated
 linguist-vendored` on anything suspicious). `MAXFILES` is the changeset-size
 ceiling above which a commit is treated as a bulk sweep (reformat, import,
 mass rename) and excluded from frequency and coupling counts.
+
+`WORK` is keyed on the repo's top-level path, not on `HEAD`, because Step 8
+moves `HEAD` onto the docs branch; it stays valid across shells and is removed
+in Step 9. If a directory from an interrupted run is already there, delete it
+before the first Step 2 block so stale files cannot pass for this run's output.
 
 Then measure coverage:
 
@@ -653,8 +663,9 @@ skill never merges and never writes the review-currency stamp.
 
 ### 9. Hand off
 
-Print the dossier path, the PR URL, and the `**Next session:**` line, then the
-menu in § Handoff.
+Remove the work directory with `rm -rf "$WORK"` (re-run the Step 0 variables
+block first if this is a new shell), print the dossier path, the PR URL, and
+the `**Next session:**` line, then the menu in § Handoff.
 
 ## What this skill is NOT
 
@@ -715,7 +726,8 @@ Done means all of these hold:
 - Entry frontmatter keys equal `/compound`'s (pinned by
   `scripts/test-excavate-entry-contract.sh`).
 - The dossier exists at the printed path; the PR URL (or the command to open
-  it) is printed; `$WORK` is removed.
+  it) is printed; `$WORK` is removed (Step 9, not an exit trap, because no
+  shell outlives one Bash call).
 
 ## Handoff
 

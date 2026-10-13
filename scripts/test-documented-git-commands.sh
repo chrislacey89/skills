@@ -2004,7 +2004,7 @@ while [[ "$i" -le "$excavate_total" ]]; do
 done
 assert_eq " 1" "$setup_holders" "the block that defines NONDOMAIN is block 1, and only block 1 (it is the shared setup)"
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
-for needle in 'SINCE=' 'WORK=$(mktemp -d)' 'START=$(' 'BOTS=' 'MAXFILES='; do
+for needle in 'SINCE=' 'WORK="${TMPDIR:-/tmp}/excavate-' 'mkdir -p -m 700 "$WORK"' 'START=$(' 'BOTS=' 'MAXFILES='; do
     [[ "${excavate_blocks[1]}" == *"$needle"* ]] || fatal "the shared setup block no longer contains '$needle'; every later block assumes it"
 done
 
@@ -2231,9 +2231,13 @@ excavate_start_line="$(grep -m1 '^START=' <<<"${excavate_blocks[1]}" || true)"
 xc_run() {   # outdir secs pathval idx...
     local out="$1" secs="$2" pathval="$3" idx text st=0
     shift 3
-    mkdir -p "$out"
+    mkdir -p "$out/tmp"
     {
         printf 'XO_OUT=%q\n' "$out"
+        # WORK is a deterministic path under TMPDIR, so passes that share the
+        # sandbox would share a directory; a private TMPDIR per pass keeps one
+        # pass's files (and a mutant's missing ones) from standing in for another's.
+        printf 'export TMPDIR=%q\n' "$out/tmp"
         printf 'cd %q || exit 97\n' "$excavate_sandbox"
         printf '%s\n' "${excavate_blocks[1]}"
         # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
