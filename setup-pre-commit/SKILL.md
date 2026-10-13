@@ -287,7 +287,7 @@ Update the `prepare` script in package.json from `"husky"` to `"lefthook install
 
 Stage all changed/created files and commit with message:
 
-`chore: add pre-commit hooks (lefthook + biome)` (or substitute the actual formatter name)
+`chore: add pre-commit hooks (lefthook + biome, secret scan, dependency audit)` (or substitute the actual formatter name, and drop the name of any gate Step 2 found the repo already had)
 
 This will run through the new pre-commit hooks — a good smoke test that everything works.
 
