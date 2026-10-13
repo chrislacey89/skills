@@ -1,6 +1,6 @@
 ---
 name: setup-pre-commit
-description: "Infrastructure skill for setting up commit-time quality gates. Use when a repo needs Lefthook-based pre-commit hooks for formatting, linting, type checking, and tests. Supports downstream /execute and /pre-merge, but is not part of the normal feature-delivery pipeline."
+description: "Infrastructure skill for setting up commit-time quality gates. Use when a repo needs Lefthook-based pre-commit hooks for formatting, linting, type checking, and tests, plus a secret scan at commit and a dependency audit at push. Supports downstream /execute and /pre-merge, but is not part of the normal feature-delivery pipeline."
 ---
 
 # Setup Pre-Commit Hooks
@@ -18,6 +18,8 @@ Do not use it as part of the default feature pipeline. It prepares the repo so l
 - **Lefthook** for git hook management (fast, zero-dependency, config-as-code)
 - **Formatting + linting** on staged files (Biome preferred; Prettier, ESLint, or others supported)
 - **Typecheck** and **test** scripts in the pre-commit hook
+- **Secret scan** on staged changes in the pre-commit hook (gitleaks, unless the repo already runs a scanner)
+- **Dependency audit** in the pre-push hook, using the detected package manager's own audit command
 
 ## Steps
 
@@ -43,6 +45,21 @@ ls biome.json biome.jsonc .prettierrc .prettierrc.* prettier.config.* .eslintrc*
 **If nothing is detected:** recommend Biome (single tool for formatting + linting, fast, zero-config defaults) and confirm with the user before installing.
 
 Ask: "No formatter/linter detected. I'd recommend Biome — it handles both formatting and linting in one tool, is very fast, and works out of the box. Want to go with Biome, or would you prefer Prettier, ESLint, or something else?"
+
+The same rule covers the two security gates Step 5 adds. Check for a secret scanner or a dependency audit the repo already runs:
+
+```bash
+# Secret-scanner config
+ls .gitleaks.toml .gitleaksignore .secrets.baseline .trufflehog* .pre-commit-config.yaml 2>/dev/null
+# A scanner or an audit already wired into hooks, scripts, or CI
+grep -rnE "gitleaks|trufflehog|detect-secrets|ggshield|[a-z] audit" lefthook.yml package.json .pre-commit-config.yaml .github/workflows 2>/dev/null
+```
+
+**If a secret scanner is detected:** keep it. Wire Step 5's `secret-scan` command to that tool, or leave the command out when the existing setup already runs it at commit time. A `.gitleaks.toml` or `.gitleaksignore` is configuration gitleaks reads on its own; leave both as they are.
+
+**If an audit step is detected:** leave it where it is and do not add a second one.
+
+**If nothing is detected:** use gitleaks and the package manager's audit. Neither needs a question — a repo with no scanner has no preference to override.
 
 ### 3. Install Dependencies
 
@@ -73,6 +90,8 @@ bun add -D lefthook
 | Prettier + ESLint | `prettier eslint` | both |
 | oxlint | `oxlint` | `oxlint.json` |
 | dprint | `dprint` | `dprint.json` |
+
+**Secret scanner (when Step 2 found none):** gitleaks is a standalone binary, not an npm package, so it does not go in devDependencies. Install it by one of the routes in [gitleaks § Installing](https://github.com/gitleaks/gitleaks#installing), and tell the user that everyone who commits to the repo needs it on `PATH`. The dependency audit needs no install; it ships with the package manager.
 
 ### 4. Initialize Lefthook
 
@@ -164,6 +183,26 @@ pre-commit:
       run: {package_manager} run test
 ```
 
+**Security gates (add to whichever config above was used):**
+
+```yaml
+pre-commit:
+  commands:
+    secret-scan:
+      run: gitleaks git --pre-commit --staged --redact
+
+pre-push:
+  commands:
+    dependency-audit:
+      run: {package_manager} audit
+```
+
+Merge these into the config rather than appending a second `pre-commit:` key. The audit calls the registry, which makes it too slow for every commit, so it runs on pre-push.
+
+- **Secret scan.** The command's flags are documented in `gitleaks git --help` and [gitleaks § Commands](https://github.com/gitleaks/gitleaks#commands). When the scan flags a fixture or a test key, suppress that one finding with the scanner's own mechanism — [`gitleaks:allow`](https://github.com/gitleaks/gitleaks#gitleaksallow), [`.gitleaksignore`](https://github.com/gitleaks/gitleaks#gitleaksignore), or an allowlist in [`.gitleaks.toml`](https://github.com/gitleaks/gitleaks#configuration). Do not narrow the command to make a finding go away.
+- **Dependency audit.** Each manager documents its own severity threshold, ignore list, and exit codes: [npm](https://docs.npmjs.com/cli/commands/npm-audit), [pnpm](https://pnpm.io/cli/audit), [bun](https://bun.sh/docs/pm/cli/audit), [yarn classic](https://classic.yarnpkg.com/en/docs/cli/audit). Yarn 2 and later spell the command [`yarn npm audit`](https://yarnpkg.com/cli/npm/audit); check `yarn --version` before writing the line.
+- **Both gates fail closed.** Lefthook fails the hook when a command exits nonzero (see [`run`](https://lefthook.dev/configuration/run/)), so a finding blocks the commit or push. So does a scanner missing from `PATH`, and so does an npm, pnpm, or bun audit that cannot reach the registry. Leave it that way: no `|| true`, no wrapper that skips when the tool is absent. A gate that passes when it could not run reports the same green as one that ran and found nothing.
+
 **Adapt the config:**
 - Replace `{package_manager}` with the detected package manager (pnpm, npm, yarn, bun)
 - If the repo has no `typecheck` script in package.json, omit that command and tell the user
@@ -217,6 +256,17 @@ Only create if no config exists and the user chose to install a new tool.
 - [ ] Formatter/linter config exists
 - [ ] Run `npx lefthook run pre-commit` to verify hooks work
 - [ ] No `.husky/` directory exists (if migrating from Husky, remove it)
+- [ ] The secret scan blocks a staged secret. Stage a throwaway fixture, run the hook, and confirm `secret-scan` fails; then unstage and delete the fixture. Nothing is committed either way:
+
+  ```bash
+  printf '%s PRIVATE KEY-----\n%s\n-----END RSA PRIVATE KEY-----\n' '-----BEGIN RSA' "$(openssl rand -base64 48)" > fixture-secret.txt
+  git add fixture-secret.txt
+  npx lefthook run pre-commit   # expect secret-scan to fail
+  git reset -q fixture-secret.txt && rm fixture-secret.txt
+  ```
+
+  If `secret-scan` passes with the fixture staged, the gate is not working. Fix it before Step 9 rather than committing a scaffold that reports green.
+- [ ] Run `npx lefthook run pre-push` and confirm `dependency-audit` ran. A failure here that lists advisories is the gate working on the repo's current dependencies; show the user the output and let them decide what to upgrade. Do not weaken the command to get a green run.
 
 ### 8. Clean Up Husky (if migrating)
 
@@ -261,6 +311,6 @@ This will run through the new pre-commit hooks — a good smoke test that everyt
 ## Handoff
 
 - **Expected input:** a repo that needs commit-time quality gates
-- **Produces:** working git hooks and tool configuration for commit-time checks
+- **Produces:** working git hooks and tool configuration for commit-time checks, plus a secret scan at commit and a dependency audit at push
 - **Supports downstream:** `/execute` and `/pre-merge` by making basic verification more automatic
 - **What comes next:** return to normal feature work with stronger local feedback loops
