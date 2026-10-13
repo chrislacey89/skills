@@ -2103,8 +2103,12 @@ done
 #   p3,5,6,8,10,11,13        churny.txt only (2 lines, under the LOC floor)
 #   p15 big.txt (200 lines)  p16 bulk/f01..f40.txt (> MAXFILES)
 #   p18 git mv old_dir/x.txt new_dir/x.txt    p19 A adds a dependency
-#   p20 "configure dependabot alerts"  B  ci-notes.txt     a HUMAN whose SUBJECT
-#                            names a bot; the bot filter must read the author field only
+#   p20 "configure dependabot alerts"  B  ci-notes.txt, café.txt   a HUMAN whose SUBJECT
+#                            names a bot; the bot filter must read the author field only.
+#                            café.txt (60 lines at the root, 61 after p20) has a non-ASCII
+#                            name: under the default core.quotePath git prints it as
+#                            "caf\303\251.txt", wc cannot open that, and the file vanishes
+#                            from loc.txt and so from hotspots.txt
 excavate_dates=(2020-07-01 2020-07-10 2020-07-20 2020-08-01 2020-08-10 2020-08-20 2020-09-01 2020-09-10 2020-09-20 2020-10-01 2020-10-08 2020-10-15 2020-10-22 2020-11-01 2020-11-08 2020-11-15 2020-11-22 2020-11-28 2020-12-01 2020-12-05)
 excavate_in_window="${#excavate_dates[@]}"
 excavate_planted_fix_commits=3   # FIX: null guard, Revert "add flag", tidy (via its body)
@@ -2149,6 +2153,7 @@ bot_name='dependabot[bot]'
     printf '{"dependencies":{}}\n' > package.json
     printf 'lock 0\n' > package-lock.json
     printf 'x one\nx two\nx three\n' > old_dir/x.txt
+    for k in $(seq 1 60); do printf 'cafe line %d\n' "$k"; done > café.txt
     git add -A
     xc_commit 2020-01-15 "$author_a" "seed fixture"
 
@@ -2187,7 +2192,7 @@ bot_name='dependabot[bot]'
                 xc_commit "$d" "$author_a" "move x" ;;
             19) printf '{"dependencies":{"bot-dep":"2.0.0","left-pad":"1.0.0"}}\n' > package.json; git add package.json
                 xc_commit "$d" "$author_a" "add left-pad dependency" ;;
-            20) printf 'alerts on\n' > ci-notes.txt; git add ci-notes.txt
+            20) printf 'alerts on\n' > ci-notes.txt; printf 'cafe line 61\n' >> café.txt; git add ci-notes.txt café.txt
                 xc_commit "$d" "$author_b" "configure dependabot alerts" ;;
             *)  echo "fixture has no step for position $p" >&2; exit 1 ;;
         esac
@@ -2406,6 +2411,8 @@ hotspots="$(cat "$excavate_out/main/work/hotspots.txt")"
 assert_eq "$excavate_planted_hot_revs${tab}${hot_loc}${tab}hot.txt" "$(sed -n 1p <<<"$hotspots")" "hotspots: line 1 is hot.txt with 6 revisions and LOC == its final line count ($hot_loc)"
 assert_eq 0 "$(grep -Fc 'churny.txt' <<<"$hotspots" || true)" "hotspots: churny.txt (2 lines, 7 revisions) is below the LOC floor and absent"
 assert_eq "1${tab}200${tab}big.txt" "$(sed -n 2p <<<"$hotspots")" "hotspots: big.txt (1 revision, 200 lines) ranks below hot.txt"
+assert_eq "1${tab}61${tab}café.txt" "$(sed -n 3p <<<"$hotspots")" "hotspots: café.txt (non-ASCII name, 1 revision, 61 lines) survives unquoted with its LOC"
+assert_eq 61 "$(awk -F'\t' '$2 == "café.txt" { print $1 }' "$excavate_out/main/work/loc.txt")" "loc: café.txt is listed by its real name with its real line count"
 
 # fix.txt and the convention rate
 fix_file="$excavate_out/main/work/fix.txt"
@@ -2630,6 +2637,18 @@ m5=0; xc_run "$excavate_out/m5" 120 UNUSED "$b_log" "$b_freq" || m5=$?
 excavate_blocks[b_log]="$orig_log"
 assert_eq 0 "$m5" "M5 (whole-header bot test) still runs"
 assert_eq "" "$(count_for "$excavate_out/m5/work/freq.txt" ci-notes.txt)" "M5: a whole-header bot test drops the human commit, so the ci-notes.txt assertion bites"
+
+# M6: drop the core.quotePath export from the shared setup. Every later block
+# then sees the default, quoted spelling of café.txt.
+orig_setup="${excavate_blocks[1]}"
+mut="$(grep -vF 'GIT_CONFIG_KEY_0=core.quotePath' <<<"$orig_setup")"
+[[ "$mut" != "$orig_setup" ]] || fatal "mutation M6 did not change the shared setup block; the quotePath export moved"
+excavate_blocks[1]="$mut"
+m6=0; xc_run "$excavate_out/m6" 120 UNUSED "$b_log" "$b_freq" "$b_loc" "$b_hot" || m6=$?
+excavate_blocks[1]="$orig_setup"
+assert_eq 0 "$m6" "M6 (no core.quotePath export) still runs"
+assert_eq "" "$(awk -F'\t' '$2 == "café.txt" { print $1 }' "$excavate_out/m6/work/loc.txt")" "M6: under the default quotePath café.txt never reaches loc.txt, so the loc assertion bites"
+assert_eq 0 "$(grep -Fc 'café.txt' "$excavate_out/m6/work/hotspots.txt" || true)" "M6: and café.txt is absent from hotspots.txt, so the hotspots assertion bites"
 
 # -----------------------------------------------------------------------------
 

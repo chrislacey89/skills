@@ -148,7 +148,10 @@ START=$(git log --since="$SINCE" --no-merges --format=%cs HEAD </dev/null | tail
 NONDOMAIN=(':(exclude)*.lock' ':(exclude)*package-lock.json' ':(exclude)*pnpm-lock.yaml' ':(exclude)*yarn.lock' ':(exclude)*.min.*' ':(exclude)*.snap' ':(exclude)*.generated.*' ':(exclude)CHANGELOG.md' ':(exclude)*/vendor/*' ':(exclude)*/node_modules/*')
 BOTS='[[]bot[]]|dependabot|renovate'
 MAXFILES=30
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.quotePath GIT_CONFIG_VALUE_0=false
 ```
+
+The `GIT_CONFIG_*` export sets `core.quotePath=false` for every git call in this run (see [git-config, Environment](https://git-scm.com/docs/git-config#ENVIRONMENT)), so a path with non-ASCII bytes prints as itself rather than as a quoted escape that `wc` and the joins below cannot open or match.
 
 `START` is the first in-window commit date, derived from git rather than from
 `date`, because `date -d` is GNU-only and `date -v` is BSD-only. `NONDOMAIN`
