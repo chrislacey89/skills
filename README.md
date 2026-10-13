@@ -1,10 +1,10 @@
 # Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-32-blue)
+![Skills](https://img.shields.io/badge/skills-34-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 32 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 34 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -98,6 +98,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML artifact in one of two modes — a scrolling recap (file-tree + change flags, annotated split diffs with line-anchored callouts, contract cards, UI wireframes, before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a walkthrough deck (premise → changes → mechanism → aftermath, one idea per screen); CSS-spine diagrams for trivial flows, Mermaid-via-CDN for multi-stage graphs, copy-text feedback loop (optional, never auto-invoked, transient artifact) |
 | [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR, handed back to `/pre-merge` so the entry is reviewed and re-stamped before `/closeout` merges (default), or post-merge as the fallback |
+| [excavate](excavate/) | Mine a legacy repo's last 12 months of git history (and PR threads via `gh`) into ranked hotspots, cited recovered decisions, and a who-to-ask map, then offer a PR of `docs/solutions/` entries the pipeline already reads. User-invoked only (`disable-model-invocation: true`); never merges |
 | [improve-pipeline](improve-pipeline/) | File a Skill Kit improvement proposal as a GitHub issue when the lesson is about the pipeline rather than the project |
 | [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
 

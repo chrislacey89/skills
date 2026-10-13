@@ -253,6 +253,13 @@ jobs:
       - name: Run prose-fix disposition contract suite
         run: bash scripts/test-prose-fix-disposition.sh
 
+      # /compound Phase 3 and /excavate Step 7 both write the docs/solutions/ entry
+      # format, and /research Phase 3 reads `volatility` and `date` from every
+      # entry. A key changed in one template leaves the other's entries malformed
+      # with nothing failing; this extracts both key lists and compares them.
+      - name: Run excavate entry-contract suite
+        run: bash scripts/test-excavate-entry-contract.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

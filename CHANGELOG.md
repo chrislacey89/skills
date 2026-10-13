@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.29.0 — /excavate recovers a legacy repo's hotspots and cited decisions before the first feature (#402)
+
+Starting on a legacy repo with no `docs/solutions/`, no research archive, and no written decisions, the pipeline's first knowledge step — `/research` Phase 3's grep of `docs/solutions/` — returns nothing, and `/write-a-prd`'s "we've hit X before" line has nothing to say. The information exists in a year of commits, reverts, dependency changes, and PR review threads; no skill read it. The nearest thing, `/triage-issue`'s fix-commit grep, is confirmatory by contract and never surveys.
+
+### Changes
+
+- **New `/excavate` side-route, user-invoked (#402)** — mines a fixed window of git history (and PR bodies, reviews, and linked issues via `gh` when available) from one shared filtered log into Tornhill-style hotspots (revisions qualified by LOC, cut at the power-law knee; fix-labeled density gated on a convention-rate check; classified change coupling with Sum of Coupling; indentation-plus-LOC trend at four revision quartiles), recovered decisions each cited to a SHA or PR and verified against the current tree, and a who-to-ask map with the book's non-evaluative framing. Writes an off-tree dossier and offers `docs/solutions/` entries per item on a docs-only PR it never merges.
+- **Only stated decisions are committed (#402)** — a decision entry rests on a verbatim quote whose citation resolves; inferred rationale stays in the dossier. This is the Grounding Rule from `docs/visual-rendering-core.md` applied to history, because an invented "why" in a directory `/pre-merge` Dimension 7 treats as authoritative is worse than none.
+- **No silent degrade (#402)** — a Coverage block (window, commit count, shallow status, squash ratio, `gh` reach and PRs fetched N of M) heads the dossier and the PR body. Squash-merged repos get PR-level change sets for coupling or an absent section that says why.
+- **`/help` gains a state-driven row for the legacy signal (#402)** — no `docs/solutions/`, root commit older than ~6 months, not shallow, no excavation dossier → `/excavate`. It sits ahead of the `/compound` row that would otherwise shadow it on any repo with a merge, and row 6 now excludes `excavation-*.md` so the dossier does not read as a feature awaiting a PRD.
+- **`/research` Phase 3 reads the newest excavation dossier (#402)** — so hotspots need not be committed to be useful.
+- **`scripts/test-excavate-entry-contract.sh` pins the second writer to the first (#402)** — `/excavate`'s documented frontmatter keys, categories, and volatility are extracted from `/compound`'s template and compared, the fix-grep string is compared to `/triage-issue`'s, and the entry template is checked for author vocabulary. `scripts/test-documented-git-commands.sh` gains an `/excavate` fixture that plants a known hotspot, coupling pair, bulk commit, rename, revert, and two-author file, and runs every fenced git block from the skill against it.
+
 ## v1.28.0 — the coverage matrix tests the whole user story, and flow rows hang off the Must they realize (#362)
 
 A downstream PRD asked for a demo a stakeholder could open from a link and understand in ninety seconds. Six slices were decomposed, five built, four merged — and the shipped demo opens on an empty eight-step form you have to fill in before a frame plays. The PRD had specified the pre-filled form in four places and a spike had proven it worked. The mechanism's name appears zero times across the twenty-nine-minute window in which `/prd-to-issues` created all six issues.

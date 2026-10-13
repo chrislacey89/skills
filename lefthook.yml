@@ -99,6 +99,8 @@ pre-push:
       run: bash scripts/test-compound-restamp-handoff.sh
     prose-fix-disposition-tests:
       run: bash scripts/test-prose-fix-disposition.sh
+    excavate-entry-contract-tests:
+      run: bash scripts/test-excavate-entry-contract.sh
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the
