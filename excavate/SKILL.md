@@ -159,7 +159,8 @@ is a starting list: extend it with this repo's generated, vendored, snapshot,
 and mirrored paths before Step 1 (check `git check-attr linguist-generated
 linguist-vendored` on anything suspicious). `MAXFILES` is the changeset-size
 ceiling above which a commit is treated as a bulk sweep (reformat, import,
-mass rename) and excluded from frequency and coupling counts.
+mass rename) and excluded from frequency and coupling counts. The shared log in
+Step 2 applies it once, when the log is built; no later block repeats it.
 
 `WORK` is keyed on the repo's top-level path, not on `HEAD`, because Step 8
 moves `HEAD` onto the docs branch; it stays valid across shells and is removed
@@ -224,11 +225,19 @@ exclusions cannot drift between them:
 
 ```bash
 git log --since="$SINCE" --no-merges --name-only --date=short --pretty=format:'@@%H%x09%aN%x09%ad%x09%s' -- . "${NONDOMAIN[@]}" </dev/null \
-  | awk -v bots="$BOTS" '/^@@/ { split($0, h, "\t"); skip = (h[2] ~ bots) } !skip' > "$WORK/log.txt"
+  | awk -v bots="$BOTS" -v max="$MAXFILES" '
+function flush(   i) { if (hdr != "") { print hdr; if (n <= max) for (i = 1; i <= n; i++) print f[i] } hdr = ""; n = 0 }
+/^@@/ { flush(); split($0, h, "\t"); skip = (h[2] ~ bots); if (!skip) hdr = $0; next }
+skip  { next }
+NF    { f[++n] = $0 }
+END   { flush() }' > "$WORK/log.txt"
 ```
 
 The bot test reads the author field only, so a human commit whose subject
-mentions a bot survives. `%aN` reads `.mailmap` ([gitmailmap](https://git-scm.com/docs/gitmailmap)), so
+mentions a bot survives. The bulk cutoff is applied here, once: a commit over
+`MAXFILES` files keeps its header but loses its file lines, so it still
+counts as a commit by a named human (the scrub list and the median date below
+read headers) and contributes to no file count or pair. `%aN` reads `.mailmap` ([gitmailmap](https://git-scm.com/docs/gitmailmap)), so
 two spellings of one person collapse if the repo maps them; if it does not,
 note the duplicates in the dossier rather than guessing which are the same
 person.
@@ -327,14 +336,11 @@ in a PR body; that is what the per-item confirm in Step 7 is for.
 
 ### 3. Hotspots
 
-Revision count per file, bulk commits excluded:
+Revision count per file, read from the shared log (bulk commits already have
+no file lines there):
 
 ```bash
-awk -v max="$MAXFILES" '
-function flush(   i) { if (n >= 1 && n <= max) for (i = 1; i <= n; i++) print f[i]; n = 0 }
-/^@@/ { flush(); next }
-NF    { f[++n] = $0 }
-END   { flush() }' "$WORK/log.txt" | sort | uniq -c | sort -rn > "$WORK/freq.txt"
+awk '!/^@@/ && NF' "$WORK/log.txt" | sort | uniq -c | sort -rn > "$WORK/freq.txt"
 ```
 
 Lines of code for every text file tracked at `HEAD` (binary files are skipped
@@ -376,15 +382,16 @@ git rev-list --count --since="$SINCE" --no-merges -i -E --grep='fix|bug|regress|
 ```
 
 If fewer than roughly one commit in ten matches, omit the column and say so.
-Otherwise count per file, with the same bulk-commit exclusion:
+Otherwise count per file from the shared log, keeping only the commits whose
+SHA the label match selects, so the window, exclusions, and bulk cutoff are the
+log's:
 
 ```bash
-git log --since="$SINCE" --no-merges -i -E --grep='fix|bug|regress|revert' --name-only --pretty=format:'@@%H' -- . "${NONDOMAIN[@]}" </dev/null \
-  | awk -v max="$MAXFILES" '
-function flush(   i) { if (n >= 1 && n <= max) for (i = 1; i <= n; i++) print f[i]; n = 0 }
-/^@@/ { flush(); next }
-NF    { f[++n] = $0 }
-END   { flush() }' | sort | uniq -c | sort -rn > "$WORK/fix.txt"
+git rev-list --since="$SINCE" --no-merges -i -E --grep='fix|bug|regress|revert' HEAD </dev/null > "$WORK/fixshas.txt"
+awk -F'\t' -v shas="$WORK/fixshas.txt" '
+BEGIN { while ((getline s < shas) > 0) fix[s] = 1 }
+/^@@/ { sha = substr($1, 3); next }
+NF && (sha in fix) { print }' "$WORK/log.txt" | sort | uniq -c | sort -rn > "$WORK/fix.txt"
 ```
 
 The pattern is `/triage-issue`'s, and the two are pinned equal by
@@ -402,9 +409,9 @@ all match. The column is labeled **fix-labeled commits**, never "bugs".
 **Change coupling** from the shared log, pairs then Sum of Coupling:
 
 ```bash
-awk -v max="$MAXFILES" '
+awk '
 function flush(   i, j, a, b, t) {
-  if (n >= 2 && n <= max)
+  if (n >= 2)
     for (i = 1; i < n; i++) for (j = i + 1; j <= n; j++) {
       a = f[i]; b = f[j]; if (a > b) { t = a; a = b; b = t }
       pair[a "\t" b]++
@@ -459,8 +466,8 @@ splitting the shared log at its median commit date:
 
 ```bash
 MID=$(grep '^@@' "$WORK/log.txt" | cut -f3 | sort | awk '{ d[NR] = $0 } END { if (NR) print d[int((NR + 1) / 2)] }')
-awk -F'\t' -v max="$MAXFILES" -v mid="$MID" '
-function flush(   i) { if (n >= 1 && n <= max) for (i = 1; i <= n; i++) cnt[half "\t" f[i]]++; n = 0 }
+awk -F'\t' -v mid="$MID" '
+function flush(   i) { for (i = 1; i <= n; i++) cnt[half "\t" f[i]]++; n = 0 }
 /^@@/ { flush(); half = ($3 < mid) ? "first" : "second"; next }
 NF    { f[++n] = $0 }
 END   { flush(); for (k in cnt) print cnt[k] "\t" k }' "$WORK/log.txt" | sort -t"$(printf '\t')" -k2,2 -k1,1nr > "$WORK/persist.txt"
