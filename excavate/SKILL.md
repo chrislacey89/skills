@@ -219,6 +219,22 @@ two spellings of one person collapse if the repo maps them; if it does not,
 note the duplicates in the dossier rather than guessing which are the same
 person.
 
+The scrub list is built from the same log, in the same step, so it exists
+before anything downstream needs it:
+
+```bash
+awk -F'\t' '/^@@/ && $2 != "" { print $2 }' "$WORK/log.txt" | sort -u > "$WORK/names.txt"
+```
+
+The log already dropped bot commits, so the file lists only human `%aN`
+values. `[ -s "$WORK/names.txt" ]` must hold before the miners are dispatched:
+a window with no human commits has no scrub list, and an empty list is a
+failure to report, not a clean result. When `gh` is available, the PR author
+logins (`jq -r '.[].author.login' "$WORK/prs.json"`) and every reviewer and
+commenter login that Miner B reads are appended to this same file as they are
+fetched, then `sort -u` is re-run over it with blank lines removed, because
+one blank line in an `rg -F -f` pattern file matches every line.
+
 Now dispatch **two sub-agents in parallel** with the `Agent` tool. Both read
 `$WORK/log.txt`; neither re-runs `git log` with its own window. Each returns
 the paths it wrote plus a ten-line summary, not the data.
@@ -274,7 +290,7 @@ that touch hotspot paths (Step 3 output) first, capped at about one hundred,
 and record `fetched of total` for the Coverage block:
 
 ```bash
-gh pr list --state merged --search "merged:>=$START" --limit 300 --json number,title,body,mergedAt,mergeCommit,closingIssuesReferences,files > "$WORK/prs.json"
+gh pr list --state merged --search "merged:>=$START" --limit 300 --json number,title,body,author,mergedAt,mergeCommit,closingIssuesReferences,files > "$WORK/prs.json"
 ```
 
 ```bash
@@ -291,7 +307,7 @@ coupling on a squash-merged repo.
 **Redaction runs on `$WORK` before either miner reads text.** Apply the
 secret-shape rule in `references/visual-rendering-core.md` § 2, then mask
 emails, hostnames and URLs outside this repo's own `github.com/<owner>/<repo>`,
-and every name in the contributor list. Mark each as `[redacted]` and count
+and every line of `$WORK/names.txt`. Mark each as `[redacted]` and count
 them for the dossier's Limits section. Regexes cannot catch a customer's name
 in a PR body; that is what the per-item confirm in Step 7 is for.
 
@@ -606,8 +622,11 @@ than ninety days as potentially stale, which is exactly right for a snapshot.
 Run `/compound` Phase 4's overlap grep against any existing `docs/solutions/`
 first, and fold into an existing entry rather than duplicating it.
 
-**No entry carries a name or handle.** The contributor list from Step 5 is the
+**No entry carries a name or handle.** `$WORK/names.txt`, built in Step 2, is the
 scrub list: `rg -F -f "$WORK/names.txt" docs/solutions/` must print nothing.
+Check `[ -s "$WORK/names.txt" ]` first and stop if it fails, because `rg -F -f`
+on an empty file exits 1, exactly as it does for "no match", so an empty list
+passes a scrub that scrubbed nothing.
 
 Run the mechanical gates first (the quote is a substring of the cited text,
 `git cat-file -e` resolves, the scrub prints nothing) so the human's attention
@@ -691,7 +710,8 @@ Done means all of these hold:
   line.
 - Every decision entry's citation resolves (`git cat-file -e` or the PR
   exists) and its quote is a substring of the cited text.
-- `rg -F -f "$WORK/names.txt" docs/solutions/` prints nothing.
+- `$WORK/names.txt` is non-empty, and `rg -F -f "$WORK/names.txt" docs/solutions/`
+  prints nothing.
 - Entry frontmatter keys equal `/compound`'s (pinned by
   `scripts/test-excavate-entry-contract.sh`).
 - The dossier exists at the printed path; the PR URL (or the command to open

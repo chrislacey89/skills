@@ -1907,7 +1907,7 @@ fi
 
 section "/excavate: every git block in § Process, run against a planted 2020 fixture"
 
-# /excavate tells a downstream agent to run nineteen fenced blocks
+# /excavate tells a downstream agent to run twenty fenced blocks
 # unsupervised in a repository it has never seen; most are awk/sort pipelines
 # over `git log` output, which is exactly the shape of command that goes quietly
 # wrong (an unanchored grep, a missing pathspec, a guard that is only there
@@ -2040,10 +2040,12 @@ excavate_find() {   # $1 = fixed substring that must occur in exactly one block;
 
 # Declared here so ShellCheck can see the assignments excavate_find makes via printf -v.
 b_cover=; b_log=; b_rev1=; b_rev2=; b_rename=; b_manifest=; b_freq=; b_loc=; b_hot=; b_conv=
-b_fix=; b_pairs=; b_soc=; b_trend=; b_contrib=; b_persist=; b_baseline=; b_base=
+b_fix=; b_pairs=; b_soc=; b_trend=; b_contrib=; b_persist=; b_baseline=; b_base=; b_names=
 excavate_find 'is-shallow-repository' b_cover
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
 excavate_find '> "$WORK/log.txt"' b_log
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/names.txt"' b_names
 excavate_find "--grep='^Revert \"'" b_rev1
 excavate_find '^This reverts commit' b_rev2
 excavate_find '--diff-filter=RD' b_rename
@@ -2068,7 +2070,7 @@ excavate_find 'git shortlog' b_contrib
 excavate_find '> "$WORK/persist.txt"' b_persist
 excavate_find 'knee share' b_baseline
 
-for b in "$b_cover" "$b_log" "$b_rev1" "$b_rev2" "$b_rename" "$b_manifest" "$b_freq" "$b_loc" "$b_hot" "$b_conv" "$b_fix" "$b_pairs" "$b_soc" "$b_trend" "$b_contrib" "$b_persist" "$b_baseline"; do
+for b in "$b_cover" "$b_log" "$b_names" "$b_rev1" "$b_rev2" "$b_rename" "$b_manifest" "$b_freq" "$b_loc" "$b_hot" "$b_conv" "$b_fix" "$b_pairs" "$b_soc" "$b_trend" "$b_contrib" "$b_persist" "$b_baseline"; do
     [[ "${excavate_class[b]}" == git ]] || fatal "block $b was located by content but is classed '${excavate_class[b]}', not git"
 done
 
@@ -2356,6 +2358,15 @@ shallow_line="$(grep 'is-shallow-repository' <<<"${excavate_blocks[b_cover]}")"
 assert_eq 1 "$(count_lines "$shallow_line")" "the shallow check is exactly one line of the coverage block"
 assert_eq true "$(cd "$excavate_sandbox.shallow" && eval "$shallow_line")" "shallow check prints true in a --depth 1 clone"
 assert_eq false "$(cd "$excavate_sandbox" && eval "$shallow_line")" "shallow check prints false in the full fixture"
+
+# names.txt: the scrub list Step 7 greps docs/solutions/ against. It must exist,
+# be non-empty, hold exactly the two planted humans, and carry no bot and no blank
+# line (one blank line in an `rg -F -f` pattern file matches everything).
+names_file="$excavate_out/main/work/names.txt"
+assert_eq 1 "$([[ -s "$names_file" ]] && echo 1 || echo 0)" "names: the scrub list is written and non-empty"
+assert_eq "$author_a
+$author_b" "$(cat "$names_file")" "names: the scrub list is exactly the two planted human authors, one per line"
+assert_eq 0 "$(grep -c -e '^$' -e 'dependabot' "$names_file" || true)" "names: no blank line and no bot in the scrub list"
 
 # freq.txt
 freq_file="$excavate_out/main/work/freq.txt"
