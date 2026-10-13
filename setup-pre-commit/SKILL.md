@@ -91,7 +91,7 @@ bun add -D lefthook
 | oxlint | `oxlint` | `oxlint.json` |
 | dprint | `dprint` | `dprint.json` |
 
-**Secret scanner (when Step 2 found none):** gitleaks is a standalone binary, not an npm package, so it does not go in devDependencies. Install it by one of the routes in [gitleaks § Installing](https://github.com/gitleaks/gitleaks#installing), and tell the user that everyone who commits to the repo needs it on `PATH`. The dependency audit needs no install; it ships with the package manager.
+**Secret scanner (when Step 2 found none):** gitleaks is a standalone binary, not an npm package, so it does not go in devDependencies. Install it by one of the routes in [gitleaks § Installing](https://github.com/gitleaks/gitleaks#installing), and tell the user that everyone who commits to the repo needs it on `PATH`. If you cannot install it (no package manager for it, a restricted sandbox, no network), stop and ask the user before Step 9: the fail-closed gate would block the smoke-test commit, and dropping `secret-scan` or making it skip when the binary is absent is the user's decision, not yours. The dependency audit needs no install; it ships with the package manager.
 
 ### 4. Initialize Lefthook
 
@@ -256,7 +256,7 @@ Only create if no config exists and the user chose to install a new tool.
 - [ ] Formatter/linter config exists
 - [ ] Run `npx lefthook run pre-commit` to verify hooks work
 - [ ] No `.husky/` directory exists (if migrating from Husky, remove it)
-- [ ] The secret scan blocks a staged secret. Stage a throwaway fixture, run the hook, and confirm `secret-scan` fails; then unstage and delete the fixture. Nothing is committed either way:
+- [ ] The secret scan blocks a staged secret. Skip this check when Step 2 left `secret-scan` out because the repo already scans; otherwise stage a throwaway fixture, run the hook, and confirm `secret-scan` fails; then unstage and delete the fixture. Nothing is committed either way:
 
   ```bash
   printf '%s PRIVATE KEY-----\n%s\n-----END RSA PRIVATE KEY-----\n' '-----BEGIN RSA' "$(openssl rand -base64 48)" > fixture-secret.txt
@@ -266,7 +266,7 @@ Only create if no config exists and the user chose to install a new tool.
   ```
 
   If `secret-scan` passes with the fixture staged, the gate is not working. Fix it before Step 9 rather than committing a scaffold that reports green.
-- [ ] Run `npx lefthook run pre-push` and confirm `dependency-audit` ran. A failure here that lists advisories is the gate working on the repo's current dependencies; show the user the output and let them decide what to upgrade. Do not weaken the command to get a green run.
+- [ ] Run `npx lefthook run pre-push` and confirm `dependency-audit` ran. A failure here that lists advisories is the gate working on the repo's current dependencies; show the user the output and let them decide what to upgrade. Do not weaken the command to get a green run. Setting a severity threshold or an ignore entry (Step 5 links where each manager documents them), including for an advisory that has no fix, is the user's decision, not yours: this gate will block every push until they make it, so ask rather than edit.
 
 ### 8. Clean Up Husky (if migrating)
 
