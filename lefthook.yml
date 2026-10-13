@@ -75,6 +75,8 @@ pre-push:
       run: bash scripts/test-shellcheck-version-parity.sh
     markdown-diff-attribute-tests:
       run: bash scripts/test-markdown-diff-attribute.sh
+    setup-pre-commit-gates-tests:
+      run: bash scripts/test-setup-pre-commit-gates.sh
     guards-can-fire-tests:
       run: bash scripts/test-guards-can-fire.sh
     syntax-palette-contract-tests:
