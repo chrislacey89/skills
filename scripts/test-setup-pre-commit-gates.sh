@@ -23,6 +23,11 @@
 
 set -euo pipefail
 
+# A caller that reached this suite via a git hook has GIT_DIR and friends set;
+# the lefthook fixture's `git init`/`git add` would land on the real repo.
+# See docs/solutions/testing-patterns/scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 skill="$repo_root/setup-pre-commit/SKILL.md"
 
