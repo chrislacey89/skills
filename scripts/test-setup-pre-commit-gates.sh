@@ -162,7 +162,7 @@ section "Step 2 detection grep finds an audit step in package.json"
 # status is not the signal; a hit is output that names package.json.
 run_detect() {
     local out
-    out="$(cd "$1" && eval "$detect_cmd" 2>/dev/null || true)"
+    out="$(cd "$1" || exit 0; eval "$detect_cmd" 2>/dev/null || true)"
     [[ "$out" == *package.json* ]]
 }
 hit="$tmp/detect-hit"
