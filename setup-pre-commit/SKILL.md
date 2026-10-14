@@ -266,7 +266,7 @@ Only create if no config exists and the user chose to install a new tool.
   ```
 
   If `secret-scan` passes with the fixture staged, the gate is not working. Fix it before Step 9 rather than committing a scaffold that reports green.
-- [ ] Run `npx lefthook run pre-push` and confirm `dependency-audit` ran. A failure here that lists advisories is the gate working on the repo's current dependencies; show the user the output and let them decide what to upgrade. Do not weaken the command to get a green run. Setting a severity threshold or an ignore entry (Step 5 links where each manager documents them), including for an advisory that has no fix, is the user's decision, not yours: this gate will block every push until they make it, so ask rather than edit.
+- [ ] Run `npx lefthook run pre-push` and confirm `dependency-audit` ran. Skip this check when Step 2 left `dependency-audit` out because the repo already audits. A failure here that lists advisories is the gate working on the repo's current dependencies; show the user the output and let them decide what to upgrade. Do not weaken the command to get a green run. Setting a severity threshold or an ignore entry (Step 5 links where each manager documents them), including for an advisory that has no fix, is the user's decision, not yours: this gate will block every push until they make it, so ask rather than edit.
 
 ### 8. Clean Up Husky (if migrating)
 
