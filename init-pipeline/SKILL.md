@@ -186,19 +186,7 @@ ls lefthook.yml .husky 2>/dev/null
 
 **After user confirms**, invoke `/setup-pre-commit` with the confirmed tools.
 
-**Recommended Lefthook + Biome config** (when both are confirmed):
-
-```yaml
-# Pre-push hook for vitest run should be added after test suite stabilizes.
-pre-commit:
-  commands:
-    check:
-      glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
-      run: pnpm biome check --write --no-errors-on-unmatched --files-ignore-unknown=true --colors=off {staged_files}
-      stage_fixed: true
-```
-
-Key flags: `--no-errors-on-unmatched` prevents false failures when no staged files match, `--files-ignore-unknown=true` avoids Biome choking on unsupported files, `--colors=off` gives cleaner hook output. Skip typecheck in pre-commit (too slow) — add it as a pre-push hook later.
+The hook config itself, including every gate it scaffolds, is `/setup-pre-commit` Step 5's; do not write `lefthook.yml` here.
 
 **Package manager enforcement:** If the confirmed package manager is pnpm (detected or chosen), add the `only-allow` guard:
 

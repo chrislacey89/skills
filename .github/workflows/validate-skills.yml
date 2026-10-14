@@ -173,6 +173,13 @@ jobs:
       - name: Run markdown diff-attribute contract suite
         run: bash scripts/test-markdown-diff-attribute.sh
 
+      # Executes the commands setup-pre-commit/SKILL.md documents for its
+      # security gates (missing binary, unreachable registry, detection grep,
+      # yaml shape). Needs neither gitleaks nor the network; an absent
+      # lefthook or yq SKIPs its own assertion loudly.
+      - name: Run setup-pre-commit gates contract suite
+        run: bash scripts/test-setup-pre-commit-gates.sh
+
       # The mechanism for PR #296's escapes: a guard whose condition cannot
       # become true reports coverage while providing none, and is invisible in
       # exactly the way the defect it guards against is invisible.
