@@ -23,7 +23,10 @@
 # (#310). That last clause is deliberately narrower than "every name claim":
 # the population is keyed on one literal, so a site resolving the base another
 # way (`git remote show origin`, `gh repo view --json defaultBranchRef`) is NOT
-# covered — see the section's own reach note. Extend the suite when a skill
+# covered — see the section's own reach note. Every fenced bash block in
+# /excavate's process section is also run, against a fixture dated 2020 with an
+# absolute SINCE; its gh blocks are an explicit, named, counted skip set rather
+# than a silent one. Extend the suite when a skill
 # documents another runnable command; do not maintain a list of the commands in
 # prose, since that list is itself the thing that drifts.
 #
@@ -271,6 +274,17 @@ trap 'rm -rf "$sandbox"' EXIT
 # environment of their own.
 export GIT_CONFIG_GLOBAL=/dev/null
 export GIT_CONFIG_SYSTEM=/dev/null
+
+# A caller that reached this suite via a git hook (pre-push, run from a linked
+# worktree) has GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE set in its environment.
+# The fixture below runs `git init -q .` and `git config` in $sandbox, and would
+# inherit them: git prefers an explicit GIT_DIR to discovering a repository from
+# the working directory, so the fixture would re-initialize and configure the
+# real repository instead, writing `core.bare=true` and the fixture identity
+# into the shared .git/config while the suite still reports green. See
+# docs/solutions/testing-patterns/scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md.
+# Unset before the first fixture git call.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
 (
     cd "$sandbox"
@@ -1898,6 +1912,791 @@ if [[ "$unreachable_status" -ne 0 && "$unreachable_status" -ne 2 ]]; then
 else
     printf '  FAIL the check exits %d when the remote cannot be reached; that is indistinguishable from confirmed-gone (2) or from success (0)\n' "$unreachable_status"
     fail=$((fail + 1))
+fi
+
+# -----------------------------------------------------------------------------
+
+section "/excavate: every git block in § Process, run against a planted 2020 fixture"
+
+# /excavate tells a downstream agent to run twenty fenced blocks
+# unsupervised in a repository it has never seen; most are awk/sort pipelines
+# over `git log` output, which is exactly the shape of command that goes quietly
+# wrong (an unanchored grep, a missing pathspec, a guard that is only there
+# because `git show ":path"` reads the index). So the blocks are RUN, extracted
+# verbatim from the skill, against a fixture that plants one answer per block.
+#
+# Three decisions are worth stating because the obvious alternative is wrong:
+#   - The census is derived by an awk state machine over the fences AND by a
+#     plain grep of the opening fences; they must agree (header lesson 7b — two
+#     different patterns that can disagree).
+#   - A block that is neither `gh` nor runnable FAILS rather than skipping. The
+#     `gh` blocks are the only skip set; each is named in the output, and
+#     "run + skipped == census" is checked per block, not as a sum.
+#   - The fixture is dated 2020 and SINCE is overridden to an absolute date
+#     AFTER the setup block runs, so the block's own `SINCE='12 months ago'`
+#     still executes and START is recomputed from the override. A relative
+#     window would make every in-window assertion a function of today's date.
+# Blocks are identified by a distinctive substring that must match exactly one
+# block, never by position, so a reordered skill fails loudly instead of
+# running the wrong block against the wrong assertion.
+
+excavate_skill="$repo_root/excavate/SKILL.md"
+[[ -f "$excavate_skill" ]] || fatal "no excavate/SKILL.md at $excavate_skill"
+
+excavate_sandbox="$(mktemp -d)"
+excavate_out="$(mktemp -d)"
+trap 'rm -rf "$sandbox" "$base_sandbox" "$remote_sandbox" "$excavate_sandbox" "$excavate_sandbox.shallow" "$excavate_out"' EXIT
+
+# --- Extraction: the Nth fenced bash block, verbatim -------------------------
+
+excavate_extract() {
+    awk -v want="$1" '
+        /^```/ {
+            if (state == "") { if ($0 ~ /^```bash[ \t]*$/) { n++; state = "bash" } else state = "other" }
+            else if ($0 ~ /^```[ \t]*$/) state = ""
+            next
+        }
+        state == "bash" && n == want { print }
+    ' "$excavate_skill"
+}
+
+excavate_total="$(awk '
+    /^```/ {
+        if (state == "") { if ($0 ~ /^```bash[ \t]*$/) c++; state = "x" }
+        else if ($0 ~ /^```[ \t]*$/) state = ""
+    }
+    END { print c + 0 }' "$excavate_skill")"
+excavate_grep_total="$(grep -c '^```bash' "$excavate_skill" || true)"
+
+assert_eq "$excavate_grep_total" "$excavate_total" "the fence state machine and a plain grep agree on the number of bash blocks ($excavate_total)"
+if [[ "$excavate_total" -ge 12 ]]; then
+    printf '  ok   census floor: %d bash blocks (>= 12)\n' "$excavate_total"
+    pass=$((pass + 1))
+else
+    printf '  FAIL census floor: only %d bash blocks found (< 12); the extractor or the skill lost most of its commands\n' "$excavate_total"
+    fail=$((fail + 1))
+fi
+
+excavate_blocks=()
+excavate_class=()
+excavate_setup_n=0
+excavate_gh_n=0
+excavate_git_n=0
+excavate_gh_list=""
+excavate_empty_n=0
+i=1
+while [[ "$i" -le "$excavate_total" ]]; do
+    excavate_blocks[i]="$(excavate_extract "$i")"
+    [[ -n "${excavate_blocks[i]}" ]] || excavate_empty_n=$((excavate_empty_n + 1))
+    first_tok="$(awk 'NF { print $1; exit }' <<<"${excavate_blocks[i]}")"
+    if [[ "$i" -eq 1 ]]; then
+        excavate_class[i]=setup
+        excavate_setup_n=$((excavate_setup_n + 1))
+    elif [[ "$first_tok" == gh ]]; then
+        excavate_class[i]=gh
+        excavate_gh_n=$((excavate_gh_n + 1))
+        excavate_gh_list="$excavate_gh_list $i"
+    else
+        excavate_class[i]=git
+        excavate_git_n=$((excavate_git_n + 1))
+    fi
+    i=$((i + 1))
+done
+assert_eq 0 "$excavate_empty_n" "no extracted block is empty"
+
+# Independent check on the "block 1 is the shared setup" premise: a DIFFERENT
+# pattern (the array definition every later block depends on) must pick out
+# exactly block 1 and nothing else.
+setup_holders=""
+i=1
+while [[ "$i" -le "$excavate_total" ]]; do
+    [[ "${excavate_blocks[i]}" == *'NONDOMAIN=('* ]] && setup_holders="$setup_holders $i"
+    i=$((i + 1))
+done
+assert_eq " 1" "$setup_holders" "the block that defines NONDOMAIN is block 1, and only block 1 (it is the shared setup)"
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+for needle in 'SINCE=' 'WORK="${TMPDIR:-/tmp}/excavate-' 'mkdir -p -m 700 "$WORK"' 'START=$(' 'BOTS=' 'MAXFILES='; do
+    [[ "${excavate_blocks[1]}" == *"$needle"* ]] || fatal "the shared setup block no longer contains '$needle'; every later block assumes it"
+done
+
+if [[ "$excavate_gh_n" -ge 1 ]]; then
+    printf '  ok   the gh class is non-empty (%d blocks)\n' "$excavate_gh_n"
+    pass=$((pass + 1))
+else
+    printf '  FAIL the gh class is empty; either /excavate lost its gh blocks or the classifier no longer sees them\n'
+    fail=$((fail + 1))
+fi
+for g in $excavate_gh_list; do
+    printf '  skip gh block %d (network call, not run): %s\n' "$g" "$(awk 'NF { print; exit }' <<<"${excavate_blocks[g]}")"
+done
+assert_eq "$excavate_total" "$((excavate_setup_n + excavate_gh_n + excavate_git_n))" "setup + gh + git partition the census, every block in exactly one class"
+
+# --- Locating blocks by content ----------------------------------------------
+
+excavate_find() {   # $1 = fixed substring that must occur in exactly one block; $2 = variable to set
+    # Sets a variable in the caller's shell rather than printing, so the fatal
+    # below runs in the main shell: inside `$( … )` an exit kills only the
+    # subshell and the suite carries on (test-guards-can-fire.sh, detector C).
+    local found="" cnt=0 j=1
+    while [[ "$j" -le "$excavate_total" ]]; do
+        if [[ "${excavate_blocks[j]}" == *"$1"* ]]; then
+            found="$j"
+            cnt=$((cnt + 1))
+        fi
+        j=$((j + 1))
+    done
+    [[ "$cnt" -eq 1 ]] || fatal "expected exactly one /excavate block containing '$1', found $cnt"
+    printf -v "$2" '%s' "$found"
+}
+
+# Declared here so ShellCheck can see the assignments excavate_find makes via printf -v.
+b_cover=; b_log=; b_rev1=; b_rev2=; b_rename=; b_manifest=; b_freq=; b_loc=; b_hot=; b_conv=
+b_fix=; b_pairs=; b_soc=; b_trend=; b_contrib=; b_persist=; b_baseline=; b_base=; b_names=; b_vars=
+excavate_find 'is-shallow-repository' b_cover
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/log.txt"' b_log
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/vars.sh"' b_vars
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/names.txt"' b_names
+excavate_find "--grep='^Revert \"'" b_rev1
+excavate_find '^This reverts commit' b_rev2
+excavate_find '--diff-filter=RD' b_rename
+excavate_find 'manifest-diffs.txt' b_manifest
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/freq.txt"' b_freq
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/loc.txt"' b_loc
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/hotspots.txt"' b_hot
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find 'rev-list --count --since="$SINCE" --no-merges -i -E' b_conv
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/fix.txt"' b_fix
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/pairs.txt"' b_pairs
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/soc.txt"' b_soc
+excavate_find 'FILE=<path>' b_trend
+excavate_find 'git shortlog' b_contrib
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/persist.txt"' b_persist
+excavate_find 'knee share' b_baseline
+
+for b in "$b_cover" "$b_vars" "$b_log" "$b_names" "$b_rev1" "$b_rev2" "$b_rename" "$b_manifest" "$b_freq" "$b_loc" "$b_hot" "$b_conv" "$b_fix" "$b_pairs" "$b_soc" "$b_trend" "$b_contrib" "$b_persist" "$b_baseline"; do
+    [[ "${excavate_class[b]}" == git ]] || fatal "block $b was located by content but is classed '${excavate_class[b]}', not git"
+done
+
+# --- The fixture -------------------------------------------------------------
+#
+# Position p (1..20) is the in-window commit's place in history; the quartile
+# points the trend block samples are therefore positions 5, 10, 15, 19. Hot
+# changes sit on both sides of each point so its LOC and indentation move
+# strictly between samples.
+#
+#   p1 add flag              A  flag.txt                   (the revert's target)
+#   p2 FIX: null guard       A  hot, coupled, lock         fix-labeled
+#   p4 tidy [body: reverting the flag by hand]
+#                            A  hot, lock                  fix-labeled via BODY
+#   p7, p17                  A  hot, coupled, lock
+#   p9                       B  hot, lock
+#   p12 Revert "add flag"    B  hot, coupled, lock         fix-labeled
+#   p14 bump deps            dependabot[bot]  hot, package.json
+#   p3,5,6,8,10,11,13        churny.txt only (2 lines, under the LOC floor)
+#   p15 big.txt (200 lines)  p16 bulk/f01..f40.txt (> MAXFILES)
+#   p18 git mv old_dir/x.txt new_dir/x.txt    p19 A adds a dependency
+#   p20 "configure dependabot alerts"  B  ci-notes.txt, café.txt   a HUMAN whose SUBJECT
+#                            names a bot; the bot filter must read the author field only.
+#                            café.txt (60 lines at the root, 61 after p20) has a non-ASCII
+#                            name: under the default core.quotePath git prints it as
+#                            "caf\303\251.txt", wc cannot open that, and the file vanishes
+#                            from loc.txt and so from hotspots.txt
+excavate_dates=(2020-07-01 2020-07-10 2020-07-20 2020-08-01 2020-08-10 2020-08-20 2020-09-01 2020-09-10 2020-09-20 2020-10-01 2020-10-08 2020-10-15 2020-10-22 2020-11-01 2020-11-08 2020-11-15 2020-11-22 2020-11-28 2020-12-01 2020-12-05)
+excavate_in_window="${#excavate_dates[@]}"
+excavate_planted_fix_commits=3   # FIX: null guard, Revert "add flag", tidy (via its body)
+excavate_planted_hot_revs=6      # human commits touching hot.txt (the bot's seventh is filtered)
+excavate_planted_pair=4          # human commits touching hot.txt AND coupled.txt
+excavate_planted_churny=7
+author_a='Alice Author'
+author_b='Bob Builder'
+bot_name='dependabot[bot]'
+
+(
+    cd "$excavate_sandbox"
+    git init -q -b main .
+    git config commit.gpgsign false
+
+    xc_commit() {   # date author subject [body]
+        local d="$1T12:00:00+0000" who="$2"
+        export GIT_AUTHOR_NAME="$who" GIT_COMMITTER_NAME="$who"
+        export GIT_AUTHOR_EMAIL=noreply@example.invalid GIT_COMMITTER_EMAIL=noreply@example.invalid
+        export GIT_AUTHOR_DATE="$d" GIT_COMMITTER_DATE="$d"
+        if [[ -n "${4:-}" ]]; then
+            git commit -q -m "$3" -m "$4"
+        else
+            git commit -q -m "$3"
+        fi
+    }
+    xc_hot_grow() { local k; for k in 1 2 3 4 5 6 7 8 9 10; do printf '    hot %s-%s\n' "$1" "$k" >> hot.txt; done; git add hot.txt; }
+    xc_coupled_shrink() {
+        local n; n="$(wc -l < coupled.txt | tr -d ' ')"
+        head -n "$((n - 10))" coupled.txt > coupled.tmp && mv coupled.tmp coupled.txt
+        git add coupled.txt
+    }
+    xc_lock() { printf 'lock %s\n' "$1" >> package-lock.json; git add package-lock.json; }
+    xc_day() { printf '%s' "${excavate_dates[$(($1 - 1))]}"; }
+
+    # Pre-window root commit.
+    mkdir old_dir
+    for k in $(seq 1 40); do printf 'hot line %d\n' "$k"; done > hot.txt
+    for k in $(seq 1 60); do printf '    coupled line %d\n' "$k"; done > coupled.txt
+    printf 'a\nb\n' > churny.txt
+    for k in $(seq 1 200); do printf 'big line %d\n' "$k"; done > big.txt
+    printf '{"dependencies":{}}\n' > package.json
+    printf 'lock 0\n' > package-lock.json
+    printf 'x one\nx two\nx three\n' > old_dir/x.txt
+    for k in $(seq 1 60); do printf 'cafe line %d\n' "$k"; done > café.txt
+    git add -A
+    xc_commit 2020-01-15 "$author_a" "seed fixture"
+
+    # Created strictly in position order: history is linear, so position p IS
+    # rev-list's p-th commit, and the quartile points are what the comments say.
+    for p in $(seq 1 "$excavate_in_window"); do
+        d="$(xc_day "$p")"
+        case "$p" in
+            1)  printf 'on\n' > flag.txt; git add flag.txt
+                xc_commit "$d" "$author_a" "add flag"
+                flag_sha="$(git rev-parse HEAD)" ;;
+            2)  xc_hot_grow "$p"; xc_coupled_shrink; xc_lock "$p"
+                xc_commit "$d" "$author_a" "FIX: null guard" ;;
+            3|5|6|8|10|11|13)
+                printf 'a\n%s\n' "$p" > churny.txt; git add churny.txt
+                xc_commit "$d" "$author_a" "tweak knob $p" ;;
+            4)  xc_hot_grow "$p"; xc_lock "$p"
+                xc_commit "$d" "$author_a" "tidy" "reverting the flag by hand" ;;
+            7)  xc_hot_grow "$p"; xc_coupled_shrink; xc_lock "$p"
+                xc_commit "$d" "$author_a" "add widget" ;;
+            9)  xc_hot_grow "$p"; xc_lock "$p"
+                xc_commit "$d" "$author_b" "add gizmo" ;;
+            12) xc_hot_grow "$p"; xc_coupled_shrink; xc_lock "$p"
+                xc_commit "$d" "$author_b" 'Revert "add flag"' "This reverts commit $flag_sha." ;;
+            14) xc_hot_grow "$p"; printf '{"dependencies":{"bot-dep":"2.0.0"}}\n' > package.json; git add package.json
+                xc_commit "$d" "$bot_name" "bump deps" ;;
+            15) awk 'NR == 100 { print "big line changed"; next } 1' big.txt > big.tmp && mv big.tmp big.txt; git add big.txt
+                xc_commit "$d" "$author_a" "update big table" ;;
+            16) mkdir bulk
+                for k in $(seq -w 1 40); do printf 'bulk %s\n' "$k" > "bulk/f$k.txt"; done
+                git add bulk
+                xc_commit "$d" "$author_a" "import bulk files" ;;
+            17) xc_hot_grow "$p"; xc_coupled_shrink; xc_lock "$p"
+                xc_commit "$d" "$author_a" "add gadget" ;;
+            18) mkdir new_dir; git mv old_dir/x.txt new_dir/x.txt
+                xc_commit "$d" "$author_a" "move x" ;;
+            19) printf '{"dependencies":{"bot-dep":"2.0.0","left-pad":"1.0.0"}}\n' > package.json; git add package.json
+                xc_commit "$d" "$author_a" "add left-pad dependency" ;;
+            20) printf 'alerts on\n' > ci-notes.txt; printf 'cafe line 61\n' >> café.txt; git add ci-notes.txt café.txt
+                xc_commit "$d" "$author_b" "configure dependabot alerts" ;;
+            *)  echo "fixture has no step for position $p" >&2; exit 1 ;;
+        esac
+    done
+)
+# Outcome checks, not the subshell's status (see the /closeout fixture above).
+[[ "$(git -C "$excavate_sandbox" rev-list --count HEAD)" -eq "$((excavate_in_window + 1))" ]] \
+    || fatal "the /excavate fixture did not produce $((excavate_in_window + 1)) commits (20 planned positions + 1 pre-window root)"
+[[ "$(git -C "$excavate_sandbox" rev-list --count --since=2020-06-01 HEAD)" -eq "$excavate_in_window" ]] \
+    || fatal "the /excavate fixture's in-window commits are not all dated after 2020-06-01"
+git clone -q --depth 1 "file://$excavate_sandbox" "$excavate_sandbox.shallow" \
+    || fatal "could not make the shallow clone of the /excavate fixture"
+
+# The bulk commit must exceed the ceiling the skill documents, read from the
+# skill rather than restated: if MAXFILES is ever raised past 40 the plant no
+# longer expresses the fault and every bulk assertion below becomes vacuous.
+excavate_maxfiles="$(sed -n 's/^MAXFILES=\([0-9][0-9]*\).*/\1/p' <<<"${excavate_blocks[1]}")"
+[[ -n "$excavate_maxfiles" && "$excavate_maxfiles" -lt 40 ]] \
+    || fatal "MAXFILES is '${excavate_maxfiles:-unreadable}' in the shared setup; the fixture's 40-file bulk commit must exceed it"
+
+hot_loc="$(wc -l < "$excavate_sandbox/hot.txt" | tr -d ' ')"
+
+# --- Running blocks ----------------------------------------------------------
+
+# `timeout` is coreutils on Linux and `gtimeout` under Homebrew on macOS; with
+# neither, a background killer. Returns 124 on timeout in every branch.
+run_timed() {   # secs cmd...
+    local secs="$1" st=0 pid killer
+    shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$secs" "$@" || st=$?
+    elif command -v gtimeout >/dev/null 2>&1; then
+        gtimeout "$secs" "$@" || st=$?
+    else
+        "$@" &
+        pid=$!
+        ( sleep "$secs"; kill "$pid" 2>/dev/null ) &
+        killer=$!
+        wait "$pid" || st=$?
+        kill "$killer" 2>/dev/null || true
+        wait "$killer" 2>/dev/null || true
+        [[ "$st" -eq 143 ]] && st=124
+    fi
+    return "$st"
+}
+
+excavate_start_line="$(grep -m1 '^START=' <<<"${excavate_blocks[1]}" || true)"
+[[ -n "$excavate_start_line" ]] || fatal "no '^START=' line in the shared setup block; the SINCE override cannot recompute it"
+
+# Run the shared setup, override SINCE to the fixture's absolute window, recompute
+# START, then the listed blocks in the order given. Each block's stdout/stderr go
+# to $out/b<N>.out/.err and its exit status to $out/rc. stdin is a pipe that stays
+# open for 30 s and never carries data: a block that reads stdin (a bare `git
+# shortlog`) blocks instead of seeing EOF, which is the hang the skill warns about.
+# A harness that handed it /dev/null would make that guard unfireable.
+xc_run() {   # outdir secs pathval idx...
+    local out="$1" secs="$2" pathval="$3" idx text st=0
+    shift 3
+    mkdir -p "$out/tmp"
+    {
+        printf 'XO_OUT=%q\n' "$out"
+        # WORK is a deterministic path under TMPDIR, so passes that share the
+        # sandbox would share a directory; a private TMPDIR per pass keeps one
+        # pass's files (and a mutant's missing ones) from standing in for another's.
+        printf 'export TMPDIR=%q\n' "$out/tmp"
+        printf 'cd %q || exit 97\n' "$excavate_sandbox"
+        printf '%s\n' "${excavate_blocks[1]}"
+        # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+        printf 'printf "1 %%s\\n" "$?" >> "$XO_OUT/rc"\n'
+        printf 'SINCE=2020-06-01\n'
+        printf '%s\n' "$excavate_start_line"
+        # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+        printf 'printf "%%s\\n" "$START" > "$XO_OUT/start"\n'
+        for idx in "$@"; do
+            text="${excavate_blocks[idx]//<path>/$pathval}"
+            # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+            printf '{\n%s\n} > "$XO_OUT/b%s.out" 2> "$XO_OUT/b%s.err"\n' "$text" "$idx" "$idx"
+            # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+            printf 'printf "%s %%s\\n" "$?" >> "$XO_OUT/rc"\n' "$idx"
+        done
+        # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+        printf 'mkdir -p "$XO_OUT/work" && cp -R "$WORK/." "$XO_OUT/work/"\n'
+    } > "$out/run.sh"
+    run_timed "$secs" bash "$out/run.sh" > "$out/stdout" 2> "$out/stderr" < <(exec sleep 30 2>/dev/null) || st=$?
+    return "$st"
+}
+
+# Every non-gh, non-setup block that does NOT take a <path> runs once, in file
+# order, in one process (they share $WORK). Blocks that take <path> are run
+# separately below, once per path under test.
+main_idx=""
+path_idx=""
+i=2
+while [[ "$i" -le "$excavate_total" ]]; do
+    if [[ "${excavate_class[i]}" == git ]]; then
+        if [[ "${excavate_blocks[i]}" == *'<path>'* ]]; then
+            path_idx="$path_idx $i"
+        else
+            main_idx="$main_idx $i"
+        fi
+    fi
+    i=$((i + 1))
+done
+
+# shellcheck disable=SC2086  # the index lists are space-separated by construction
+{
+    run_main=0; xc_run "$excavate_out/main" 120 UNUSED $main_idx || run_main=$?
+    run_trend_hot=0; xc_run "$excavate_out/trend-hot" 120 hot.txt "$b_trend" || run_trend_hot=$?
+    run_trend_coupled=0; xc_run "$excavate_out/trend-coupled" 120 coupled.txt "$b_trend" || run_trend_coupled=$?
+    run_contrib=0; xc_run "$excavate_out/contrib" 20 hot.txt "$b_contrib" || run_contrib=$?
+}
+
+assert_eq 0 "$run_main" "the main pass (every non-gh block without a <path>) completes"
+assert_eq 0 "$run_trend_hot" "the trend block completes on hot.txt"
+assert_eq 0 "$run_trend_coupled" "the trend block completes on coupled.txt"
+if [[ "$run_contrib" -eq 124 ]]; then
+    printf '  FAIL shortlog read stdin: the contributors block did not finish in 20 s\n'
+    fail=$((fail + 1))
+else
+    assert_eq 0 "$run_contrib" "the contributors block completes without reading stdin"
+fi
+
+# --- Accounting: run + skipped == census, per block --------------------------
+
+ran_list=" "
+for d in main trend-hot trend-coupled contrib; do
+    if [[ -f "$excavate_out/$d/rc" ]]; then
+        while read -r idx rc; do
+            ran_list="$ran_list$idx "
+            if [[ "$rc" -ne 0 ]]; then
+                printf '  FAIL block %s exited %s in the %s pass\n       stderr: %s\n' "$idx" "$rc" "$d" "$(cat "$excavate_out/$d/b$idx.err" 2>/dev/null || true)"
+                fail=$((fail + 1))
+            fi
+        done < "$excavate_out/$d/rc"
+    fi
+done
+ran_n=0
+skipped_n=0
+unaccounted=""
+i=1
+while [[ "$i" -le "$excavate_total" ]]; do
+    is_ran=no; is_skipped=no
+    [[ "$ran_list" == *" $i "* ]] && is_ran=yes
+    [[ " $excavate_gh_list " == *" $i "* ]] && is_skipped=yes
+    if [[ "$is_ran" == yes && "$is_skipped" == no ]]; then
+        ran_n=$((ran_n + 1))
+    elif [[ "$is_skipped" == yes && "$is_ran" == no ]]; then
+        skipped_n=$((skipped_n + 1))
+    else
+        unaccounted="$unaccounted $i"
+    fi
+    i=$((i + 1))
+done
+assert_eq "" "$unaccounted" "every block was run or explicitly skipped as gh, never both and never neither"
+assert_eq "$excavate_total" "$((ran_n + skipped_n))" "blocks run ($ran_n) + blocks skipped ($skipped_n) == census ($excavate_total)"
+
+# --- Placeholders: no <...> may survive into a block that ran ----------------
+
+leftover=""
+for i in $main_idx; do
+    if grep -qE '<[a-z][a-z-]*>' <<<"${excavate_blocks[i]}"; then leftover="$leftover $i"; fi
+done
+assert_eq "" "$leftover" "no unsubstituted <placeholder> sits in a block the main pass ran"
+
+assert_eq "2020-07-01" "$(cat "$excavate_out/main/start")" "START was recomputed from the overridden SINCE (first in-window commit date)"
+
+# --- Answers -----------------------------------------------------------------
+
+xo() { cat "$excavate_out/main/$1"; }   # file written under $WORK
+xb() { cat "$excavate_out/main/b$1.out"; }
+count_lines() { if [[ -z "$1" ]]; then printf 0; else printf '%s\n' "$1" | wc -l | tr -d ' '; fi; }
+# uniq -c style "   N path" file -> N for a path, empty when absent
+count_for() { awk -v p="$2" '{ c = $1; sub(/^ *[0-9]+ /, ""); if ($0 == p) print c }' "$1"; }
+tab=$'\t'
+
+# Coverage block
+cover="$(xb "$b_cover")"
+assert_eq 4 "$(count_lines "$cover")" "coverage block prints exactly its four documented lines"
+assert_eq false "$(sed -n 1p <<<"$cover")" "coverage: is-shallow-repository prints false in the full fixture"
+assert_eq "$excavate_in_window" "$(sed -n 2p <<<"$cover")" "coverage: in-window non-merge count == commits planted in the window (bot included)"
+assert_eq 2020-01-15 "$(sed -n 3p <<<"$cover")" "coverage: root-commit date is the pre-window commit's"
+assert_matches "$(sed -n 4p <<<"$cover")" '^0 of [0-9]+ subjects end in \(#N\)$' "coverage: squash ratio line, zero planted (#N) subjects"
+assert_eq "0 of $excavate_in_window subjects end in (#N)" "$(sed -n 4p <<<"$cover")" "coverage: squash ratio counts every in-window subject"
+
+# Shallow polarity: the line extracted from the block, run in both repos.
+shallow_line="$(grep 'is-shallow-repository' <<<"${excavate_blocks[b_cover]}")"
+assert_eq 1 "$(count_lines "$shallow_line")" "the shallow check is exactly one line of the coverage block"
+assert_eq true "$(cd "$excavate_sandbox.shallow" && eval "$shallow_line")" "shallow check prints true in a --depth 1 clone"
+assert_eq false "$(cd "$excavate_sandbox" && eval "$shallow_line")" "shallow check prints false in the full fixture"
+
+# names.txt: the scrub list Step 7 greps docs/solutions/ against. It must exist,
+# be non-empty, hold exactly the two planted humans, and carry no bot and no blank
+# line (one blank line in an `rg -F -f` pattern file matches everything).
+names_file="$excavate_out/main/work/names.txt"
+assert_eq 1 "$([[ -s "$names_file" ]] && echo 1 || echo 0)" "names: the scrub list is written and non-empty"
+assert_eq "$author_a
+$author_b" "$(cat "$names_file")" "names: the scrub list is exactly the two planted human authors, one per line"
+assert_eq 0 "$(grep -c -e '^$' -e 'dependabot' "$names_file" || true)" "names: no blank line and no bot in the scrub list"
+
+# The bot filter reads the author field, not the whole header: a human commit
+# whose SUBJECT names a bot (p20) keeps its header in the shared log.
+log_file="$excavate_out/main/work/log.txt"
+assert_eq 1 "$(awk -F'\t' -v a="$author_b" '/^@@/ && $2 == a && $4 == "configure dependabot alerts"' "$log_file" | wc -l | tr -d ' ')" "log: the human commit whose subject says dependabot keeps its header in the shared log"
+assert_eq 0 "$(awk -F'\t' '/^@@/ && $2 ~ /bot/' "$log_file" | wc -l | tr -d ' ')" "log: no header carries the bot as its author"
+
+# freq.txt
+freq_file="$excavate_out/main/work/freq.txt"
+assert_eq "$excavate_planted_hot_revs" "$(count_for "$freq_file" hot.txt)" "freq: hot.txt has exactly its $excavate_planted_hot_revs human in-window revisions (bot filtered, pre-window excluded)"
+assert_eq "$excavate_planted_churny" "$(count_for "$freq_file" churny.txt)" "freq: churny.txt has its $excavate_planted_churny revisions"
+assert_eq 1 "$(count_for "$freq_file" ci-notes.txt)" "freq: ci-notes.txt counts once (the human commit whose subject names a bot)"
+assert_eq "" "$(count_for "$freq_file" package-lock.json)" "freq: package-lock.json is absent (NONDOMAIN)"
+assert_eq 0 "$(grep -Fc 'bulk/' "$freq_file" || true)" "freq: no bulk/ file (the 40-file commit exceeds MAXFILES)"
+
+# hotspots.txt
+hotspots="$(cat "$excavate_out/main/work/hotspots.txt")"
+assert_eq "$excavate_planted_hot_revs${tab}${hot_loc}${tab}hot.txt" "$(sed -n 1p <<<"$hotspots")" "hotspots: line 1 is hot.txt with 6 revisions and LOC == its final line count ($hot_loc)"
+assert_eq 0 "$(grep -Fc 'churny.txt' <<<"$hotspots" || true)" "hotspots: churny.txt (2 lines, 7 revisions) is below the LOC floor and absent"
+assert_eq "1${tab}200${tab}big.txt" "$(sed -n 2p <<<"$hotspots")" "hotspots: big.txt (1 revision, 200 lines) ranks below hot.txt"
+assert_eq "1${tab}61${tab}café.txt" "$(sed -n 3p <<<"$hotspots")" "hotspots: café.txt (non-ASCII name, 1 revision, 61 lines) survives unquoted with its LOC"
+assert_eq 61 "$(awk -F'\t' '$2 == "café.txt" { print $1 }' "$excavate_out/main/work/loc.txt")" "loc: café.txt is listed by its real name with its real line count"
+
+# fix.txt and the convention rate
+fix_file="$excavate_out/main/work/fix.txt"
+assert_eq "$excavate_planted_fix_commits" "$(count_for "$fix_file" hot.txt)" "fix: hot.txt has the FIX, the Revert and tidy (matched through its BODY, since the grep is -i and unanchored)"
+assert_eq "$excavate_planted_fix_commits" "$(xb "$b_conv")" "fix: the convention-rate line prints the planted fix-labeled commit count, an integer"
+assert_matches "$(xb "$b_conv")" '^[0-9]+$' "fix: the convention-rate line is a bare integer"
+
+# reverts: one fenced block holding two commands (by subject, then by body
+# trailer). b_rev1 and b_rev2 are the same block, so its output is two lines, one
+# per command, told apart by the field count their --pretty formats give.
+assert_eq "$b_rev1" "$b_rev2" "both revert commands live in one fenced block"
+rev_out="$(xb "$b_rev1")"
+rev1="$(sed -n 1p <<<"$rev_out")"
+rev2="$(sed -n 2p <<<"$rev_out")"
+assert_eq 2 "$(count_lines "$rev_out")" "revert block prints exactly two lines: one match per command, one planted revert"
+assert_eq 3 "$(awk -F'\t' '{ print NF }' <<<"$rev1")" "revert command 1 (by subject) printed one hash/date/subject row"
+assert_eq 2 "$(awk -F'\t' '{ print NF }' <<<"$rev2")" "revert command 2 (by body trailer) printed one hash/subject row"
+assert_contains "$rev1" 'Revert "add flag"' "revert command 1 names the planted revert"
+assert_contains "$rev2" 'Revert "add flag"' "revert command 2 names the planted revert"
+if [[ "$rev_out" == *tidy* ]]; then
+    printf '  FAIL the revert block matched the tidy commit, whose BODY begins "reverting"; the pattern lost its anchor\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   the revert block does not match tidy (case-sensitive, anchored)\n'
+    pass=$((pass + 1))
+fi
+assert_eq "$(cut -f1 <<<"$rev1")" "$(cut -f1 <<<"$rev2")" "revert commands 1 and 2 report the same commit"
+
+# rename
+rename_out="$(xb "$b_rename")"
+if grep -Eq "^R[0-9]+${tab}old_dir/x.txt${tab}new_dir/x.txt" <<<"$rename_out"; then
+    printf '  ok   rename block emits an R<score> row old_dir/x.txt -> new_dir/x.txt\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL rename block has no R<score> row for the planted git mv\n       got: %q\n' "$rename_out"
+    fail=$((fail + 1))
+fi
+
+# manifest
+manifest="$(cat "$excavate_out/main/work/manifest-diffs.txt")"
+if grep -Eq '^\+.*left-pad' <<<"$manifest"; then
+    printf '  ok   manifest block emits a + line for the dependency author A added\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL manifest block has no + line naming left-pad\n       got: %q\n' "$manifest"
+    fail=$((fail + 1))
+fi
+
+# pairs and SOC
+pairs_file="$excavate_out/main/work/pairs.txt"
+pair_n=""
+while IFS="$tab" read -r c a b; do
+    if [[ "$a" == coupled.txt && "$b" == hot.txt ]]; then pair_n="$c"; fi
+done < "$pairs_file"
+assert_eq "$excavate_planted_pair" "$pair_n" "pairs: coupled.txt<TAB>hot.txt (sorted order) co-changed exactly $excavate_planted_pair times"
+assert_eq 0 "$(grep -Fc 'package-lock.json' "$pairs_file" || true)" "pairs: no pair involves package-lock.json (NONDOMAIN)"
+assert_eq 0 "$(grep -Fc 'bulk/' "$pairs_file" || true)" "pairs: no pair involves bulk/ (MAXFILES)"
+hot_pair_sum=0
+while IFS="$tab" read -r c a b; do
+    if [[ "$a" == hot.txt || "$b" == hot.txt ]]; then hot_pair_sum=$((hot_pair_sum + c)); fi
+done < "$pairs_file"
+soc_hot=""
+while IFS="$tab" read -r c f; do
+    if [[ "$f" == hot.txt ]]; then soc_hot="$c"; fi
+done < "$excavate_out/main/work/soc.txt"
+assert_eq "$hot_pair_sum" "$soc_hot" "soc: hot.txt's SOC equals the sum of its pair counts in pairs.txt ($hot_pair_sum)"
+
+# persistence: the shared log split at its median commit date; hot.txt has
+# in-window commits on both sides of every quartile point, so it must appear
+# in both halves. Nothing may appear in a third half.
+persist_file="$excavate_out/main/work/persist.txt"
+[[ -f "$persist_file" ]] || { printf '  FAIL persistence block wrote no persist.txt\n'; fail=$((fail + 1)); }
+persist_hot_first=0; persist_hot_second=0; persist_other=0
+while IFS="$tab" read -r c h f; do
+    case "$h" in
+        first)  [[ "$f" == hot.txt ]] && persist_hot_first="$c" ;;
+        second) [[ "$f" == hot.txt ]] && persist_hot_second="$c" ;;
+        *)      persist_other=$((persist_other + 1)) ;;
+    esac
+done < "$persist_file"
+assert_eq 0 "$persist_other" "persist: every row is tagged first or second"
+if [[ "$persist_hot_first" -ge 1 && "$persist_hot_second" -ge 1 ]]; then
+    printf '  ok   persist: hot.txt counted in both halves (%s + %s)\n' "$persist_hot_first" "$persist_hot_second"
+    pass=$((pass + 1))
+else
+    printf '  FAIL persist: hot.txt missing from a half (first=%s second=%s)\n' "$persist_hot_first" "$persist_hot_second"
+    fail=$((fail + 1))
+fi
+assert_eq 6 "$((persist_hot_first + persist_hot_second))" "persist: the two halves of hot.txt sum to its in-window revision count"
+assert_eq 0 "$(grep -Fc 'package-lock.json' "$persist_file" || true)" "persist: NONDOMAIN exclusion carries through the shared log"
+
+# baselines: one line, derived from hotspots.txt, whose knee share is computed
+# from the file's own first five rows
+excavate_find 'knee share' b_base
+base_line="$(cat "$excavate_out/main/b$b_base.out")"
+if [[ "$base_line" =~ ^files\ [0-9]+.median\ [0-9]+.p90\ [0-9]+.knee\ share\ [0-9]+%\ of\ [0-9]+\ revisions$ ]]; then
+    printf '  ok   baselines: one line with files, median, p90, knee share, total (%s)\n' "$base_line"; pass=$((pass + 1))
+else
+    printf '  FAIL baselines line has the wrong shape: %s\n' "$base_line"; fail=$((fail + 1))
+fi
+base_total="${base_line##* of }"; base_total="${base_total%% revisions}"
+hot_total="$(awk -F'\t' '{ t += $1 } END { print t + 0 }' "$excavate_out/main/work/hotspots.txt")"
+assert_eq "$hot_total" "$base_total" "baselines: the revision total equals the sum of hotspots.txt's revision column"
+
+# trend
+excavate_monotone() {   # file col -> inc | dec | other (exactly four rows required)
+    awk -F'\t' -v c="$2" 'NR > 1 { if ($c > prev) up++; else if ($c < prev) down++ } { prev = $c } END { if (NR == 4 && up == 3) print "inc"; else if (NR == 4 && down == 3) print "dec"; else print "other" }' "$1"
+}
+trend_hot="$excavate_out/trend-hot/b${b_trend}.out"
+trend_cpl="$excavate_out/trend-coupled/b${b_trend}.out"
+assert_eq 4 "$(count_lines "$(cat "$trend_hot")")" "trend on hot.txt prints four rows"
+assert_eq inc "$(excavate_monotone "$trend_hot" 3)" "trend on hot.txt: LOC strictly increases across the four points"
+assert_eq inc "$(excavate_monotone "$trend_hot" 4)" "trend on hot.txt: indentation strictly increases across the four points"
+assert_eq 4 "$(count_lines "$(cat "$trend_cpl")")" "trend on coupled.txt prints four rows"
+assert_eq dec "$(excavate_monotone "$trend_cpl" 3)" "trend on coupled.txt: LOC strictly decreases"
+assert_eq dec "$(excavate_monotone "$trend_cpl" 4)" "trend on coupled.txt: indentation strictly decreases"
+
+# contributors and last-active (one block, two commands: 2 + 2 lines)
+contrib="$(cat "$excavate_out/contrib/b${b_contrib}.out")"
+assert_eq 4 "$(count_lines "$contrib")" "contributors block prints two shortlog lines then two last-active lines"
+assert_matches "$(sed -n 1p <<<"$contrib")" "^ *4[[:space:]]+${author_a}\$" "contributors: first line is author A with 4 commits"
+assert_matches "$(sed -n 2p <<<"$contrib")" "^ *2[[:space:]]+${author_b}\$" "contributors: second line is author B with 2 commits"
+if [[ "$contrib" == *dependabot* ]]; then
+    printf '  FAIL contributors block lists the bot\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   contributors block does not list the bot\n'
+    pass=$((pass + 1))
+fi
+assert_eq "${author_a}${tab}${excavate_dates[16]}" "$(sed -n 3p <<<"$contrib")" "last-active: author A's last hot.txt commit is p17's date"
+assert_eq "${author_b}${tab}${excavate_dates[11]}" "$(sed -n 4p <<<"$contrib")" "last-active: author B's last hot.txt commit is p12's date"
+
+# vars.sh: a later shell (a miner's, or the next Bash tool call) has none of the
+# variables the blocks read. The persisted file must carry the RESOLVED values
+# (the SINCE override, not the setup block's default), and a block run in a
+# second, fresh process after sourcing it must reproduce the main pass. This is
+# the property the single-process main pass cannot see on its own.
+vars_file="$excavate_out/main/work/vars.sh"
+assert_eq 1 "$([[ -s "$vars_file" ]] && echo 1 || echo 0)" "vars.sh: the persisted variables file is written and non-empty"
+excavate_nondomain_n="$(bash -c 'eval "$(grep -m1 "^NONDOMAIN=(" <<<"$1")"; printf "%s" "${#NONDOMAIN[@]}"' _ "${excavate_blocks[1]}")"
+[[ "$excavate_nondomain_n" -ge 1 ]] || fatal "could not count the NONDOMAIN entries the shared setup declares"
+# shellcheck disable=SC2016  # the script is for the child shell to expand
+vars_probe='. "$1"; printf "%s\n%s\n%s\n%s\n" "$SINCE" "${#NONDOMAIN[@]}" "$START" "$(git -C "$2" config --get core.quotePath)"'
+vars_fresh="$(bash -c "$vars_probe" _ "$vars_file" "$excavate_sandbox")"
+assert_eq "2020-06-01" "$(sed -n 1p <<<"$vars_fresh")" "vars.sh: a fresh shell reads the overridden SINCE, not the setup block's default"
+assert_eq "$excavate_nondomain_n" "$(sed -n 2p <<<"$vars_fresh")" "vars.sh: a fresh shell reads NONDOMAIN as an array of the declared length ($excavate_nondomain_n)"
+assert_eq "2020-07-01" "$(sed -n 3p <<<"$vars_fresh")" "vars.sh: a fresh shell reads START recomputed from the overridden SINCE"
+assert_eq "false" "$(sed -n 4p <<<"$vars_fresh")" "vars.sh: a fresh shell inherits the core.quotePath export"
+
+# Re-run the shared-log block in a second process that only sources vars.sh. The
+# file lives in the pass's private TMPDIR, so the child writes its own log.txt.
+vars_second_log() {   # the block text to run after sourcing
+    local out="$excavate_out/second"
+    mkdir -p "$out"
+    # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+    { printf 'cd %q || exit 97\n. %q\n' "$excavate_sandbox" "$vars_file"; printf '%s\n' "$1"; printf 'wc -l < "$WORK/log.txt" | tr -d " "\n'; } > "$out/run.sh"
+    run_timed 60 bash "$out/run.sh" 2>"$out/stderr" </dev/null
+}
+assert_eq "$(wc -l < "$log_file" | tr -d ' ')" "$(vars_second_log "${excavate_blocks[b_log]}")" "vars.sh: the shared log rebuilt in a second process that only sources it has the main pass's line count"
+
+# --- Mutations: prove the assertions bite ------------------------------------
+#
+# Each mutant is the extracted block string with one clause removed, run through
+# the same harness. The skill text on disk is never edited. The shared-log block
+# carries the window and the exclusions that freq.txt and pairs.txt merely read,
+# so that is where those two clauses live and where they are removed.
+
+freq_is_six() { [[ "$(count_for "$1" hot.txt)" == "$excavate_planted_hot_revs" ]]; }
+orig_log="${excavate_blocks[b_log]}"
+
+# M1: drop --since from the shared log.
+mut="${orig_log/--since=\"\$SINCE\" /}"
+[[ "$mut" != "$orig_log" ]] || fatal "mutation M1 did not change the shared-log block; the clause it removes moved"
+excavate_blocks[b_log]="$mut"
+m1=0; xc_run "$excavate_out/m1" 120 UNUSED "$b_log" "$b_freq" || m1=$?
+excavate_blocks[b_log]="$orig_log"
+assert_eq 0 "$m1" "M1 (no --since) still runs"
+assert_eq 7 "$(count_for "$excavate_out/m1/work/freq.txt" hot.txt)" "M1: without --since hot.txt counts 7 (the pre-window commit leaks in)"
+if freq_is_six "$excavate_out/m1/work/freq.txt"; then
+    printf '  FAIL M1: the hot.txt == 6 assertion still passes on the --since-less output; it does not bite\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   M1: the hot.txt == 6 assertion FAILS on the --since-less output\n'
+    pass=$((pass + 1))
+fi
+if freq_is_six "$freq_file"; then
+    printf '  ok   M1 control: the same assertion passes on the unmutated output\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL M1 control: the assertion fails on the unmutated output\n'
+    fail=$((fail + 1))
+fi
+
+# M2: drop the NONDOMAIN pathspec from the shared log.
+mut="${orig_log/ \"\$\{NONDOMAIN\[@\]\}\"/}"
+[[ "$mut" != "$orig_log" ]] || fatal "mutation M2 did not change the shared-log block; the clause it removes moved"
+excavate_blocks[b_log]="$mut"
+m2=0; xc_run "$excavate_out/m2" 120 UNUSED "$b_log" "$b_pairs" || m2=$?
+excavate_blocks[b_log]="$orig_log"
+assert_eq 0 "$m2" "M2 (no NONDOMAIN) still runs"
+if grep -Fq 'package-lock.json' "$excavate_out/m2/work/pairs.txt"; then
+    printf '  ok   M2: without NONDOMAIN a package-lock.json pair appears, so the pairs assertion bites\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL M2: dropping NONDOMAIN produced no package-lock.json pair; the pairs assertion cannot see the exclusion\n'
+    fail=$((fail + 1))
+fi
+
+# M3: the trend guard. Force an empty revision (the sed address past the end of
+# revs.txt) so the guard is what separates "skip" from "report the index as
+# history", then remove the guard and show the tree's LOC comes back as data.
+orig_trend="${excavate_blocks[b_trend]}"
+forced="${orig_trend//\$(( (total * q + 3) \/ 4 ))p/\$(( total + 100 ))p}"
+[[ "$forced" != "$orig_trend" ]] || fatal "mutation M3 could not force an empty revision; the trend block's sed address changed"
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+guard='[ -n "$r" ] || continue'
+[[ "$forced" == *"$guard"* ]] || fatal "the trend block no longer carries '$guard'"
+unguarded="${forced/$guard/}"
+[[ "$unguarded" != "$forced" ]] || fatal "mutation M3 did not remove the guard"
+excavate_blocks[b_trend]="$forced"
+m3a=0; xc_run "$excavate_out/m3a" 120 hot.txt "$b_trend" || m3a=$?
+excavate_blocks[b_trend]="$unguarded"
+m3b=0; xc_run "$excavate_out/m3b" 120 hot.txt "$b_trend" || m3b=$?
+excavate_blocks[b_trend]="$orig_trend"
+assert_eq 0 "$((m3a + m3b))" "M3 (forced-empty revision, with and without the guard) runs"
+assert_eq 0 "$(wc -c < "$excavate_out/m3a/b${b_trend}.out" | tr -d ' ')" "M3: with the guard, an empty revision prints no row"
+assert_eq 4 "$(count_lines "$(cat "$excavate_out/m3b/b${b_trend}.out")")" "M3: without the guard, an empty revision still prints four rows"
+assert_eq "$hot_loc" "$(awk -F'\t' 'NR == 1 { print $3 }' "$excavate_out/m3b/b${b_trend}.out")" "M3: and those rows carry the working tree's LOC ($hot_loc) as if it were history"
+
+# M4: the hang guard. Strip the revision and the stdin redirect from the
+# contributors block; with the harness's open-but-silent stdin the block must
+# time out, proving the 20 s guard above can fire.
+orig_contrib="${excavate_blocks[b_contrib]}"
+mut="${orig_contrib// HEAD -- / -- }"
+mut="${mut// <\/dev\/null/}"
+[[ "$mut" != "$orig_contrib" ]] || fatal "mutation M4 did not change the contributors block"
+excavate_blocks[b_contrib]="$mut"
+m4=0; xc_run "$excavate_out/m4" 3 hot.txt "$b_contrib" || m4=$?
+excavate_blocks[b_contrib]="$orig_contrib"
+assert_eq 124 "$m4" "M4: without HEAD and </dev/null the contributors block hangs on stdin and is killed (shortlog read stdin)"
+
+# M5: test the bots regex against the whole header instead of the author field.
+m5_from='h[2] ~ bots'
+# shellcheck disable=SC2016  # literal awk text, not an expansion
+m5_to='$0 ~ bots'
+mut="${orig_log//"$m5_from"/$m5_to}"
+[[ "$mut" != "$orig_log" ]] || fatal "mutation M5 did not change the shared-log block; the author-field test moved"
+excavate_blocks[b_log]="$mut"
+m5=0; xc_run "$excavate_out/m5" 120 UNUSED "$b_log" "$b_freq" || m5=$?
+excavate_blocks[b_log]="$orig_log"
+assert_eq 0 "$m5" "M5 (whole-header bot test) still runs"
+assert_eq "" "$(count_for "$excavate_out/m5/work/freq.txt" ci-notes.txt)" "M5: a whole-header bot test drops the human commit, so the ci-notes.txt assertion bites"
+
+# M6: drop the core.quotePath export from the shared setup. Every later block
+# then sees the default, quoted spelling of café.txt.
+orig_setup="${excavate_blocks[1]}"
+mut="$(grep -vF 'GIT_CONFIG_KEY_0=core.quotePath' <<<"$orig_setup")"
+[[ "$mut" != "$orig_setup" ]] || fatal "mutation M6 did not change the shared setup block; the quotePath export moved"
+excavate_blocks[1]="$mut"
+m6=0; xc_run "$excavate_out/m6" 120 UNUSED "$b_log" "$b_freq" "$b_loc" "$b_hot" || m6=$?
+excavate_blocks[1]="$orig_setup"
+assert_eq 0 "$m6" "M6 (no core.quotePath export) still runs"
+assert_eq "" "$(awk -F'\t' '$2 == "café.txt" { print $1 }' "$excavate_out/m6/work/loc.txt")" "M6: under the default quotePath café.txt never reaches loc.txt, so the loc assertion bites"
+assert_eq 0 "$(grep -Fc 'café.txt' "$excavate_out/m6/work/hotspots.txt" || true)" "M6: and café.txt is absent from hotspots.txt, so the hotspots assertion bites"
+
+# M7: the second process re-runs the Step 0 variables block (the old advice)
+# instead of sourcing vars.sh. SINCE resets to '12 months ago', which is empty
+# against a 2020 fixture, so the log it builds has no lines and the vars.sh
+# line-count assertion above bites.
+m7_log="$(
+    out="$excavate_out/m7"; mkdir -p "$out"
+    # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+    { printf 'export TMPDIR=%q\ncd %q || exit 97\n' "$excavate_out/main/tmp" "$excavate_sandbox"; printf '%s\n' "${excavate_blocks[1]}"; printf '%s\n' "${excavate_blocks[b_log]}"; printf 'wc -l < "$WORK/log.txt" | tr -d " "\n'; } > "$out/run.sh"
+    run_timed 60 bash "$out/run.sh" 2>"$out/stderr" </dev/null
+)"
+assert_eq 0 "$m7_log" "M7: re-running the Step 0 block in the second process builds an empty log against the fixture window"
+if [[ "$m7_log" == "$(wc -l < "$log_file" | tr -d ' ')" ]]; then
+    printf '  FAIL M7: the stale-window rerun matches the main pass; the vars.sh line-count assertion does not bite\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   M7: the vars.sh line-count assertion FAILS when the second process re-runs Step 0 instead of sourcing\n'
+    pass=$((pass + 1))
 fi
 
 # -----------------------------------------------------------------------------

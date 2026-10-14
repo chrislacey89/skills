@@ -72,6 +72,13 @@ gh pr list --head "$(git branch --show-current)" --state open --json number,titl
 REPO_SLUG=$(git config --get remote.origin.url | sed -E 's|.*[:/]([^/]+)/([^/.]+)(\.git)?$|\1-\2|')
 ls -t "$HOME/.claude/research/$REPO_SLUG/" 2>/dev/null
 
+# Legacy-repo signal for /excavate: no docs/solutions/, a root commit older than ~6 months
+# (unknown on a shallow clone), and no excavation dossier yet
+[ -d docs/solutions ] && echo "docs/solutions: present" || echo "docs/solutions: absent"
+git rev-parse --is-shallow-repository
+git log --max-parents=0 --format=%cs HEAD </dev/null | sort | head -1
+ls "$HOME/.claude/research/$REPO_SLUG/"excavation-*.md 2>/dev/null
+
 # Open issues with PRD or slice labels, or in open milestones
 gh issue list --state open --json number,title,labels,milestone --limit 50
 
@@ -109,12 +116,13 @@ Walk through these checks in priority order. The first one that matches is the r
 | 3 | Open slice issues referencing a PRD, none closed | `/execute` on the highest-priority slice with an empty `open_blockers` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
 | 4 | Open slice issues referencing a PRD, some closed | `/execute` on the next slice with an empty `open_blockers` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |
 | 5 | Open PRD issue with no slice issues | `/prd-to-issues` on PRD #`<prd>` | "PRD #`<prd>` is shaped but not yet decomposed — `/prd-to-issues` breaks it into slices." |
-| 6 | Recent research archive entry for this repo, no open PRD issue matching its feature | `/write-a-prd` | "A recent research file for `<feature>` is archived but there is no PRD issue — `/write-a-prd` turns it into a shaped pitch." |
+| 6 | Recent research archive entry for this repo (excluding `excavation-*.md`, which is `/excavate`'s dossier, not a feature), no open PRD issue matching its feature | `/write-a-prd` | "A recent research file for `<feature>` is archived but there is no PRD issue — `/write-a-prd` turns it into a shaped pitch." |
 | 7 | Planning milestone with a `research-ready` feature issue | `/research` on the `research-ready` feature | "Milestone `<name>` has a `research-ready` feature — run `/research` on it." |
 | 8 | Planning milestone with only `roadmap bet` features | Promote one feature to `research-ready`, then `/research` | "Milestone `<name>` has only `roadmap bet` features — pick one, promote it, then `/research`." |
-| 9 | Shipped work but no `docs/solutions/` entry since the last merge | `/compound` | "The last merge shipped work that has not yet been compounded — run `/compound`." |
-| 10 | QA bugs open and no active feature work | `/execute` on the highest-priority QA bug | "You have `<N>` open QA bug issues — `/execute` to work through them." |
-| 11 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |
+| 9 | No `docs/solutions/` directory, root commit older than ~6 months, not a shallow clone, and no `excavation-*.md` in the research archive | `/excavate` | "This repo has history but no written decisions or research archive — `/excavate` recovers hotspots and cited decisions from git before the first feature." |
+| 10 | Shipped work but no `docs/solutions/` entry since the last merge | `/compound` | "The last merge shipped work that has not yet been compounded — run `/compound`." |
+| 11 | QA bugs open and no active feature work | `/execute` on the highest-priority QA bug | "You have `<N>` open QA bug issues — `/execute` to work through them." |
+| 12 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |
 
 "Unblocked" in signals #3 and #4 means an empty `open_blockers` from the Phase 1b frontier call — read it, do not infer it from `Blocked by` prose in the issue bodies. This is the same rule `/prd-to-issues` §9 and the Ralph loop prompt use, so all three selection sites agree by construction rather than by coincidence.
 

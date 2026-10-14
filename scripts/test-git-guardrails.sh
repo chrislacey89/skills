@@ -453,11 +453,20 @@ printf 'documented stale-stamp passes:   %d\n' "${#stale_allowed[@]}"
 gh_stub_dir="$(mktemp -d)"
 
 # Two commits that exist in THIS repository, so the guard's delta measurement
-# runs its measurable branch rather than its fallback. HEAD~1 is used rather
-# than a literal SHA: a literal would have to be updated forever, and the
-# suite would go quietly vacuous the day it stopped resolving.
-stamp_sha="$(git -C "$repo_root" rev-parse HEAD~1 2>/dev/null)"
-head_oid="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null)"
+# runs its measurable branch rather than its fallback. Resolved rather than
+# literal: a literal would have to be updated forever, and the suite would go
+# quietly vacuous the day it stopped resolving.
+#
+# The pair must be ADJACENT, because the assertion below expects a delta of
+# exactly one commit. `HEAD` and `HEAD~1` are not adjacent in CI: a pull
+# request checks out `refs/pull/N/merge`, whose first parent is the base
+# branch, so `HEAD~1..HEAD` is every commit on the PR plus the merge, and the
+# assertion failed on every multi-commit PR the moment #402 let this suite
+# run past its shallow-clone fatal. Taking the newest NON-merge commit on the
+# first-parent chain and its single parent makes `stamp..head` exactly one
+# commit by construction, in any checkout shape.
+head_oid="$(git -C "$repo_root" rev-list --first-parent --no-merges -1 HEAD 2>/dev/null)"
+stamp_sha="$(git -C "$repo_root" rev-parse "${head_oid}~1" 2>/dev/null)"
 [[ ${#stamp_sha} -eq 40 && ${#head_oid} -eq 40 && "$stamp_sha" != "$head_oid" ]] || \
     fatal "could not resolve two distinct 40-character commits in $repo_root (shallow clone?)"
 

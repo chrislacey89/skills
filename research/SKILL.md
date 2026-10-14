@@ -188,6 +188,8 @@ If relevant solutions exist, read them and incorporate their lessons. Note which
 
 **Scope check before transfer.** When a loaded solution doesn't state explicit scope or preconditions (the `Rule Scope` section added by `/compound`), or when its stated scope doesn't match the current work's structural shape, re-derive the recommendation from first principles rather than transferring it. A rule correct for a 2-step agent loop with a terminal forced tool can invert for a 3-step loop where the same tool is non-terminal — keyword match is not shape match. Verify the shape, don't skip the check.
 
+**Excavation dossier.** When `~/.claude/research/<repo-slug>/excavation-*.md` exists (written by `/excavate` on a legacy repo that was never compounded), read the newest one's Hotspots section and only the `stated` rows of its Decisions section for the paths this feature touches; `inferred` rows carry no research-level authority. Its Coverage block states the window and what the history could not show; treat its `date` as the snapshot date under the same staleness judgment as below.
+
 **Staleness check:** When reading a `docs/solutions/` file, check its `volatility` YAML field and `date`. If `volatile` and older than 90 days, or if the Shelf Life condition appears to have been met, note it as potentially stale before incorporating its lessons. Flag stale docs to the user — they should be updated or deleted.
 
 ### Phase 4: Research

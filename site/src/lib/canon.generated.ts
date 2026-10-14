@@ -88,6 +88,7 @@ export const canon: CanonWork[] = [
 		author: "Diomidis Spinellis",
 		type: "book",
 		citations: [
+			{ skill: "excavate", tier: "secondary" },
 			{ skill: "walk-commits", tier: "primary" },
 		],
 	},
@@ -158,6 +159,7 @@ export const canon: CanonWork[] = [
 		author: "Nancy Leveson",
 		type: "book",
 		citations: [
+			{ skill: "excavate", tier: "secondary" },
 			{ skill: "fix-findings", tier: "primary" },
 			{ skill: "pre-merge", tier: "secondary" },
 		],
@@ -190,6 +192,15 @@ export const canon: CanonWork[] = [
 			{ skill: "prototype", tier: "primary" },
 			{ skill: "research", tier: "secondary" },
 			{ skill: "tdd", tier: "secondary" },
+		],
+	},
+	{
+		full: "Fundamentals of Software Architecture — Mark Richards & Neal Ford",
+		title: "Fundamentals of Software Architecture",
+		author: "Mark Richards & Neal Ford",
+		type: "book",
+		citations: [
+			{ skill: "excavate", tier: "secondary" },
 		],
 	},
 	{
@@ -427,6 +438,7 @@ export const canon: CanonWork[] = [
 		author: "Felienne Hermans",
 		type: "book",
 		citations: [
+			{ skill: "excavate", tier: "secondary" },
 			{ skill: "prd-to-issues", tier: "secondary" },
 			{ skill: "re-pitch", tier: "secondary" },
 		],
@@ -518,6 +530,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "Working Effectively with Legacy Code — Michael Feathers",
+		title: "Working Effectively with Legacy Code",
+		author: "Michael Feathers",
+		type: "book",
+		citations: [
+			{ skill: "excavate", tier: "secondary" },
+		],
+	},
+	{
 		full: "Writing Effective Use Cases — Alistair Cockburn",
 		title: "Writing Effective Use Cases",
 		author: "Alistair Cockburn",
@@ -525,6 +546,15 @@ export const canon: CanonWork[] = [
 		citations: [
 			{ skill: "prd-to-issues", tier: "secondary" },
 			{ skill: "write-a-prd", tier: "secondary" },
+		],
+	},
+	{
+		full: "Your Code as a Crime Scene — Adam Tornhill",
+		title: "Your Code as a Crime Scene",
+		author: "Adam Tornhill",
+		type: "book",
+		citations: [
+			{ skill: "excavate", tier: "primary" },
 		],
 	},
 ];

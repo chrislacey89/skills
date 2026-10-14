@@ -92,7 +92,14 @@ jobs:
   script-tests:
     runs-on: ubuntu-latest
     steps:
+      # Full history, not the default depth-1 checkout: test-git-guardrails.sh
+      # resolves two distinct real commits for its stale-stamp cases and exits 2
+      # on a shallow clone, which had stopped this job before every later suite
+      # ran (red on prod since #349). Repaired here because it hid whether the
+      # two /excavate suites run at all in CI (#402).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Run sync-skill-references test suite
         run: bash scripts/test-sync-references.sh
@@ -259,6 +266,13 @@ jobs:
 
       - name: Run prose-fix disposition contract suite
         run: bash scripts/test-prose-fix-disposition.sh
+
+      # /compound Phase 3 and /excavate Step 7 both write the docs/solutions/ entry
+      # format, and /research Phase 3 reads `volatility` and `date` from every
+      # entry. A key changed in one template leaves the other's entries malformed
+      # with nothing failing; this extracts both key lists and compares them.
+      - name: Run excavate entry-contract suite
+        run: bash scripts/test-excavate-entry-contract.sh
 
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
