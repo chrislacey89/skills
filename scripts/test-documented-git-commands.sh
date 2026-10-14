@@ -2051,10 +2051,12 @@ excavate_find() {   # $1 = fixed substring that must occur in exactly one block;
 
 # Declared here so ShellCheck can see the assignments excavate_find makes via printf -v.
 b_cover=; b_log=; b_rev1=; b_rev2=; b_rename=; b_manifest=; b_freq=; b_loc=; b_hot=; b_conv=
-b_fix=; b_pairs=; b_soc=; b_trend=; b_contrib=; b_persist=; b_baseline=; b_base=; b_names=
+b_fix=; b_pairs=; b_soc=; b_trend=; b_contrib=; b_persist=; b_baseline=; b_base=; b_names=; b_vars=
 excavate_find 'is-shallow-repository' b_cover
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
 excavate_find '> "$WORK/log.txt"' b_log
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/vars.sh"' b_vars
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
 excavate_find '> "$WORK/names.txt"' b_names
 excavate_find "--grep='^Revert \"'" b_rev1
@@ -2081,7 +2083,7 @@ excavate_find 'git shortlog' b_contrib
 excavate_find '> "$WORK/persist.txt"' b_persist
 excavate_find 'knee share' b_baseline
 
-for b in "$b_cover" "$b_log" "$b_names" "$b_rev1" "$b_rev2" "$b_rename" "$b_manifest" "$b_freq" "$b_loc" "$b_hot" "$b_conv" "$b_fix" "$b_pairs" "$b_soc" "$b_trend" "$b_contrib" "$b_persist" "$b_baseline"; do
+for b in "$b_cover" "$b_vars" "$b_log" "$b_names" "$b_rev1" "$b_rev2" "$b_rename" "$b_manifest" "$b_freq" "$b_loc" "$b_hot" "$b_conv" "$b_fix" "$b_pairs" "$b_soc" "$b_trend" "$b_contrib" "$b_persist" "$b_baseline"; do
     [[ "${excavate_class[b]}" == git ]] || fatal "block $b was located by content but is classed '${excavate_class[b]}', not git"
 done
 
@@ -2545,6 +2547,34 @@ fi
 assert_eq "${author_a}${tab}${excavate_dates[16]}" "$(sed -n 3p <<<"$contrib")" "last-active: author A's last hot.txt commit is p17's date"
 assert_eq "${author_b}${tab}${excavate_dates[11]}" "$(sed -n 4p <<<"$contrib")" "last-active: author B's last hot.txt commit is p12's date"
 
+# vars.sh: a later shell (a miner's, or the next Bash tool call) has none of the
+# variables the blocks read. The persisted file must carry the RESOLVED values
+# (the SINCE override, not the setup block's default), and a block run in a
+# second, fresh process after sourcing it must reproduce the main pass. This is
+# the property the single-process main pass cannot see on its own.
+vars_file="$excavate_out/main/work/vars.sh"
+assert_eq 1 "$([[ -s "$vars_file" ]] && echo 1 || echo 0)" "vars.sh: the persisted variables file is written and non-empty"
+excavate_nondomain_n="$(bash -c 'eval "$(grep -m1 "^NONDOMAIN=(" <<<"$1")"; printf "%s" "${#NONDOMAIN[@]}"' _ "${excavate_blocks[1]}")"
+[[ "$excavate_nondomain_n" -ge 1 ]] || fatal "could not count the NONDOMAIN entries the shared setup declares"
+# shellcheck disable=SC2016  # the script is for the child shell to expand
+vars_probe='. "$1"; printf "%s\n%s\n%s\n%s\n" "$SINCE" "${#NONDOMAIN[@]}" "$START" "$(git -C "$2" config --get core.quotePath)"'
+vars_fresh="$(bash -c "$vars_probe" _ "$vars_file" "$excavate_sandbox")"
+assert_eq "2020-06-01" "$(sed -n 1p <<<"$vars_fresh")" "vars.sh: a fresh shell reads the overridden SINCE, not the setup block's default"
+assert_eq "$excavate_nondomain_n" "$(sed -n 2p <<<"$vars_fresh")" "vars.sh: a fresh shell reads NONDOMAIN as an array of the declared length ($excavate_nondomain_n)"
+assert_eq "2020-07-01" "$(sed -n 3p <<<"$vars_fresh")" "vars.sh: a fresh shell reads START recomputed from the overridden SINCE"
+assert_eq "false" "$(sed -n 4p <<<"$vars_fresh")" "vars.sh: a fresh shell inherits the core.quotePath export"
+
+# Re-run the shared-log block in a second process that only sources vars.sh. The
+# file lives in the pass's private TMPDIR, so the child writes its own log.txt.
+vars_second_log() {   # the block text to run after sourcing
+    local out="$excavate_out/second"
+    mkdir -p "$out"
+    # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+    { printf 'cd %q || exit 97\n. %q\n' "$excavate_sandbox" "$vars_file"; printf '%s\n' "$1"; printf 'wc -l < "$WORK/log.txt" | tr -d " "\n'; } > "$out/run.sh"
+    run_timed 60 bash "$out/run.sh" 2>"$out/stderr" </dev/null
+}
+assert_eq "$(wc -l < "$log_file" | tr -d ' ')" "$(vars_second_log "${excavate_blocks[b_log]}")" "vars.sh: the shared log rebuilt in a second process that only sources it has the main pass's line count"
+
 # --- Mutations: prove the assertions bite ------------------------------------
 #
 # Each mutant is the extracted block string with one clause removed, run through
@@ -2649,6 +2679,25 @@ excavate_blocks[1]="$orig_setup"
 assert_eq 0 "$m6" "M6 (no core.quotePath export) still runs"
 assert_eq "" "$(awk -F'\t' '$2 == "café.txt" { print $1 }' "$excavate_out/m6/work/loc.txt")" "M6: under the default quotePath café.txt never reaches loc.txt, so the loc assertion bites"
 assert_eq 0 "$(grep -Fc 'café.txt' "$excavate_out/m6/work/hotspots.txt" || true)" "M6: and café.txt is absent from hotspots.txt, so the hotspots assertion bites"
+
+# M7: the second process re-runs the Step 0 variables block (the old advice)
+# instead of sourcing vars.sh. SINCE resets to '12 months ago', which is empty
+# against a 2020 fixture, so the log it builds has no lines and the vars.sh
+# line-count assertion above bites.
+m7_log="$(
+    out="$excavate_out/m7"; mkdir -p "$out"
+    # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+    { printf 'export TMPDIR=%q\ncd %q || exit 97\n' "$excavate_out/main/tmp" "$excavate_sandbox"; printf '%s\n' "${excavate_blocks[1]}"; printf '%s\n' "${excavate_blocks[b_log]}"; printf 'wc -l < "$WORK/log.txt" | tr -d " "\n'; } > "$out/run.sh"
+    run_timed 60 bash "$out/run.sh" 2>"$out/stderr" </dev/null
+)"
+assert_eq 0 "$m7_log" "M7: re-running the Step 0 block in the second process builds an empty log against the fixture window"
+if [[ "$m7_log" == "$(wc -l < "$log_file" | tr -d ' ')" ]]; then
+    printf '  FAIL M7: the stale-window rerun matches the main pass; the vars.sh line-count assertion does not bite\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   M7: the vars.sh line-count assertion FAILS when the second process re-runs Step 0 instead of sourcing\n'
+    pass=$((pass + 1))
+fi
 
 # -----------------------------------------------------------------------------
 

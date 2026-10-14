@@ -119,11 +119,17 @@ it comes from; none is restated elsewhere in this file.
 ## Process
 
 Every fenced block below runs as written. Each Bash tool call is a fresh shell,
-so no variable survives from one call to the next: the Step 0 variables block
-is idempotent, and you re-run it at the top of every shell a later block runs
-in (`WORK` is a path derived from the repo, so every re-run lands on the same
-directory). The miners are handed the absolute `$WORK` path in their brief
-rather than inheriting the variable. `<path>` is the one placeholder,
+so no variable survives from one call to the next. The Step 0 variables block
+runs once; the block after it writes every resolved value to `$WORK/vars.sh`,
+and every later shell, yours or a miner's, begins with `. "$WORK/vars.sh"`
+instead of re-running Step 0, which would reset `SINCE` to its default and
+discard a `--since` or a `NONDOMAIN` extension. A shell that skips the file
+fails without an error: `git log --since=""` returns no commits and
+`grep -Ev ""` prints nothing, and empty output reads as the valid answer "no
+reverts". `WORK` is a path derived from the repo, so a new shell re-derives it
+with the `WORK=` expression from Step 0 and sources the file under it; the
+miners are handed the absolute path to `vars.sh` in their brief rather than
+inheriting any variable. `<path>` is the one placeholder,
 substituted per hotspot.
 Flag semantics are the tool's own documentation
 ([git-log](https://git-scm.com/docs/git-log),
@@ -167,7 +173,18 @@ moves `HEAD` onto the docs branch; it stays valid across shells and is removed
 in Step 9. If a directory from an interrupted run is already there, delete it
 before the first Step 2 block so stale files cannot pass for this run's output.
 
-Then measure coverage:
+Persist the resolved values once `NONDOMAIN` is extended (and again after the
+Step 1 gate, if the user changes the window: source the file, set `SINCE`,
+re-run Step 0's `START=` line, then run this block again):
+
+```bash
+{
+  declare -p SINCE START NONDOMAIN BOTS MAXFILES WORK
+  declare -px GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+} > "$WORK/vars.sh"
+```
+
+Then measure coverage, in a shell that begins with `. "$WORK/vars.sh"`:
 
 ```bash
 git rev-parse --is-shallow-repository
@@ -218,6 +235,10 @@ window. Below roughly forty in-window commits, offer to widen to the last N
 commits instead and say so in the block; a dormant repo still has a history,
 it just is not in the last year.
 
+If the answer changes the window, persist the new values before Step 2 (the
+block after the Step 0 variables does it), so the miners read the window the
+user approved.
+
 ### 2. Build the shared log and dispatch the miners
 
 One scoped, filtered log feeds every analysis, so the window, bot filter, and
@@ -259,8 +280,11 @@ fetched, then `sort -u` is re-run over it with blank lines removed, because
 one blank line in an `rg -F -f` pattern file matches every line.
 
 Now dispatch **two sub-agents in parallel** with the `Agent` tool. Both read
-`$WORK/log.txt`; neither re-runs `git log` with its own window. Each returns
-the paths it wrote plus a ten-line summary, not the data.
+`$WORK/log.txt`; neither re-runs `git log` with its own window. Each is handed
+the absolute path of `vars.sh` and begins every shell with `. <that path>`
+before running any block, because a miner's shell has none of the variables the
+blocks read. Each returns the paths it wrote plus a ten-line summary, not the
+data.
 
 - **Miner A, hotspots** (deterministic shell; it runs the blocks in Steps 3 and
   5 and writes `freq.txt`, `fix.txt`, `loc.txt`, `hotspots.txt`, `pairs.txt`,
