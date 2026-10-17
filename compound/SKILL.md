@@ -208,14 +208,14 @@ Determine the category for filing. Use the most specific category that fits:
 
 **Before writing the Root Cause section**, apply two tests. First: was the outcome a predictable consequence of the decision, or did it depend on conditions that weren't available to reason about at decision time? If unpredictable from the decision, the lesson belongs in Context (what you now know about the environment), not Prevention (what to do differently next time). Second: under what conditions would this lesson mislead a future agent? If you can't name a condition that would make the lesson wrong, tighten it until it's falsifiable or drop it. For Pattern and Structure lessons, record the answer in the Rule Scope section of the template so future `/research` consumers can pattern-match their own work's shape against the preconditions without re-deriving them from prose.
 
-**Ensure the directory exists:**
+**Ensure the directory exists (in-tree `docs/solutions` write target only; on `sidecar`, or on `in-tree` with another `in_tree_path`, create nothing in the project tree here, and Phase 5 handles the destination):**
 ```bash
 mkdir -p docs/solutions/<category>
 ```
 
 **Filename convention:** `<kebab-case-problem-slug>-<YYYY-MM-DD>.md`
 
-Example: `docs/solutions/integration-issues/ably-presence-channel-auth-2026-03-28.md`
+Example (in-tree `docs/solutions` target): `docs/solutions/integration-issues/ably-presence-channel-auth-2026-03-28.md`
 
 ```markdown
 ---
