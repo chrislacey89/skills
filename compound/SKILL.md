@@ -346,7 +346,7 @@ grep -rl "relevant-keyword" "$(bash "$SC" path solutions)" docs/solutions/ 2>/de
 Search the sidecar directory the resolver prints and the project's `in_tree_path` (substitute it for `docs/solutions/` when it differs; skip it when it is `none`). On `SIDECAR MISS`, or with no sidecar, search `docs/solutions/` alone. The defect clustering check below reads the same two locations.
 
 If a related solution already exists:
-- **If it's the same problem solved again:** Update the existing file instead of creating a duplicate. Add new context, note if the solution changed.
+- **If it's the same problem solved again:** Update the existing file instead of creating a duplicate. Add new context, note if the solution changed. Edit it in place only when it sits in the store this entry's write target commits to (Phase 5): the sidecar for `sidecar`, the project's `in_tree_path` for `in-tree`. A match in the other store is read, not edited, because no Phase 5 branch commits there; write the new entry to the write target and cite the match from it. An in-place edit to a sidecar file is committed with `sidecar.sh commit`, never `git add` in the project.
 - **If it's a related but distinct problem:** Create the new file and add cross-references in both documents.
 - **If the existing solution is now outdated:** Update or supersede it. Never silently let stale solutions persist.
 
