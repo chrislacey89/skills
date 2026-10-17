@@ -367,7 +367,7 @@ git config --file "$GIT_CONFIG_GLOBAL" core.hooksPath "$tmp/badhooks"
 run "$HOSTILE" init --name hostile --mode guest --write sidecar --in-tree-path none
 check "init exits 1 when the initial commit fails" 1 "$rc"
 contains "the failure is the hostile hook, not an alias refusal" "hostile global pre-commit" "$out"
-check "a failed init leaves no sidecar directory" "no" "$([ -e "$SKILL_KIT_SIDECAR_ROOT/hostile" ] && echo yes || echo no)"
+check "a failed init leaves no sidecar directory" "no" "$(if [ -e "$SKILL_KIT_SIDECAR_ROOT/hostile" ]; then echo yes; else echo no; fi)"
 cp "$tmp/gitconfig.good" "$GIT_CONFIG_GLOBAL"
 run "$HOSTILE" init --name hostile --mode guest --write sidecar --in-tree-path none
 check "a retry after removing the hook succeeds" 0 "$rc"
@@ -390,7 +390,7 @@ PATH="$tmp/jqshim:$PATH"
 run "$JQFAIL" init --name jqfail --mode guest --write sidecar --in-tree-path none
 PATH="$SAVED_PATH"
 check "init exits 1 when the sidecar.json write fails" 1 "$rc"
-check "a failed jq write leaves no sidecar directory" "no" "$([ -e "$SKILL_KIT_SIDECAR_ROOT/jqfail" ] && echo yes || echo no)"
+check "a failed jq write leaves no sidecar directory" "no" "$(if [ -e "$SKILL_KIT_SIDECAR_ROOT/jqfail" ]; then echo yes; else echo no; fi)"
 run "$JQFAIL" init --name jqfail --mode guest --write sidecar --in-tree-path none
 check "a retry after the jq failure succeeds" 0 "$rc"
 

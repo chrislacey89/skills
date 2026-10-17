@@ -81,7 +81,7 @@ norm_remote() {
     rest="${rest%.git}"
     while [ "${rest%/}" != "$rest" ]; do rest="${rest%/}"; done
     while [ "${rest#/}" != "$rest" ]; do rest="${rest#/}"; done
-    [ -n "$host" ] && [ -n "$rest" ] || return 0
+    if ! { [ -n "$host" ] && [ -n "$rest" ]; }; then return 0; fi
     lower "$host/$rest"
 }
 
@@ -306,7 +306,7 @@ cmd_init() {
 
 cmd_config() {
     local sc
-    [ "${1:-}" = "get" ] && [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
+    if ! { [ "${1:-}" = "get" ] && [ $# -eq 2 ]; }; then die_usage "usage: sidecar.sh config get <dotted.key>"; fi
     sc="$(do_resolve)" || exit 1
     jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
 }
@@ -330,7 +330,7 @@ cmd_commit() {
             *)  paths+=("$1"); shift ;;
         esac
     done
-    [ "$have_msg" -eq 1 ] && [ -n "$msg" ] || die_usage "usage: sidecar.sh commit -- <path>... -m <msg>"
+    if ! { [ "$have_msg" -eq 1 ] && [ -n "$msg" ]; }; then die_usage "usage: sidecar.sh commit -- <path>... -m <msg>"; fi
     [ "${#paths[@]}" -gt 0 ] || die_usage "usage: sidecar.sh commit -- <path>... -m <msg>"
     sc="$(do_resolve)" || exit 1
     real="$(cd "$sc" && pwd -P)"
@@ -363,7 +363,7 @@ cmd_require() {
             *) die_usage "require: unknown argument: $1" ;;
         esac
     done
-    [ -n "$path" ] && [ -n "$from" ] || die_usage "usage: sidecar.sh require <path> --from <referrer>"
+    if ! { [ -n "$path" ] && [ -n "$from" ]; }; then die_usage "usage: sidecar.sh require <path> --from <referrer>"; fi
     if [ ! -e "$path" ]; then
         printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
         exit 1
