@@ -334,16 +334,22 @@ volatility: evergreen | stable | volatile
 
 Before committing, search for existing solutions that might overlap:
 
-Search every place a lesson can live, not just the project tree. Resolve both locations through this skill's bundled resolver (Phase 5's *Write target* names it; `SC` is the same path):
+Search every place a lesson can live, not just the project tree. Resolve both locations through this skill's bundled resolver (Phase 5's *Write target* names it; `SC` is the same path). The block searches the sidecar's `solutions/` directory and the project's `in_tree_path` (skipped when it is `none`); on `SIDECAR MISS`, or with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-bash "$SC" path solutions                       # the sidecar's solutions/ directory
-bash "$SC" config get solutions.in_tree_path    # docs/solutions | docs/adr | <path> | none
-grep -rl "relevant-keyword" "$(bash "$SC" path solutions)" docs/solutions/ 2>/dev/null
+KW="relevant-keyword"
+SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
+ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
+[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
+for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
+  case "$DIR" in ""|none) continue ;; esac
+  [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
+done
+true
 ```
 
-Search the sidecar directory the resolver prints and the project's `in_tree_path` (substitute it for `docs/solutions/` when it differs; skip it when it is `none`). On `SIDECAR MISS`, or with no sidecar, search `docs/solutions/` alone. The defect clustering check below reads the same two locations.
+The defect clustering check below reads the same two locations.
 
 If a related solution already exists:
 - **If it's the same problem solved again:** Update the existing file instead of creating a duplicate. Add new context, note if the solution changed. Edit it in place only when it sits in the store this entry's write target commits to (Phase 5): the sidecar for `sidecar`, the project's `in_tree_path` for `in-tree`. A match in the other store is read, not edited, because no Phase 5 branch commits there; write the new entry to the write target and cite the match from it. An in-place edit to a sidecar file is committed with `sidecar.sh commit`, never `git add` in the project.
