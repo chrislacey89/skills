@@ -372,15 +372,13 @@ section "a non-docs/solutions in_tree_path stays off the in-PR hand-back"
 # The two discriminators above read only `docs/solutions/` paths. An in-tree
 # entry at another in_tree_path (docs/adr, ...) committed in-PR would register
 # as "outside" and reopen the /compound -> /pre-merge -> /compound bounce, so
-# Phase 5 routes it to the post-merge fallback until the discriminators read
+# Phase 5 routes it to a separate doc PR until the discriminators read
 # in_tree_path. Pin that the routing line is still there.
 phase5="$(extract_section "$compound_skill" "### Phase 5: Commit")"
 # shellcheck disable=SC2016  # literal backticks are the text being matched
 in_tree_line="$(grep -F -- '**`in-tree`**' <<<"$phase5" || true)"
 assert_eq "1" "$(grep -cF 'does **not** take the in-PR path' <<<"$in_tree_line" || true)" \
     "Phase 5's in-tree bullet keeps a non-docs/solutions in_tree_path off the in-PR path"
-assert_eq "1" "$(grep -cF 'post-merge fallback' <<<"$in_tree_line" || true)" \
-    "...and sends it to the post-merge fallback"
 
 # -----------------------------------------------------------------------------
 

@@ -370,7 +370,7 @@ bash "$SC" config get solutions.in_tree_path   # docs/solutions | docs/adr | <pa
 
 - **`sidecar`** — take the sidecar branch below.
 - **`ask`** — in a HITL run, offer the choice for this entry as an `AskUserQuestion` with the sidecar first and marked recommended; in an AFK run, take the sidecar branch without asking and say so in the Phase 6 report (`write: ask → sidecar (AFK, no prompt)`).
-- **`in-tree`** — commit in the project as below. When `in_tree_path` is `docs/solutions`, that is the in-PR path that follows, unchanged. Otherwise the entry goes under `in_tree_path` in the shape Phase 3 imitated, but it does **not** take the in-PR path: the `/pre-merge` re-run and `/closeout` recognize a compound commit only by `docs/solutions/` paths, so a commit at another path would read as code and re-open the `/compound` bounce. Take the post-merge fallback at the end of this phase (a small separate PR for the doc) and say so in the Phase 6 report.
+- **`in-tree`** — commit in the project as below. When `in_tree_path` is `docs/solutions`, that is the in-PR path that follows, unchanged. Otherwise the entry goes under `in_tree_path` in the shape Phase 3 imitated, but it does **not** take the in-PR path: the `/pre-merge` re-run and `/closeout` recognize a compound commit only by `docs/solutions/` paths, so a commit at another path would read as code and re-open the `/compound` bounce. Take the doc-PR branch below instead, and say so in the Phase 6 report.
 - **`SIDECAR MISS`** (the resolver exits 1 and prints the `init` command) — if the repo has a committed `docs/solutions/`, it predates the sidecar: show the miss line as a notice and continue in-tree as below. Otherwise stop, print the `init` command exactly as the resolver gave it, and write nothing; creating a sidecar is a human act.
 
 **Sidecar branch.** The entry is written into the sidecar and committed there. The project's tree, its `.git`, and the PR branch are not touched, so the head does not move past the review stamp and the `/pre-merge` re-run below does not apply. Two content rules hold in this branch because a guest sidecar is a personal store outside the client's review: apply the same secret redaction as an in-tree entry, and copy no fenced block longer than 20 lines from the client's tree — describe the code and cite its path instead.
@@ -389,6 +389,8 @@ bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
 ```
 
 `commit` never pushes. Phase 4's mechanism, if any, lives in the project and goes through the in-PR path on its own; the sidecar holds the lesson only. Then go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
+
+**Doc-PR branch (in-tree at an `in_tree_path` other than `docs/solutions`).** The lesson is known while PR #<n> is still open, so this is not the post-merge fallback and nothing is committed onto the base branch directly. Commit the entry alone on a new branch cut from the base branch, push that branch, and open a small PR for it. Stage only the entry: Phase 4's mechanism, if any, belongs with the code it guards and goes through the in-PR path on its own, as in the sidecar branch — that commit does move the head past the stamp, so it hands to the `/pre-merge` re-run. Merge the doc PR only after `/closeout` has merged PR #<n>, so the entry never lands on base citing code that is not there yet. Then go to Phase 6's doc-PR block.
 
 **In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR. Committing does not review it — the hand-back below is what makes it reviewed and merged with the code that taught it:
 
@@ -448,6 +450,18 @@ Key lesson: [One sentence summary of the most important takeaway]
 This will be consulted automatically during future /research and /write-a-prd sessions.
 
 **Loop closed.** Next: /help when you return to this repo.
+```
+
+**Doc-PR path** — the entry rides its own PR, and PR #<n> is still open, so the loop is not closed:
+
+```
+Compounded onto doc PR #<m>: <in_tree_path>/<filename>.md   (merge after PR #<n>)
+Write target: in-tree at <in_tree_path>
+Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
+
+Key lesson: [One sentence summary of the most important takeaway]
+
+Next: /pre-merge on PR #<n> if the mechanism was committed there (the head moved past the stamp), otherwise /closeout on PR #<n>; then merge doc PR #<m>.
 ```
 
 **Sidecar path** — the lesson is committed in the sidecar, and the PR head did not move, so no re-run follows:
