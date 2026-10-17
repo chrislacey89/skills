@@ -273,6 +273,12 @@ cmd_init() {
     fi
 
     mkdir -p "$dir" || refuse "init: cannot create $dir"
+    # $dir did not exist above, so init created it. Any failure from here on
+    # (git init, config, the jq write, the first commit) would leave a
+    # sidecar claiming these keys with no committed sidecar.json, and block
+    # every retry; remove it on any exit until success clears the trap.
+    INIT_CREATED_DIR="$dir"
+    trap 'rm -rf "$INIT_CREATED_DIR"' EXIT
     sgit "$dir" init -q -b main || refuse "init: git init failed in $dir"
     sgit "$dir" config user.name "$gname"
     sgit "$dir" config user.email "$gemail"
@@ -293,12 +299,8 @@ cmd_init() {
            verify: { typecheck: "", test: "", lint: "", package_manager: "", hook_manager: "" },
            created: $created
          }' --args $keys > "$dir/sidecar.json" || refuse "init: could not write sidecar.json"
-    # A sidecar whose first commit failed would claim these keys while holding
-    # no committed sidecar.json, and block every retry; leave nothing behind.
-    if ! commit_paths "$dir" "sidecar: init $name" sidecar.json; then
-        rm -rf "$dir"
-        exit 1
-    fi
+    commit_paths "$dir" "sidecar: init $name" sidecar.json || exit 1
+    trap - EXIT
     printf '%s\n' "$dir"
 }
 

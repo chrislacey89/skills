@@ -369,5 +369,26 @@ run "$HOSTILE" init --name hostile --mode guest --write sidecar --in-tree-path n
 check "a retry after removing the hook succeeds" 0 "$rc"
 check "the retried sidecar.json is committed" "" "$(git -C "$SKILL_KIT_SIDECAR_ROOT/hostile" status --porcelain)"
 
+section "init cleans up when the sidecar.json write fails"
+
+# A PATH shim fails only the `jq -n` that builds sidecar.json; every other jq
+# call passes through to the real binary. The redirect has already created an
+# empty sidecar.json by then.
+REAL_JQ="$(command -v jq)"
+mkdir -p "$tmp/jqshim"
+# shellcheck disable=SC2016 # the shim body is meant to be literal
+printf '#!/bin/sh\n[ "$1" = "-n" ] && exit 1\nexec "%s" "$@"\n' "$REAL_JQ" > "$tmp/jqshim/jq"
+chmod +x "$tmp/jqshim/jq"
+JQFAIL="$tmp/jqfail"
+mkrepo "$JQFAIL"
+SAVED_PATH="$PATH"
+PATH="$tmp/jqshim:$PATH"
+run "$JQFAIL" init --name jqfail --mode guest --write sidecar --in-tree-path none
+PATH="$SAVED_PATH"
+check "init exits 1 when the sidecar.json write fails" 1 "$rc"
+check "a failed jq write leaves no sidecar directory" "no" "$([ -e "$SKILL_KIT_SIDECAR_ROOT/jqfail" ] && echo yes || echo no)"
+run "$JQFAIL" init --name jqfail --mode guest --write sidecar --in-tree-path none
+check "a retry after the jq failure succeeds" 0 "$rc"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
