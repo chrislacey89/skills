@@ -60,7 +60,10 @@ runo() { local d="$1"; shift; out="$(cd "$d" && bash "$SC" "$@" 2>/dev/null)"; r
 
 mkrepo() {
     git init -q "$1"
-    git -C "$1" commit -q --allow-empty -m "root"
+    # The path is in the message so every fixture has its own root SHA: with
+    # identical empty commits, repos made in the same second share a root
+    # commit, which sidecar.sh rightly treats as one project.
+    git -C "$1" commit -q --allow-empty -m "root $1"
     git -C "$1" commit -q --allow-empty -m "second"
 }
 
@@ -363,6 +366,7 @@ cp "$GIT_CONFIG_GLOBAL" "$tmp/gitconfig.good"
 git config --file "$GIT_CONFIG_GLOBAL" core.hooksPath "$tmp/badhooks"
 run "$HOSTILE" init --name hostile --mode guest --write sidecar --in-tree-path none
 check "init exits 1 when the initial commit fails" 1 "$rc"
+contains "the failure is the hostile hook, not an alias refusal" "hostile global pre-commit" "$out"
 check "a failed init leaves no sidecar directory" "no" "$([ -e "$SKILL_KIT_SIDECAR_ROOT/hostile" ] && echo yes || echo no)"
 cp "$tmp/gitconfig.good" "$GIT_CONFIG_GLOBAL"
 run "$HOSTILE" init --name hostile --mode guest --write sidecar --in-tree-path none
