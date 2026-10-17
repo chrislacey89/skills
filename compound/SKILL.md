@@ -204,7 +204,7 @@ Determine the category for filing. Use the most specific category that fits:
 
 ### Phase 3: Write the Solution Document
 
-Create the document in `docs/solutions/<category>/`. Use the template below.
+**Choose the write target first** — Phase 5's *Write target* block reads it from the project's sidecar. On `in-tree` with `in_tree_path` of `docs/solutions` (and on the no-sidecar fallback), create the document in `docs/solutions/<category>/` with the template below. On `sidecar`, use the same template and filename; Phase 5 says where the file goes. On `in-tree` with any other `in_tree_path` (`docs/adr`, `docs/decisions`, …), do not impose this template: read the newest existing file at that path and imitate its shape, headings, and filename pattern, because that repo's convention outranks the pack's.
 
 **Before writing the Root Cause section**, apply two tests. First: was the outcome a predictable consequence of the decision, or did it depend on conditions that weren't available to reason about at decision time? If unpredictable from the decision, the lesson belongs in Context (what you now know about the environment), not Prevention (what to do differently next time). Second: under what conditions would this lesson mislead a future agent? If you can't name a condition that would make the lesson wrong, tighten it until it's falsifiable or drop it. For Pattern and Structure lessons, record the answer in the Rule Scope section of the template so future `/research` consumers can pattern-match their own work's shape against the preconditions without re-deriving them from prose.
 
@@ -353,6 +353,36 @@ Name the pattern in the entry as well (e.g., "both auth integration bugs were sp
 
 ### Phase 5: Commit
 
+**Write target.** The project's sidecar records where lessons go. Read it through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path or run git against one yourself:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" config get solutions.write          # sidecar | in-tree | ask
+bash "$SC" config get solutions.in_tree_path   # docs/solutions | docs/adr | <path> | none
+```
+
+- **`sidecar`** — take the sidecar branch below.
+- **`ask`** — in a HITL run, offer the choice for this entry as an `AskUserQuestion` with the sidecar first and marked recommended; in an AFK run, take the sidecar branch without asking and say so in the Phase 6 report (`write: ask → sidecar (AFK, no prompt)`).
+- **`in-tree`** — commit in the project as below. When `in_tree_path` is `docs/solutions`, that is the in-PR path that follows, unchanged. Otherwise the entry goes under `in_tree_path` in the shape Phase 3 imitated, on the same in-PR path.
+- **`SIDECAR MISS`** (the resolver exits 1 and prints the `init` command) — if the repo has a committed `docs/solutions/`, it predates the sidecar: show the miss line as a notice and continue in-tree as below. Otherwise stop, print the `init` command exactly as the resolver gave it, and write nothing; creating a sidecar is a human act.
+
+**Sidecar branch.** The entry is written into the sidecar and committed there. The project's tree, its `.git`, and the PR branch are not touched, so the head does not move past the review stamp and the `/pre-merge` re-run below does not apply. Two content rules hold in this branch because a guest sidecar is a personal store outside the client's review: apply the same secret redaction as an in-tree entry, and copy no fenced block longer than 20 lines from the client's tree — describe the code and cite its path instead.
+
+<!-- sidecar-write: compound -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+DIR="$(bash "$SC" path solutions)/<category>" || exit 1
+mkdir -p "$DIR"
+ENTRY="$DIR/<slug>-<YYYY-MM-DD>.md"
+cat > "$ENTRY" <<'EOF'
+<the entry, written with Phase 3's template>
+EOF
+bash "$SC" require "$ENTRY" --from "/compound Phase 5" || exit 1
+bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
+```
+
+`commit` never pushes. Phase 4's mechanism, if any, lives in the project and goes through the in-PR path on its own; the sidecar holds the lesson only. Then go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
+
 **In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR. Committing does not review it — the hand-back below is what makes it reviewed and merged with the code that taught it:
 
 ```bash
@@ -412,6 +442,20 @@ This will be consulted automatically during future /research and /write-a-prd se
 
 **Loop closed.** Next: /help when you return to this repo.
 ```
+
+**Sidecar path** — the lesson is committed in the sidecar, and the PR head did not move, so no re-run follows:
+
+```
+Compounded to sidecar: <absolute path to the entry>
+Write target: sidecar   [or: ask → sidecar (HITL choice)] [or: ask → sidecar (AFK, no prompt)]
+Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
+
+Key lesson: [One sentence summary of the most important takeaway]
+
+The sidecar is local and never pushed; readers consult it alongside the repo's in-tree path.
+```
+
+If Phase 4's mechanism was committed onto the PR, that commit did move the head, so name the `/pre-merge` re-run as the next step in prose. Otherwise this path ends here like the post-merge one.
 
 On the in-PR path two steps still follow — `/pre-merge` re-reads the delta and re-stamps, then `/closeout` performs the merge — so `/compound` hands to the first of them with a `**Next session:**` line. On the post-merge path `/compound` is the end of the loop, so it prints the loop-closed line instead. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
 

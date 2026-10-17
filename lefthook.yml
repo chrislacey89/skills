@@ -103,6 +103,8 @@ pre-push:
       run: bash scripts/test-prose-fix-disposition.sh
     excavate-entry-contract-tests:
       run: bash scripts/test-excavate-entry-contract.sh
+    sidecar-resolution-tests:
+      run: bash scripts/test-sidecar-resolution.sh
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the

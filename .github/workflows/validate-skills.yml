@@ -274,6 +274,13 @@ jobs:
       - name: Run excavate entry-contract suite
         run: bash scripts/test-excavate-entry-contract.sh
 
+      # sidecar.sh is the one place a sidecar path is computed or git is run
+      # against one. This runs it against scratch repos: one identity across
+      # main, worktree, and clone; 20 parallel commits land; a leaked GIT_DIR
+      # never reaches the project.
+      - name: Run sidecar resolution contract suite
+        run: bash scripts/test-sidecar-resolution.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference
