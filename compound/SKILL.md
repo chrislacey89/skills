@@ -334,16 +334,23 @@ volatility: evergreen | stable | volatile
 
 Before committing, search for existing solutions that might overlap:
 
+Search every place a lesson can live, not just the project tree. Resolve both locations through this skill's bundled resolver (Phase 5's *Write target* names it; `SC` is the same path):
+
 ```bash
-grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" path solutions                       # the sidecar's solutions/ directory
+bash "$SC" config get solutions.in_tree_path    # docs/solutions | docs/adr | <path> | none
+grep -rl "relevant-keyword" "$(bash "$SC" path solutions)" docs/solutions/ 2>/dev/null
 ```
+
+Search the sidecar directory the resolver prints and the project's `in_tree_path` (substitute it for `docs/solutions/` when it differs; skip it when it is `none`). On `SIDECAR MISS`, or with no sidecar, search `docs/solutions/` alone. The defect clustering check below reads the same two locations.
 
 If a related solution already exists:
 - **If it's the same problem solved again:** Update the existing file instead of creating a duplicate. Add new context, note if the solution changed.
 - **If it's a related but distinct problem:** Create the new file and add cross-references in both documents.
 - **If the existing solution is now outdated:** Update or supersede it. Never silently let stale solutions persist.
 
-**Defect clustering check (DO-CONFIRM — verify before committing the entry).** Search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. For a worked pair, this repo's own `staleness-gate-intermediate-writers` (`problem_type: staleness gate invalidated by an unenumerated intermediate writer`) and `by-construction-claims-need-a-mechanism` (`problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it`) share not one word. The second entry names them as the same pattern anyway — *"a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism"* — which is the judgment this check is asking you to make, and which no string match would ever reach.
+**Defect clustering check (DO-CONFIRM — verify before committing the entry).** Search for not just overlapping solutions but overlapping defect patterns. If either location above already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. For a worked pair, this repo's own `staleness-gate-intermediate-writers` (`problem_type: staleness gate invalidated by an unenumerated intermediate writer`) and `by-construction-claims-need-a-mechanism` (`problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it`) share not one word. The second entry names them as the same pattern anyway — *"a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism"* — which is the judgment this check is asking you to make, and which no string match would ever reach.
 
 This entry ships with a mechanism that would catch the next instance — one of the five Q4 names: a test, a linter rule, an assertion, a planning checklist item, or a filed issue in `chrislacey89/skills`. The fifth is available only under the ownership guard in Phase 1's *Filing against the pack* subsection — the preventing change belongs to the pipeline rather than to this codebase — and is not an exit for the first four being hard. That subsection carries the filing procedure too, and it is not bug-fix-gated; the enumeration is likewise borrowed from Q4 independently of Q4's own bug-fix flag, since this check is not gated to bug fixes. If none of the five can be built here, the entry states in one line which came closest and what blocked it. A third prose-only entry on the same pattern is not a valid outcome.
 
