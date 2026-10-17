@@ -133,6 +133,7 @@ section "remote normalization"
 
 NORM="$tmp/norm"
 mkrepo "$NORM"
+n=0
 for pair in \
     "https://GitHub.com/Acme/Widget.git/|github.com/acme/widget" \
     "ssh://git@gitlab.com:2222/group/sub/repo.git|gitlab.com/group/sub/repo" \
@@ -144,6 +145,12 @@ for pair in \
     out="$(cd "$NORM" && SKILL_KIT_SIDECAR_ROOT="$tmp/empty-root" bash "$SC" resolve 2>&1)"
     contains "a miss on $url suggests a name from $want" \
         "--name $(basename "$(dirname "$want")")-$(basename "$want" | tr -c 'a-z0-9._-\n' '-')" "$out"
+    # the suggested --name is a substring match that ignores host, port and
+    # trailing slashes; the stored remote: key is what must be exact
+    NORM_ROOT="$tmp/norm-sidecars-$n"; n=$((n + 1))
+    (cd "$NORM" && SKILL_KIT_SIDECAR_ROOT="$NORM_ROOT" bash "$SC" init --name nk --mode guest --write sidecar --in-tree-path none >/dev/null 2>&1)
+    check "init keys $url as exactly remote:$want" \
+        "remote:$want" "$(jq -r '[.keys[] | select(startswith("remote:"))] | join(",")' "$NORM_ROOT/nk/sidecar.json" 2>&1)"
 done
 git -C "$NORM" remote set-url origin "https://x:token@GitLab.com/Group/Sub/Repo.git"
 SUBGROUP_ROOT="$tmp/subgroup-sidecars"
