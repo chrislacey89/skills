@@ -327,6 +327,31 @@ check "git status --porcelain in the project is empty" "" "$(git -C "$GUEST" sta
 check "no file under the project's .git changed" "$GUEST_BEFORE" "$(fingerprint "$GUEST")"
 
 # -----------------------------------------------------------------------------
+section "resolve refuses to add an alias another sidecar owns"
+
+# Sidecar A holds this checkout's root key; sidecar B (hand-written, isolated
+# root) holds its remote key. resolve must not copy B's key into A: that is the
+# collision init refuses to create.
+COLL_SAVED_ROOT="$SKILL_KIT_SIDECAR_ROOT"
+export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars-collision"
+COLL="$tmp/collide"
+mkrepo "$COLL"
+run "$COLL" init --name coll-a --mode guest --write sidecar --in-tree-path none
+check "collision fixture: sidecar A is created" 0 "$rc"
+COLL_A="$SKILL_KIT_SIDECAR_ROOT/coll-a"
+mkdir -p "$SKILL_KIT_SIDECAR_ROOT/coll-b"
+printf '{"name":"coll-b","keys":["remote:github.com/acme/collide"]}\n' > "$SKILL_KIT_SIDECAR_ROOT/coll-b/sidecar.json"
+git -C "$COLL" remote add origin git@github.com:Acme/Collide.git
+run "$COLL" resolve
+check "resolve still succeeds on A's root key" 0 "$rc"
+contains "resolve prints an ALIAS COLLISION warning" "ALIAS COLLISION: remote:github.com/acme/collide already belongs to $SKILL_KIT_SIDECAR_ROOT/coll-b" "$out"
+check "A did not gain B's remote key" 0 \
+    "$(jq '[.keys[] | select(. == "remote:github.com/acme/collide")] | length' "$COLL_A/sidecar.json")"
+check "B still owns the remote key" 1 \
+    "$(jq '[.keys[] | select(. == "remote:github.com/acme/collide")] | length' "$SKILL_KIT_SIDECAR_ROOT/coll-b/sidecar.json")"
+export SKILL_KIT_SIDECAR_ROOT="$COLL_SAVED_ROOT"
+
+# -----------------------------------------------------------------------------
 section "init cleans up when its first commit fails"
 
 HOSTILE="$tmp/hostile"
