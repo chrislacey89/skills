@@ -18,11 +18,12 @@ npx skills@latest add chrislacey89/skills --skill '*' --agent claude-code --glob
 
 ### Requirements
 
-Most skills need only an agent that reads `SKILL.md` files. The pipeline's GitHub-native state has one version floor:
+Most skills need only an agent that reads `SKILL.md` files. The pipeline's GitHub-native state and the sidecar resolver set these version floors:
 
 | Requirement | Needed for | Notes |
 |---|---|---|
 | [`gh`](https://cli.github.com) **≥ 2.94.0** | issue dependencies and sub-issue relationships in `/prd-to-issues`, `/qa`, `/execute`, `/help`, `/setup-ralph-loop` | Released 2026-06-10. Earlier versions lack `gh issue edit --add-blocked-by` and the `blockedBy` / `blocking` `--json` fields. Check with `gh --version`. |
+| [`git`](https://git-scm.com) **≥ 2.31** | the sidecar resolver (`sidecar.sh`) bundled into `/compound` and `/research` | Earlier versions lack `git rev-parse --path-format=absolute`, which the resolver uses to find the main checkout from a linked worktree. Check with `git --version`. |
 
 On GitHub Enterprise Server, issue **types** and **sub-issues** need GHES 3.17+, and issue **dependencies** need GHES 3.19+. Where dependencies are unavailable, the filing skills degrade to the prose `## Blocked by` section and say so rather than failing.
 
