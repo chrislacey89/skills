@@ -293,7 +293,12 @@ cmd_init() {
            verify: { typecheck: "", test: "", lint: "", package_manager: "", hook_manager: "" },
            created: $created
          }' --args $keys > "$dir/sidecar.json" || refuse "init: could not write sidecar.json"
-    commit_paths "$dir" "sidecar: init $name" sidecar.json || exit 1
+    # A sidecar whose first commit failed would claim these keys while holding
+    # no committed sidecar.json, and block every retry; leave nothing behind.
+    if ! commit_paths "$dir" "sidecar: init $name" sidecar.json; then
+        rm -rf "$dir"
+        exit 1
+    fi
     printf '%s\n' "$dir"
 }
 

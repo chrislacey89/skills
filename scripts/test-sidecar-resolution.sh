@@ -319,5 +319,23 @@ check "a direct commit from the guest project succeeds" 0 "$rc"
 check "git status --porcelain in the project is empty" "" "$(git -C "$GUEST" status --porcelain)"
 check "no file under the project's .git changed" "$GUEST_BEFORE" "$(fingerprint "$GUEST")"
 
+# -----------------------------------------------------------------------------
+section "init cleans up when its first commit fails"
+
+HOSTILE="$tmp/hostile"
+mkrepo "$HOSTILE"
+mkdir -p "$tmp/badhooks"
+printf '#!/bin/sh\necho "hostile global pre-commit" >&2\nexit 1\n' > "$tmp/badhooks/pre-commit"
+chmod +x "$tmp/badhooks/pre-commit"
+cp "$GIT_CONFIG_GLOBAL" "$tmp/gitconfig.good"
+git config --file "$GIT_CONFIG_GLOBAL" core.hooksPath "$tmp/badhooks"
+run "$HOSTILE" init --name hostile --mode guest --write sidecar --in-tree-path none
+check "init exits 1 when the initial commit fails" 1 "$rc"
+check "a failed init leaves no sidecar directory" "no" "$([ -e "$SKILL_KIT_SIDECAR_ROOT/hostile" ] && echo yes || echo no)"
+cp "$tmp/gitconfig.good" "$GIT_CONFIG_GLOBAL"
+run "$HOSTILE" init --name hostile --mode guest --write sidecar --in-tree-path none
+check "a retry after removing the hook succeeds" 0 "$rc"
+check "the retried sidecar.json is committed" "" "$(git -C "$SKILL_KIT_SIDECAR_ROOT/hostile" status --porcelain)"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
