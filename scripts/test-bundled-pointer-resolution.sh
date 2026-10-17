@@ -19,8 +19,8 @@
 # references/references/". Two review passes caught it. No check did.
 #
 # WHAT IT PINS, every side extracted from the real files:
-#   1. Every markdown link of the form `](references/<name>.md)` in a tracked
-#      skill file resolves to a real file, from that file's own directory.
+#   1. Every markdown link of the form `](references/<name>.md)` (or `.sh`, for
+#      a bundled script) in a tracked skill file resolves to a real file, from that file's own directory.
 #   2. No tracked file inside a references/ directory writes a
 #      `](references/...)` link — from there the sibling form is the correct
 #      one and the references/ prefix is the recorded bug.
@@ -56,7 +56,7 @@ checked=0
 for f in $skill_md_files; do
     dir="$(dirname "$f")"
     # Whitespace-normalize: a link split across a wrapped line is still a link.
-    links="$(tr '\n' ' ' < "$f" | grep -o '](references/[A-Za-z0-9._-]*\.md)' | tr -d '](' | sed 's/)$//' | sort -u)"
+    links="$(tr '\n' ' ' < "$f" | grep -oE '\]\(references/[A-Za-z0-9._-]*\.(md|sh)\)' | tr -d '](' | sed 's/)$//' | sort -u)"
     for rel in $links; do
         checked=$((checked + 1))
         target="$dir/$rel"
