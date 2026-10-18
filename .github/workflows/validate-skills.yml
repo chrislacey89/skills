@@ -281,6 +281,14 @@ jobs:
       - name: Run sidecar resolution contract suite
         run: bash scripts/test-sidecar-resolution.sh
 
+      # A git hook exports GIT_DIR, and a suite that runs `git init` or
+      # `git config` in a fixture without clearing it writes into the real repo
+      # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every
+      # pre-push suite, read from lefthook.yml, from a scratch linked worktree
+      # with GIT_DIR exported and fails on any change to its shared config.
+      - name: Run fixture git-isolation suite
+        run: bash scripts/test-fixture-git-isolation.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

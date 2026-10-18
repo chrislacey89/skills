@@ -105,6 +105,11 @@ pre-push:
       run: bash scripts/test-excavate-entry-contract.sh
     sidecar-resolution-tests:
       run: bash scripts/test-sidecar-resolution.sh
+    # Re-runs every suite above from a scratch linked worktree with GIT_DIR
+    # exported, the way this hook runs them, and fails if any suite wrote into
+    # that repo's shared config (#429). Reads its suite list from this file.
+    fixture-git-isolation-tests:
+      run: bash scripts/test-fixture-git-isolation.sh
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the
