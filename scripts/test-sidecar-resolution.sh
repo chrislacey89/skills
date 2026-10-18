@@ -423,13 +423,29 @@ printf 'alli\n'   > "$A/NewEra-Alliances-mimir/alli-2026-03-01.md"
 cp "$A/mimir/local-2026-01-01.md" "$A/NewEra-Alliances-mimir/"
 printf 'other\n'  > "$A/unrelated/z.md"
 
+# The basename is not a match for a checkout that has a remote: mimir/ above is
+# claimed only because the run below names it with --archive-alias.
+run "$MIG" init --name mig-noalias --mode owned --write sidecar --in-tree-path none
+check "a basename directory is not migrated for a checkout with a remote" "dir" \
+    "$(if [ -L "$A/mimir" ]; then echo link; elif [ -d "$A/mimir" ]; then echo dir; fi)"
+check "the remote-derived directories still migrate without an alias" "link link" \
+    "$(if [ -L "$A/New-Era-Technology-mimir" ]; then echo link; fi) $(if [ -L "$A/NewEra-Alliances-mimir" ]; then echo link; fi)"
+# Undo, so the sections below start from the planted fixture.
+rm -rf "$SKILL_KIT_SIDECAR_ROOT/mig-noalias"
+for d in New-Era-Technology-mimir NewEra-Alliances-mimir; do
+    rm -f "$A/$d"; mkdir -p "$A/$d"
+done
+printf 'tech\n' > "$A/New-Era-Technology-mimir/tech-2026-02-01.md"
+printf 'alli\n' > "$A/NewEra-Alliances-mimir/alli-2026-03-01.md"
+cp "$A/mimir/local-2026-01-01.md" "$A/NewEra-Alliances-mimir/"
+
 run "$MIG" init --name mig-nomig --mode owned --write sidecar --in-tree-path none --no-migrate-archive
 check "init --no-migrate-archive succeeds" 0 "$rc"
 check "--no-migrate-archive leaves the archive directory a directory" "dir" \
     "$(if [ -L "$A/mimir" ]; then echo link; elif [ -d "$A/mimir" ]; then echo dir; fi)"
 rm -rf "$SKILL_KIT_SIDECAR_ROOT/mig-nomig"
 
-run "$MIG" init --name mig --mode owned --write sidecar --in-tree-path none
+run "$MIG" init --name mig --mode owned --write sidecar --in-tree-path none --archive-alias Mimir
 check "init with a matching archive succeeds" 0 "$rc"
 MSC="$SKILL_KIT_SIDECAR_ROOT/mig"
 for d in mimir New-Era-Technology-mimir NewEra-Alliances-mimir; do
@@ -452,6 +468,28 @@ check "stdout is still only the sidecar path" "$MSC" "$(printf '%s\n' "$out" | g
 run "$MIG" path research
 check "path research resolves to the migrated directory" "$MSC/research" "$out"
 
+# An unrelated remote-less project archived as api/, and a different repo with a
+# remote checked out at .../api: the folder name alone must not claim it.
+mkdir -p "$tmp/mig/co"
+API="$tmp/mig/co/api"
+mkrepo "$API"
+git -C "$API" remote add origin git@github.com:acme/api-server.git
+mkdir -p "$A/api" "$A/Co-Api"
+printf 'theirs\n' > "$A/api/theirs.md"
+run "$API" init --name api-server --mode owned --write sidecar --in-tree-path none
+check "init beside an unrelated api/ archive succeeds" 0 "$rc"
+check "the unrelated api/ archive is still a real directory with its file" "dir theirs" \
+    "$(if [ -L "$A/api" ]; then echo link; else echo dir; fi) $(cat "$A/api/theirs.md")"
+lacks "nothing is reported moved from api/" "$A/api" "$out"
+# A remote-less checkout is the one case the basename still means something.
+NOREM="$tmp/mig/norem/solo"
+mkdir -p "$A/solo"; printf 's\n' > "$A/solo/s.md"
+mkrepo "$NOREM"
+run "$NOREM" init --name solo --mode owned --write sidecar --in-tree-path none
+check "a remote-less checkout still claims its basename directory" "$SKILL_KIT_SIDECAR_ROOT/solo/research" "$(readlink "$A/solo")"
+run "$NOREM" init --name solo2 --mode owned --write sidecar --in-tree-path none --archive-alias a/b
+check "--archive-alias rejects a path" 2 "$rc"
+
 # Two old directories that disagree about one file name: the first moves, the
 # second is left as it was rather than overwritten.
 CLASH="$tmp/mig/clash"
@@ -460,7 +498,7 @@ git -C "$CLASH" remote add origin git@github.com:acme/clash.git
 mkdir -p "$A/acme-clash" "$A/clash"
 printf 'one\n' > "$A/acme-clash/n.md"
 printf 'two\n' > "$A/clash/n.md"
-run "$CLASH" init --name clash --mode owned --write sidecar --in-tree-path none
+run "$CLASH" init --name clash --mode owned --write sidecar --in-tree-path none --archive-alias clash
 check "init with a conflicting archive still succeeds" 0 "$rc"
 contains "the conflict is reported" "left $A/clash untouched: n.md already exists" "$out"
 check "the conflicting directory is still a directory with its own file" "dir two" \
