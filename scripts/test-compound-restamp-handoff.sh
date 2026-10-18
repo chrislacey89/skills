@@ -67,6 +67,13 @@
 
 set -euo pipefail
 
+# A caller that reached this suite via a git hook (pre-push, run from a
+# worktree) has GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE set in its environment.
+# build_fixture's `git init` and `git config` would inherit them and write
+# `core.bare=true`, the fixture identity, and a temp `core.hooksPath` into the
+# real repo's shared config. Unset before any git call.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 compound_skill="$repo_root/compound/SKILL.md"
 premerge_skill="$repo_root/pre-merge/SKILL.md"
