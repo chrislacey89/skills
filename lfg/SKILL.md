@@ -140,8 +140,8 @@ Exit 0 proceeds. Exit 1 alone does not mean there is no sidecar: it is also the
 exit for "not inside a git repository" and for a sidecar found whose new alias
 could not be committed. Decide on the output, not the code. If stderr carries a
 `SIDECAR MISS` line with an `init` command: **stop** before shape-lite, print that
-command exactly as given, and say that `/init-pipeline` run by hand (Path A) asks
-the questions it needs. On any other exit 1, stop and relay what the resolver
+command exactly as given, and say that `/init-pipeline` run by hand asks the
+questions it needs, on Path A or on a project whose hook is current (its § 8). On any other exit 1, stop and relay what the resolver
 printed as printed; it is not a miss, so offer no `init` command. Do not run
 `init` yourself, because creating a sidecar is a human act. The tiny path writes
 nothing to a sidecar and skips this check.
