@@ -134,12 +134,11 @@
 
 set -euo pipefail
 
-# A caller that reached this suite via a git hook (pre-push) has GIT_DIR set
-# in its environment. The fixtures' `git -C <scratch> init` would inherit it and
-# re-initialize the real repo instead; from a linked worktree that writes
-# `core.bare = true` into the shared config (#429), and the following `add` and
-# `commit` land in the real index and branch. Unset before any git call.
-# scripts/test-fixture-git-isolation.sh pins this.
+# A caller that reached this suite via a git hook (pre-push, run from a
+# worktree) has GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE set in its environment.
+# The scratch-repo `git init` below would inherit them and re-initialize the
+# real repository instead, writing `core.bare=true` into its shared config.
+# Unset before any git call.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"

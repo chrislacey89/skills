@@ -22,7 +22,7 @@ Invoke `/git-guardrails-claude-code` with project scope.
 
 This installs a PreToolUse hook on Bash that blocks destructive git commands — force pushes, hard resets, forced cleans, force branch deletes, and whole-tree checkout/restore. The authoritative list lives in `/git-guardrails-claude-code`'s "What Gets Blocked" and "What Stays Allowed" sections; read it there rather than here.
 
-The list is deliberately not restated in this file. It was, and the copy was wrong: it claimed plain `git push` was blocked, which it never has been. That is the same defect as #227 — documentation asserting coverage the matcher does not have — and a second copy is a second thing to keep true, in the file more downstream projects actually read.
+The list is deliberately not restated in this file. It was, and the copy was wrong: it claimed plain `git push` was blocked, which it never has been. That is the same defect as chrislacey89/skills#227 — documentation asserting coverage the matcher does not have — and a second copy is a second thing to keep true, in the file more downstream projects actually read.
 
 ### 2. TDD classification gate (Claude Code hook)
 

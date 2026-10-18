@@ -42,7 +42,7 @@ the first six field invocations were lost this way, and the runs that followed
 had no shape-lite, no marker, and no ledger. Nothing in this file can catch that,
 because this file is what failed to load. If a session did work that looks like
 an `/lfg` run but has none of those artifacts, this is why; retype `/lfg` and
-start over (#383).
+start over (chrislacey89/skills#383).
 
 It stands beside `/shape` → `/research` → `/write-a-prd` → `/prd-to-issues` →
 `/execute` and **reconnects to the main workflow at `/pre-merge --loop`**. From
@@ -60,7 +60,7 @@ per-slice issues.
 
 ## Locked vocabulary
 
-The recap, the gap issues, and the calibration in #372 read these values. Change
+The recap, the gap issues, and the calibration in chrislacey89/skills#372 read these values. Change
 one here and nowhere else.
 
 | Name | Value |
