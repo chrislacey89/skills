@@ -23,7 +23,9 @@
 # paths, so each old directory must survive as a symlink that still resolves.
 #
 # Section 9 runs the /compound sidecar block extracted from compound/SKILL.md,
-# so an edit to that block is tested as written.
+# and the "/research" section runs research/SKILL.md's Phase 3 read, Phase 5a
+# storage read, and Phase 5c write, so an edit to any of them is tested as
+# written.
 #
 # Fixtures are built after unsetting the inherited git environment, with a
 # private global config, so a hook's GIT_DIR or the runner's identity cannot
@@ -34,6 +36,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 SC="$repo_root/init-pipeline/scripts/sidecar.sh"
 COMPOUND="$repo_root/compound/SKILL.md"
+RESEARCH="$repo_root/research/SKILL.md"
 [ -f "$SC" ] || { printf 'FATAL %s is missing\n' "$SC"; exit 1; }
 
 tmp="$(mktemp -d)"
@@ -462,6 +465,83 @@ contains "the conflict is reported" "left $A/clash untouched: n.md already exist
 check "the conflicting directory is still a directory with its own file" "dir two" \
     "$(if [ -L "$A/clash" ]; then echo link; else echo dir; fi) $(cat "$A/clash/n.md")"
 check "the first directory moved" "$SKILL_KIT_SIDECAR_ROOT/clash/research" "$(readlink "$A/acme-clash")"
+
+# -----------------------------------------------------------------------------
+section "/research: Phase 3 read, Phase 5a storage, Phase 5c write"
+
+# first_bash_after <file> <start-regex> — the first ```bash block after the
+# first line matching the regex.
+first_bash_after() {
+    awk -v pat="$2" '$0 ~ pat { on = 1; next }
+                     on && /^```bash$/ { inb = 1; next }
+                     inb && /^```$/ { exit }
+                     inb { print }' "$1"
+}
+with_sc() { printf '%s\n' "$1" | sed -e "s|^SC=.*|SC=\"$SC\"|"; }
+
+p5c="$(first_bash_after "$RESEARCH" '^<!-- sidecar-write: research -->$')"
+p3="$(first_bash_after "$RESEARCH" '^### Phase 3: ')"
+p5a="$(first_bash_after "$RESEARCH" '^#### Phase 5a: ')"
+for pair in "Phase 3:$p3" "Phase 5a:$p5a" "Phase 5c:$p5c"; do
+    name="${pair%%:*}"; body="${pair#*:}"
+    if [ -z "$body" ]; then
+        bad "research/SKILL.md carries the $name block" "no bash block found"
+    else
+        ok "research/SKILL.md carries the $name block"
+        contains "the $name block calls the bundled resolver" 'references/sidecar.sh' "$body"
+        lacks "the $name block runs no git of its own" 'git ' "$(printf '%s\n' "$body" | grep -v '^[[:space:]]*#')"
+    fi
+done
+
+# Phase 5c, on the migrated mimir sidecar.
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|search-index|g' -e 's|<YYYY-MM-DD>|2026-10-17|g')"
+out="$(cd "$MIG" && bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block runs cleanly" 0 "$rc"
+check "the research entry is the sidecar's HEAD commit" "research/search-index-2026-10-17.md" \
+    "$(git -C "$MSC" log -1 --name-only --format= | head -n 1)"
+check "the entry is readable through an old archive path" "yes" \
+    "$(if [ -f "$A/mimir/search-index-2026-10-17.md" ]; then echo yes; fi)"
+check "the project's tree is untouched by Phase 5c" "" "$(git -C "$MIG" status --porcelain)"
+
+# Phase 3, with matches in both stores, then with in_tree_path none.
+SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
+mkdir -p "$SOLS/perf" "$MIG/docs/adr"
+printf 'needle sidecar\n' > "$SOLS/perf/a.md"
+printf 'needle in-tree\n' > "$MIG/docs/adr/0001.md"
+jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+script="$(with_sc "$p3" | sed -e 's|^KW=.*|KW="needle"|')"
+out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"; rc=$?
+check "the Phase 3 block runs cleanly" 0 "$rc"
+contains "Phase 3 lists the sidecar match" "$SOLS/perf/a.md" "$out"
+contains "Phase 3 lists the in_tree_path match" "docs/adr/0001.md" "$out"
+jq '.solutions.in_tree_path = "none"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"
+contains "with in_tree_path none, Phase 3 still lists the sidecar match" "$SOLS/perf/a.md" "$out"
+lacks "with in_tree_path none, Phase 3 reads no in-tree path" "docs/adr" "$out"
+git -C "$MSC" checkout -q -- sidecar.json
+
+# Phase 5a: sidecar value, settings fallback with no sidecar, then the default.
+script="$(with_sc "$p5a")"
+jq '.research.storage = "spike-issue"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"
+check "Phase 5a reads research.storage from the sidecar" "research.storage = spike-issue, from sidecar" "$out"
+git -C "$MSC" checkout -q -- sidecar.json
+NOSC="$tmp/mig/nosidecar"
+mkrepo "$NOSC"
+mkdir -p "$NOSC/.claude"
+printf '{"research":{"storage":"spike-issue"}}\n' > "$NOSC/.claude/settings.json"
+out="$(cd "$NOSC" && bash -c "$script" 2>/dev/null)"
+check "with no sidecar, Phase 5a honors .claude/settings.json and says so" \
+    "research.storage = spike-issue, from .claude/settings.json (no sidecar resolved)" "$out"
+rm "$NOSC/.claude/settings.json"
+out="$(cd "$NOSC" && bash -c "$script" 2>/dev/null)"
+check "with neither, Phase 5a defaults to archive" "research.storage = archive, from default" "$out"
+
+# The dossier require line Phase 3 documents.
+run "$MIG" require "$MSC/research/excavation-2026-01-01.md" --from "/research Phase 3"
+check "require on a missing dossier exits 1" 1 "$rc"
+check "require names the dossier and the referrer" \
+    "MISSING: $MSC/research/excavation-2026-01-01.md (referenced by /research Phase 3)" "$out"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
