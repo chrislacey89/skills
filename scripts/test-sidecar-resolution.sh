@@ -627,7 +627,9 @@ else
 fi
 check "help/SKILL.md no longer cuts a slug from the remote URL" "" \
     "$(grep -n 'REPO_SLUG' "$HELP_SKILL")"
-# BASE_REF comes from /help's Phase 1a.
+# BASE_REF comes from /help's Phase 1a. Prepending it runs Phase 1a's variable in the
+# block's own process, which a real parallel call does not get; the unset case is
+# exercised separately below.
 hscript="BASE_REF=main
 $(with_sc "$hblock")"
 
@@ -649,6 +651,12 @@ contains "a hit prints the sidecar path and its last commit date" \
 lacks "a hit prints no SIDECAR MISS" "SIDECAR MISS" "$hall"
 contains "with no entries anywhere, both counts are 0" "solutions entries: in-tree (none)=0 sidecar=0" "$hout"
 contains "with no entries and two landings, the last merge reads uncompounded" "last merge compounded: no" "$hout"
+
+# A parallel call starts a fresh shell, so BASE_REF can be empty: the verdict must be unknown, never yes.
+unset_out="$(cd "$HR" && env -u BASE_REF bash -c "$(with_sc "$hblock")" 2>/dev/null)"; unset_rc=$?
+contains "without BASE_REF the last-merge verdict is unknown" "last merge compounded: unknown" "$unset_out"
+lacks "without BASE_REF the last-merge verdict is not yes" "last merge compounded: yes" "$unset_out"
+check "without BASE_REF the block still exits 0" "0" "$unset_rc"
 
 # A sidecar entry older than the landing before the last one does not cover the last merge.
 mkdir -p "$HSC/solutions/perf"

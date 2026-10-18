@@ -125,8 +125,11 @@ if [ -n "$SIDE" ]; then
   [ "${T:-0}" -gt "${NEWEST:-0}" ] && NEWEST=$T
 fi
 echo "solutions entries: in-tree (${ITP:-none})=$IN_TREE_N sidecar=$SIDE_N"
-PREV_LANDING=$(git log --first-parent --skip=1 -1 --format=%ct "$BASE_REF")
-if [ -n "$PREV_LANDING" ] && [ "${NEWEST:-0}" -lt "$PREV_LANDING" ]; then
+PREV_LANDING=""
+[ -n "$BASE_REF" ] && PREV_LANDING=$(git log --first-parent --skip=1 -1 --format=%ct "$BASE_REF")
+if [ -z "$BASE_REF" ]; then
+  echo "last merge compounded: unknown (BASE_REF is not set in this call; set it from Phase 1a)"
+elif [ -n "$PREV_LANDING" ] && [ "${NEWEST:-0}" -lt "$PREV_LANDING" ]; then
   echo "last merge compounded: no"
 else
   echo "last merge compounded: yes"
@@ -143,7 +146,7 @@ Read the resolver's stderr as well as the block's stdout. Three outcomes matter:
 - **`SIDECAR MISS`** — no sidecar is registered for this project. The resolver's miss line carries the exact `init` command; quote it, and let row 6 route the recommendation. Exit 1 without a `SIDECAR MISS` line (not a git repository, or a found sidecar whose new alias could not be committed) is not a miss: relay the resolver's line as printed.
 - **`ALIAS COLLISION: …`** — two sidecars claim one of this checkout's keys. It is a warning, not a failure: the resolver used the first sidecar it names and the block continued. Print the line in "Where you are" as given, naming both sidecars, whatever the recommendation turns out to be — a project split across two sidecars has two research archives and two solutions stores, and each one reads as incomplete on its own.
 
-"Last merge compounded" compares the newest entry in either location against the landing *before* the last one on the base branch (`--first-parent`, so a squash commit and a merge commit each count once). An entry for the last merge is written before that merge lands, on the PR or straight into the sidecar, so measuring from the last landing itself would flag every sidecar-compounded merge as uncompounded. The in-tree side reads commit dates on the base branch rather than file mtimes, which a fresh clone resets.
+"Last merge compounded" prints `unknown` when `$BASE_REF` is empty in this call (each parallel call gets a fresh shell, so Phase 1a's variable has to be written into the block); row 11 does not fire on `unknown`. It otherwise compares the newest entry in either location against the landing *before* the last one on the base branch (`--first-parent`, so a squash commit and a merge commit each count once). An entry for the last merge is written before that merge lands, on the PR or straight into the sidecar, so measuring from the last landing itself would flag every sidecar-compounded merge as uncompounded. The in-tree side reads commit dates on the base branch rather than file mtimes, which a fresh clone resets.
 
 **Parallel tool-use gotcha.** In Claude Code, when one bash call in a parallel batch errors, the harness cancels its in-flight siblings — one bad ref takes down the whole snapshot. This is why Phase 1a must run first (and alone): if base-branch detection fails, nothing in Phase 1b will try to reference `$BASE_BRANCH`. Do not chain `&&`/`||` against a guessed branch name inside a parallel batch to "save a round trip" — it will fail noisily on any repo that does not match your guess.
 
