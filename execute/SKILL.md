@@ -237,6 +237,15 @@ Either one gives the capability an owner that survives the close. Do not silentl
 
 Skip this read — and the disposal rule with it — for one-off tasks not tied to a GitHub issue (the same scope guard Step 0 uses).
 
+**Resolve the sidecar first.** The research archive and the project's lessons are found through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), at its absolute installed path; never compute a sidecar path yourself.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" resolve
+```
+
+Exit 0 proceeds. On exit 1 in an **AFK iteration, stop**: print the resolver's stderr as printed — on `SIDECAR MISS` that is the `init` command — and leave it for a human, because creating a sidecar is a human act and an iteration that reads half its context reads as complete when it is not. In a HITL run, show the same line to the user and continue read-only: the solutions grep below falls back to `docs/solutions/`, and a research path the PRD cites is still checked as written.
+
 **Read the research artifact for this feature.** The PRD's "Research Reference" section names where it lives — one of two locations depending on the project's `research.storage` mode:
 
 1. **Spike-issue mode** — the PRD references a closed `research`-labeled GitHub issue (`Refs #<spike-issue-number>`). Read it with:
@@ -245,7 +254,12 @@ Skip this read — and the disposal rule with it — for one-off tasks not tied 
    ```
    This works on any machine — fresh clones, CI sandboxes, recovered laptops, or contributor environments.
 
-2. **Archive mode** (default) — the PRD references `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`. Read the file directly. If you are running on a machine other than the one that produced the research, the file will not exist; flag this to the user and either re-run `/research` or proceed with explicit acknowledgment of the missing context.
+2. **Archive mode** (default) — the PRD references the research entry's absolute path. Check it before reading it:
+   ```bash
+   SC="<this skill's directory>/references/sidecar.sh"
+   bash "$SC" require "<path the PRD cites>" --from "PRD #<n>"
+   ```
+   On a miss the resolver prints `MISSING: <path> (referenced by PRD #<n>)` and exits 1 — typically a different machine from the one that produced the research. In an AFK iteration, stop. In a HITL run, show the line to the user and either re-run `/research` or proceed with their explicit acknowledgment of the missing context.
 
 Some legacy PRDs may still reference `research.md` in the repo root or `plans/` — read it if present. Whatever the location, the research artifact contains cached technical research that should inform your approach. Do not re-research what has already been decided.
 
@@ -253,15 +267,26 @@ Some legacy PRDs may still reference `research.md` in the repo root or `plans/` 
 
 Treat it as pointers, not truth. The anchors were written at decomposition time and siblings may have merged since; the code and the research artifact still win on any conflict, per the precedence rule below. A stale anchor is a correction to file on the issue, not a reason to skip the block.
 
-Consult `docs/solutions/` for relevant past solutions before starting implementation:
+Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. The block searches the sidecar's `solutions/` directory and the project's `solutions.in_tree_path` (skipped when it is `none`); with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
 
 ```bash
-grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
+SC="<this skill's directory>/references/sidecar.sh"
+KW="relevant-keyword"
+SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
+ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
+[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
+for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
+  case "$DIR" in ""|none) continue ;; esac
+  [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
+done
+true
 ```
+
+List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` is that repo's own convention: read it as a plain document. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry's file path>"` (a fresh shell has no `SC`; a bare filename resolves beside that file) before relying on it; on `MISSING:`, stop in an AFK iteration and flag it to the user in a HITL run.
 
 If past solutions exist for this problem domain, incorporate their lessons and avoid their documented pitfalls.
 
-**Artifact precedence:** When the research artifact and `docs/solutions/` give conflicting guidance, follow the research artifact — it was verified against the current installed versions. Storage location does not affect trust: a spike issue and an archive entry carry equivalent authority. If the conflict is significant enough that you are uncertain, flag it to the user before proceeding. Load `docs/solutions/` selectively: grep for relevant keywords first, then read only matching files.
+**Artifact precedence:** When the research artifact and a solutions entry give conflicting guidance, follow the research artifact — it was verified against the current installed versions. Storage location does not affect trust: a spike issue and an archive entry carry equivalent authority. If the conflict is significant enough that you are uncertain, flag it to the user before proceeding. Load solutions entries selectively: grep for relevant keywords first, then read only matching files.
 
 ### 2. Plan the Implementation (optional)
 

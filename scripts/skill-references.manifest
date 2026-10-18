@@ -53,3 +53,10 @@ init-pipeline/scripts/sidecar.sh  excavate
 init-pipeline/scripts/sidecar.sh  help
 init-pipeline/scripts/sidecar.sh  lfg
 init-pipeline/scripts/sidecar.sh  research
+init-pipeline/scripts/sidecar.sh  write-a-prd
+init-pipeline/scripts/sidecar.sh  execute
+init-pipeline/scripts/sidecar.sh  pre-merge
+init-pipeline/scripts/sidecar.sh  fix-findings
+init-pipeline/scripts/sidecar.sh  correct-course
+init-pipeline/scripts/sidecar.sh  handoff
+init-pipeline/scripts/sidecar.sh  prd-to-issues

@@ -466,7 +466,26 @@ cmd_require() {
         esac
     done
     if ! { [ -n "$path" ] && [ -n "$from" ]; }; then die_usage "usage: sidecar.sh require <path> --from <referrer>"; fi
-    if [ ! -e "$path" ]; then
+    # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
+    local probe="$path"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$path" in "~/"*) probe="$HOME/${path#"~/"}" ;; esac
+    # A relative link inside a lesson is relative to the lesson's own folder, so when
+    # --from names an existing file, also try the path beside it.
+    if [ ! -e "$probe" ] && [ -f "$from" ]; then
+        case "$probe" in /*) ;; *) [ -e "$(dirname "$from")/$probe" ] && probe="$(dirname "$from")/$probe" ;; esac
+    fi
+    # A bare name may also live in a sibling category folder (<store>/<category>/<name>.md),
+    # so look one level up and across, never deeper.
+    if [ ! -e "$probe" ] && [ -f "$from" ]; then
+        case "$probe" in
+            /*|*/*) ;;
+            *) for cand in "$(dirname "$(dirname "$from")")"/*/"$probe"; do
+                   [ -e "$cand" ] && { probe="$cand"; break; }
+               done ;;
+        esac
+    fi
+    if [ ! -e "$probe" ]; then
         printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
         exit 1
     fi
