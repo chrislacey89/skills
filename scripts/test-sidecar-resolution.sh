@@ -629,5 +629,79 @@ $(printf '%s\n' "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
     contains "the skill's require block signals the miss" "dossier missing" "$out"
 fi
 
+# -----------------------------------------------------------------------------
+section "Each documented \$SC command runs in its own fresh shell"
+
+# THE DRIFT CLASS (#413, PR #426 finding 2; the third recording of the
+# by-construction-claim-with-no-mechanism pattern). The agent harness runs every
+# fenced block in a fresh shell, so a block that reads $SC must define it. A
+# first pass left execute, write-a-prd and pre-merge sharing one SC=; with SC
+# empty, `bash ""` fails and a resolver miss reads as "no lessons", which the
+# skill treats as a valid answer. The fix (5c1fc25) had no guard: a reviewer's
+# deletion of the SC= lines in a scratch copy turned no suite red, because the
+# /research section above rewrites `SC=` through with_sc, which hides exactly
+# this defect. docs/solutions/patterns/
+# skill-command-blocks-run-one-shell-per-call-2026-10-13.md names the
+# mechanism: run each block in its own process.
+#
+# So: every fenced bash block (indented or not) and every inline code span
+# that mentions $SC is cut out of the three skills, only the placeholders are
+# filled, and each is run in its own `env -u SC bash -c`, with no SC injected.
+# It passes only if the shell was able to define SC itself.
+
+# blocks_using_sc <file> <outdir> <tag> — write each fenced bash block that
+# mentions $SC to <outdir>/<tag>-N.sh (leading fence indent stripped).
+blocks_using_sc() {
+    awk -v dir="$2" -v tag="$3" '
+        /^[[:space:]]*```bash[[:space:]]*$/ { inb = 1; ind = $0; sub(/```.*/, "", ind); blk = ""; next }
+        inb && /^[[:space:]]*```[[:space:]]*$/ {
+            inb = 0
+            if (blk ~ /\$SC|\$\{SC/) { n++; f = sprintf("%s/%s-%d.sh", dir, tag, n); printf "%s", blk > f; close(f) }
+            next }
+        inb { l = $0; if (index(l, ind) == 1) l = substr(l, length(ind) + 1); blk = blk l "\n" }
+    ' "$1"
+}
+# spans_using_sc <file> <outdir> <tag> — same for inline code spans that both
+# define and use SC (a span that only uses it is covered by the prose rule
+# asserted below).
+spans_using_sc() {
+    # shellcheck disable=SC2016  # backticks and $SC are literal patterns here
+    grep -o '`[^`]*`' "$1" | sed -e 's/^`//' -e 's/`$//' \
+        | grep -F 'SC=' | grep -F '$SC' \
+        | awk -v dir="$2" -v tag="$3" '{ f = sprintf("%s/%s-span%d.sh", dir, tag, NR); print > f; close(f) }'
+}
+
+SCDIR="$tmp/scblocks"
+SCREPO="$tmp/screpo"
+mkdir -p "$SCDIR"
+mkrepo "$SCREPO"
+for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1; do
+    skill="${entry%%:*}"; rest="${entry#*:}"; rel="${rest%%:*}"; min="${rest##*:}"
+    skdir="$repo_root/$skill"
+    blocks_using_sc "$repo_root/$rel" "$SCDIR" "$skill"
+    spans_using_sc "$repo_root/$rel" "$SCDIR" "$skill"
+    found=0
+    for f in "$SCDIR/$skill"-*.sh; do
+        [ -f "$f" ] || continue
+        found=$((found + 1))
+        script="$(sed -e "s|<this skill's directory>|$skdir|g" -e 's|<[A-Za-z][^<>]*>|x|g' "$f")"
+        out="$(cd "$SCREPO" && env -u SC bash -c "$script" 2>&1 </dev/null)"; rc=$?
+        label="$(basename "$f") from $rel"
+        if grep -q 'SC=' "$f"; then ok "$label defines SC itself"; else bad "$label defines SC itself" "uses \$SC with no SC= in the block"; fi
+        if [ "$rc" -eq 127 ] || [ "$rc" -eq 126 ] || case "$out" in *"No such file or directory"*) true ;; *) false ;; esac; then
+            bad "$label runs in a fresh shell" "rc=$rc: $out"
+        else
+            ok "$label runs in a fresh shell with no SC injected"
+        fi
+    done
+    if [ "$found" -ge "$min" ]; then ok "$rel yields at least $min \$SC commands ($found found)"
+    else bad "$rel yields at least $min \$SC commands" "found $found; the extractor or the skill drifted"; fi
+done
+# pre-merge's sidecar commands are inline prose, and two of them lean on a rule
+# rather than carrying their own SC=; pin the rule they lean on.
+contains "pre-merge tells every sidecar command to begin with its own SC=" \
+    'begin every one with `SC="<this skill'"'"'s directory>/references/sidecar.sh"`' \
+    "$(cat "$repo_root/pre-merge/review-checklist.md")"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
