@@ -56,7 +56,7 @@ human to dispose of findings, so there is no valid input.
 
 - **It does not select findings.** The human's numbers are its only input. It
   never ranks, filters, batches, defers, or drops a finding, and it never adds
-  one it noticed on the way. #190 draws that line deliberately: disposition is
+  one it noticed on the way. chrislacey89/skills#190 draws that line deliberately: disposition is
   the human's. If a finding you were handed looks wrong, the fixer reports it
   **refuted** with evidence and stops — it does not decide the finding away.
 - **It does not stamp.** `/pre-merge` is the only writer of the
@@ -104,7 +104,7 @@ exist and stop. Do not guess at intent, and do not silently fix the neighbors.
 
 ### Step 1. Per finding, spawn a fresh fixer
 
-**Spawn both sub-agents on the cheaper tier — `model: "sonnet"` on the `Agent` call.** What this skill buys is independence, not capability: the defect it exists to close is that the authoring session cannot see its own work, and a fresh Sonnet context removes that as completely as a fresh Opus one. Escalate to the session's own tier only on a signal — a fixer that returns `blocked`, or a finding that turns on a contract spanning several files. Per finding this skill spends two sub-agent runs, so the tier is where its cost actually lives. This is a default, not a rule anything enforces; issue #339 carries the hypothesis and the three signals that would refute it.
+**Spawn both sub-agents on the cheaper tier — `model: "sonnet"` on the `Agent` call.** What this skill buys is independence, not capability: the defect it exists to close is that the authoring session cannot see its own work, and a fresh Sonnet context removes that as completely as a fresh Opus one. Escalate to the session's own tier only on a signal — a fixer that returns `blocked`, or a finding that turns on a contract spanning several files. Per finding this skill spends two sub-agent runs, so the tier is where its cost actually lives. This is a default, not a rule anything enforces; issue chrislacey89/skills#339 carries the hypothesis and the three signals that would refute it.
 
 **One sub-agent per finding, never one for all of them.** A single fixer holding
 every finding carries fix 1's reasoning into fix 2, which re-creates across
@@ -181,7 +181,7 @@ be the next `/pre-merge` re-run's subject.
 
 A second sub-agent, fresh, **read-only**, and working in a throwaway copy of the
 tree. Spawn it on the same cheaper tier as the fixer, for the same reason and with the same escalation signal (Step 1). Its procedure is a checklist and its mutation is drawn from the corpus rather than composed, and the apparatus check gates the verdict — a breaker that cannot make its control go red reports `not-run` rather than false confidence. Neither sub-agent may drop below Sonnet: both read a real tree and run a real suite, and a breaker that misreports `killed` is worse than no breaker at all. It never edits the branch, never commits, never stamps, and never fixes
-what it finds — #249 is the incident that rule comes from: a review sub-agent
+what it finds — chrislacey89/skills#249 is the incident that rule comes from: a review sub-agent
 mutated the tree it was reviewing. **And its subject has to be a fixed commit,
 not whatever the branch holds when the breaker looks.** A round processes
 findings one after another, and `HEAD` keeps moving as later findings' fixers
@@ -251,7 +251,7 @@ wrong `-C`, a `$BREAKER_DIR` that was bound in the block's shell and had gone
 empty by the shell that mutated. In the field a breaker reached the real repo
 exactly that way and edited two rows of a file under review while a sibling agent
 was reading it. The isolation is structural for commits and asserted for
-everything else, and #344 is the run where the asserted half failed — so the two
+everything else, and chrislacey89/skills#344 is the run where the asserted half failed — so the two
 halves are named separately here rather than under one word.
 
 So the copy carries a mechanism for the second half rather than a promise. The
@@ -309,7 +309,7 @@ Read it there; it is not restated here.
 
 **The verdict is advisory.** `survived` is reported to the human as a line item
 and to the `/pre-merge` re-run as evidence. It is never auto-re-fixed (that is
-the re-fix loop #253 recorded), and it never earns or withholds a stamp — a
+the re-fix loop chrislacey89/skills#253 recorded), and it never earns or withholds a stamp — a
 `survived` verdict that nothing executed reads identically to one that did,
 which is why the apparatus check gates the verdict and why the verdict gates
 nothing.
@@ -399,7 +399,7 @@ Lock 1 is a writer, a refusing reader, and a lifecycle, on the same pattern as
 `/tdd`'s `.claude/.tdd-active`. Both flags are transient by construction, which
 is the condition under which this pack tolerates filesystem state at all. Every
 row below names the step that reads the flag, because a flag no later step reads
-is not load-bearing (#326).
+is not load-bearing (chrislacey89/skills#326).
 
 | Flag | Written by | Read by | Removed by |
 |---|---|---|---|
@@ -446,7 +446,7 @@ is a property of the skill rather than a habit of the session. The fixer does no
 respond to the breaker; the breaker does not re-run against a revised fix. If a
 mutation survived and the human wants it addressed, that is a new invocation with
 the human's decision behind it. Without the cap this is the fix-review-fix cycle
-#253 recorded, with the loop half now also committing.
+chrislacey89/skills#253 recorded, with the loop half now also committing.
 
 **Order and concurrency.** The cap says how many times each sub-agent runs; this
 says in what order, because leaving that to the session is the same silence the
@@ -456,7 +456,7 @@ working tree and commits to one branch, so two at once is a race on both, and
 "exactly one commit per fix" stops being something either can guarantee. Giving
 each fixer its own worktree would trade that race for merge conflicts on exactly
 the findings most likely to collide, since findings routinely land in one file
-(three of five in one round of #338 landed in `/init-pipeline` § 2); at three to
+(three of five in one round of chrislacey89/skills#338 landed in `/init-pipeline` § 2); at three to
 eight findings that is not a trade worth making.
 
 **A breaker runs only against a fix already committed, and nothing runs
@@ -531,7 +531,7 @@ ROUNDS=$(git log --format=%B "$BASE_REF..HEAD" | sed -n 's/^Fix-Findings-Run: //
 `/fix-findings <numbers>`**, **Stop here — leave the fixes unreviewed on the
 branch**. **At two or more**, this branch has already been through a fix round
 and a re-review, and across three repos the third round found a new
-contradiction more often than it closed one (#347 — skills #345 counted its own
+contradiction more often than it closed one (chrislacey89/skills#347 — chrislacey89/skills#345 counted its own
 rounds to five before deleting the rule it was patching). Lead with **→ Hand
 the remaining findings off as issues (recommended — `/qa` or
 `/request-refactor-plan`), then re-run `/pre-merge` on what is here**, then

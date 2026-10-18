@@ -44,7 +44,7 @@ on.
 Send it as its own message, not as the first message of a fresh workspace. A
 hidden skill typed into a first message that a host prepends a preamble to is
 read as prose and never loads; `/lfg`'s Invocation Position records the field
-incident (#383). Retype it as a second message.
+incident (chrislacey89/skills#383). Retype it as a second message.
 
 `/help` Step 2 states the signal for starting with it. Do not use it on a repo the pipeline
 already compounds (run `/compound` there), as a performance review of anyone
