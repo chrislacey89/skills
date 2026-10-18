@@ -132,8 +132,11 @@ The fixer's instructions, in order:
    finding's own claim requires. If it cannot be reproduced, report
    **`refuted`** with the evidence and make **no commit**. A refuted finding is
    reported to the human, not argued into existence and not fixed anyway.
-2. **Grep `docs/solutions/` for the class of thing you are about to write** — the same
-   move `/execute` Step 1 makes before implementation — and read any entry that
+2. **Grep `docs/solutions/` for the class of thing you are about to write** — both
+   locations, the sidecar's `solutions/` and the project's in-tree path, resolved
+   through the bundled [references/sidecar.sh](references/sidecar.sh) exactly as
+   `/execute` Step 1 does before implementation, with a `MISSING:` line from
+   `sidecar.sh require` on any path an entry cites reported rather than skipped — and read any entry that
    matches before touching the tree. The corpus is a list of shapes that have
    already failed here; on this skill's own PR, four fixers wrote grep-based
    assertions over prose eight days after an entry named that exact shape and

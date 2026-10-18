@@ -52,7 +52,7 @@ Capture pointers to durable state, not copies of its contents. Run the cheap com
 
 If the work belongs to a pipeline feature, locate the research artifact rather than rereading it:
 
-- archive mode (default): `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`
+- archive mode (default): the absolute path the PRD cites, under `sidecar.sh path research` from the bundled [references/sidecar.sh](references/sidecar.sh); check it with `sidecar.sh require <path> --from "PRD #<n>"` and record a `MISSING:` line in the doc rather than dropping the pointer
 - spike-issue mode: `gh issue view <spike-issue-number>`
 
 If a PRD or slice issue is in scope, record its number. Reference each of these by path, URL, or issue number — never copy bodies into the handoff doc. Future-you can run `gh issue view` from the fresh session.
