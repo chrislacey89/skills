@@ -323,18 +323,30 @@ When the storage mode is `archive`, write the research document into the project
 <!-- sidecar-write: research -->
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-DIR="$(bash "$SC" path research)" || exit 1
-ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
+if DIR="$(bash "$SC" path research 2>/dev/null)"; then
+  ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
+  COMMIT=yes
+else
+  # SIDECAR MISS: pre-sidecar archive, keyed by the slug the miss line suggests.
+  MISS="$(bash "$SC" path research 2>&1 >/dev/null)"
+  printf '%s\n' "$MISS" >&2
+  SLUG="$(printf '%s' "$MISS" | sed -n 's/.*--name \([^ ]*\) .*/\1/p')"
+  case "$SLUG" in ''|.*|*/*|*[!a-z0-9._-]*) exit 1 ;; esac
+  DIR="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}/$SLUG"
+  mkdir -p "$DIR" || exit 1
+  ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
+  COMMIT=no
+fi
 cat > "$ENTRY" <<'EOF'
 <the research document, frontmatter from Phase 5b first>
 EOF
 bash "$SC" require "$ENTRY" --from "/research Phase 5c" || exit 1
-bash "$SC" commit -- "$ENTRY" -m "research: <feature-slug>"
+[ "$COMMIT" = no ] || bash "$SC" commit -- "$ENTRY" -m "research: <feature-slug>"
 ```
 
 `commit` never pushes, and nothing here touches the project's tree or its `.git`. `scripts/test-sidecar-resolution.sh` runs this block as written.
 
-**On `SIDECAR MISS`** (the resolver exits 1 and prints the `init` command), write nothing. In a HITL run, show the user the `init` command exactly as the resolver gave it and continue once they have run it; in an AFK run, stop. Creating a sidecar is a human act: auto-creating one is how the old archive split one project across several directories.
+**On `SIDECAR MISS`** (the resolver exits 1 and prints the `init` command with its absolute path), the block still writes the entry, to the pre-sidecar archive directory `<slug>/` that `/write-a-prd` and `/help` still read, where `<slug>` is the `--name` the miss line suggests (`owner-repo`, lowercased). That fallback is the migration path: it keeps the research-to-PRD handoff alive until a sidecar exists, and `sidecar.sh init` later moves those files into the sidecar. It is not committed anywhere. Show the user the miss line's `init` command exactly as printed so the next run lands in the sidecar, and do not run it yourself. In an AFK run, write the entry and note the miss in the handoff. Creating a sidecar is a human act: auto-creating one is how the old archive split one project across several directories.
 
 **Why outside the repo:** the archive is per-user working memory, not team-shared artifact. Branch switches, worktree cleanup, and `.gitignore` hygiene cannot accidentally destroy it. It is not committed to the project and is never visible to collaborators.
 

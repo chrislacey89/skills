@@ -192,8 +192,10 @@ do_resolve() {
         break
     done
     if [ -z "$hit" ]; then
-        printf 'SIDECAR MISS: run: sidecar.sh init --name %s --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>\n' \
-            "$(suggest_name)" >&2
+        # Absolute path to this script: a bare `sidecar.sh` is on no one's PATH.
+        self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+        printf 'SIDECAR MISS: run: bash %s init --name %s --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>\n' \
+            "$self" "$(suggest_name)" >&2
         return 1
     fi
     new_keys=""

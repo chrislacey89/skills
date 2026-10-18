@@ -196,7 +196,7 @@ git -C "$OTHER" remote add origin git@github.com:Foo/Bar-Baz.git
 run "$OTHER" resolve
 check "resolve on an unknown repo exits 1" 1 "$rc"
 contains "it prints SIDECAR MISS with the suggested name filled in" \
-    "SIDECAR MISS: run: sidecar.sh init --name foo-bar-baz" "$out"
+    "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
 run "$OTHER" path solutions
 check "path on a miss exits 1" 1 "$rc"
 run "$OTHER" config get solutions.write
@@ -503,6 +503,23 @@ check "the research entry is the sidecar's HEAD commit" "research/search-index-2
 check "the entry is readable through an old archive path" "yes" \
     "$(if [ -f "$A/mimir/search-index-2026-10-17.md" ]; then echo yes; fi)"
 check "the project's tree is untouched by Phase 5c" "" "$(git -C "$MIG" status --porcelain)"
+
+# Phase 5c on a SIDECAR MISS: the entry lands in the pre-sidecar archive
+# (a private archive root, never the real ~/.claude/research), uncommitted.
+MISSREPO="$tmp/missrepo"
+mkrepo "$MISSREPO"
+git -C "$MISSREPO" remote add origin git@github.com:Foo/Bar-Baz.git
+MISSARCH="$tmp/missarch"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|miss-case|g' -e 's|<YYYY-MM-DD>|2026-10-17|g')"
+sc_before="$(ls "$SKILL_KIT_SIDECAR_ROOT")"
+out="$(cd "$MISSREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$MISSARCH" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block on a miss runs cleanly" 0 "$rc"
+check "on a miss the entry lands in the pre-sidecar archive under the suggested slug" "yes" \
+    "$(if [ -f "$MISSARCH/foo-bar-baz/miss-case-2026-10-17.md" ]; then echo yes; fi)"
+contains "on a miss the user is shown the init command with an absolute path" \
+    "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
+check "on a miss no sidecar is created" "$sc_before" "$(ls "$SKILL_KIT_SIDECAR_ROOT")"
+check "the project's tree is untouched by a missed Phase 5c" "" "$(git -C "$MISSREPO" status --porcelain)"
 
 # Phase 3, with matches in both stores, then with in_tree_path none.
 SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
