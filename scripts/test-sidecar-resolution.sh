@@ -217,11 +217,13 @@ check "require expands a quoted leading ~/ (present file)" "0:" "$rc:$out"
 # shellcheck disable=SC2088  # literal ~ is the input under test
 out=$(HOME="$tmp/home" bash "$SC" require "~/r/b.md" --from "PRD #1" 2>&1); rc=$?
 check "require on an absent ~/ path shows the path as given" "1:MISSING: ~/r/b.md (referenced by PRD #1)" "$rc:$out"
-mkdir -p "$tmp/lessons/a" "$tmp/lessons/b"; : > "$tmp/lessons/a/entry.md"; : > "$tmp/lessons/a/sibling.md"
+mkdir -p "$tmp/lessons/a" "$tmp/lessons/b"; : > "$tmp/lessons/a/entry.md"; : > "$tmp/lessons/a/sibling.md"; : > "$tmp/lessons/b/entry.md"
 out=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/a/entry.md" 2>&1); rc=$?
 check "require resolves a bare sibling name against the citing file's folder" "0:" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/b/entry.md" 2>&1); rc=$?
-check "require does not search other folders for a bare name" "1:MISSING: sibling.md (referenced by lessons/b/entry.md)" "$rc:$out"
+check "require resolves a bare name in a sibling category folder" "0:" "$rc:$out"
+out=$(cd "$tmp" && bash "$SC" require "nowhere.md" --from "lessons/b/entry.md" 2>&1); rc=$?
+check "require on a bare name absent from every category still reports MISSING" "1:MISSING: nowhere.md (referenced by lessons/b/entry.md)" "$rc:$out"
 run "$tmp"
 check "no verb is a usage error" 2 "$rc"
 run "$PROJ" path dossier

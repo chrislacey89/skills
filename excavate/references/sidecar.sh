@@ -475,6 +475,16 @@ cmd_require() {
     if [ ! -e "$probe" ] && [ -f "$from" ]; then
         case "$probe" in /*) ;; *) [ -e "$(dirname "$from")/$probe" ] && probe="$(dirname "$from")/$probe" ;; esac
     fi
+    # A bare name may also live in a sibling category folder (<store>/<category>/<name>.md),
+    # so look one level up and across, never deeper.
+    if [ ! -e "$probe" ] && [ -f "$from" ]; then
+        case "$probe" in
+            /*|*/*) ;;
+            *) for cand in "$(dirname "$(dirname "$from")")"/*/"$probe"; do
+                   [ -e "$cand" ] && { probe="$cand"; break; }
+               done ;;
+        esac
+    fi
     if [ ! -e "$probe" ]; then
         printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
         exit 1
