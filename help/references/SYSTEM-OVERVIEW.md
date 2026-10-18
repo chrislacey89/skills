@@ -99,7 +99,7 @@ For milestone-planned work, `/research` does not consume a raw `roadmap bet`. It
 
 **Output:** One research artifact, location selected per project via `research.storage` in the project's `sidecar.json` (default `archive`; a project with no sidecar may still declare it in `.claude/settings.json`):
 
-- **`archive`** — file at `<sidecar>/research/<feature-slug>-<YYYY-MM-DD>.md`, committed to the project's sidecar, outside the repo. Worktree- and branch-resilient. Right for solo / single-machine / private projects.
+- **`archive`** — file at the path `/research` Phase 5c writes (see Phase 5c). Worktree- and branch-resilient. Right for solo / single-machine / private projects.
 - **`spike-issue`** — closed-on-creation GitHub issue in the same repo as the PRD, labeled `research`, with the same body and frontmatter the archive would carry. Reachable from any machine via `gh issue view`, citable from PRD/slice/PR/compound via `Refs #N`. Right for public, portfolio, OSS, transparency-themed, multi-contributor, or multi-machine projects.
 
 Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot` so future readers can judge freshness regardless of storage location. Referenced in the PRD. Persists after ship — neither location is touched during cleanup or backtracking. Supersession is by new dated artifact, never by editing the existing one.
