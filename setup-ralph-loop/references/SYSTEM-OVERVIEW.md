@@ -272,7 +272,7 @@ State never lives in the project tree. It lives in three places: GitHub (issues 
 | QA bugs | GitHub issues | Created during manual QA, closed by Ralph |
 | Decisions register | Ubiquitous language doc (decisions section) | Co-located with terminology, single source of truth |
 | Technical research | Per-project, selected by `research.storage` in the project's `sidecar.json`. Default `archive` → file in the sidecar at `<sidecar>/research/<feature>-<date>.md`. Opt-in `spike-issue` → closed `research`-labeled GitHub issue in the same repo as the PRD | Storage location matches the project's audience flow without forcing a global rule. Archive is right for solo / single-machine / private work. Spike-issue is right for public, portfolio, OSS, multi-contributor, or multi-machine work where the PRD's audience reads via GitHub. Both carry the same frontmatter and equivalent authority |
-| Per-project configuration | `sidecar.json` in the project's sidecar (`mode`, `solutions.write`, `solutions.in_tree_path`, `research.storage`, `forge`, `tracker`, `verify`) | Read with `sidecar.sh config get`; never written into the project's tree, so a guest repo carries no pack footprint |
+| Per-project configuration | `sidecar.json` in the project's sidecar (`mode`, `solutions.write`, `solutions.in_tree_path`, `research.storage`, `forge`, `tracker`, `verify`) | Read with `sidecar.sh config get`; never written into the project's tree |
 | Institutional knowledge | `docs/solutions/` in repo, or `<sidecar>/solutions/` when the sidecar's `solutions.write` is `sidecar`; readers consult both | Compounds over time, consulted during planning |
 | Workflow definitions | `.claude/skills/` in repo | Composable, load-on-demand, version-controlled |
 
