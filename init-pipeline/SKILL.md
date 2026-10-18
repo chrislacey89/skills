@@ -14,7 +14,7 @@ Scaffold pipeline enforcement infrastructure into the current project: Claude Co
 
 ## What it sets up
 
-All files are created in the **target project**, not in the Skill Kit repo.
+All files are created in the **target project**, not in the Skill Kit repo — except § 8's sidecar, which lives outside both.
 
 ### 1. Git guardrails (Claude Code hook)
 
@@ -46,7 +46,9 @@ Use the confirmed list (default or customized) to populate the `IMPL_PATTERNS` a
 
 **Path C — a hook is installed but does not read every path clause 1 tests** (`hooks-stale`: a project initialized before one of those paths shipped — before the post-review edit lock, or before `.claude/.lfg-active`). `/execute` Step 0 prints the terms it found missing on a `missing:` line on stderr, beside the verdict it prints on stdout; every one of them is a boundary this project's install predates, and this path's job is to bring the hook up to all of them at once rather than one boundary per run. The trigger-surface question was answered at that project's own install, so neither Path A's question nor Path B's default applies here — both belong to the fresh-install case, and reaching for either on this path is the one harm this path exists to prevent. Do not ask again, and do not silently re-default: carry the installed hook's `IMPL_PATTERNS` array — with the provenance comment above it — and its skip clauses over verbatim, because the project may have customized them at its own install time, and changing them changes the classification gate's behavior for work that has nothing to do with the lock. Replace everything from the installed hook's `# Check for classification markers` comment through its final `exit 0` with the marker-check clauses at the foot of the block below. On a pre-lock hook that is one clause replaced and one added, not two replaced, because such a hook carries the classification clause alone and the post-review clause is what the upgrade brings; on a hook that already has both, it is both replaced with current text. Either way the span is the same and the replacement is wholesale, so this path never has to know which boundary it is crossing — which is what lets one run fix a hook that is behind on several.
 
-**The rest of the run, per path.** § 4 and § 5 are the two sections below that wait on a human — § 4 presents its detection findings and holds for a confirmation before invoking `/setup-pre-commit`, and § 5 asks whether to install the optional quality gate — and a run with nobody to ask cannot execute either. That is not hypothetical: `/execute` Step 0 sends both of its verdicts here and holds Step 1 until this skill reports, so a section waiting on an answer nobody is present to give stalls the caller rather than the callee, and an AFK Ralph iteration drives `claude --message` with no user at the keyboard at all. On **Path A**, run everything below, § 4 and § 5 included. On **Path B**, run § 3, § 6 and § 7; take § 4 without asking, applying what its detection block finds or the default it names when it finds nothing; and skip § 5, which is optional and whose unanswered default is no. On **Path C**, run § 3 (a merge, never an overwrite) and § 6 — whose `.gitignore` append is idempotent, and is the step that stops the lock's two flags from landing as committable untracked files in a repo that predates them — then stop: skip § 4, § 5 and § 7 outright, because this project answered them at its own install and a lock upgrade that re-opens a settled toolchain decision is doing something nothing asked it to do. If a Path C run notices that a section it skipped never ran at that project at all, say so in what it reports and leave it — `/init-pipeline` invoked by hand, with a user present, is Path A and asks properly.
+**No path — a current hook is installed, and a user ran `/init-pipeline` by hand.** `/execute` Step 0's gate reports `hooks-lock-present` for this hook, so it never auto-invokes this skill here, and none of A, B, or C applies: the trigger surface was settled at this project's install. Leave the hook as it is and ask none of the questions above.
+
+**The rest of the run, per path.** § 4 and § 5 are the two sections below that wait on a human — § 4 presents its detection findings and holds for a confirmation before invoking `/setup-pre-commit`, and § 5 asks whether to install the optional quality gate — and a run with nobody to ask cannot execute either. That is not hypothetical: `/execute` Step 0 sends both of its verdicts here and holds Step 1 until this skill reports, so a section waiting on an answer nobody is present to give stalls the caller rather than the callee, and an AFK Ralph iteration drives `claude --message` with no user at the keyboard at all. On **Path A**, run everything below, § 4, § 5 and § 8 included. On **Path B**, run § 3, § 6 and § 7; take § 4 without asking, applying what its detection block finds or the default it names when it finds nothing; and skip § 5, which is optional and whose unanswered default is no, and § 8, which creates nothing without a human to answer it. On a **current-hook hand-run**, run § 8 alone: everything else this skill does was done at this project's install, and § 8 is the one section a project set up before the sidecar existed has never run. On **Path C**, run § 3 (a merge, never an overwrite) and § 6 — whose `.gitignore` append is idempotent, and is the step that stops the lock's two flags from landing as committable untracked files in a repo that predates them — then stop: skip § 4, § 5, § 7 and § 8 outright, because this project answered them at its own install and a lock upgrade that re-opens a settled toolchain decision is doing something nothing asked it to do. If a Path C run notices that a section it skipped never ran at that project at all, say so in what it reports and leave it. For § 8 the route is a hand-run once the hook is current, which runs § 8 alone.
 
 **Skip logic stays extension-agnostic.** Tests, type declarations, and config files are detected by path substring (`*test*`, `*spec*`, `.d.ts`, `.config.*`) rather than per-language expansion.
 
@@ -350,12 +352,60 @@ echo "host_owned=$host_owned"
 
 The bare presence of a host env var does not answer the question: `CONDUCTOR_WORKSPACE_PATH` is inherited by any shell started under Conductor and can name a workspace of a different repository entirely, so it counts only when it contains the current toplevel. `"host"` and `"pipeline"` remain for a user who sets them by hand, knowing every clone of the repo shares the answer.
 
+### 8. Sidecar (Path A and a current-hook hand-run only)
+
+The sidecar is the project's private store outside its tree: `sidecar.json` (this project's pack configuration), the research archive, and solutions entries. [scripts/sidecar.sh](scripts/sidecar.sh) is the only thing that computes its path or commits to it; call it by its absolute installed path and never inline either. `/research`, `/compound`, and `/excavate` read it through their bundled copies.
+
+**Path A, or a hand-run on a project whose hook is current (§ 2), with a user present.** On Path B and Path C, skip this section: create no sidecar and ask nothing. A sidecar records two decisions only a human can make, and creating one is a human act. A run with nobody to ask that guesses them writes a store every later run trusts. The skills that read the sidecar print the resolver's `init` command on a miss, so skipping here strands nothing.
+
+This section writes to the sidecar and never to the project. `.claude/settings.json` is byte-identical before and after it, and § 7's rule against scaffolding a machine fact into a committed file holds here too: the sidecar is per-machine and uncommitted to the project, which is why these answers live there.
+
+**Resolve first.**
+
+```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
+bash "$SC" resolve
+```
+
+- **Hit** (exit 0, prints the sidecar path): show `mode` and `solutions` from its `sidecar.json` and offer to keep them; keep is the default. To change a value, edit `sidecar.json` and commit it with `bash "$SC" commit -- sidecar.json -m "sidecar: <what changed>"`. Do not run `init` again: it refuses a project that already has a sidecar.
+- **Miss** (stderr carries a `SIDECAR MISS` line with an `init` command; exit 1 alone is not enough, because `resolve` also exits 1 outside a git repository and when it finds a sidecar but cannot commit a new alias, so on any other exit 1 stop and relay what it printed as printed, with no questions and no `init`): ask the three questions below, **one per turn**, each with the recommended answer first, then run `init`.
+
+**Q1 — mode.** `owned` (your repository: the pack may write issues, labels, milestones, and PRs on its forge) or `guest` (someone else's, such as a client's: the pack writes nothing to its forge). The script derives the forge permissions from this answer; do not ask about them separately.
+
+**Q2 — the repo's existing in-tree knowledge path.** Detect it, then show it for confirmation before anything is written.
+
+```bash
+ITP=none
+for d in docs/solutions docs/adr docs/adrs docs/decisions; do
+  if [ -d "$d" ]; then ITP="$d"; break; fi
+done
+echo "in_tree_path=$ITP"
+```
+
+Offer the detected value first. The user may replace it with any other path, or with `none`.
+
+**Q3 — `solutions.write`**, where `/compound` puts a new lesson:
+
+- `sidecar` — in the sidecar, committed there, never in the project's tree.
+- `in-tree` — at the Q2 path, on the open PR.
+- `ask` — `/compound` offers the choice per entry with the sidecar preselected. An AFK run resolves it to the sidecar without asking.
+
+The default is `sidecar` whenever Q1 is `guest`, whatever path Q2 detected: a guest repo is someone else's, and a committed `docs/solutions` there is theirs, not a place for the pack's lessons. When Q1 is `owned`, the default is `in-tree` only when the confirmed path is `docs/solutions` and it is committed (`git ls-files docs/solutions | head -n 1` prints something). Otherwise the default is `sidecar`, including for `docs/adr`, `docs/adrs`, `docs/decisions`, and an uncommitted `docs/solutions`. A repo with its own convention keeps that convention for its own records and is not flooded with the pack's. When Q2's answer is `none`, skip Q3: `sidecar` is the only valid answer, because `init` refuses `in-tree` and `ask` without an in-tree path.
+
+**Then create it**, with the miss line's suggested `--name`:
+
+```bash
+bash "$SC" init --name <suggested> --mode <Q1> --write <Q3> --in-tree-path <Q2>
+```
+
+`init` refuses rather than guesses: when the project's identity is already claimed by another sidecar, or when no global git identity is set, which it copies as the sidecar's committer. Relay a refusal as printed. Do not set a git identity on the user's behalf. By default `init` also moves this project's old research archive into the sidecar, and reports each move on stderr. Show those lines to the user.
+
 ## Verification
 
-Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all seven. A Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, so the pre-commit and quality-gate items below belong to the install that already ran and are not this run's to satisfy:
+Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all eight. A Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, and a current-hook hand-run produces § 8's sidecar and nothing else, so on either the pre-commit and quality-gate items below belong to the install that already ran and are not this run's to satisfy:
 
 - [ ] `.claude/hooks/enforce-classification.sh` exists and is executable
-- [ ] Hook's `IMPL_PATTERNS` array matches the project's implementation surface: on § 2's Path A or B, the default list or the customized answer confirmed during this install; on Path C, byte-identical to the array in the hook that was already there
+- [ ] Hook's `IMPL_PATTERNS` array matches the project's implementation surface: on § 2's Path A or B, the default list or the customized answer confirmed during this install; on Path C or a current-hook hand-run, byte-identical to the array in the hook that was already there
 - [ ] `.claude/hooks/block-dangerous-git.sh` exists and is executable
 - [ ] `.claude/settings.json` has both PreToolUse hooks configured
 - [ ] If quality gate accepted: `.claude/hooks/quality-gate.sh` exists, is executable, and PostToolUse hook is in settings
@@ -364,11 +414,14 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] `.gitignore` has marker entries
 - [ ] `.claude/settings.json` has no `worktree.provisioning` key written by this run (`auto`), whether or not a host env var is set
 - [ ] No existing project settings were overwritten
+- [ ] Path A or a current-hook hand-run: `bash "$SC" resolve` exits 0 and prints the sidecar, and its `sidecar.json` carries the confirmed `mode`, `solutions.write`, and `solutions.in_tree_path`
+- [ ] `.claude/settings.json` is unchanged by § 8: take `shasum .claude/settings.json` right before § 8 starts and again after § 8, and the two match
+- [ ] Path B or C: no sidecar was created (`bash "$SC" resolve` gives the same answer it gave before the run)
 
 ## Handoff
 
 - **Expected input:** any project that will use `/execute`
-- **Produces:** complete enforcement infrastructure — Claude Code hooks, git guardrails, pre-commit hooks using detected or user-confirmed tools
+- **Produces:** complete enforcement infrastructure — Claude Code hooks, git guardrails, pre-commit hooks using detected or user-confirmed tools — and, on Path A or a current-hook hand-run, the project's sidecar with its `mode` and `solutions` target
 - **Auto-invoked by:** `/execute` Step 0 when `.claude/hooks/enforce-classification.sh` is missing, or when it exists but does not read every term in that gate's `GATE_TERMS` — a pre-lock or pre-marker install, re-scaffolded per § 2
 - **Invokes:** `/git-guardrails-claude-code` (project scope), `/setup-pre-commit`
-- **Supports downstream:** `/tdd` (marker creation), `/execute` (marker cleanup); reserves `.claude/.ralph-checked` for `/setup-ralph-loop`, which creates the marker itself (auto-invoked by `/execute` for multi-slice work, or run manually); reserves `.claude/.review-stamped` and `.claude/.fix-findings-active` for the post-review edit lock, written by `/pre-merge` Phase 4 and `/fix-findings` respectively
+- **Supports downstream:** `/research`, `/compound`, and `/excavate` (they read the sidecar § 8 creates; `/lfg` stops on a miss before its AFK phase), `/tdd` (marker creation), `/execute` (marker cleanup); reserves `.claude/.ralph-checked` for `/setup-ralph-loop`, which creates the marker itself (auto-invoked by `/execute` for multi-slice work, or run manually); reserves `.claude/.review-stamped` and `.claude/.fix-findings-active` for the post-review edit lock, written by `/pre-merge` Phase 4 and `/fix-findings` respectively

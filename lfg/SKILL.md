@@ -126,6 +126,26 @@ echo "host_owned=$host_owned"
 A bare `CONDUCTOR_WORKSPACE_PATH` is not enough: it leaks into shells started
 under Conductor and can name another repository's workspace.
 
+**Sidecar (feature path only).** Why this stop exists is stated in
+`/init-pipeline` § 8. Check for it now, while the user is
+still here, through the bundled resolver
+[references/sidecar.sh](references/sidecar.sh) at its absolute installed path:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" resolve
+```
+
+Exit 0 proceeds. Exit 1 alone does not mean there is no sidecar: it is also the
+exit for "not inside a git repository" and for a sidecar found whose new alias
+could not be committed. Decide on the output, not the code. If stderr carries a
+`SIDECAR MISS` line with an `init` command: **stop** before shape-lite, print that
+command exactly as given, and say that `/init-pipeline` run by hand asks the
+questions it needs, on Path A or on a project whose hook is current (its § 8). On any other exit 1, stop and relay what the resolver
+printed as printed; it is not a miss, so offer no `init` command. Do not run
+`init` yourself, because creating a sidecar is a human act. The tiny path writes
+nothing to a sidecar and skips this check.
+
 ### Tiny path
 
 1. Create the skip marker, exactly as the trivial rule directs:
@@ -173,7 +193,8 @@ the PR body's `Closes #N` closes it.
 #### 4. Scaffold (AFK)
 
 Invoke `/init-pipeline` and **declare Path B** in the invocation: say that no user
-is present and that the trigger-surface question takes its default. Invoke it only
+is present and that the trigger-surface question takes its default. Path B skips
+`/init-pipeline` § 8, which is why Step 0 checked the sidecar first. Invoke it only
 now, after shape-lite has ended. Otherwise it sees a present user, takes Path A,
 and asks the trigger-surface question. If a hook is already installed, run
 `/execute` Step 0's pipeline hooks gate and hand its verdict to `/init-pipeline`:
