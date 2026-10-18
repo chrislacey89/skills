@@ -199,7 +199,7 @@ If relevant solutions exist, read them and incorporate their lessons. Note which
 
 **Scope check before transfer.** When a loaded solution doesn't state explicit scope or preconditions (the `Rule Scope` section added by `/compound`), or when its stated scope doesn't match the current work's structural shape, re-derive the recommendation from first principles rather than transferring it. A rule correct for a 2-step agent loop with a terminal forced tool can invert for a 3-step loop where the same tool is non-terminal — keyword match is not shape match. Verify the shape, don't skip the check.
 
-**Excavation dossier.** `/excavate` writes its dossier into the same sidecar directory Phase 5c writes to, `$(bash "$SC" path research)`. When an `excavation-*.md` file exists there (a legacy repo that was never compounded), read the newest one's Hotspots section and only the `stated` rows of its Decisions section for the paths this feature touches; `inferred` rows carry no research-level authority. Its Coverage block states the window and what the history could not show; treat its `date` as the snapshot date under the same staleness judgment as below.
+**Excavation dossier.** `/excavate` writes its dossier only into the sidecar's research directory, `$(bash "$SC" path research)`. Unlike Phase 5c it takes no no-sidecar fallback (on `SIDECAR MISS` it waits for the user to create one), so on a miss there is no dossier to read. When an `excavation-*.md` file exists there (a legacy repo that was never compounded), read the newest one's Hotspots section and only the `stated` rows of its Decisions section for the paths this feature touches; `inferred` rows carry no research-level authority. Its Coverage block states the window and what the history could not show; treat its `date` as the snapshot date under the same staleness judgment as below.
 
 When the shaped input, an issue, or the user cites a specific dossier path, check that it exists before relying on it:
 
@@ -274,7 +274,7 @@ echo "research.storage = $STORAGE, from $SOURCE"
 
 The two modes:
 
-- **`archive`** (default) — write into the project's sidecar, `<sidecar>/research/`: a private git repository outside the working tree, resolved by `sidecar.sh path research`. Worktree- and branch-resilient, never committed to the project, never visible to collaborators. Right for solo / single-machine / private projects.
+- **`archive`** (default) — write a file outside the working tree, at the location Phase 5c resolves: the project's sidecar when one exists, the pre-sidecar archive when none does. Worktree- and branch-resilient, never committed to the project, never visible to collaborators. Right for solo / single-machine / private projects.
 - **`spike-issue`** — file the research as a closed-on-creation GitHub issue in the same repo as the PRD, labeled `research`. Right for public, portfolio, OSS, transparency-themed, multi-contributor, or multi-machine projects where the PRD's audience is GitHub and the research must be openable by that audience without per-user setup. Spike issue visibility follows the repo's visibility — private repos produce private spikes.
 
 Tell the user the line the block printed; it names the mode and where the value came from (e.g., `research.storage = spike-issue, from .claude/settings.json (no sidecar resolved)`). If neither the sidecar nor the settings file sets it, default to `archive` and proceed.
@@ -316,9 +316,14 @@ callback_contracts_snapshot:
 ---
 ```
 
-#### Phase 5c — Archive mode (default): Write to the Sidecar
+#### Phase 5c — Archive mode (default): Write the Research File
 
-When the storage mode is `archive`, write the research document into the project's sidecar and commit it there. `<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date; the resolver supplies the directory:
+When the storage mode is `archive`, write the research document outside the working tree. The block below is the one statement of where, and it has two outcomes:
+
+- **A sidecar resolves:** the entry goes into `<sidecar>/research/` and is committed there.
+- **`SIDECAR MISS`:** the entry goes into the pre-sidecar archive, `${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}/<slug>/`, and is committed nowhere (see *On `SIDECAR MISS`* below).
+
+`<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date; the resolver supplies the directory:
 
 <!-- sidecar-write: research -->
 ```bash
@@ -346,7 +351,7 @@ bash "$SC" require "$ENTRY" --from "/research Phase 5c" || exit 1
 
 `commit` never pushes, and nothing here touches the project's tree or its `.git`. `scripts/test-sidecar-resolution.sh` runs this block as written.
 
-**On `SIDECAR MISS`** (the resolver exits 1 and prints the `init` command with its absolute path), the block still writes the entry, to the pre-sidecar archive directory `<slug>/` that `/write-a-prd` still reads, where `<slug>` is the `--name` the miss line suggests (`owner-repo`, lowercased). That fallback is the migration path: it keeps the research-to-PRD handoff alive until a sidecar exists, and `sidecar.sh init` later moves those files into the sidecar. It is not committed anywhere. Show the user the miss line's `init` command exactly as printed so the next run lands in the sidecar, and do not run it yourself. In an AFK run, write the entry and note the miss in the handoff. Creating a sidecar is a human act: auto-creating one is how the old archive split one project across several directories.
+**On `SIDECAR MISS`** (the resolver exits 1 and prints the `init` command with its absolute path), the block still writes the entry, to the pre-sidecar archive directory `<slug>/`, where `<slug>` is the `--name` the miss line suggests (`owner-repo`, lowercased). `/write-a-prd`'s archive-mode read block finds it by parsing the same miss line, and `scripts/test-sidecar-resolution.sh` runs that block against this one's output. That fallback is the migration path: it keeps the research-to-PRD handoff alive until a sidecar exists, and `sidecar.sh init` later moves those files into the sidecar. It is not committed anywhere. Show the user the miss line's `init` command exactly as printed so the next run lands in the sidecar, and do not run it yourself. In an AFK run, write the entry and note the miss in the handoff. Creating a sidecar is a human act: auto-creating one is how the old archive split one project across several directories.
 
 **Why outside the repo:** the archive is per-user working memory, not team-shared artifact. Branch switches, worktree cleanup, and `.gitignore` hygiene cannot accidentally destroy it. It is not committed to the project and is never visible to collaborators.
 
