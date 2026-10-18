@@ -141,7 +141,7 @@ exit for "not inside a git repository" and for a sidecar found whose new alias
 could not be committed. Decide on the output, not the code. If stderr carries a
 `SIDECAR MISS` line with an `init` command: **stop** before shape-lite, print that
 command exactly as given, and say that `/init-pipeline` run by hand asks the
-questions it needs, on Path A or on a project whose hook is current (its § 8). On any other exit 1, stop and relay what the resolver
+questions it needs (its § 8), in one run whatever state the project's hook is in. On any other exit 1, stop and relay what the resolver
 printed as printed; it is not a miss, so offer no `init` command. Do not run
 `init` yourself, because creating a sidecar is a human act. The tiny path writes
 nothing to a sidecar and skips this check.
@@ -192,15 +192,21 @@ the PR body's `Closes #N` closes it.
 
 #### 4. Scaffold (AFK)
 
-Invoke `/init-pipeline` and **declare Path B** in the invocation: say that no user
-is present and that the trigger-surface question takes its default. Path B skips
-`/init-pipeline` § 8, which is why Step 0 checked the sidecar first. Invoke it only
-now, after shape-lite has ended. Otherwise it sees a present user, takes Path A,
-and asks the trigger-surface question. If a hook is already installed, run
-`/execute` Step 0's pipeline hooks gate and hand its verdict to `/init-pipeline`:
-`hooks-stale` is Path C. Run the gate, do not restate it — it is the list of
-terms that decides this, and a second copy of that list here is the drift
-`docs/restated-claims.md` describes. Git guardrails stay on.
+Run `/execute` Step 0's pipeline hooks gate first, and let its verdict pick the
+path. Run the gate, do not restate it — it is the list of terms that decides
+this, and a second copy of that list here is the drift `docs/restated-claims.md`
+describes. Invoke `/init-pipeline` only now, after shape-lite has ended, and say
+in the invocation that no user is present; otherwise it sees a present user and
+asks its questions.
+
+- `hooks-absent` → invoke it and **declare Path B**: the trigger-surface question
+  takes its default.
+- `hooks-stale` → invoke it and declare Path C.
+- `hooks-lock-present` → do not invoke it. With nobody present it has nothing to
+  do on that hook (its § 2 "No path" case).
+
+Neither Path B nor an auto-invoked Path C runs `/init-pipeline` § 8, which is why
+Step 0 checked the sidecar first. Git guardrails stay on.
 
 This matters more to this skill than to any other, because `.claude/.lfg-active`
 is the newest marker: a project whose hook predates it accepts every other marker
@@ -320,7 +326,7 @@ promote, or discard. It carries, in this order:
 
 - **Expected input:** an ask typed as `/lfg <ask>`, plus a user present for shape-lite on the feature path.
 - **Produces:** a stamped PR whose body is the recap (banner, decisions, gap issues, stop tally, proof paths); a PRD-lite issue on the feature path; gap issues carrying the gap label; `open` ledger rows moved to `filed`.
-- **May invoke:** `/init-pipeline` (Path B), `/pre-merge --loop`.
+- **May invoke:** `/init-pipeline` (Path B, or Path C on a stale hook), `/pre-merge --loop`.
 - **Returns control to:** the user, who demos the branch and then decides whether to promote or discard it.
 - **Comes next by default:** the user. To keep the code, settle the ledger and run `/closeout`. To discard it, close the PR.
 
