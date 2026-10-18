@@ -578,7 +578,7 @@ Do not present all four questions at once. Iterate on each answer until the user
 
 **Before handoff, name any remaining feasibility spikes.** If the document still carries `Uncertain` assumptions whose verdicts are cheaply code-verifiable and have not been discharged, list them under a short "Pending feasibility spikes" closing note and name `/prototype` FEASIBILITY as the discharge route. The PRD can still be written with those assumptions tagged — but the named discharge route makes it cheap for the next agent (or this one, in `/execute` Step 0) to settle them before mid-implementation. The cost-of-delay framing is XP's *Defect Cost Increase*: discharging at `/research` time costs minutes; the same assumption discovered at `/execute` time costs hours.
 
-In archive mode, Phase 5c commits the research file to the sidecar, never to the project's git. In spike-issue mode, the research lives as a closed GitHub issue plus, when a sidecar resolves, a cache copy in the sidecar; do not commit the cache copy to the project either.
+In archive mode, see Phase 5c for where the research file is written and whether it is committed. In spike-issue mode, the research lives as a closed GitHub issue plus, when a sidecar resolves, a cache copy in the sidecar; do not commit the cache copy to the project either.
 
 **At the end of Phase 6, print the runtime handoff line:**
 
@@ -587,13 +587,13 @@ In archive mode, Phase 5c commits the research file to the sidecar, never to the
 **Input:** <archive-path-or-spike-issue-url>
 ```
 
-For archive mode, the input is the absolute `$ENTRY` path Phase 5c wrote, under `<sidecar>/research/`. For spike-issue mode, the input is the closed GitHub issue URL. Print this line whether the user chose to continue here or in a fresh session — the line is the durable handoff either way.
+For archive mode, the input is the absolute `$ENTRY` path Phase 5c wrote. For spike-issue mode, the input is the closed GitHub issue URL. Print this line whether the user chose to continue here or in a fresh session — the line is the durable handoff either way.
 
 ## Handoff
 
 - **Expected input:** clarified problem framing from `/shape`, including choices, assumptions, impositions, and structural signals
 - **Produces:** a research artifact carrying verified version and documentation guidance plus an estimate-readiness posture. Storage location depends on the project's `research.storage` setting:
-  - **`archive`** (default): file at `<sidecar>/research/<feature-slug>-<YYYY-MM-DD>.md`, committed in the sidecar
+  - **`archive`** (default): file at the path Phase 5c wrote (see Phase 5c)
   - **`spike-issue`**: closed GitHub issue labeled `research` in the same repo as the PRD, plus a cache copy in the sidecar when one resolves
 - **May invoke:** `/api-design-review` when contract risk is high enough that the API shape needs focused scrutiny before shaping continues
 - **Comes next by default:** `/write-a-prd`
