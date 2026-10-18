@@ -681,6 +681,8 @@ git -C "$HR" add docs/adr/0001.md
 hc 2026-03-10T00:00:00Z "adr"
 hrun "$HR"
 contains "entries at in_tree_path docs/adr are counted (row 10 does not fire)" "in-tree (docs/adr)=1" "$hout"
+contains "an in-tree entry committed after the previous landing counts as compounding the last merge" \
+    "last merge compounded: yes" "$hout"
 git -C "$HSC" checkout -q -- sidecar.json
 
 # Two sidecars claiming one key: a warning naming both, and the block still reports a sidecar.
