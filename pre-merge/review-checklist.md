@@ -58,7 +58,7 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 
 **Runs in:** sub-agent A.
 
-**Principle:** State lives in GitHub (issues) or in code (`docs/solutions/`, skills). No ad-hoc filesystem state.
+**Principle:** State never lives in the project tree. It lives in GitHub (issues), in the project's sidecar, or in code (`docs/solutions/`, skills). No ad-hoc filesystem state.
 
 **Violation patterns:**
 - New state files: `.gsd/`, `STATE.md`, `PLAN.md`, `CONTEXT.md`, `ROADMAP.md`, `SUMMARY.md`, `continue.md`, `UAT.md`

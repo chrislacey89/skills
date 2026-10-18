@@ -179,7 +179,7 @@ Skill Kit prefers durable state in GitHub and temporary state only when it serve
 
 ### Durable per-user artifacts outside the repo
 
-- Research files live in `~/.claude/research/<repo-slug>/<feature>-<date>.md` — worktree- and branch-resilient, not committed to the repo, freshness judged via frontmatter `date` and `installed_versions_snapshot`
+- Research files live in the project's sidecar at `<sidecar>/research/<feature>-<date>.md` — worktree- and branch-resilient, committed to the sidecar and never to the repo, freshness judged via frontmatter `date` and `installed_versions_snapshot`
 - Skill-local reference files live next to the skill when they are specific to that skill
 
 ### What Skill Kit avoids
@@ -223,7 +223,7 @@ For blank-project or major-tranche work, `/shape` can hand that closing summary 
 
 ### `/research`
 
-- An archived research file with verified docs, version checks, and recommended approach
+- A research file archived in the sidecar, with verified docs, version checks, and recommended approach
 
 For milestone-planned work, `/research` should consume the selected feature issue only after it has been expanded into a `research-ready` brief.
 
@@ -254,7 +254,7 @@ For milestone-planned work, `/research` should consume the selected feature issu
 ## Operating tips
 
 - Use the written artifact from the previous step instead of relying on full conversation history.
-- Research files live in `~/.claude/research/<repo>/…` outside the repo. They persist across features — let stale entries age naturally; the frontmatter `date` and `installed_versions_snapshot` are how future readers judge freshness.
+- Research files live in the project's sidecar (`<sidecar>/research/`), outside the repo. They persist across features — let stale entries age naturally; the frontmatter `date` and `installed_versions_snapshot` are how future readers judge freshness. A pre-sidecar `~/.claude/research/<slug>/` directory is moved there by `/init-pipeline`, which leaves a symlink at the old path so PRDs that cite it still resolve.
 - Treat `docs/solutions/` as a compounding loop, not a dumping ground.
 - For milestone-planned work, do not run `/research` against a raw `roadmap bet`; promote the chosen feature issue to `research-ready` first.
 - Use helper skills only when their narrower rigor is actually needed.
