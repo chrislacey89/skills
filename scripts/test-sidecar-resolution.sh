@@ -18,6 +18,10 @@
 #   - Plain add-then-commit under 20 parallel writers loses most files to
 #     index.lock contention.
 #
+# The "archive migration" section pins init's move of the old per-slug
+# research directories into the sidecar: PRD issues embed those absolute
+# paths, so each old directory must survive as a symlink that still resolves.
+#
 # Section 9 runs the /compound sidecar block extracted from compound/SKILL.md,
 # so an edit to that block is tested as written.
 #
@@ -43,6 +47,9 @@ git config --file "$GIT_CONFIG_GLOBAL" user.email "tester@example.com"
 git config --file "$GIT_CONFIG_GLOBAL" init.defaultBranch main
 git config --file "$GIT_CONFIG_GLOBAL" protocol.file.allow always
 export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars"
+# init migrates the research archive by default; never let it touch the
+# runner's real ~/.claude/research.
+export SKILL_KIT_RESEARCH_ARCHIVE="$tmp/archive"
 
 pass=0
 fail=0
@@ -393,6 +400,68 @@ check "init exits 1 when the sidecar.json write fails" 1 "$rc"
 check "a failed jq write leaves no sidecar directory" "no" "$(if [ -e "$SKILL_KIT_SIDECAR_ROOT/jqfail" ]; then echo yes; else echo no; fi)"
 run "$JQFAIL" init --name jqfail --mode guest --write sidecar --in-tree-path none
 check "a retry after the jq failure succeeds" 0 "$rc"
+
+# -----------------------------------------------------------------------------
+section "archive migration"
+
+# One project under three old slugs, as the originating machine's archive
+# holds mimir: the checkout basename (pre-remote), and owner-repo for each of
+# two remotes (an org rename). Mixed case, because the old slugs were.
+mkdir -p "$tmp/mig"
+MIG="$tmp/mig/mimir"
+mkrepo "$MIG"
+git -C "$MIG" remote add origin git@github.com:NewEra-Alliances/Mimir.git
+git -C "$MIG" remote add old https://github.com/New-Era-Technology/mimir.git
+A="$SKILL_KIT_RESEARCH_ARCHIVE"
+mkdir -p "$A/mimir" "$A/New-Era-Technology-mimir" "$A/NewEra-Alliances-mimir" "$A/unrelated"
+printf 'local\n'  > "$A/mimir/local-2026-01-01.md"
+printf 'tech\n'   > "$A/New-Era-Technology-mimir/tech-2026-02-01.md"
+printf 'alli\n'   > "$A/NewEra-Alliances-mimir/alli-2026-03-01.md"
+cp "$A/mimir/local-2026-01-01.md" "$A/NewEra-Alliances-mimir/"
+printf 'other\n'  > "$A/unrelated/z.md"
+
+run "$MIG" init --name mig-nomig --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "init --no-migrate-archive succeeds" 0 "$rc"
+check "--no-migrate-archive leaves the archive directory a directory" "dir" \
+    "$(if [ -L "$A/mimir" ]; then echo link; elif [ -d "$A/mimir" ]; then echo dir; fi)"
+rm -rf "$SKILL_KIT_SIDECAR_ROOT/mig-nomig"
+
+run "$MIG" init --name mig --mode owned --write sidecar --in-tree-path none
+check "init with a matching archive succeeds" 0 "$rc"
+MSC="$SKILL_KIT_SIDECAR_ROOT/mig"
+for d in mimir New-Era-Technology-mimir NewEra-Alliances-mimir; do
+    check "$d is now a symlink to the sidecar's research/" "$MSC/research" "$(readlink "$A/$d")"
+    contains "init printed the move for $d" "from $A/$d into $MSC/research" "$out"
+done
+for f in local-2026-01-01.md tech-2026-02-01.md alli-2026-03-01.md; do
+    check "$f is readable through the sidecar" "yes" "$(if [ -f "$MSC/research/$f" ]; then echo yes; fi)"
+    for d in mimir New-Era-Technology-mimir NewEra-Alliances-mimir; do
+        check "$f is readable through the old path $d" "yes" "$(if [ -f "$A/$d/$f" ]; then echo yes; fi)"
+    done
+done
+check "an archive directory matching no alias is untouched" "dir other" \
+    "$(if [ -L "$A/unrelated" ]; then echo link; else echo dir; fi) $(cat "$A/unrelated/z.md")"
+check "the moved files are committed in the sidecar" "" "$(git -C "$MSC" status --porcelain)"
+check "the migration commit carries all three files" 3 \
+    "$(git -C "$MSC" show --name-only --format= HEAD | grep -c '^research/')"
+check "stdout is still only the sidecar path" "$MSC" "$(printf '%s\n' "$out" | grep -v '^sidecar.sh:' | tail -n 1)"
+run "$MIG" path research
+check "path research resolves to the migrated directory" "$MSC/research" "$out"
+
+# Two old directories that disagree about one file name: the first moves, the
+# second is left as it was rather than overwritten.
+CLASH="$tmp/mig/clash"
+mkrepo "$CLASH"
+git -C "$CLASH" remote add origin git@github.com:acme/clash.git
+mkdir -p "$A/acme-clash" "$A/clash"
+printf 'one\n' > "$A/acme-clash/n.md"
+printf 'two\n' > "$A/clash/n.md"
+run "$CLASH" init --name clash --mode owned --write sidecar --in-tree-path none
+check "init with a conflicting archive still succeeds" 0 "$rc"
+contains "the conflict is reported" "left $A/clash untouched: n.md already exists" "$out"
+check "the conflicting directory is still a directory with its own file" "dir two" \
+    "$(if [ -L "$A/clash" ]; then echo link; else echo dir; fi) $(cat "$A/clash/n.md")"
+check "the first directory moved" "$SKILL_KIT_SIDECAR_ROOT/clash/research" "$(readlink "$A/acme-clash")"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
