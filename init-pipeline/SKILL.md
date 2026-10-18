@@ -419,7 +419,7 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] No existing project settings were overwritten
 - [ ] Path A or Path D: `bash "$SC" resolve` exits 0 and prints the sidecar, and its `sidecar.json` carries the confirmed `mode`, `solutions.write`, and `solutions.in_tree_path`
 - [ ] `.claude/settings.json` is unchanged by § 8: take `shasum .claude/settings.json` right before § 8 starts and again after § 8, and the two match
-- [ ] Path B or C: no sidecar was created (`bash "$SC" resolve` gives the same answer it gave before the run)
+- [ ] Path B or an auto-invoked Path C: no sidecar was created (`bash "$SC" resolve` gives the same answer it gave before the run)
 
 ## Handoff
 
