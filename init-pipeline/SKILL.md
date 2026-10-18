@@ -407,12 +407,13 @@ bash "$SC" init --name <suggested> --mode <Q1> --write <Q3> --in-tree-path <Q2>
 
 ## Verification
 
-Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all eight. An auto-invoked Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, and Path D produces at most a refreshed marker-check span, § 8's sidecar, and § 5's quality gate when the install was Path B, so on either the pre-commit items below — and the quality-gate item, unless Path D ran § 5 — belong to the install that already ran and are not this run's to satisfy:
+Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all eight. An auto-invoked Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, and Path D produces at most a refreshed marker-check span, § 8's sidecar, § 5's quality gate when the install was Path B, and with it the one-line rewrite § 5 ends with, so on either the pre-commit items below — and the quality-gate item, unless Path D ran § 5 — belong to the install that already ran and are not this run's to satisfy:
 
 - [ ] `.claude/hooks/enforce-classification.sh` exists and is executable
 - [ ] Hook's `IMPL_PATTERNS` array matches the project's implementation surface: on § 2's Path A or B, the default list or the customized answer confirmed during this install; on Path C or Path D, byte-identical to the array in the hook that was already there
 - [ ] `.claude/hooks/block-dangerous-git.sh` exists and is executable
 - [ ] `.claude/settings.json` has both PreToolUse hooks configured
+- [ ] Path D that ran § 5: the line above `IMPL_PATTERNS` is the one § 5 says to rewrite it to, whichever answer the user gave
 - [ ] If quality gate accepted: `.claude/hooks/quality-gate.sh` exists, is executable, and PostToolUse hook is in settings
 - [ ] Hook manager config exists (e.g. `lefthook.yml`)
 - [ ] Pre-commit hooks run successfully
