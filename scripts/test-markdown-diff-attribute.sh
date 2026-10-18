@@ -36,6 +36,12 @@
 
 set -euo pipefail
 
+# A caller that reached this suite via a git hook (pre-push) has GIT_DIR set
+# in its environment. The fixture's `git init` and `git config` would inherit
+# it and write into the real repo's shared config instead of the scratch repo.
+# Unset before any git call. scripts/test-fixture-git-isolation.sh pins this.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 

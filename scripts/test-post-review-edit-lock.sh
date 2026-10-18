@@ -134,6 +134,14 @@
 
 set -euo pipefail
 
+# A caller that reached this suite via a git hook (pre-push) has GIT_DIR set
+# in its environment. The fixtures' `git -C <scratch> init` would inherit it and
+# re-initialize the real repo instead; from a linked worktree that writes
+# `core.bare = true` into the shared config (#429), and the following `add` and
+# `commit` land in the real index and branch. Unset before any git call.
+# scripts/test-fixture-git-isolation.sh pins this.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 
