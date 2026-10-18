@@ -196,8 +196,9 @@ Run `/execute` Step 0's pipeline hooks gate first, and let its verdict pick the
 path. Run the gate, do not restate it — it is the list of terms that decides
 this, and a second copy of that list here is the drift `docs/restated-claims.md`
 describes. Invoke `/init-pipeline` only now, after shape-lite has ended, and say
-in the invocation that it is auto-invoked, not run by hand; otherwise it may take
-the hand-run paths and ask its questions.
+in the invocation that it is auto-invoked, not run by hand, and that the run is
+non-interactive with nobody present to answer; otherwise it may take the
+user-present paths and ask its questions.
 
 - `hooks-absent` → invoke it and **declare Path B**: the trigger-surface question
   takes its default.
