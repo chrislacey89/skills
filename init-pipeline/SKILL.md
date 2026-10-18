@@ -413,7 +413,7 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] `.claude/settings.json` has no `worktree.provisioning` key written by this run (`auto`), whether or not a host env var is set
 - [ ] No existing project settings were overwritten
 - [ ] Path A only: `bash "$SC" resolve` exits 0 and prints the sidecar, and its `sidecar.json` carries the confirmed `mode`, `solutions.write`, and `solutions.in_tree_path`
-- [ ] `.claude/settings.json` is unchanged by § 8: take `shasum .claude/settings.json` after § 3 and again after § 8, and the two match
+- [ ] `.claude/settings.json` is unchanged by § 8: take `shasum .claude/settings.json` right before § 8 starts (after § 5 and § 7 have finished editing the file) and again after § 8, and the two match
 - [ ] Path B or C: no sidecar was created (`bash "$SC" resolve` gives the same answer it gave before the run)
 
 ## Handoff
