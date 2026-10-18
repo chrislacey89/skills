@@ -46,9 +46,7 @@ hidden skill typed into a first message that a host prepends a preamble to is
 read as prose and never loads; `/lfg`'s Invocation Position records the field
 incident (#383). Retype it as a second message.
 
-Use it when a repo has history but no `docs/solutions/`, no research archive
-entry, and no written decisions, and you are about to start feature work in it.
-`/help` recommends it on that signal. Do not use it on a repo the pipeline
+`/help` Step 2 states the signal for starting with it. Do not use it on a repo the pipeline
 already compounds (run `/compound` there), as a performance review of anyone
 (see § 5), or as a defect finder (`/qa` and `/triage-issue` own that).
 
