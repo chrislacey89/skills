@@ -596,11 +596,24 @@ rm "$NOSC/.claude/settings.json"
 out="$(cd "$NOSC" && bash -c "$script" 2>/dev/null)"
 check "with neither, Phase 5a defaults to archive" "research.storage = archive, from default" "$out"
 
-# The dossier require line Phase 3 documents.
-run "$MIG" require "$MSC/research/excavation-2026-01-01.md" --from "/research Phase 3"
-check "require on a missing dossier exits 1" 1 "$rc"
-check "require names the dossier and the referrer" \
-    "MISSING: $MSC/research/excavation-2026-01-01.md (referenced by /research Phase 3)" "$out"
+# The dossier require block Phase 3 documents, extracted from the skill and run
+# (not #410's resolver called directly), so deleting or breaking the line in
+# research/SKILL.md turns this red. Found by its --from content, not position.
+req="$(awk '/^```bash$/ { inb = 1; blk = ""; next }
+            inb && /^```$/ { inb = 0; if (blk ~ /--from "\/research Phase 3"/) printf "%s", blk; next }
+            inb { blk = blk $0 "\n" }' "$RESEARCH")"
+if [ -z "$req" ]; then
+    bad "research/SKILL.md carries the dossier require block" "no bash block with --from \"/research Phase 3\""
+else
+    ok "research/SKILL.md carries the dossier require block"
+    DOSSIER="$MSC/research/excavation-2026-01-01.md"
+    script="SC=\"$SC\"
+$(printf '%s\n' "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
+    out="$(cd "$MIG" && bash -c "$script" 2>&1)"
+    contains "the skill's require block surfaces the MISSING line" \
+        "MISSING: $DOSSIER (referenced by /research Phase 3)" "$out"
+    contains "the skill's require block signals the miss" "dossier missing" "$out"
+fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
