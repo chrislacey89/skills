@@ -207,21 +207,28 @@ run "$tmp" require "$tmp/absent.md" --from "docs/x.md:12"
 check "require on an absent path exits 1" 1 "$rc"
 check "require prints the MISSING line" "MISSING: $tmp/absent.md (referenced by docs/x.md:12)" "$out"
 run "$tmp" require "$J" --from "docs/x.md:12"
-check "require on a present path exits 0 and prints nothing" "0:" "$rc:$out"
+# #431: a hit prints the path it resolved to, so a caller opens that path instead
+# of re-deriving the location from prose that may describe a different rule.
+check "require on a present path exits 0 and prints its absolute path" "0:$J" "$rc:$out"
+runr() { local d="$1"; shift; out="$(cd "$d" && bash "$SC" "$@" 2>/dev/null)"; err="$(cd "$d" && bash "$SC" "$@" 2>&1 >/dev/null)"; rc=$?; }
+runr "$tmp" require "$J" --from "docs/x.md:12"
+check "the resolved path goes to stdout, nothing to stderr" "0:$J:" "$rc:$out:$err"
 run "$tmp" require "$J"
 check "require without --from is a usage error" 2 "$rc"
 mkdir -p "$tmp/home/r"; : > "$tmp/home/r/a.md"
 # shellcheck disable=SC2088  # literal ~ is the input under test
 out=$(HOME="$tmp/home" bash "$SC" require "~/r/a.md" --from "PRD #1" 2>&1); rc=$?
-check "require expands a quoted leading ~/ (present file)" "0:" "$rc:$out"
+check "require expands a quoted leading ~/ and prints the expanded path" "0:$tmp/home/r/a.md" "$rc:$out"
 # shellcheck disable=SC2088  # literal ~ is the input under test
 out=$(HOME="$tmp/home" bash "$SC" require "~/r/b.md" --from "PRD #1" 2>&1); rc=$?
 check "require on an absent ~/ path shows the path as given" "1:MISSING: ~/r/b.md (referenced by PRD #1)" "$rc:$out"
 mkdir -p "$tmp/lessons/a" "$tmp/lessons/b"; : > "$tmp/lessons/a/entry.md"; : > "$tmp/lessons/a/sibling.md"; : > "$tmp/lessons/b/entry.md"
 out=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/a/entry.md" 2>&1); rc=$?
-check "require resolves a bare sibling name against the citing file's folder" "0:" "$rc:$out"
+check "require resolves a bare sibling name against the citing file's folder" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/b/entry.md" 2>&1); rc=$?
-check "require resolves a bare name in a sibling category folder" "0:" "$rc:$out"
+check "require resolves a bare name in a sibling category folder and prints that folder" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
+out=$(cd "$tmp/lessons" && bash "$SC" require "a/sibling.md" --from "elsewhere" 2>&1); rc=$?
+check "require prints a cwd-relative hit as an absolute path" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "nowhere.md" --from "lessons/b/entry.md" 2>&1); rc=$?
 check "require on a bare name absent from every category still reports MISSING" "1:MISSING: nowhere.md (referenced by lessons/b/entry.md)" "$rc:$out"
 run "$tmp"

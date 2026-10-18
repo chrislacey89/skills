@@ -15,7 +15,7 @@
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh path <research|solutions>
 #   sidecar.sh commit -- <path>... -m <msg>
-#   sidecar.sh require <path> --from <referrer>
+#   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
 #
 # Exit codes: 0 success, 1 miss or refusal, 2 usage.
 #
@@ -489,6 +489,9 @@ cmd_require() {
         printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
         exit 1
     fi
+    # A hit may be beside the referrer or in a sibling category, not where the
+    # caller would guess, so print where it was found and let the caller open that.
+    printf '%s/%s\n' "$(cd "$(dirname "$probe")" && pwd -P)" "$(basename "$probe")"
 }
 
 verb="${1:-}"
