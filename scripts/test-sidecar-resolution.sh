@@ -436,6 +436,7 @@ for d in mimir New-Era-Technology-mimir NewEra-Alliances-mimir; do
     check "$d is now a symlink to the sidecar's research/" "$MSC/research" "$(readlink "$A/$d")"
     contains "init printed the move for $d" "from $A/$d into $MSC/research" "$out"
 done
+# coverage: enumerated — the three files the fixture above planted, one per old directory
 for f in local-2026-01-01.md tech-2026-02-01.md alli-2026-03-01.md; do
     check "$f is readable through the sidecar" "yes" "$(if [ -f "$MSC/research/$f" ]; then echo yes; fi)"
     for d in mimir New-Era-Technology-mimir NewEra-Alliances-mimir; do
