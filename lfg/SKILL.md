@@ -126,9 +126,9 @@ echo "host_owned=$host_owned"
 A bare `CONDUCTOR_WORKSPACE_PATH` is not enough: it leaks into shells started
 under Conductor and can name another repository's workspace.
 
-**Sidecar (feature path only).** Step 4 declares Path B, and Path B never
-creates a sidecar, yet research-lite writes to the archive `/research` keeps
-there. Check for it now, while the user is still here, through the bundled resolver
+**Sidecar (feature path only).** Why this stop exists is stated in PRD #405
+§ Rabbit Holes and `/init-pipeline` § 8. Check for it now, while the user is
+still here, through the bundled resolver
 [references/sidecar.sh](references/sidecar.sh) at its absolute installed path:
 
 ```bash
