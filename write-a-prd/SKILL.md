@@ -82,7 +82,7 @@ for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
 done
 true
 ```
-List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention: read it as a plain document, with no frontmatter or staleness check. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `bash "$SC" require "<cited path>" --from "<the citing entry>"`; a `MISSING:` line is shown to the user, not skipped. If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
+List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention: read it as a plain document, with no frontmatter or staleness check. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry>"` (a fresh shell has no `SC`); a `MISSING:` line is shown to the user, not skipped. If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
 
 **Research document** — Find the most recent research artifact for this feature. The artifact may live in either of two places depending on the project's `research.storage` setting:
 
@@ -92,8 +92,9 @@ List matches from both locations; one does not shadow the other. A match under a
    ```
    If a matching spike issue exists, read its body — the YAML frontmatter at the top carries the same `date` and `installed_versions_snapshot` fields the archive uses.
 
-2. **Archive mode** (default) — list the sidecar's research directory, using the same `SC`:
+2. **Archive mode** (default) — list the sidecar's research directory, using the same resolver:
    ```bash
+   SC="<this skill's directory>/references/sidecar.sh"
    bash "$SC" path research && ls "$(bash "$SC" path research)"
    ```
    Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature. On `SIDECAR MISS` the resolver exits 1 and prints the `init` command: show it to the user exactly as printed and do not run it, because creating a sidecar is a human act. Until one exists, `/research` writes to the pre-sidecar archive directory named by the miss line's `--name`, so look there.

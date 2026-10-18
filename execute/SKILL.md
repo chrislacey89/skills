@@ -256,6 +256,7 @@ Exit 0 proceeds. On exit 1 in an **AFK iteration, stop**: print the resolver's s
 
 2. **Archive mode** (default) — the PRD references the research entry's absolute path. Check it before reading it:
    ```bash
+   SC="<this skill's directory>/references/sidecar.sh"
    bash "$SC" require "<path the PRD cites>" --from "PRD #<n>"
    ```
    On a miss the resolver prints `MISSING: <path> (referenced by PRD #<n>)` and exits 1 — typically a different machine from the one that produced the research. In an AFK iteration, stop. In a HITL run, show the line to the user and either re-run `/research` or proceed with their explicit acknowledgment of the missing context.
@@ -269,6 +270,7 @@ Treat it as pointers, not truth. The anchors were written at decomposition time 
 Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. The block searches the sidecar's `solutions/` directory and the project's `solutions.in_tree_path` (skipped when it is `none`); with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
 
 ```bash
+SC="<this skill's directory>/references/sidecar.sh"
 KW="relevant-keyword"
 SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
 ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
@@ -280,7 +282,7 @@ done
 true
 ```
 
-List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` is that repo's own convention: read it as a plain document. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `bash "$SC" require "<cited path>" --from "<the citing entry>"` before relying on it; on `MISSING:`, stop in an AFK iteration and flag it to the user in a HITL run.
+List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` is that repo's own convention: read it as a plain document. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry>"` (a fresh shell has no `SC`) before relying on it; on `MISSING:`, stop in an AFK iteration and flag it to the user in a HITL run.
 
 If past solutions exist for this problem domain, incorporate their lessons and avoid their documented pitfalls.
 
