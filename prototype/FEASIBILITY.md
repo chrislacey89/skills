@@ -119,7 +119,7 @@ The spike-solution narrowness defines what this branch refuses to cover:
 
 The word "spike" appears in two places in Skill Kit:
 
-- **`/research`'s `spike-issue` storage mode** (configured via `.claude/settings.json` `research.storage = spike-issue`) — a GitHub-issue-shaped home for the research artifact. The storage *mode* uses "spike" in the sense of "the research result, frozen as a closed issue."
+- **`/research`'s `spike-issue` storage mode** (configured via `research.storage = spike-issue` in the project's `sidecar.json`) — a GitHub-issue-shaped home for the research artifact. The storage *mode* uses "spike" in the sense of "the research result, frozen as a closed issue."
 - **This branch's spike solution** — Kent Beck's XP term for a small program that answers a technical question and then dies. The *activity*, not the artifact.
 
 Both senses are legitimate and they don't collide in practice; if terminology gets confusing in a specific repo, the [#70 meta-glossary](https://github.com/chrislacey89/skills/issues/70) is where the pinning lives.
