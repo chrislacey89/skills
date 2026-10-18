@@ -388,7 +388,7 @@ Offer the detected value first. The user may replace it with any other path, or 
 - `in-tree` — at the Q2 path, on the open PR.
 - `ask` — `/compound` offers the choice per entry with the sidecar preselected. An AFK run resolves it to the sidecar without asking.
 
-The default is `in-tree` only when the confirmed path is `docs/solutions` and it is committed (`git ls-files docs/solutions | head -n 1` prints something). Otherwise the default is `sidecar`, including for `docs/adr`, `docs/adrs`, `docs/decisions`, and an uncommitted `docs/solutions`. A repo with its own convention keeps that convention for its own records and is not flooded with the pack's. When Q2's answer is `none`, skip Q3: `sidecar` is the only valid answer, because `init` refuses `in-tree` and `ask` without an in-tree path.
+The default is `sidecar` whenever Q1 is `guest`, whatever path Q2 detected: a guest repo is someone else's, and a committed `docs/solutions` there is theirs, not a place for the pack's lessons. When Q1 is `owned`, the default is `in-tree` only when the confirmed path is `docs/solutions` and it is committed (`git ls-files docs/solutions | head -n 1` prints something). Otherwise the default is `sidecar`, including for `docs/adr`, `docs/adrs`, `docs/decisions`, and an uncommitted `docs/solutions`. A repo with its own convention keeps that convention for its own records and is not flooded with the pack's. When Q2's answer is `none`, skip Q3: `sidecar` is the only valid answer, because `init` refuses `in-tree` and `ask` without an in-tree path.
 
 **Then create it**, with the miss line's suggested `--name`:
 
