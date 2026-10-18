@@ -111,7 +111,7 @@ Prefer capturing the highest level you can support with evidence. If the lesson 
 
 **Before proceeding, answer four questions:**
 
-1. **Is this genuinely novel?** Check official library docs and existing `docs/solutions/` files. If the lesson is already well-documented elsewhere, skip it or link to the existing source.
+1. **Is this genuinely novel?** Check official library docs and the stores Phase 4's overlap search covers. If the lesson is already well-documented elsewhere, skip it or link to the existing source.
 2. **Will this still be accurate in 3 months?** If the lesson is tightly coupled to a dependency version or a temporary workaround, note that — it affects the `volatility` classification below.
 3. **Could this be captured closer to the source?** A behavioral invariant is better as a test. A convention is better as a linter rule. A "why" explanation is better as a code comment co-located with the decision — bounded to the *current* why, the reason a reader needs to understand the code as it now stands. The incident that discovered it belongs in the commit message and the PR body, where a reader reconstructing history already looks; `/execute` Step 3 states that routing at the moment the comment is written, and this question is the retrospective check on it. If the lesson can be captured in a higher-fidelity artifact, do that instead of writing prose. This is about *carrying the lesson* — Phase 4's clustering check asks a different question, whether a mechanism should *catch the next instance*, and a recurrence can require one even though the lesson itself needed prose.
 4. **Was the process fixed?** (Bug-fix compounds only.) Was the fix a correction (removed the defect) or a workaround (suppressed the failure)? Were structurally similar patterns elsewhere in the codebase found and addressed? What process change would prevent this defect class from entering the codebase again — a stronger test, a linter rule, an assertion, a planning checklist item, or a filed issue in `chrislacey89/skills` (see *Filing against the pack* below)? If the answer is "nothing," the mechanism that produced this defect is still active.
@@ -204,18 +204,18 @@ Determine the category for filing. Use the most specific category that fits:
 
 ### Phase 3: Write the Solution Document
 
-Create the document in `docs/solutions/<category>/`. Use the template below.
+**Choose the write target first** — Phase 5's *Write target* block reads it from the project's sidecar. On `in-tree` with `in_tree_path` of `docs/solutions` (and on the no-sidecar fallback), create the document in `docs/solutions/<category>/` with the template below. On `sidecar`, use the same template and filename; Phase 5 says where the file goes. On `in-tree` with any other `in_tree_path` (`docs/adr`, `docs/decisions`, …), do not impose this template: read the newest existing file at that path and imitate its shape, headings, and filename pattern, because that repo's convention outranks the pack's.
 
 **Before writing the Root Cause section**, apply two tests. First: was the outcome a predictable consequence of the decision, or did it depend on conditions that weren't available to reason about at decision time? If unpredictable from the decision, the lesson belongs in Context (what you now know about the environment), not Prevention (what to do differently next time). Second: under what conditions would this lesson mislead a future agent? If you can't name a condition that would make the lesson wrong, tighten it until it's falsifiable or drop it. For Pattern and Structure lessons, record the answer in the Rule Scope section of the template so future `/research` consumers can pattern-match their own work's shape against the preconditions without re-deriving them from prose.
 
-**Ensure the directory exists:**
+**Ensure the directory exists (in-tree `docs/solutions` write target only; on `sidecar`, or on `in-tree` with another `in_tree_path`, create nothing in the project tree here, and Phase 5 handles the destination):**
 ```bash
 mkdir -p docs/solutions/<category>
 ```
 
 **Filename convention:** `<kebab-case-problem-slug>-<YYYY-MM-DD>.md`
 
-Example: `docs/solutions/integration-issues/ably-presence-channel-auth-2026-03-28.md`
+Example (in-tree `docs/solutions` target): `docs/solutions/integration-issues/ably-presence-channel-auth-2026-03-28.md`
 
 ```markdown
 ---
@@ -334,16 +334,29 @@ volatility: evergreen | stable | volatile
 
 Before committing, search for existing solutions that might overlap:
 
+Search every place a lesson can live, not just the project tree. Resolve both locations through this skill's bundled resolver (Phase 5's *Write target* names it; `SC` is the same path). The block searches the sidecar's `solutions/` directory and the project's `in_tree_path` (skipped when it is `none`); on `SIDECAR MISS`, or with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
+
 ```bash
-grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
+SC="<this skill's directory>/references/sidecar.sh"
+KW="relevant-keyword"
+SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
+ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
+[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
+for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
+  case "$DIR" in ""|none) continue ;; esac
+  [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
+done
+true
 ```
 
+The defect clustering check below reads the same two locations.
+
 If a related solution already exists:
-- **If it's the same problem solved again:** Update the existing file instead of creating a duplicate. Add new context, note if the solution changed.
+- **If it's the same problem solved again:** Update the existing file instead of creating a duplicate. Add new context, note if the solution changed. Edit it in place only when it sits in the store this entry's write target commits to (Phase 5): the sidecar for `sidecar`, the project's `in_tree_path` for `in-tree`. A match in the other store is read, not edited, because no Phase 5 branch commits there; write the new entry to the write target and cite the match from it. An in-place edit to a sidecar file is committed with `sidecar.sh commit`, never `git add` in the project.
 - **If it's a related but distinct problem:** Create the new file and add cross-references in both documents.
 - **If the existing solution is now outdated:** Update or supersede it. Never silently let stale solutions persist.
 
-**Defect clustering check (DO-CONFIRM — verify before committing the entry).** Search for not just overlapping solutions but overlapping defect patterns. If `docs/solutions/` already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. For a worked pair, this repo's own `staleness-gate-intermediate-writers` (`problem_type: staleness gate invalidated by an unenumerated intermediate writer`) and `by-construction-claims-need-a-mechanism` (`problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it`) share not one word. The second entry names them as the same pattern anyway — *"a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism"* — which is the judgment this check is asking you to make, and which no string match would ever reach.
+**Defect clustering check (DO-CONFIRM — verify before committing the entry).** Search for not just overlapping solutions but overlapping defect patterns. If either location above already holds an entry in the same `category` whose `problem_type` names the same underlying pattern, this one is the *second* recording of that pattern — prose was the deliverable the first time and the pattern recurred anyway. Match on both fields: `category` is one of the ten enumerated values in Phase 2's table, so it is the anchor you can actually grep; `problem_type` is free text a reader must judge, and matching on it alone finds nothing. For a worked pair, this repo's own `staleness-gate-intermediate-writers` (`problem_type: staleness gate invalidated by an unenumerated intermediate writer`) and `by-construction-claims-need-a-mechanism` (`problem_type: a claim asserted as holding "by construction" is maintained by hand in N files, with nothing constructing it`) share not one word. The second entry names them as the same pattern anyway — *"a limitation, a source gap, a stamped interval, or a verification that constrains nothing downstream is a footnote, not a mechanism"* — which is the judgment this check is asking you to make, and which no string match would ever reach.
 
 This entry ships with a mechanism that would catch the next instance — one of the five Q4 names: a test, a linter rule, an assertion, a planning checklist item, or a filed issue in `chrislacey89/skills`. The fifth is available only under the ownership guard in Phase 1's *Filing against the pack* subsection — the preventing change belongs to the pipeline rather than to this codebase — and is not an exit for the first four being hard. That subsection carries the filing procedure too, and it is not bug-fix-gated; the enumeration is likewise borrowed from Q4 independently of Q4's own bug-fix flag, since this check is not gated to bug fixes. If none of the five can be built here, the entry states in one line which came closest and what blocked it. A third prose-only entry on the same pattern is not a valid outcome.
 
@@ -353,10 +366,40 @@ Name the pattern in the entry as well (e.g., "both auth integration bugs were sp
 
 ### Phase 5: Commit
 
+**Write target.** The project's sidecar records where lessons go. Read it through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path or run git against one yourself:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" config get solutions.write          # sidecar | in-tree | ask
+bash "$SC" config get solutions.in_tree_path   # docs/solutions | docs/adr | <path> | none
+```
+
+- **`sidecar`** — take the sidecar branch below.
+- **`ask`** — in a HITL run, offer the choice for this entry as an `AskUserQuestion` with the sidecar first and marked recommended; in an AFK run, take the sidecar branch without asking and say so in the Phase 6 report (`write: ask → sidecar (AFK, no prompt)`).
+- **`in-tree`** — commit in the project on the in-PR path below, whatever `in_tree_path` is. When it is not `docs/solutions`, the entry goes under `in_tree_path` in the shape Phase 3 imitated and is still committed on the PR branch and handed to the `/pre-merge` re-run; how that re-run reads a delta outside `docs/solutions/` is `/pre-merge` Phase 4's rule, not restated here.
+- **`SIDECAR MISS`** (the resolver exits 1 and prints the `init` command) — if the repo has a committed `docs/solutions/`, it predates the sidecar: show the miss line as a notice and continue in-tree as below. Otherwise stop, print the `init` command exactly as the resolver gave it, and write nothing; creating a sidecar is a human act.
+
+**Sidecar branch.** The entry is written into the sidecar and committed there. The project's tree, its `.git`, and the PR branch are not touched, so the head does not move past the review stamp and the `/pre-merge` re-run below does not apply. Two content rules hold in this branch because a guest sidecar is a personal store outside the client's review: apply the same secret redaction as an in-tree entry, and copy no fenced block longer than 20 lines from the client's tree — describe the code and cite its path instead.
+
+<!-- sidecar-write: compound -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+DIR="$(bash "$SC" path solutions)/<category>" || exit 1
+mkdir -p "$DIR"
+ENTRY="$DIR/<slug>-<YYYY-MM-DD>.md"
+cat > "$ENTRY" <<'EOF'
+<the entry, written with Phase 3's template>
+EOF
+bash "$SC" require "$ENTRY" --from "/compound Phase 5" || exit 1
+bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
+```
+
+`commit` never pushes. Phase 4's mechanism, if any, lives in the project and goes through the in-PR path on its own; the sidecar holds the lesson only. Then go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
+
 **In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR. Committing does not review it — the hand-back below is what makes it reviewed and merged with the code that taught it:
 
 ```bash
-git add docs/solutions/<category>/<filename>.md
+git add <path/to/entry>   # docs/solutions/<category>/<filename>.md, or the file Phase 3 wrote under in_tree_path
 git add <path/to/mechanism>   # Phase 4's mechanism — omit when Phase 4 did not fire, or recorded that none could be built
 git commit -m "docs: compound — <brief description of what was learned>"
 git push        # in-PR path: push so the entry joins the open PR for review
@@ -389,7 +432,7 @@ Tell the user what was captured, then print the closing block that matches the p
 **In-PR path (default)** — the lesson now rides the open PR, one commit past the stamp `/pre-merge` Phase 4 wrote. Hand off to the re-run that reviews it and moves the stamp; `/closeout` merges after that, from `/pre-merge`'s menu:
 
 ```
-Compounded onto PR #<n>: docs/solutions/<category>/<filename>.md
+Compounded onto PR #<n>: <path/to/entry>
 Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
 
 Key lesson: [One sentence summary of the most important takeaway]
@@ -412,6 +455,20 @@ This will be consulted automatically during future /research and /write-a-prd se
 
 **Loop closed.** Next: /help when you return to this repo.
 ```
+
+**Sidecar path** — the lesson is committed in the sidecar, and the PR head did not move, so no re-run follows:
+
+```
+Compounded to sidecar: <absolute path to the entry>
+Write target: sidecar   [or: ask → sidecar (HITL choice)] [or: ask → sidecar (AFK, no prompt)]
+Mechanism: <path/to/mechanism>   [or: chrislacey89/skills#<n> — pack-level, filed] [or: none possible — <the one-line reason from the entry>] [or: n/a — Phase 4 did not fire]
+
+Key lesson: [One sentence summary of the most important takeaway]
+
+The sidecar is local and never pushed; readers consult it alongside the repo's in-tree path.
+```
+
+If Phase 4's mechanism was committed onto the PR, that commit did move the head, so name the `/pre-merge` re-run as the next step in prose. Otherwise this path ends here like the post-merge one.
 
 On the in-PR path two steps still follow — `/pre-merge` re-reads the delta and re-stamps, then `/closeout` performs the merge — so `/compound` hands to the first of them with a `**Next session:**` line. On the post-merge path `/compound` is the end of the loop, so it prints the loop-closed line instead. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
 

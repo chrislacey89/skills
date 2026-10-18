@@ -48,3 +48,5 @@ docs/mutation-at-consumption.md  fix-findings
 docs/next-step-menu.md          fix-findings
 docs/trivial-task-rule.md  execute
 docs/trivial-task-rule.md  lfg
+init-pipeline/scripts/sidecar.sh  compound
+init-pipeline/scripts/sidecar.sh  research
