@@ -370,7 +370,7 @@ bash "$SC" resolve
 
 **Q1 — mode.** `owned` (your repository: the pack may write issues, labels, milestones, and PRs on its forge) or `guest` (someone else's, such as a client's: the pack writes nothing to its forge). The script derives the forge permissions from this answer; do not ask about them separately.
 
-**Q2 — the repo's existing in-tree knowledge path.** Detect it, then show it for confirmation before anything is written. The candidates are the ones `/excavate` miner B scans:
+**Q2 — the repo's existing in-tree knowledge path.** Detect it, then show it for confirmation before anything is written.
 
 ```bash
 ITP=none
