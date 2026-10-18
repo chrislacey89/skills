@@ -126,8 +126,8 @@ echo "host_owned=$host_owned"
 A bare `CONDUCTOR_WORKSPACE_PATH` is not enough: it leaks into shells started
 under Conductor and can name another repository's workspace.
 
-**Sidecar (feature path only).** Why this stop exists is stated in PRD #405
-§ Rabbit Holes and `/init-pipeline` § 8. Check for it now, while the user is
+**Sidecar (feature path only).** Why this stop exists is stated in
+`/init-pipeline` § 8. Check for it now, while the user is
 still here, through the bundled resolver
 [references/sidecar.sh](references/sidecar.sh) at its absolute installed path:
 
