@@ -50,5 +50,6 @@ docs/trivial-task-rule.md  execute
 docs/trivial-task-rule.md  lfg
 init-pipeline/scripts/sidecar.sh  compound
 init-pipeline/scripts/sidecar.sh  excavate
+init-pipeline/scripts/sidecar.sh  help
 init-pipeline/scripts/sidecar.sh  lfg
 init-pipeline/scripts/sidecar.sh  research

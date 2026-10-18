@@ -68,17 +68,6 @@ git log --oneline "$BASE_REF..HEAD"
 # Open PR for the current branch, if any
 gh pr list --head "$(git branch --show-current)" --state open --json number,title,url
 
-# Research archive entries for this repo (durable, per-user, outside the repo)
-REPO_SLUG=$(git config --get remote.origin.url | sed -E 's|.*[:/]([^/]+)/([^/.]+)(\.git)?$|\1-\2|')
-ls -t "$HOME/.claude/research/$REPO_SLUG/" 2>/dev/null
-
-# Legacy-repo signal for /excavate: no docs/solutions/, a root commit older than ~6 months
-# (unknown on a shallow clone), and no excavation dossier yet
-[ -d docs/solutions ] && echo "docs/solutions: present" || echo "docs/solutions: absent"
-git rev-parse --is-shallow-repository
-git log --max-parents=0 --format=%cs HEAD </dev/null | sort | head -1
-ls "$HOME/.claude/research/$REPO_SLUG/"excavation-*.md 2>/dev/null
-
 # Open issues with PRD or slice labels, or in open milestones
 gh issue list --state open --json number,title,labels,milestone --limit 50
 
@@ -101,6 +90,61 @@ The frontier call is independent of every other call in this batch and cannot fa
 
 Repos whose slice issues predate native dependency wiring (see `/prd-to-issues` §7) will report an empty `open_blockers` for everything. `ever_wired` tells that apart from a genuinely flat graph without guessing: if any issue reports `ever_wired > 0`, the repo *is* wired and the empty lists are real. If every issue reports `ever_wired: 0` and the bodies contain prose `Blocked by #N` lines, no edge was ever written — fall back to the prose and say so in the recommendation rather than asserting the whole backlog is takeable.
 
+**The sidecar, in the same parallel batch.** The project's sidecar is a private git repository outside this tree that holds its research archive (`research/`) and, depending on `solutions.write`, its solutions entries (`solutions/`). Resolve it through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), at its absolute installed path; never compute a sidecar path yourself. This block feeds rows 6, 7, 10, and 11 below:
+
+<!-- sidecar-read: help -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+# Read-only git against the sidecar, with the project's git environment cleared.
+sgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$SIDECAR" "$@"; }
+SC_ERR="$(mktemp)"
+SIDE="" ITP="docs/solutions"
+if SIDECAR="$(bash "$SC" resolve 2>"$SC_ERR")"; then
+  echo "Sidecar: $SIDECAR (last commit $(sgit log -1 --format=%cs))"
+  RESEARCH="$(bash "$SC" path research 2>/dev/null)"
+  SIDE="$(bash "$SC" path solutions 2>/dev/null)"
+  ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)"
+  echo "research entries:"; [ -n "$RESEARCH" ] && ls -t "$RESEARCH"
+  echo "excavation dossier:"; [ -n "$RESEARCH" ] && ls "$RESEARCH"/excavation-*.md 2>/dev/null
+else
+  grep -q '^SIDECAR MISS' "$SC_ERR" && echo "SIDECAR MISS"
+fi
+cat "$SC_ERR" >&2; rm -f "$SC_ERR"
+
+# Solutions entries in both locations: solutions.in_tree_path (skipped when it is
+# none) and the sidecar's solutions/. Row 10 reads the counts, row 11 the dates.
+case "${ITP:-docs/solutions}" in none) ITP="" ;; *) ITP="${ITP:-docs/solutions}" ;; esac
+IN_TREE_N=0 SIDE_N=0 NEWEST=0
+if [ -n "$ITP" ] && [ -d "$ITP" ]; then
+  IN_TREE_N=$(find "$ITP" -type f ! -name '.*' | wc -l | tr -d ' ')
+  NEWEST=$(git log -1 --format=%ct "$BASE_REF" -- "$ITP")
+fi
+if [ -n "$SIDE" ]; then
+  SIDE_N=$(find "$SIDE" -type f -name '*.md' | wc -l | tr -d ' ')
+  T=$(sgit log -1 --format=%ct -- solutions)
+  [ "${T:-0}" -gt "${NEWEST:-0}" ] && NEWEST=$T
+fi
+echo "solutions entries: in-tree (${ITP:-none})=$IN_TREE_N sidecar=$SIDE_N"
+PREV_LANDING=$(git log --first-parent --skip=1 -1 --format=%ct "$BASE_REF")
+if [ -n "$PREV_LANDING" ] && [ "${NEWEST:-0}" -lt "$PREV_LANDING" ]; then
+  echo "last merge compounded: no"
+else
+  echo "last merge compounded: yes"
+fi
+
+# Legacy-repo signal for /excavate: root commit date (unknown on a shallow clone)
+git rev-parse --is-shallow-repository
+git log --max-parents=0 --format=%cs HEAD </dev/null | sort | head -1
+```
+
+Read the resolver's stderr as well as the block's stdout. Three outcomes matter:
+
+- **`Sidecar: <path> (last commit <date>)`** — report both in "Where you are". A last-commit date months behind the project's own activity is how a stalled sidecar shows up.
+- **`SIDECAR MISS`** — no sidecar is registered for this project. The resolver's miss line carries the exact `init` command; quote it, and let row 6 route the recommendation. Exit 1 without a `SIDECAR MISS` line (not a git repository, or a found sidecar whose new alias could not be committed) is not a miss: relay the resolver's line as printed.
+- **`ALIAS COLLISION: …`** — two sidecars claim one of this checkout's keys. It is a warning, not a failure: the resolver used the first sidecar it names and the block continued. Print the line in "Where you are" as given, naming both sidecars, whatever the recommendation turns out to be — a project split across two sidecars has two research archives and two solutions stores, and each one reads as incomplete on its own.
+
+"Last merge compounded" compares the newest entry in either location against the landing *before* the last one on the base branch (`--first-parent`, so a squash commit and a merge commit each count once). An entry for the last merge is written before that merge lands, on the PR or straight into the sidecar, so measuring from the last landing itself would flag every sidecar-compounded merge as uncompounded. The in-tree side reads commit dates on the base branch rather than file mtimes, which a fresh clone resets.
+
 **Parallel tool-use gotcha.** In Claude Code, when one bash call in a parallel batch errors, the harness cancels its in-flight siblings — one bad ref takes down the whole snapshot. This is why Phase 1a must run first (and alone): if base-branch detection fails, nothing in Phase 1b will try to reference `$BASE_BRANCH`. Do not chain `&&`/`||` against a guessed branch name inside a parallel batch to "save a round trip" — it will fail noisily on any repo that does not match your guess.
 
 If `gh` is not authenticated or the repo is not a GitHub repo, note which signals you could not gather and work from the rest. A missing signal is not a failure — it just narrows the recommendation.
@@ -116,13 +160,14 @@ Walk through these checks in priority order. The first one that matches is the r
 | 3 | Open slice issues referencing a PRD, none closed | `/execute` on the highest-priority slice with an empty `open_blockers` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
 | 4 | Open slice issues referencing a PRD, some closed | `/execute` on the next slice with an empty `open_blockers` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |
 | 5 | Open PRD issue with no slice issues | `/prd-to-issues` on PRD #`<prd>` | "PRD #`<prd>` is shaped but not yet decomposed — `/prd-to-issues` breaks it into slices." |
-| 6 | Recent research archive entry for this repo (excluding `excavation-*.md`, which is `/excavate`'s dossier, not a feature), no open PRD issue matching its feature | `/write-a-prd` | "A recent research file for `<feature>` is archived but there is no PRD issue — `/write-a-prd` turns it into a shaped pitch." |
-| 7 | Planning milestone with a `research-ready` feature issue | `/research` on the `research-ready` feature | "Milestone `<name>` has a `research-ready` feature — run `/research` on it." |
-| 8 | Planning milestone with only `roadmap bet` features | Promote one feature to `research-ready`, then `/research` | "Milestone `<name>` has only `roadmap bet` features — pick one, promote it, then `/research`." |
-| 9 | No `docs/solutions/` directory, root commit older than ~6 months, not a shallow clone, and no `excavation-*.md` in the research archive | `/excavate` | "This repo has history but no written decisions or research archive — `/excavate` recovers hotspots and cited decisions from git before the first feature." |
-| 10 | Shipped work but no `docs/solutions/` entry since the last merge | `/compound` | "The last merge shipped work that has not yet been compounded — run `/compound`." |
-| 11 | QA bugs open and no active feature work | `/execute` on the highest-priority QA bug | "You have `<N>` open QA bug issues — `/execute` to work through them." |
-| 12 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |
+| 6 | `SIDECAR MISS` from the Phase 1b sidecar block | `/init-pipeline` (its § 8 creates the sidecar) | "No sidecar is registered for this project, so its research archive and solutions entries have nowhere to live — `/init-pipeline` § 8 creates one." |
+| 7 | Recent entry in the sidecar's `research/` (excluding `excavation-*.md`, which is `/excavate`'s dossier, not a feature), no open PRD issue matching its feature | `/write-a-prd` | "A recent research file for `<feature>` is archived but there is no PRD issue — `/write-a-prd` turns it into a shaped pitch." |
+| 8 | Planning milestone with a `research-ready` feature issue | `/research` on the `research-ready` feature | "Milestone `<name>` has a `research-ready` feature — run `/research` on it." |
+| 9 | Planning milestone with only `roadmap bet` features | Promote one feature to `research-ready`, then `/research` | "Milestone `<name>` has only `roadmap bet` features — pick one, promote it, then `/research`." |
+| 10 | No entries at `solutions.in_tree_path` (or it is `none`) **and** no entries in the sidecar's `solutions/` (both counts 0 on the `solutions entries:` line), root commit older than ~6 months, not a shallow clone, and no `excavation-*.md` in the sidecar's `research/` | `/excavate` | "This repo has history but no written decisions or research archive — `/excavate` recovers hotspots and cited decisions from git before the first feature." |
+| 11 | Shipped work but no entry in either solutions location since the last merge (`last merge compounded: no`) | `/compound` | "The last merge shipped work that has not yet been compounded — run `/compound`." |
+| 12 | QA bugs open and no active feature work | `/execute` on the highest-priority QA bug | "You have `<N>` open QA bug issues — `/execute` to work through them." |
+| 13 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |
 
 "Unblocked" in signals #3 and #4 means an empty `open_blockers` from the Phase 1b frontier call — read it, do not infer it from `Blocked by` prose in the issue bodies. This is the same rule `/prd-to-issues` §9 and the Ralph loop prompt use, so all three selection sites agree by construction rather than by coincidence.
 
@@ -148,12 +193,12 @@ Present one recommendation, with the one-line reason and the state signals that 
 <2-3 alternative next steps for common cases where the heuristic might have missed>
 ```
 
-Example output (for signal #6, a recent research archive entry with no matching PRD issue):
+Example output (for signal #7, a recent research entry in the sidecar with no matching PRD issue):
 
 ```
 ## Where you are
 
-Current branch: main. No open PRs. Research archive has `~/.claude/research/owner-repo/nextjs-middleware-migration-2026-04-05.md`, dated 2026-04-05 and pointing at a Next.js 16 middleware migration. No open PRD issue matches it (I searched open issues for "middleware" and "Next.js" and found nothing). No open slice issues. No active milestone.
+Current branch: main. No open PRs. Sidecar: `~/.claude/sidecars/owner-repo` (last commit 2026-04-05). Its `research/` has `nextjs-middleware-migration-2026-04-05.md`, dated 2026-04-05 and pointing at a Next.js 16 middleware migration. No open PRD issue matches it (I searched open issues for "middleware" and "Next.js" and found nothing). No open slice issues. No active milestone.
 
 ## Next step
 

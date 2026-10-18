@@ -24,8 +24,8 @@
 #
 # Section 9 runs the /compound sidecar block extracted from compound/SKILL.md,
 # and the "/research" section runs research/SKILL.md's Phase 3 read, Phase 5a
-# storage read, and Phase 5c write, so an edit to any of them is tested as
-# written.
+# storage read, and Phase 5c write, and the "/help" section runs help/SKILL.md's
+# Phase 1b sidecar block, so an edit to any of them is tested as written.
 #
 # Fixtures are built after unsetting the inherited git environment, with a
 # private global config, so a hook's GIT_DIR or the runner's identity cannot
@@ -614,6 +614,87 @@ $(printf '%s\n' "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
         "MISSING: $DOSSIER (referenced by /research Phase 3)" "$out"
     contains "the skill's require block signals the miss" "dossier missing" "$out"
 fi
+
+# -----------------------------------------------------------------------------
+section "/help: Phase 1b sidecar block"
+
+HELP_SKILL="$repo_root/help/SKILL.md"
+hblock="$(first_bash_after "$HELP_SKILL" '^<!-- sidecar-read: help -->$')"
+if [ -z "$hblock" ]; then
+    bad "help/SKILL.md carries the sidecar-read block" "no bash block after <!-- sidecar-read: help -->"
+else
+    ok "help/SKILL.md carries the sidecar-read block"
+fi
+check "help/SKILL.md no longer cuts a slug from the remote URL" "" \
+    "$(grep -n 'REPO_SLUG' "$HELP_SKILL")"
+# BASE_REF comes from /help's Phase 1a.
+hscript="BASE_REF=main
+$(with_sc "$hblock")"
+
+# A project whose base branch has three dated landings.
+HR="$tmp/helprepo"
+git init -q "$HR"
+hc() { GIT_COMMITTER_DATE="$1" GIT_AUTHOR_DATE="$1" git -C "$HR" commit -q --allow-empty -m "$2"; }
+hc 2026-01-01T00:00:00Z "root $HR"
+hc 2026-02-01T00:00:00Z "landing 1"
+hc 2026-03-01T00:00:00Z "landing 2"
+(cd "$HR" && bash "$SC" init --name helprepo --mode guest --write sidecar --in-tree-path none \
+    --no-migrate-archive >/dev/null 2>&1)
+HSC="$SKILL_KIT_SIDECAR_ROOT/helprepo"
+hrun() { hout="$(cd "$1" && bash -c "$hscript" 2>/dev/null)"; hall="$(cd "$1" && bash -c "$hscript" 2>&1)"; }
+
+hrun "$HR"
+contains "a hit prints the sidecar path and its last commit date" \
+    "Sidecar: $HSC (last commit $(git -C "$HSC" log -1 --format=%cs))" "$hout"
+lacks "a hit prints no SIDECAR MISS" "SIDECAR MISS" "$hall"
+contains "with no entries anywhere, both counts are 0" "solutions entries: in-tree (none)=0 sidecar=0" "$hout"
+contains "with no entries and two landings, the last merge reads uncompounded" "last merge compounded: no" "$hout"
+
+# A sidecar entry older than the landing before the last one does not cover the last merge.
+mkdir -p "$HSC/solutions/perf"
+printf 'old\n' > "$HSC/solutions/perf/old.md"
+(cd "$HR" && GIT_COMMITTER_DATE=2026-01-15T00:00:00Z bash "$SC" commit -- solutions/perf/old.md -m old >/dev/null 2>&1)
+hrun "$HR"
+contains "a sidecar entry counts with docs/solutions absent (row 10 does not fire)" "sidecar=1" "$hout"
+contains "an entry from before the previous landing leaves the last merge uncompounded" "last merge compounded: no" "$hout"
+
+# An entry written after the previous landing, before the last one lands, covers it.
+printf 'new\n' > "$HSC/solutions/perf/new.md"
+(cd "$HR" && GIT_COMMITTER_DATE=2026-02-15T00:00:00Z bash "$SC" commit -- solutions/perf/new.md -m new >/dev/null 2>&1)
+hrun "$HR"
+contains "a sidecar entry written before the last merge landed counts as compounding it" \
+    "last merge compounded: yes" "$hout"
+
+# in_tree_path docs/adr with an entry counts as an in-tree entry.
+jq '.solutions.in_tree_path = "docs/adr"' "$HSC/sidecar.json" > "$HSC/sj" && mv "$HSC/sj" "$HSC/sidecar.json"
+mkdir -p "$HR/docs/adr"
+printf '# ADR 1\n' > "$HR/docs/adr/0001.md"
+git -C "$HR" add docs/adr/0001.md
+hc 2026-03-10T00:00:00Z "adr"
+hrun "$HR"
+contains "entries at in_tree_path docs/adr are counted (row 10 does not fire)" "in-tree (docs/adr)=1" "$hout"
+git -C "$HSC" checkout -q -- sidecar.json
+
+# Two sidecars claiming one key: a warning naming both, and the block still reports a sidecar.
+DUP="$SKILL_KIT_SIDECAR_ROOT/dup-helprepo"
+git init -q "$DUP"
+cp "$HSC/sidecar.json" "$DUP/sidecar.json"
+git -C "$DUP" add sidecar.json && git -C "$DUP" commit -q -m dup
+hrun "$HR"
+contains "an alias collision prints ALIAS COLLISION" "ALIAS COLLISION" "$hall"
+contains "the collision line names the first sidecar" "$DUP" "$hall"
+contains "the collision line names the second sidecar" "$HSC" "$hall"
+contains "a collision is a warning: the block still prints a sidecar" "Sidecar: " "$hout"
+rm -rf "$DUP"
+check "the project's tree is untouched by the /help block" "" "$(git -C "$HR" status --porcelain)"
+
+# A miss: SIDECAR MISS on stdout, the init command on stderr, no sidecar created.
+sc_before="$(ls "$SKILL_KIT_SIDECAR_ROOT")"
+hrun "$MISSREPO"
+contains "a miss prints SIDECAR MISS" "SIDECAR MISS" "$hout"
+contains "a miss relays the resolver's init command" "SIDECAR MISS: run: bash $SC init" "$hall"
+contains "a miss probes the default in-tree store" "in-tree (docs/solutions)=0 sidecar=0" "$hout"
+check "a miss creates no sidecar" "$sc_before" "$(ls "$SKILL_KIT_SIDECAR_ROOT")"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
