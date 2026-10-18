@@ -214,7 +214,7 @@ and not this one, so the stand-down this step is about is exactly the one missin
 An inert marker does not fail loudly — the hook goes on refusing implementation
 writes, and the refusal names `/tdd`, which the feature path does not use.
 
-When `/init-pipeline` returns, create the run marker. This is the only
+When this step's branch completes (`/init-pipeline` has returned, or at once on `hooks-lock-present`, where it was never invoked), create the run marker on every branch. This is the only
 marker-creation block in this skill:
 
 ```bash
