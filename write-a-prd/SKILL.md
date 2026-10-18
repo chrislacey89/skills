@@ -69,11 +69,20 @@ Explore the repo to verify the user's assertions and understand the current stat
 
 Before interviewing the user, check two sources:
 
-**Past solutions** — Search `docs/solutions/` for relevant documented solutions:
+**Past solutions** — Search every place a lesson can live: the project's sidecar and its in-tree path. Resolve both through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path yourself. The block searches the sidecar's `solutions/` directory and the project's `solutions.in_tree_path` (skipped when it is `none`); on `SIDECAR MISS`, or with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
 ```bash
-grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
+SC="<this skill's directory>/references/sidecar.sh"
+KW="relevant-keyword"
+SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
+ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
+[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
+for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
+  case "$DIR" in ""|none) continue ;; esac
+  [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
+done
+true
 ```
-If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
+List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention: read it as a plain document, with no frontmatter or staleness check. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry's file path>"` (a fresh shell has no `SC`; a bare filename resolves beside that file); a `MISSING:` line is shown to the user, not skipped. If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
 
 **Research document** — Find the most recent research artifact for this feature. The artifact may live in either of two places depending on the project's `research.storage` setting:
 
@@ -83,13 +92,14 @@ If relevant solutions exist, read them. Incorporate their lessons into your unde
    ```
    If a matching spike issue exists, read its body — the YAML frontmatter at the top carries the same `date` and `installed_versions_snapshot` fields the archive uses.
 
-2. **Archive mode** (default) — list the per-user archive for this repo. Derive `<repo-slug>` from the current git remote (e.g. `chrislacey89-skills`):
+2. **Archive mode** (default) — list the sidecar's research directory, using the same resolver:
    ```bash
-   ls ~/.claude/research/<repo-slug>/ 2>/dev/null
+   SC="<this skill's directory>/references/sidecar.sh"
+   bash "$SC" path research && ls "$(bash "$SC" path research)"
    ```
-   Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature.
+   Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature. On `SIDECAR MISS` the resolver exits 1 and prints the `init` command: show it to the user exactly as printed and do not run it, because creating a sidecar is a human act. Until one exists, `/research` writes to the pre-sidecar archive directory named by the miss line's `--name`, so look there.
 
-Check both locations — a project that recently switched modes may still have artifacts in the old location. If both exist for the same feature, prefer the more recent `date` in frontmatter and surface the duplicate to the user. Before trusting any research artifact, check the frontmatter `date` and `installed_versions_snapshot` — if either looks stale against current reality, flag it to the user. If a research artifact exists and is fresh, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the canonical location (spike issue URL or archive path) in the pitch so `/execute` and Ralph can read it during implementation.
+Check both locations — a project that recently switched modes may still have artifacts in the old location. If both exist for the same feature, prefer the more recent `date` in frontmatter and surface the duplicate to the user. Before trusting any research artifact, check the frontmatter `date` and `installed_versions_snapshot` — if either looks stale against current reality, flag it to the user. If a research artifact exists and is fresh, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the canonical location (spike issue URL, or the entry's absolute path as listed above) in the pitch so `/execute` and Ralph can read it during implementation.
 
 **Artifact precedence:** When the research artifact and `docs/solutions/` disagree, the research artifact takes precedence — it was verified against installed versions. Storage location does not affect trust: a spike issue and an archive entry carry equivalent authority because their bodies are produced by the same `/research` skill against the same Phase 0/1 verification. Surface the conflict to the user during the interview rather than silently choosing one.
 
@@ -303,7 +313,7 @@ DO render **locked contract shapes** in code form when the PRD's decision lives 
 
 ## Research Reference
 
-[Include only if a matching research artifact exists. Use the form that matches the project's `research.storage` mode.]
+[Include only if a matching research artifact exists. Use the form that matches the project's `research.storage` mode. In archive mode, write the absolute path § 4's listing printed, never a `~` or `<repo-slug>` form, so `/execute` can check it with `sidecar.sh require` as written.]
 
 **Spike-issue mode (preferred when present):**
 
@@ -316,12 +326,12 @@ Implementors should read the spike issue before starting work (`gh issue view <s
 
 **Archive mode (fallback when no spike issue exists):**
 
-Technical research for this feature is documented at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md` (per-user archive, outside the repo). Key recommendations:
+Technical research for this feature is documented at `<absolute path to the research entry>` (the project's sidecar, outside the repo). Key recommendations:
 
 - [Recommended approach from research]
 - [Key constraint or tradeoff from research]
 
-Implementors should read the research document before starting work. Archive paths are not openable by readers other than the originating user — for cross-machine, multi-contributor, or public-audience PRDs, opt the project into spike-issue mode (see `/research` Phase 5a).
+Implementors should read the research document before starting work. Sidecar paths are not openable by readers other than the originating user — for cross-machine, multi-contributor, or public-audience PRDs, opt the project into spike-issue mode (see `/research` Phase 5a).
 
 ## Lessons from Past Solutions
 

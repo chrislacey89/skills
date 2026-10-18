@@ -155,7 +155,7 @@ Each AFK slice's `### Context` block must contain, or explicitly declare empty:
 
 - **Anchors** — existing files to read or imitate, as `path — why`, or the line `Greenfield — no existing pattern to follow.` The anchor is a **path**, never a bare pattern name: "follow the repository pattern" helps only a reader who already recognizes it, while a path is readable by anyone. The `why` states the file's **purpose, or the pattern it exemplifies** ("owns the retry/backoff policy every outbound client uses") — never a line-level restatement, which gives the reader nothing to chunk against and is pure load (Fan 2010). Where the repo has an `UBIQUITOUS_LANGUAGE.md` and this slice leans on domain terms defined there, cite it as one more anchor.
 - **Gotchas** — constraints known now that bear on this slice, drawn from the PRD's Rabbit Holes and the research artifact, or `None known.`
-- **Research** — the research artifact's location (`Refs #<spike-issue-number>` or the archive path), cited in this slice so `/execute` need not walk the parent PRD to find it.
+- **Research** — the research artifact's location (`Refs #<spike-issue-number>` or the archive path), cited in this slice so `/execute` need not walk the parent PRD to find it. Check an archive path with the bundled [references/sidecar.sh](references/sidecar.sh) `require <path> --from "PRD #<n>"` before citing it, and surface a `MISSING:` line instead of filing a dangling pointer.
 
 These three labels are rendered verbatim in the `### Context` block of the issue template below. `scripts/test-context-block-contract.sh` pins the two lists against each other — changing a slot here without changing the template (or the reverse) fails the suite rather than shipping a check that asks for a field the template has no room for.
 
@@ -310,7 +310,7 @@ Or "Nothing — this is a leaf node (no upstream dependencies)." if no dependenc
 - **Anchors:** `path/to/existing.ts` — owns the retry/backoff policy every outbound client uses; imitate its error shape
 - **Anchors:** `UBIQUITOUS_LANGUAGE.md` — defines the domain terms this slice's `What to Build` leans on
 - **Gotchas:** the upstream API rejects batches larger than 50 (PRD Rabbit Holes)
-- **Research:** `Refs #<spike-issue-number>` — or `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`
+- **Research:** `Refs #<spike-issue-number>` — or the absolute archive path the PRD cites, copied verbatim
 
 Use the explicit empty declarations rather than dropping a bullet: `Greenfield — no existing pattern to follow.` and `None known.`
 

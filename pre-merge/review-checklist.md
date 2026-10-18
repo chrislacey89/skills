@@ -65,7 +65,7 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 - New state directories: `docs/brainstorms/`, `docs/specs/`
 - Any new persistent markdown file that tracks state outside of GitHub issues or `docs/solutions/`
 
-Research files produced by `/research` live in the per-user archive at `~/.claude/research/<repo-slug>/…`, outside the repo. They are not a state-discipline violation because they never enter the working tree.
+Research files produced by `/research`, and solutions entries `/compound` writes to the sidecar, live in the project's sidecar, a private git repository outside the repo resolved by `sidecar.sh`. They are not a state-discipline violation because they never enter the working tree.
 
 **Out of scope:** Git history cleanliness (pre-commit hooks handle formatting and linting).
 
@@ -172,8 +172,10 @@ This is a **reconciliation test, not a gate** — `/pre-merge` is advisory in ev
 
 **Principle:** Past lessons should inform current work. If the implementation touches areas with documented solutions, it should follow those patterns or consciously update them.
 
+**Where the lessons live.** Read both locations, through the bundled resolver [references/sidecar.sh](references/sidecar.sh) at its absolute installed path, never a computed path. Each command runs in a fresh shell, so begin every one with `SC="<this skill's directory>/references/sidecar.sh"`: the sidecar's `bash "$SC" path solutions`, and the project's `bash "$SC" config get solutions.in_tree_path` unless it is `none`. With no sidecar (`SIDECAR MISS`), read `docs/solutions/` alone and note the miss line in the finding report. Entries under an `in_tree_path` other than `docs/solutions` are that repo's own convention, read as plain documents with no staleness check. A cited path that `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<path>" --from "<citing entry's file path>"` (a bare filename resolves beside that file) reports `MISSING:` is itself a finding, not a silent skip.
+
 **Violation patterns:**
-- Contradicting a documented pattern — implementing something that a `docs/solutions/` entry explicitly warns against, without updating the solution document
+- Contradicting a documented pattern — implementing something that a solutions entry (in either location) explicitly warns against, without updating the solution document
 - Ignoring a relevant prevention strategy — a solution's Prevention section describes a practice that applies to this code, but the code doesn't follow it
 - Stale solution consumption — relying on a `volatile` solution that is older than 90 days or whose Shelf Life condition appears met
 
