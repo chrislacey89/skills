@@ -198,12 +198,16 @@ The four lines are: shallow or not, commits in the window, root-commit date
 A high squash ratio means each commit is a whole PR, so commit-level coupling
 is PR-level coupling already; a low ratio with squash-merged PRs elsewhere is
 the case to watch. Probe `gh auth status` and whether the remote is GitHub;
-record `gh: yes` or `gh: no`. Look for a prior
-`~/.claude/research/<repo-slug>/excavation-*.md` and an existing
-`docs/solutions/`; a rerun updates entries rather than duplicating them, and
-scores the prior dossier's `persistent` tags against the new window (how many
-stayed hot) so the Coverage block carries a hit rate for its own predictions.
-`<repo-slug>` follows `/research`'s rule: `owner-name` from the git remote.
+record `gh: yes` or `gh: no`. Resolve the dossier directory with
+`bash "$SC" path research`, where `SC` is the absolute installed path of this
+skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh); never
+compute a sidecar path yourself. On `SIDECAR MISS` the resolver exits 1 and
+prints an `init` command: show it to the user and continue once they have run
+it, because creating a sidecar is a human act. Look in that directory for a
+prior `excavation-*.md`, and for an existing `docs/solutions/`; a rerun updates
+entries rather than duplicating them, and scores the prior dossier's
+`persistent` tags against the new window (how many stayed hot) so the Coverage
+block carries a hit rate for its own predictions.
 
 If the repo is shallow, say how much history is missing and offer
 `git fetch --unshallow`; never run it, since it rewrites `.git`.
@@ -584,8 +588,13 @@ honest commit messages.
 
 ### 6. Write the dossier
 
-Path: `~/.claude/research/<repo-slug>/excavation-<YYYY-MM-DD>.md`, creating
-directories as needed. Frontmatter:
+Path: `<dir>/excavation-<YYYY-MM-DD>.md`, where `<dir>` is what
+`bash "$SC" path research` printed in Step 0 (the same sidecar directory
+`/research` writes its archive to; the resolver creates it). Keep the
+`excavation-` prefix: `/help` and `/research` find the dossier by it. When the
+file is written, commit it in the sidecar with
+`bash "$SC" commit -- "<dossier path>" -m "excavate: dossier <YYYY-MM-DD>"`,
+which never pushes and never touches the project's tree. Frontmatter:
 
 ```yaml
 ---
@@ -770,7 +779,7 @@ Done means all of these hold:
   `/excavate [--since <date>] [--paths <pathspec>...]`, and a user present for
   the scope gate and the per-item confirm.
 - **Produces:** an off-tree dossier at
-  `~/.claude/research/<repo-slug>/excavation-<YYYY-MM-DD>.md`; an opt-in PR of
+  `<sidecar>/research/excavation-<YYYY-MM-DD>.md`, committed in the sidecar; an opt-in PR of
   `docs/solutions/` entries (stated decisions, mechanism-bearing hotspots) on
   `excavate/<date>`; nothing merged.
 - **Feeds downstream:** `/research` Phase 3 reads the newest dossier for the
@@ -792,5 +801,5 @@ Print, substituting the real values:
 
 ```
 **Next session:** /shape
-**Input:** ~/.claude/research/<repo-slug>/excavation-<date>.md and PR #<n> on excavate/<date> — read the Coverage block before trusting either
+**Input:** <sidecar>/research/excavation-<date>.md and PR #<n> on excavate/<date> — read the Coverage block before trusting either
 ```
