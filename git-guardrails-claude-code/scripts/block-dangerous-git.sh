@@ -8,7 +8,7 @@
 # than the command.
 #
 # This parses the command into arguments instead of searching it for substrings.
-# The substring version leaked seven ways (#227): it could not see flag order
+# The substring version leaked seven ways (chrislacey89/skills#227): it could not see flag order
 # (`push origin main -f`), flag bundling (`clean -df`), long-form aliases
 # (`branch --delete --force`), or the `--` separator (`checkout -- .`), and it
 # over-matched every path beginning with a dot, blocking ordinary commands like
@@ -312,7 +312,7 @@ inspect_git() {
 # issued by an AFK loop, never passes through /closeout, and that unattended
 # case is exactly where nobody notices the reviewed diff is not the merged
 # diff. This makes the read unskippable at the one command that performs the
-# merge (#327, Lock 2).
+# merge (chrislacey89/skills#327, Lock 2).
 #
 # The sed expression below is byte-identical to /closeout's by contract, not by
 # intent: scripts/test-review-currency-marker.sh extracts it from this file and
@@ -339,7 +339,7 @@ STALE_STAMP_OPT_OUT=ALLOW_STALE_STAMP_MERGE
 # `grep -rn 'gh pr merge' .` all mention the words without running them, and
 # this hook runs before every Bash call in every repo it is installed into. An
 # earlier draft matched the words anywhere in the command and refused all three
-# (#332); a hook that refuses `echo` is a hook that gets uninstalled.
+# (chrislacey89/skills#332); a hook that refuses `echo` is a hook that gets uninstalled.
 #
 # Leading environment assignments and the wrappers below keep the following
 # word in command position. The list is short and every entry is probed in
