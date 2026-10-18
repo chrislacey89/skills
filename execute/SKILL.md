@@ -282,7 +282,7 @@ done
 true
 ```
 
-List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` is that repo's own convention: read it as a plain document. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry>"` (a fresh shell has no `SC`) before relying on it; on `MISSING:`, stop in an AFK iteration and flag it to the user in a HITL run.
+List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` is that repo's own convention: read it as a plain document. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry's file path>"` (a fresh shell has no `SC`; a bare filename resolves beside that file) before relying on it; on `MISSING:`, stop in an AFK iteration and flag it to the user in a HITL run.
 
 If past solutions exist for this problem domain, incorporate their lessons and avoid their documented pitfalls.
 

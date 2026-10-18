@@ -470,6 +470,11 @@ cmd_require() {
     local probe="$path"
     # shellcheck disable=SC2088  # the literal ~ is the point
     case "$path" in "~/"*) probe="$HOME/${path#"~/"}" ;; esac
+    # A relative link inside a lesson is relative to the lesson's own folder, so when
+    # --from names an existing file, also try the path beside it.
+    if [ ! -e "$probe" ] && [ -f "$from" ]; then
+        case "$probe" in /*) ;; *) [ -e "$(dirname "$from")/$probe" ] && probe="$(dirname "$from")/$probe" ;; esac
+    fi
     if [ ! -e "$probe" ]; then
         printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
         exit 1
