@@ -92,12 +92,24 @@ List matches from both locations; one does not shadow the other. A match under a
    ```
    If a matching spike issue exists, read its body — the YAML frontmatter at the top carries the same `date` and `installed_versions_snapshot` fields the archive uses.
 
-2. **Archive mode** (default) — list the sidecar's research directory, using the same resolver:
+2. **Archive mode** (default) — list the research directory `/research` Phase 5c writes to, using the same resolver. With a sidecar that is its `research/`; on `SIDECAR MISS` it is the pre-sidecar archive, found exactly the way Phase 5c finds it:
+   <!-- sidecar-read: research -->
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
-   bash "$SC" path research && ls "$(bash "$SC" path research)"
+   if DIR="$(bash "$SC" path research 2>/dev/null)"; then
+     ls "$DIR"
+   else
+     # SIDECAR MISS: /research Phase 5c's pre-sidecar archive, keyed by the slug the miss line suggests.
+     MISS="$(bash "$SC" path research 2>&1 >/dev/null)"
+     printf '%s\n' "$MISS" >&2
+     SLUG="$(printf '%s' "$MISS" | sed -n 's/.*--name \([^ ]*\) .*/\1/p')"
+     case "$SLUG" in ''|.*|*/*|*[!a-z0-9._-]*) exit 1 ;; esac
+     DIR="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}/$SLUG"
+     echo "pre-sidecar archive: $DIR"
+     if [ -d "$DIR" ]; then ls "$DIR"; else echo "(empty: no research entries)"; fi
+   fi
    ```
-   Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature. On `SIDECAR MISS` the resolver exits 1 and prints the `init` command: show it to the user exactly as printed and do not run it, because creating a sidecar is a human act. Until one exists, `/research` writes to the pre-sidecar archive directory named by the miss line's `--name`, so look there.
+   Pick the entry whose `feature` frontmatter field (or filename slug) matches this feature, and cite it by `$DIR/<file>`. On `SIDECAR MISS` show the user the miss line exactly as printed and do not run its `init` command, because creating a sidecar is a human act. An exit 1 with no miss line (not a git repository) is not a miss: relay what the resolver printed. `scripts/test-sidecar-resolution.sh` runs this block against Phase 5c's write, so the two cannot name different directories.
 
 Check both locations — a project that recently switched modes may still have artifacts in the old location. If both exist for the same feature, prefer the more recent `date` in frontmatter and surface the duplicate to the user. Before trusting any research artifact, check the frontmatter `date` and `installed_versions_snapshot` — if either looks stale against current reality, flag it to the user. If a research artifact exists and is fresh, read it thoroughly. It contains the technical approach already researched and recommended during the `/research` phase. The pitch should build on these recommendations rather than re-debating them. Reference the canonical location (spike issue URL, or the entry's absolute path as listed above) in the pitch so `/execute` and Ralph can read it during implementation.
 
