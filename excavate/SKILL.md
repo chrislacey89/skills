@@ -44,7 +44,7 @@ on.
 Send it as its own message, not as the first message of a fresh workspace. A
 hidden skill typed into a first message that a host prepends a preamble to is
 read as prose and never loads; `/lfg`'s Invocation Position records the field
-incident (#383). Retype it as a second message.
+incident (chrislacey89/skills#383). Retype it as a second message.
 
 Use it when a repo has history but no `docs/solutions/`, no research archive
 entry, and no written decisions, and you are about to start feature work in it.

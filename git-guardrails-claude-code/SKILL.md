@@ -26,11 +26,11 @@ Do not treat it as part of the normal feature pipeline. It is a repo or user set
 - `git checkout .` / `git restore .` / `git checkout -- .` / `git restore -- .`
 - `git checkout ./` / `git checkout ./.` / `git checkout :/` / `git restore :/`
 
-The guard reads the command as tokens and never evaluates it, so a destructive command assembled at run time — a flag or subcommand held in a variable, spliced with `${IFS}`, or produced by command substitution — is not visible to it. That is a limit of the design, not a missing entry; #334 records it alongside the destructive commands the lists do not yet cover.
+The guard reads the command as tokens and never evaluates it, so a destructive command assembled at run time — a flag or subcommand held in a variable, spliced with `${IFS}`, or produced by command substitution — is not visible to it. That is a limit of the design, not a missing entry; chrislacey89/skills#334 records it alongside the destructive commands the lists do not yet cover.
 
 ## What Gets Blocked Conditionally
 
-`gh pr merge` is the one command here refused on a *condition* rather than on its shape. `/pre-merge` stamps the commit it reviewed into the PR body; `/closeout` Step 2 reads that stamp back before merging. The guard performs the same read at the merge itself, so a merge typed by hand or issued by an AFK loop cannot skip it (#327). It refuses only when the PR carries a stamp and that stamp names a commit other than the PR's current head — the reviewed diff is not the diff about to land.
+`gh pr merge` is the one command here refused on a *condition* rather than on its shape. `/pre-merge` stamps the commit it reviewed into the PR body; `/closeout` Step 2 reads that stamp back before merging. The guard performs the same read at the merge itself, so a merge typed by hand or issued by an AFK loop cannot skip it (chrislacey89/skills#327). It refuses only when the PR carries a stamp and that stamp names a commit other than the PR's current head — the reviewed diff is not the diff about to land.
 
 ### Refused when the review stamp is stale
 
@@ -66,7 +66,7 @@ The last five are commands the guard declines to judge, and the rule that decide
 
 The check also fails open when `gh` or `jq` is absent, when the API call fails, when the PR carries no stamp, and when the stamp is malformed — every case where it cannot be certain. A gate that refuses wrongly is a gate that gets deleted, and `/closeout` Step 2 still performs this read on the path most merges take.
 
-It inherits the design limit recorded above for the git rules, and for the same reason: the command is read as tokens and never evaluated, so a merge assembled at run time — `$CMD`, `gh${IFS}pr${IFS}merge`, a subcommand produced by command substitution — is invisible to it. #334 carries that limit for both halves.
+It inherits the design limit recorded above for the git rules, and for the same reason: the command is read as tokens and never evaluated, so a merge assembled at run time — `$CMD`, `gh${IFS}pr${IFS}merge`, a subcommand produced by command substitution — is invisible to it. chrislacey89/skills#334 carries that limit for both halves.
 
 ## What Stays Allowed
 
@@ -83,7 +83,7 @@ It inherits the design limit recorded above for the git rules, and for the same 
 
 Both lists are executable, not decorative. `scripts/test-git-guardrails.sh` extracts every command in them and runs it through the real script, asserting exit 2 for the first list and exit 0 for the second. Adding a line to either list without making the script agree fails CI.
 
-That test exists because this section was wrong for an unknown period: it claimed `git push -f` was blocked when the matcher only ever saw the `--force` long form (#227). A guard's own documentation is the thing a user reads when deciding whether to install it, so an unchecked claim here is worse than no claim.
+That test exists because this section was wrong for an unknown period: it claimed `git push -f` was blocked when the matcher only ever saw the `--force` long form (chrislacey89/skills#227). A guard's own documentation is the thing a user reads when deciding whether to install it, so an unchecked claim here is worse than no claim.
 
 ### How matching works
 
@@ -185,7 +185,7 @@ If the settings file already exists, merge the hook into existing `hooks.PreTool
 
 Ask if the user wants to change what is blocked. Git rules live in the `case "$subcommand"` block in the middle of the copied script — one arm per git subcommand, each testing parsed flags and operands. Add a new arm for a subcommand that has none, or extend an existing arm's condition. The review-currency refusal is separate, in `check_gh_merge` below them, because it is conditional on repository state rather than on the command's shape.
 
-There is no pattern array to edit. An earlier version of this script matched literal substrings; that is what let `git push -f` through (#227), and the rewrite replaced it with argument parsing.
+There is no pattern array to edit. An earlier version of this script matched literal substrings; that is what let `git push -f` through (chrislacey89/skills#227), and the rewrite replaced it with argument parsing.
 
 If you change the rules, update the two lists above to match — `scripts/test-git-guardrails.sh` in the Skill Kit repo executes both lists against the script, so the documentation and the behavior fail CI together rather than drifting apart.
 
