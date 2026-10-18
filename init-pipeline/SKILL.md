@@ -10,7 +10,7 @@ Scaffold pipeline enforcement infrastructure into the current project: Claude Co
 ## When to use
 
 - Automatically invoked by `/execute` Step 0 if `.claude/hooks/enforce-classification.sh` is missing, or if the installed hook does not read every path its own classification clause tests — the lock's stamp flag, or a marker such as `.claude/.lfg-active` (see § 2's re-scaffold note)
-- Manually by the user when setting up a new project for pipeline work, which is also the only run that creates the project's sidecar (§ 8)
+- Manually by the user when setting up a new project for pipeline work
 
 ## What it sets up
 
