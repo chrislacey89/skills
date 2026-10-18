@@ -564,6 +564,8 @@ SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
 mkdir -p "$SOLS/perf" "$MIG/docs/adr"
 printf 'needle sidecar\n' > "$SOLS/perf/a.md"
 printf 'needle in-tree\n' > "$MIG/docs/adr/0001.md"
+mkdir -p "$MIG/docs/solutions"
+printf 'needle default-store\n' > "$MIG/docs/solutions/planted.md"
 jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
 script="$(with_sc "$p3" | sed -e 's|^KW=.*|KW="needle"|')"
 out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"; rc=$?
@@ -574,6 +576,7 @@ jq '.solutions.in_tree_path = "none"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MS
 out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"
 contains "with in_tree_path none, Phase 3 still lists the sidecar match" "$SOLS/perf/a.md" "$out"
 lacks "with in_tree_path none, Phase 3 reads no in-tree path" "docs/adr" "$out"
+lacks "with in_tree_path none, Phase 3 never reads a planted docs/solutions" "docs/solutions/planted.md" "$out"
 git -C "$MSC" checkout -q -- sidecar.json
 
 # Phase 5a: sidecar value, settings fallback with no sidecar, then the default.
