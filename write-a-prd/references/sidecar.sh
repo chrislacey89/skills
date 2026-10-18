@@ -466,7 +466,11 @@ cmd_require() {
         esac
     done
     if ! { [ -n "$path" ] && [ -n "$from" ]; }; then die_usage "usage: sidecar.sh require <path> --from <referrer>"; fi
-    if [ ! -e "$path" ]; then
+    # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
+    local probe="$path"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$path" in "~/"*) probe="$HOME/${path#"~/"}" ;; esac
+    if [ ! -e "$probe" ]; then
         printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
         exit 1
     fi

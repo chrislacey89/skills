@@ -210,6 +210,13 @@ run "$tmp" require "$J" --from "docs/x.md:12"
 check "require on a present path exits 0 and prints nothing" "0:" "$rc:$out"
 run "$tmp" require "$J"
 check "require without --from is a usage error" 2 "$rc"
+mkdir -p "$tmp/home/r"; : > "$tmp/home/r/a.md"
+# shellcheck disable=SC2088  # literal ~ is the input under test
+out=$(HOME="$tmp/home" bash "$SC" require "~/r/a.md" --from "PRD #1" 2>&1); rc=$?
+check "require expands a quoted leading ~/ (present file)" "0:" "$rc:$out"
+# shellcheck disable=SC2088  # literal ~ is the input under test
+out=$(HOME="$tmp/home" bash "$SC" require "~/r/b.md" --from "PRD #1" 2>&1); rc=$?
+check "require on an absent ~/ path shows the path as given" "1:MISSING: ~/r/b.md (referenced by PRD #1)" "$rc:$out"
 run "$tmp"
 check "no verb is a usage error" 2 "$rc"
 run "$PROJ" path dossier
