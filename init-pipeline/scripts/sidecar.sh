@@ -11,12 +11,25 @@
 # Usage:
 #   sidecar.sh resolve
 #   sidecar.sh init [--name <n>] --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>
+#                   [--migrate-archive | --no-migrate-archive] [--archive-alias <dir>]...
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh path <research|solutions>
 #   sidecar.sh commit -- <path>... -m <msg>
 #   sidecar.sh require <path> --from <referrer>
 #
 # Exit codes: 0 success, 1 miss or refusal, 2 usage.
+#
+# Archive migration. init, by default, moves the files of each directory under
+# ${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research} whose name matches this
+# project into <sidecar>/research/, and leaves a symlink at the old directory
+# pointing there. --no-migrate-archive skips it. A directory matches when its
+# lowercased name is owner-repo cut from a remote key, or, only when the
+# checkout has no remote, the main checkout's basename (the one form the old
+# /research improvised, and only for repos without a remote). A basename is not
+# project identity: a remote-less project archived as api/ must not be claimed
+# by an unrelated repo that happens to be checked out at .../api. A project
+# archived under its basename before it gained a remote opts that directory in
+# with --archive-alias <dir> (repeatable, matched lowercased, one path component).
 #
 # Identity. A sidecar is found by the keys in its sidecar.json, tried in order:
 #   root:<sha>               lexicographically first root commit; skipped in a
@@ -185,8 +198,10 @@ do_resolve() {
         break
     done
     if [ -z "$hit" ]; then
-        printf 'SIDECAR MISS: run: sidecar.sh init --name %s --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>\n' \
-            "$(suggest_name)" >&2
+        # Absolute path to this script: a bare `sidecar.sh` is on no one's PATH.
+        self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+        printf 'SIDECAR MISS: run: bash %s init --name %s --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>\n' \
+            "$self" "$(suggest_name)" >&2
         return 1
     fi
     new_keys=""
@@ -218,13 +233,19 @@ $k"
 }
 
 cmd_init() {
-    local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind host forge_write
+    local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind host forge_write migrate=1 aliases=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)         [ $# -ge 2 ] || die_usage "--name needs a value"; name="$2"; shift 2 ;;
             --mode)         [ $# -ge 2 ] || die_usage "--mode needs a value"; mode="$2"; shift 2 ;;
             --write)        [ $# -ge 2 ] || die_usage "--write needs a value"; write="$2"; shift 2 ;;
             --in-tree-path) [ $# -ge 2 ] || die_usage "--in-tree-path needs a value"; itp="$2"; shift 2 ;;
+            --migrate-archive)    migrate=1; shift ;;
+            --no-migrate-archive) migrate=0; shift ;;
+            --archive-alias)
+                [ $# -ge 2 ] || die_usage "--archive-alias needs a value"
+                case "$2" in ''|*/*|.|..) die_usage "init: --archive-alias must be one directory name: $2" ;; esac
+                aliases="${aliases:+$aliases$'\n'}$(lower "$2")"; shift 2 ;;
             *) die_usage "init: unknown argument: $1" ;;
         esac
     done
@@ -301,7 +322,88 @@ cmd_init() {
          }' --args $keys > "$dir/sidecar.json" || refuse "init: could not write sidecar.json"
     commit_paths "$dir" "sidecar: init $name" sidecar.json || exit 1
     trap - EXIT
+    # After the trap is cleared: a migration failure must not delete a sidecar
+    # that already holds moved archive files.
+    if [ "$migrate" -eq 1 ]; then
+        migrate_archive "$dir" "$keys" "$aliases" || exit 1
+    fi
     printf '%s\n' "$dir"
+}
+
+# Directory names the old research archive used for this project, lowercased:
+# owner-repo cut from each remote key, and, only when there is no remote key,
+# the main checkout's basename, which /research improvised for repos with no
+# remote. <keys> is the checkout's key list.
+archive_names() {
+    local keys="$1" k n has_remote=0
+    for k in $keys; do case "$k" in remote:*) has_remote=1 ;; esac; done
+    for k in $keys; do
+        case "$k" in
+            remote:*)
+                n="${k#remote:}"
+                n="${n#*/}"
+                case "$n" in
+                    */*) printf '%s-%s\n' "$(basename "$(dirname "$n")")" "$(basename "$n")" ;;
+                    *)   printf '%s\n' "$n" ;;
+                esac
+                ;;
+            path:*) [ "$has_remote" -eq 1 ] || basename "${k#path:}" ;;
+        esac
+    done
+}
+
+# migrate_archive <sidecar> <keys> <aliases>
+# Moves each matching archive directory's files into <sidecar>/research/ and
+# replaces the directory with a symlink to it, so the absolute archive paths
+# embedded in PRD issues still resolve. A directory holding a file whose name
+# exists in research/ with different content is left untouched. Actions are
+# printed on stderr; stdout stays the sidecar path.
+migrate_archive() {
+    local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0
+    archive="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}"
+    [ -d "$archive" ] || return 0
+    dest="$sc/research"
+    mkdir -p "$dest" || refuse "init: cannot create $dest"
+    names="$({ archive_names "$keys"; [ -z "$aliases" ] || printf '%s\n' "$aliases"; } | LC_ALL=C sort -u)"
+    [ -n "$names" ] || return 0
+    for d in "$archive"/*; do
+        [ -d "$d" ] || continue
+        [ -L "$d" ] && continue
+        base="$(lower "$(basename "$d")")"
+        printf '%s\n' "$names" | grep -qxF -- "$base" || continue
+        conflict=0
+        for e in "$d"/* "$d"/.[!.]* "$d"/..?*; do
+            [ -e "$e" ] || [ -L "$e" ] || continue
+            target="$dest/$(basename "$e")"
+            if [ -e "$target" ] && ! { [ -f "$e" ] && [ -f "$target" ] && cmp -s "$e" "$target"; }; then
+                printf 'sidecar.sh: archive: left %s untouched: %s already exists in %s with different content\n' \
+                    "$d" "$(basename "$e")" "$dest" >&2
+                conflict=1
+                break
+            fi
+        done
+        [ "$conflict" -eq 0 ] || continue
+        moved=0
+        for e in "$d"/* "$d"/.[!.]* "$d"/..?*; do
+            [ -e "$e" ] || [ -L "$e" ] || continue
+            target="$dest/$(basename "$e")"
+            if [ -e "$target" ]; then
+                rm -f "$e"
+            else
+                mv "$e" "$target" || refuse "init: archive: could not move $e into $dest"
+            fi
+            moved=$((moved + 1))
+        done
+        rmdir "$d" || refuse "init: archive: $d is not empty after the move; left in place"
+        ln -s "$dest" "$d" || refuse "init: archive: could not link $d to $dest"
+        printf 'sidecar.sh: archive: moved %s file(s) from %s into %s; %s is now a symlink to it\n' \
+            "$moved" "$d" "$dest" "$d" >&2
+        any=1
+    done
+    if [ "$any" -eq 1 ] && [ -n "$(ls -A "$dest")" ]; then
+        commit_paths "$sc" "sidecar: migrate research archive" research || return 1
+    fi
+    return 0
 }
 
 cmd_config() {

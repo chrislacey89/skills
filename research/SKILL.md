@@ -178,19 +178,38 @@ Do not present these as a batch. State one constraint, get confirmation, then pr
 
 ### Phase 3: Consult Past Solutions
 
-Search `docs/solutions/` for relevant past solutions:
+Search every place a lesson can live: the project's sidecar and its in-tree path. Resolve both through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path yourself. The block searches the sidecar's `solutions/` directory and the project's `solutions.in_tree_path` (skipped when it is `none`); on `SIDECAR MISS`, or with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
 
 ```bash
-grep -rl "relevant-keyword" docs/solutions/ 2>/dev/null
+SC="<this skill's directory>/references/sidecar.sh"
+KW="relevant-keyword"
+SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
+ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
+[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
+for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
+  case "$DIR" in ""|none) continue ;; esac
+  [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
+done
+true
 ```
+
+List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention, not a `/compound` entry: read it as a plain document, and skip the staleness check below, which depends on frontmatter it does not carry.
 
 If relevant solutions exist, read them and incorporate their lessons. Note which past pitfalls or patterns apply. This is the compounding benefit — past work makes future research faster and more accurate.
 
 **Scope check before transfer.** When a loaded solution doesn't state explicit scope or preconditions (the `Rule Scope` section added by `/compound`), or when its stated scope doesn't match the current work's structural shape, re-derive the recommendation from first principles rather than transferring it. A rule correct for a 2-step agent loop with a terminal forced tool can invert for a 3-step loop where the same tool is non-terminal — keyword match is not shape match. Verify the shape, don't skip the check.
 
-**Excavation dossier.** When `~/.claude/research/<repo-slug>/excavation-*.md` exists (written by `/excavate` on a legacy repo that was never compounded), read the newest one's Hotspots section and only the `stated` rows of its Decisions section for the paths this feature touches; `inferred` rows carry no research-level authority. Its Coverage block states the window and what the history could not show; treat its `date` as the snapshot date under the same staleness judgment as below.
+**Excavation dossier.** `/excavate` writes its dossier into the same sidecar directory Phase 5c writes to, `$(bash "$SC" path research)`. When an `excavation-*.md` file exists there (a legacy repo that was never compounded), read the newest one's Hotspots section and only the `stated` rows of its Decisions section for the paths this feature touches; `inferred` rows carry no research-level authority. Its Coverage block states the window and what the history could not show; treat its `date` as the snapshot date under the same staleness judgment as below.
 
-**Staleness check:** When reading a `docs/solutions/` file, check its `volatility` YAML field and `date`. If `volatile` and older than 90 days, or if the Shelf Life condition appears to have been met, note it as potentially stale before incorporating its lessons. Flag stale docs to the user — they should be updated or deleted.
+When the shaped input, an issue, or the user cites a specific dossier path, check that it exists before relying on it:
+
+```bash
+bash "$SC" require "<cited dossier path>" --from "/research Phase 3" || echo "dossier missing"
+```
+
+On a miss the resolver prints `MISSING: <path> (referenced by /research Phase 3)`. In a HITL run, show that line to the user and continue without the dossier only if they say so. In an AFK run, stop: research that silently drops a cited source reads as complete when it is not.
+
+**Staleness check:** When reading a `/compound` entry (from the sidecar's `solutions/` or an in-tree `docs/solutions/`), check its `volatility` YAML field and `date`. If `volatile` and older than 90 days, or if the Shelf Life condition appears to have been met, note it as potentially stale before incorporating its lessons. Flag stale docs to the user — they should be updated or deleted.
 
 ### Phase 4: Research
 
@@ -240,22 +259,27 @@ The research document has two possible storage locations, selected per project. 
 
 #### Phase 5a: Select the Storage Mode
 
-Read the project-level config to determine where this research goes:
+Read the project's sidecar to determine where this research goes. When no sidecar resolves, a `research.storage` key in `.claude/settings.json` is still honored, so a project configured before the sidecar existed keeps its mode:
 
 ```bash
-# Read the research.storage field from the project-local settings file.
-# Default to "archive" if the file or field is missing.
-jq -r '.research.storage // "archive"' .claude/settings.json 2>/dev/null || echo archive
+SC="<this skill's directory>/references/sidecar.sh"
+STORAGE="$(bash "$SC" config get research.storage 2>/dev/null)" && SOURCE="sidecar" || STORAGE=""
+if [ -z "$STORAGE" ]; then
+  STORAGE="$(jq -r '.research.storage // empty' .claude/settings.json 2>/dev/null)"
+  SOURCE=".claude/settings.json (no sidecar resolved)"
+fi
+[ -n "$STORAGE" ] || { STORAGE="archive"; SOURCE="default"; }
+echo "research.storage = $STORAGE, from $SOURCE"
 ```
 
 The two modes:
 
-- **`archive`** (default) — write to a per-user filesystem path outside the repo working tree (`~/.claude/research/...`). Worktree- and branch-resilient, never committed, never visible to collaborators. Right for solo / single-machine / private projects.
+- **`archive`** (default) — write into the project's sidecar, `<sidecar>/research/`: a private git repository outside the working tree, resolved by `sidecar.sh path research`. Worktree- and branch-resilient, never committed to the project, never visible to collaborators. Right for solo / single-machine / private projects.
 - **`spike-issue`** — file the research as a closed-on-creation GitHub issue in the same repo as the PRD, labeled `research`. Right for public, portfolio, OSS, transparency-themed, multi-contributor, or multi-machine projects where the PRD's audience is GitHub and the research must be openable by that audience without per-user setup. Spike issue visibility follows the repo's visibility — private repos produce private spikes.
 
-Tell the user which mode was selected and why (e.g., `"spike-issue mode: .claude/settings.json declares research.storage = spike-issue"`). If neither mode is configured, default to `archive` and proceed.
+Tell the user the line the block printed; it names the mode and where the value came from (e.g., `research.storage = spike-issue, from .claude/settings.json (no sidecar resolved)`). If neither the sidecar nor the settings file sets it, default to `archive` and proceed.
 
-To opt a project into spike-issue mode, add this to `.claude/settings.json` (Claude Code ignores fields outside its schema, so this is additive — Skill Kit owns the `research` namespace):
+To opt a project into spike-issue mode, set `research.storage` to `spike-issue` in the project's `sidecar.json`. A project with no sidecar can declare it in `.claude/settings.json` instead (Claude Code ignores fields outside its schema, so this is additive — Skill Kit owns the `research` namespace), and `sidecar.sh init` copies that value into the sidecar it creates:
 
 ```json
 {
@@ -292,15 +316,37 @@ callback_contracts_snapshot:
 ---
 ```
 
-#### Phase 5c — Archive mode (default): Write to the Per-User Archive
+#### Phase 5c — Archive mode (default): Write to the Sidecar
 
-When the storage mode is `archive`, write the research document to the per-user archive outside the repo working tree:
+When the storage mode is `archive`, write the research document into the project's sidecar and commit it there. `<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date; the resolver supplies the directory:
 
+<!-- sidecar-write: research -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+if DIR="$(bash "$SC" path research 2>/dev/null)"; then
+  ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
+  COMMIT=yes
+else
+  # SIDECAR MISS: pre-sidecar archive, keyed by the slug the miss line suggests.
+  MISS="$(bash "$SC" path research 2>&1 >/dev/null)"
+  printf '%s\n' "$MISS" >&2
+  SLUG="$(printf '%s' "$MISS" | sed -n 's/.*--name \([^ ]*\) .*/\1/p')"
+  case "$SLUG" in ''|.*|*/*|*[!a-z0-9._-]*) exit 1 ;; esac
+  DIR="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}/$SLUG"
+  mkdir -p "$DIR" || exit 1
+  ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
+  COMMIT=no
+fi
+cat > "$ENTRY" <<'EOF'
+<the research document, frontmatter from Phase 5b first>
+EOF
+bash "$SC" require "$ENTRY" --from "/research Phase 5c" || exit 1
+[ "$COMMIT" = no ] || bash "$SC" commit -- "$ENTRY" -m "research: <feature-slug>"
 ```
-~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md
-```
 
-Where `<repo-slug>` is `owner-name` derived from the git remote (e.g. `chrislacey89-skills`), `<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date. Create intermediate directories if they do not exist.
+`commit` never pushes, and nothing here touches the project's tree or its `.git`. `scripts/test-sidecar-resolution.sh` runs this block as written.
+
+**On `SIDECAR MISS`** (the resolver exits 1 and prints the `init` command with its absolute path), the block still writes the entry, to the pre-sidecar archive directory `<slug>/` that `/write-a-prd` still reads, where `<slug>` is the `--name` the miss line suggests (`owner-repo`, lowercased). That fallback is the migration path: it keeps the research-to-PRD handoff alive until a sidecar exists, and `sidecar.sh init` later moves those files into the sidecar. It is not committed anywhere. Show the user the miss line's `init` command exactly as printed so the next run lands in the sidecar, and do not run it yourself. In an AFK run, write the entry and note the miss in the handoff. Creating a sidecar is a human act: auto-creating one is how the old archive split one project across several directories.
 
 **Why outside the repo:** the archive is per-user working memory, not team-shared artifact. Branch switches, worktree cleanup, and `.gitignore` hygiene cannot accidentally destroy it. It is not committed to the project and is never visible to collaborators.
 
@@ -335,7 +381,7 @@ When the storage mode is `spike-issue`, file the research as a labeled, closed-o
    gh issue close "$SPIKE_URL" --comment "Closed on creation — see body for the point-in-time research snapshot. Do not edit; supersede with a new dated spike issue if research changes."
    ```
 
-5. **Cache locally for this session.** Also write the same body to the archive path (`~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`) so the rest of this session and any sibling tools that read the archive can find it. The spike issue is the canonical durable copy; the cache is a session convenience and may be safely overwritten on re-runs.
+5. **Cache locally for this session.** When a sidecar resolves, also write the same body with the Phase 5c block, so the rest of this session and any sibling tools that read `<sidecar>/research/` can find it. With no sidecar, skip the cache. The spike issue is the canonical durable copy; the cache is a session convenience and may be safely overwritten on re-runs.
 
 6. **Emit both the spike URL and the cache path** when reporting the completed research, and note that the canonical home is the spike issue.
 
@@ -532,7 +578,7 @@ Do not present all four questions at once. Iterate on each answer until the user
 
 **Before handoff, name any remaining feasibility spikes.** If the document still carries `Uncertain` assumptions whose verdicts are cheaply code-verifiable and have not been discharged, list them under a short "Pending feasibility spikes" closing note and name `/prototype` FEASIBILITY as the discharge route. The PRD can still be written with those assumptions tagged — but the named discharge route makes it cheap for the next agent (or this one, in `/execute` Step 0) to settle them before mid-implementation. The cost-of-delay framing is XP's *Defect Cost Increase*: discharging at `/research` time costs minutes; the same assumption discovered at `/execute` time costs hours.
 
-In archive mode, the research file is saved outside the repo — do not commit it to git. In spike-issue mode, the research lives as a closed GitHub issue and a session-local cache copy at the archive path; do not commit the cache copy either.
+In archive mode, see Phase 5c for where the research file is written and whether it is committed. In spike-issue mode, the research lives as a closed GitHub issue plus, when a sidecar resolves, a cache copy in the sidecar; do not commit the cache copy to the project either.
 
 **At the end of Phase 6, print the runtime handoff line:**
 
@@ -541,14 +587,14 @@ In archive mode, the research file is saved outside the repo — do not commit i
 **Input:** <archive-path-or-spike-issue-url>
 ```
 
-For archive mode, the input is the absolute path under `~/.claude/research/<repo-slug>/`. For spike-issue mode, the input is the closed GitHub issue URL. Print this line whether the user chose to continue here or in a fresh session — the line is the durable handoff either way.
+For archive mode, the input is the absolute `$ENTRY` path Phase 5c wrote. For spike-issue mode, the input is the closed GitHub issue URL. Print this line whether the user chose to continue here or in a fresh session — the line is the durable handoff either way.
 
 ## Handoff
 
 - **Expected input:** clarified problem framing from `/shape`, including choices, assumptions, impositions, and structural signals
 - **Produces:** a research artifact carrying verified version and documentation guidance plus an estimate-readiness posture. Storage location depends on the project's `research.storage` setting:
-  - **`archive`** (default): file at `~/.claude/research/<repo-slug>/<feature-slug>-<YYYY-MM-DD>.md`
-  - **`spike-issue`**: closed GitHub issue labeled `research` in the same repo as the PRD, plus a session-local cache copy at the archive path
+  - **`archive`** (default): file at the path Phase 5c wrote (see Phase 5c)
+  - **`spike-issue`**: closed GitHub issue labeled `research` in the same repo as the PRD, plus a cache copy in the sidecar when one resolves
 - **May invoke:** `/api-design-review` when contract risk is high enough that the API shape needs focused scrutiny before shaping continues
 - **Comes next by default:** `/write-a-prd`
 

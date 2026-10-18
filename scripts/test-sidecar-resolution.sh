@@ -18,8 +18,14 @@
 #   - Plain add-then-commit under 20 parallel writers loses most files to
 #     index.lock contention.
 #
+# The "archive migration" section pins init's move of the old per-slug
+# research directories into the sidecar: PRD issues embed those absolute
+# paths, so each old directory must survive as a symlink that still resolves.
+#
 # Section 9 runs the /compound sidecar block extracted from compound/SKILL.md,
-# so an edit to that block is tested as written.
+# and the "/research" section runs research/SKILL.md's Phase 3 read, Phase 5a
+# storage read, and Phase 5c write, so an edit to any of them is tested as
+# written.
 #
 # Fixtures are built after unsetting the inherited git environment, with a
 # private global config, so a hook's GIT_DIR or the runner's identity cannot
@@ -30,6 +36,7 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 SC="$repo_root/init-pipeline/scripts/sidecar.sh"
 COMPOUND="$repo_root/compound/SKILL.md"
+RESEARCH="$repo_root/research/SKILL.md"
 [ -f "$SC" ] || { printf 'FATAL %s is missing\n' "$SC"; exit 1; }
 
 tmp="$(mktemp -d)"
@@ -43,6 +50,9 @@ git config --file "$GIT_CONFIG_GLOBAL" user.email "tester@example.com"
 git config --file "$GIT_CONFIG_GLOBAL" init.defaultBranch main
 git config --file "$GIT_CONFIG_GLOBAL" protocol.file.allow always
 export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars"
+# init migrates the research archive by default; never let it touch the
+# runner's real ~/.claude/research.
+export SKILL_KIT_RESEARCH_ARCHIVE="$tmp/archive"
 
 pass=0
 fail=0
@@ -186,7 +196,7 @@ git -C "$OTHER" remote add origin git@github.com:Foo/Bar-Baz.git
 run "$OTHER" resolve
 check "resolve on an unknown repo exits 1" 1 "$rc"
 contains "it prints SIDECAR MISS with the suggested name filled in" \
-    "SIDECAR MISS: run: sidecar.sh init --name foo-bar-baz" "$out"
+    "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
 run "$OTHER" path solutions
 check "path on a miss exits 1" 1 "$rc"
 run "$OTHER" config get solutions.write
@@ -393,6 +403,217 @@ check "init exits 1 when the sidecar.json write fails" 1 "$rc"
 check "a failed jq write leaves no sidecar directory" "no" "$(if [ -e "$SKILL_KIT_SIDECAR_ROOT/jqfail" ]; then echo yes; else echo no; fi)"
 run "$JQFAIL" init --name jqfail --mode guest --write sidecar --in-tree-path none
 check "a retry after the jq failure succeeds" 0 "$rc"
+
+# -----------------------------------------------------------------------------
+section "archive migration"
+
+# One project under three old slugs, as the originating machine's archive
+# holds mimir: the checkout basename (pre-remote), and owner-repo for each of
+# two remotes (an org rename). Mixed case, because the old slugs were.
+mkdir -p "$tmp/mig"
+MIG="$tmp/mig/mimir"
+mkrepo "$MIG"
+git -C "$MIG" remote add origin git@github.com:NewEra-Alliances/Mimir.git
+git -C "$MIG" remote add old https://github.com/New-Era-Technology/mimir.git
+A="$SKILL_KIT_RESEARCH_ARCHIVE"
+mkdir -p "$A/mimir" "$A/New-Era-Technology-mimir" "$A/NewEra-Alliances-mimir" "$A/unrelated"
+printf 'local\n'  > "$A/mimir/local-2026-01-01.md"
+printf 'tech\n'   > "$A/New-Era-Technology-mimir/tech-2026-02-01.md"
+printf 'alli\n'   > "$A/NewEra-Alliances-mimir/alli-2026-03-01.md"
+cp "$A/mimir/local-2026-01-01.md" "$A/NewEra-Alliances-mimir/"
+printf 'other\n'  > "$A/unrelated/z.md"
+
+# The basename is not a match for a checkout that has a remote: mimir/ above is
+# claimed only because the run below names it with --archive-alias.
+run "$MIG" init --name mig-noalias --mode owned --write sidecar --in-tree-path none
+check "a basename directory is not migrated for a checkout with a remote" "dir" \
+    "$(if [ -L "$A/mimir" ]; then echo link; elif [ -d "$A/mimir" ]; then echo dir; fi)"
+check "the remote-derived directories still migrate without an alias" "link link" \
+    "$(if [ -L "$A/New-Era-Technology-mimir" ]; then echo link; fi) $(if [ -L "$A/NewEra-Alliances-mimir" ]; then echo link; fi)"
+# Undo, so the sections below start from the planted fixture.
+rm -rf "$SKILL_KIT_SIDECAR_ROOT/mig-noalias"
+for d in New-Era-Technology-mimir NewEra-Alliances-mimir; do
+    rm -f "$A/$d"; mkdir -p "$A/$d"
+done
+printf 'tech\n' > "$A/New-Era-Technology-mimir/tech-2026-02-01.md"
+printf 'alli\n' > "$A/NewEra-Alliances-mimir/alli-2026-03-01.md"
+cp "$A/mimir/local-2026-01-01.md" "$A/NewEra-Alliances-mimir/"
+
+run "$MIG" init --name mig-nomig --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "init --no-migrate-archive succeeds" 0 "$rc"
+check "--no-migrate-archive leaves the archive directory a directory" "dir" \
+    "$(if [ -L "$A/mimir" ]; then echo link; elif [ -d "$A/mimir" ]; then echo dir; fi)"
+rm -rf "$SKILL_KIT_SIDECAR_ROOT/mig-nomig"
+
+run "$MIG" init --name mig --mode owned --write sidecar --in-tree-path none --archive-alias Mimir
+check "init with a matching archive succeeds" 0 "$rc"
+MSC="$SKILL_KIT_SIDECAR_ROOT/mig"
+for d in mimir New-Era-Technology-mimir NewEra-Alliances-mimir; do
+    check "$d is now a symlink to the sidecar's research/" "$MSC/research" "$(readlink "$A/$d")"
+    contains "init printed the move for $d" "from $A/$d into $MSC/research" "$out"
+done
+# coverage: enumerated — the three files the fixture above planted, one per old directory
+for f in local-2026-01-01.md tech-2026-02-01.md alli-2026-03-01.md; do
+    check "$f is readable through the sidecar" "yes" "$(if [ -f "$MSC/research/$f" ]; then echo yes; fi)"
+    for d in mimir New-Era-Technology-mimir NewEra-Alliances-mimir; do
+        check "$f is readable through the old path $d" "yes" "$(if [ -f "$A/$d/$f" ]; then echo yes; fi)"
+    done
+done
+check "an archive directory matching no alias is untouched" "dir other" \
+    "$(if [ -L "$A/unrelated" ]; then echo link; else echo dir; fi) $(cat "$A/unrelated/z.md")"
+check "the moved files are committed in the sidecar" "" "$(git -C "$MSC" status --porcelain)"
+check "the migration commit carries all three files" 3 \
+    "$(git -C "$MSC" show --name-only --format= HEAD | grep -c '^research/')"
+check "stdout is still only the sidecar path" "$MSC" "$(printf '%s\n' "$out" | grep -v '^sidecar.sh:' | tail -n 1)"
+run "$MIG" path research
+check "path research resolves to the migrated directory" "$MSC/research" "$out"
+
+# An unrelated remote-less project archived as api/, and a different repo with a
+# remote checked out at .../api: the folder name alone must not claim it.
+mkdir -p "$tmp/mig/co"
+API="$tmp/mig/co/api"
+mkrepo "$API"
+git -C "$API" remote add origin git@github.com:acme/api-server.git
+mkdir -p "$A/api" "$A/Co-Api"
+printf 'theirs\n' > "$A/api/theirs.md"
+run "$API" init --name api-server --mode owned --write sidecar --in-tree-path none
+check "init beside an unrelated api/ archive succeeds" 0 "$rc"
+check "the unrelated api/ archive is still a real directory with its file" "dir theirs" \
+    "$(if [ -L "$A/api" ]; then echo link; else echo dir; fi) $(cat "$A/api/theirs.md")"
+lacks "nothing is reported moved from api/" "$A/api" "$out"
+# A remote-less checkout is the one case the basename still means something.
+NOREM="$tmp/mig/norem/solo"
+mkdir -p "$A/solo"; printf 's\n' > "$A/solo/s.md"
+mkrepo "$NOREM"
+run "$NOREM" init --name solo --mode owned --write sidecar --in-tree-path none
+check "a remote-less checkout still claims its basename directory" "$SKILL_KIT_SIDECAR_ROOT/solo/research" "$(readlink "$A/solo")"
+run "$NOREM" init --name solo2 --mode owned --write sidecar --in-tree-path none --archive-alias a/b
+check "--archive-alias rejects a path" 2 "$rc"
+
+# Two old directories that disagree about one file name: the first moves, the
+# second is left as it was rather than overwritten.
+CLASH="$tmp/mig/clash"
+mkrepo "$CLASH"
+git -C "$CLASH" remote add origin git@github.com:acme/clash.git
+mkdir -p "$A/acme-clash" "$A/clash"
+printf 'one\n' > "$A/acme-clash/n.md"
+printf 'two\n' > "$A/clash/n.md"
+run "$CLASH" init --name clash --mode owned --write sidecar --in-tree-path none --archive-alias clash
+check "init with a conflicting archive still succeeds" 0 "$rc"
+contains "the conflict is reported" "left $A/clash untouched: n.md already exists" "$out"
+check "the conflicting directory is still a directory with its own file" "dir two" \
+    "$(if [ -L "$A/clash" ]; then echo link; else echo dir; fi) $(cat "$A/clash/n.md")"
+check "the first directory moved" "$SKILL_KIT_SIDECAR_ROOT/clash/research" "$(readlink "$A/acme-clash")"
+
+# -----------------------------------------------------------------------------
+section "/research: Phase 3 read, Phase 5a storage, Phase 5c write"
+
+# first_bash_after <file> <start-regex> — the first ```bash block after the
+# first line matching the regex.
+first_bash_after() {
+    awk -v pat="$2" '$0 ~ pat { on = 1; next }
+                     on && /^```bash$/ { inb = 1; next }
+                     inb && /^```$/ { exit }
+                     inb { print }' "$1"
+}
+with_sc() { printf '%s\n' "$1" | sed -e "s|^SC=.*|SC=\"$SC\"|"; }
+
+p5c="$(first_bash_after "$RESEARCH" '^<!-- sidecar-write: research -->$')"
+p3="$(first_bash_after "$RESEARCH" '^### Phase 3: ')"
+p5a="$(first_bash_after "$RESEARCH" '^#### Phase 5a: ')"
+for pair in "Phase 3:$p3" "Phase 5a:$p5a" "Phase 5c:$p5c"; do
+    name="${pair%%:*}"; body="${pair#*:}"
+    if [ -z "$body" ]; then
+        bad "research/SKILL.md carries the $name block" "no bash block found"
+    else
+        ok "research/SKILL.md carries the $name block"
+        contains "the $name block calls the bundled resolver" 'references/sidecar.sh' "$body"
+        lacks "the $name block runs no git of its own" 'git ' "$(printf '%s\n' "$body" | grep -v '^[[:space:]]*#')"
+    fi
+done
+
+# Phase 5c, on the migrated mimir sidecar.
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|search-index|g' -e 's|<YYYY-MM-DD>|2026-10-17|g')"
+out="$(cd "$MIG" && bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block runs cleanly" 0 "$rc"
+check "the research entry is the sidecar's HEAD commit" "research/search-index-2026-10-17.md" \
+    "$(git -C "$MSC" log -1 --name-only --format= | head -n 1)"
+check "the entry is readable through an old archive path" "yes" \
+    "$(if [ -f "$A/mimir/search-index-2026-10-17.md" ]; then echo yes; fi)"
+check "the project's tree is untouched by Phase 5c" "" "$(git -C "$MIG" status --porcelain)"
+
+# Phase 5c on a SIDECAR MISS: the entry lands in the pre-sidecar archive
+# (a private archive root, never the real ~/.claude/research), uncommitted.
+MISSREPO="$tmp/missrepo"
+mkrepo "$MISSREPO"
+git -C "$MISSREPO" remote add origin git@github.com:Foo/Bar-Baz.git
+MISSARCH="$tmp/missarch"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|miss-case|g' -e 's|<YYYY-MM-DD>|2026-10-17|g')"
+sc_before="$(ls "$SKILL_KIT_SIDECAR_ROOT")"
+out="$(cd "$MISSREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$MISSARCH" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block on a miss runs cleanly" 0 "$rc"
+check "on a miss the entry lands in the pre-sidecar archive under the suggested slug" "yes" \
+    "$(if [ -f "$MISSARCH/foo-bar-baz/miss-case-2026-10-17.md" ]; then echo yes; fi)"
+contains "on a miss the user is shown the init command with an absolute path" \
+    "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
+check "on a miss no sidecar is created" "$sc_before" "$(ls "$SKILL_KIT_SIDECAR_ROOT")"
+check "the project's tree is untouched by a missed Phase 5c" "" "$(git -C "$MISSREPO" status --porcelain)"
+
+# Phase 3, with matches in both stores, then with in_tree_path none.
+SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
+mkdir -p "$SOLS/perf" "$MIG/docs/adr"
+printf 'needle sidecar\n' > "$SOLS/perf/a.md"
+printf 'needle in-tree\n' > "$MIG/docs/adr/0001.md"
+mkdir -p "$MIG/docs/solutions"
+printf 'needle default-store\n' > "$MIG/docs/solutions/planted.md"
+jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+script="$(with_sc "$p3" | sed -e 's|^KW=.*|KW="needle"|')"
+out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"; rc=$?
+check "the Phase 3 block runs cleanly" 0 "$rc"
+contains "Phase 3 lists the sidecar match" "$SOLS/perf/a.md" "$out"
+contains "Phase 3 lists the in_tree_path match" "docs/adr/0001.md" "$out"
+jq '.solutions.in_tree_path = "none"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"
+contains "with in_tree_path none, Phase 3 still lists the sidecar match" "$SOLS/perf/a.md" "$out"
+lacks "with in_tree_path none, Phase 3 reads no in-tree path" "docs/adr" "$out"
+lacks "with in_tree_path none, Phase 3 never reads a planted docs/solutions" "docs/solutions/planted.md" "$out"
+git -C "$MSC" checkout -q -- sidecar.json
+
+# Phase 5a: sidecar value, settings fallback with no sidecar, then the default.
+script="$(with_sc "$p5a")"
+jq '.research.storage = "spike-issue"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"
+check "Phase 5a reads research.storage from the sidecar" "research.storage = spike-issue, from sidecar" "$out"
+git -C "$MSC" checkout -q -- sidecar.json
+NOSC="$tmp/mig/nosidecar"
+mkrepo "$NOSC"
+mkdir -p "$NOSC/.claude"
+printf '{"research":{"storage":"spike-issue"}}\n' > "$NOSC/.claude/settings.json"
+out="$(cd "$NOSC" && bash -c "$script" 2>/dev/null)"
+check "with no sidecar, Phase 5a honors .claude/settings.json and says so" \
+    "research.storage = spike-issue, from .claude/settings.json (no sidecar resolved)" "$out"
+rm "$NOSC/.claude/settings.json"
+out="$(cd "$NOSC" && bash -c "$script" 2>/dev/null)"
+check "with neither, Phase 5a defaults to archive" "research.storage = archive, from default" "$out"
+
+# The dossier require block Phase 3 documents, extracted from the skill and run
+# (not #410's resolver called directly), so deleting or breaking the line in
+# research/SKILL.md turns this red. Found by its --from content, not position.
+req="$(awk '/^```bash$/ { inb = 1; blk = ""; next }
+            inb && /^```$/ { inb = 0; if (blk ~ /--from "\/research Phase 3"/) printf "%s", blk; next }
+            inb { blk = blk $0 "\n" }' "$RESEARCH")"
+if [ -z "$req" ]; then
+    bad "research/SKILL.md carries the dossier require block" "no bash block with --from \"/research Phase 3\""
+else
+    ok "research/SKILL.md carries the dossier require block"
+    DOSSIER="$MSC/research/excavation-2026-01-01.md"
+    script="SC=\"$SC\"
+$(printf '%s\n' "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
+    out="$(cd "$MIG" && bash -c "$script" 2>&1)"
+    contains "the skill's require block surfaces the MISSING line" \
+        "MISSING: $DOSSIER (referenced by /research Phase 3)" "$out"
+    contains "the skill's require block signals the miss" "dossier missing" "$out"
+fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
