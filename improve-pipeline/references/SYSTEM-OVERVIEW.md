@@ -472,7 +472,7 @@ Run in a sandboxed environment (Docker or separate terminal). Each iteration is 
 
 The frontier query needs `gh` >= 2.94.0 (see `README.md` § Installation), which exposes `blockedBy` as a `--json` field; `gh issue list` also excludes pull requests by definition, so no filter is needed. Note `state` is the GraphQL enum — uppercase `OPEN`, where the REST endpoint returns lowercase. `/prd-to-issues` §7 wires the edges this reads; `/help` and `/execute` select by the same empty-`open_blockers` rule, so every selection site in the pipeline agrees by construction.
 
-Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durable progress substrate here is GitHub-native state plus commits: PRD issues, slice issues with dependencies, QA issues, issue comments with exact errors, and the commit history itself. That keeps the repo aligned with its "state lives in GitHub, not the filesystem" rule.
+Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durable progress substrate here is GitHub-native state plus commits: PRD issues, slice issues with dependencies, QA issues, issue comments with exact errors, and the commit history itself. See § "Where State Lives" for where state belongs.
 
 ### Pre-commit hooks:
 
