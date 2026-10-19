@@ -42,6 +42,8 @@ pre-push:
       run: bash scripts/test-restated-review-operatives.sh
     loop-ledger-marker-tests:
       run: bash scripts/test-loop-ledger-markers.sh
+    bare-pack-ref-tests:
+      run: bash scripts/test-bare-pack-refs.sh
     context-block-contract-tests:
       run: bash scripts/test-context-block-contract.sh
     flow-row-read-contract-tests:

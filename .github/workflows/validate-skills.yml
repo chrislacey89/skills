@@ -125,6 +125,9 @@ jobs:
       - name: Run Context-block contract suite
         run: bash scripts/test-context-block-contract.sh
 
+      - name: Run bare pack-reference suite
+        run: bash scripts/test-bare-pack-refs.sh
+
       - name: Run flow-row read-contract suite
         run: bash scripts/test-flow-row-read-contract.sh
 

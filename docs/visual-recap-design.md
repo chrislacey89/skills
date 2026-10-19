@@ -8,7 +8,7 @@ the interactions they all share); §11 is the one forward-looking block, used by
 emits an N-way fork of options that do not exist yet.
 
 **There is no `/visual-plan` skill, and none is coming.** An earlier draft of this header named
-one as future work; #317 ruled against it and withdrew the promise rather than leave it
+one as future work; chrislacey89/skills#317 ruled against it and withdrew the promise rather than leave it
 resolving to nothing. Forward-looking blocks live in this file and `/visual-recap` renders
 them.
 
@@ -182,7 +182,7 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
 **Syntax tokens name roles, not a language.** These six are the whole vocabulary. Do not
 invent a seventh and do not repurpose one whose name does not fit what you are coloring —
 that is the run-to-run drift §6's "keep the variable names" rule exists to prevent, and both
-failure modes have happened here (#305). The names abbreviate *roles*; the table maps each
+failure modes have happened here (chrislacey89/skills#305). The names abbreviate *roles*; the table maps each
 role onto the concrete thing it colors, in a C-family language and in shell.
 
 | Token | Role | C-family | Shell |
@@ -334,8 +334,8 @@ before/after pair of graphs, a dense DAG, an ER or class diagram — takes **Mer
 When the review context is known to be offline (a plane, an air-gapped sandbox, a CI log), take
 the CSS primitive regardless and say in the caption that you did.
 
-**This reverses #131, and the fence it reopens is named rather than stepped over.** #128/#129/
-#131 made CSS the default because a Mermaid figure with no network degrades to unparsed source
+**This reverses chrislacey89/skills#131, and the fence it reopens is named rather than stepped over.** chrislacey89/skills#128/chrislacey89/skills#129/
+chrislacey89/skills#131 made CSS the default because a Mermaid figure with no network degrades to unparsed source
 text, and the surface's invariant was "reads identically with the network off." That failure
 mode is real and has not gone away. What changed is evidence about the other side of the trade:
 the diagrams that carried the most comprehension in the field — a before/after of a mechanism,
@@ -343,7 +343,7 @@ with labeled edges, fan-outs, and styled failure and guard nodes — are exactly
 spine cannot express, and the pack was teaching authors away from them. So §6's invariant is
 **scoped rather than deleted**: core blocks — prose, panes, diffs, cards, the feedback loop —
 must still read identically offline; a **diagram figure** may degrade, and must say so on its
-own face. #129's render-confirm gate is retained unchanged (core §7).
+own face. chrislacey89/skills#129's render-confirm gate is retained unchanged (core §7).
 
 **Every Mermaid figure carries a visible degrade note.** Not once in a footer — beside the
 figure, where a reader who jumped straight to it will see it:
@@ -355,7 +355,7 @@ figure, where a reader who jumped straight to it will see it:
 </div>
 ```
 
-**Neither half of this contradicts #83.** #83 chose Mermaid for **GitHub-bound markdown**
+**Neither half of this contradicts chrislacey89/skills#83.** chrislacey89/skills#83 chose Mermaid for **GitHub-bound markdown**
 (issues, PR bodies), which GitHub renders natively with no CDN at all; that decision stands and
 is untouched. The boundary that changed is only inside self-contained HTML, and it is now drawn
 by *what the graph needs* rather than by *how it is delivered*.
@@ -401,7 +401,7 @@ known to be offline.
 
 ### Multi-stage and behavioral graphs — embedded Mermaid (the default for this case)
 
-Author the source via `/mermaid` (which verifies its own render, #94) and embed it in the same
+Author the source via `/mermaid` (which verifies its own render, chrislacey89/skills#94) and embed it in the same
 full-width frame; the `.mermaid svg` rule from §1 sizes it. The `<pre class="mermaid">` carries
 the source, which Mermaid replaces with an SVG when the CDN loads. **Be honest about the offline
 state:** with no network the `<pre>` shows source text, not a diagram — a degraded fallback,
@@ -428,7 +428,7 @@ hand:
   `"slice 23"`); `(` opens a round-node. Quote the label or rephrase.
 - **No literal `<br/>` inside an unquoted label** — wrap the label in quotes first.
 - **Author it via `/mermaid`** rather than hand-writing source; its render-verification step
-  (#94) catches these before the source reaches the artifact.
+  (chrislacey89/skills#94) catches these before the source reaches the artifact.
 
 **Frame-filling render (enhancement-only; CDN per §6).** When the Mermaid CDN is available,
 initialize with `flowchart.useMaxWidth:false` and run a post-render pass so the SVG fills the
@@ -912,7 +912,7 @@ Paste this style block alongside the §1 core only when rendering an options com
 </style>
 ```
 
-**Worked example (N = 4)** — the real fork this block was written for: PR #239 changed one line
+**Worked example (N = 4)** — the real fork this block was written for: PR chrislacey89/skills#239 changed one line
 of `pre-merge/review-checklist.md`, review found its principle paragraph (line 182) and its
 violation bullet (line 193) disagreeing, and four mutually exclusive dispositions were on the
 table. Five attribute bands (resulting 182, resulting 193, buys, costs, take it if) × four
@@ -1228,7 +1228,7 @@ either forward-looking block. Only the wrapper below is new:
 </style>
 ```
 
-**Worked example (2 of the 3 decisions in #317)** — one cited-heavy, one carrying an asserted
+**Worked example (2 of the 3 decisions in chrislacey89/skills#317)** — one cited-heavy, one carrying an asserted
 consequence. Render every decision that forecloses something, not a sample:
 
 ```html
@@ -1368,12 +1368,12 @@ line-anchored callouts, a topology to check against. This part specifies the sec
 mode — a **paged walkthrough deck** for a change the reviewer has to be **argued through**: one
 causal arc, one idea per screen, the before/after pair inside the screen.
 
-It is here because the field built it twice without being asked to. On PR #299 an agent produced
-a paged deck unprompted; on PR #297 an agent rendered the canonical scroll first, was shown
-#299's deck, and rebuilt to match. Two independent sessions, no coordination, the same override.
+It is here because the field built it twice without being asked to. On PR chrislacey89/skills#299 an agent produced
+a paged deck unprompted; on PR chrislacey89/skills#297 an agent rendered the canonical scroll first, was shown
+chrislacey89/skills#299's deck, and rebuilt to match. Two independent sessions, no coordination, the same override.
 A format arrived at twice that the canon does not describe is a gap in the canon, not an
 authoring lapse — so the deck is specified rather than re-derived per run, which is the argument
-that produced this document in the first place (#126/#127).
+that produced this document in the first place (chrislacey89/skills#126/chrislacey89/skills#127).
 
 The deck **inherits everything and changes two things.** It inherits the §1 token core verbatim,
 the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. It
@@ -1650,7 +1650,7 @@ mechanism and an aftermath there is no arc, only a list.
 
 The premise screen is a **retelling for a reader who does not hold the context** — which is the
 job `/re-pitch` does in chat. The two are the same move in two media, and the field evidence for
-this is direct: on PR #297 a `/re-pitch` was run mid-session and its framing became the deck's
+this is direct: on PR chrislacey89/skills#297 a `/re-pitch` was run mid-session and its framing became the deck's
 opening screen.
 
 Write the premise screen under `/re-pitch`'s rule set:

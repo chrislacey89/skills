@@ -42,7 +42,7 @@ an unsatisfiable search.**
   site.
 
 **Review-cadence note.** The second reading was added on one triggering incident
-(a downstream Python document-parsing repo, 2026-08-31; issue #322) plus Ammann &
+(a downstream Python document-parsing repo, 2026-08-31; issue chrislacey89/skills#322) plus Ammann &
 Offutt Ch. 5 and Zeller Ch. 1. Demote it to advisory or remove it if, after a
 reasonable sample of slices, it fires on under 10% of diffs that had no other
 issue. It names a diagnosis and stops: it prescribes no test shape and ships no
