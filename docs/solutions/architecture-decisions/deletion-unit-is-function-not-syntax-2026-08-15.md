@@ -1,8 +1,8 @@
 ---
 date: 2026-08-15
 category: architecture-decisions
-problem_type: a subtractive change reviewed at the granularity of the deleted syntax rather than the functions that syntax served
-components: [execute, pre-merge, improve-pipeline]
+problem_type: a subtractive change reviewed at the granularity of the deleted syntax rather than the functions that syntax served — second occurrence appended 2026-10-19, in executable shell, where the second function was a guard
+components: [execute, pre-merge, improve-pipeline, research, write-a-prd, init-pipeline]
 technologies: [pipeline-design, prose-artifacts, code-review, subtractive-change]
 severity: medium
 volatility: stable
@@ -114,6 +114,30 @@ Note the direction, because it is what the existing sweep gets backward for this
 
 What remains of the proposal: add **sole-site declarations and exemptions** to the surface list, so a net-subtractive *prose* diff is swept for what the deleted text declared and not only for the modules it deleted. A second, smaller one for `/improve-pipeline` itself: its Mediator should treat a quoted deletion as *the proposer's decomposition*, not as a scope oracle — the same move `advisory-to-executed-rule-promotion-2026-08-07.md` already prescribes for admitted evidence gaps.
 
+## Second occurrence (2026-10-19): a dedup deleted the guard its parse doubled as
+
+**What was deleted.** #470 made `sidecar.sh` the one owner of the no-sidecar archive root. The `/research` Phase 5c writer and the `/write-a-prd` reader each carried their own copy of this:
+
+```bash
+SLUG="$(printf '%s' "$MISS" | sed -n 's/.*--name \([^ ]*\) .*/\1/p')"
+case "$SLUG" in ''|.*|*/*|*[!a-z0-9._-]*) exit 1 ;; esac
+```
+
+PR #479 replaced both copies with `DIR="$(bash "$SC" archive-dir)"`. The rationale was the restated-claims one: two copies of the slug derivation and the default root drift. That rationale is correct, and it retired one function.
+
+**The function it did not price.** The `case` arm was also the only check that a nonzero `path research` was a real `SIDECAR MISS`. A sidecar that resolves but refuses prints no `--name`, so its slug was empty and the block exited 1. `archive-dir` answered whether or not a sidecar resolved. After the dedup, every resolver failure fell into the uncommitted pre-sidecar archive and exited 0. That is regression #481.
+
+**How it surfaced.** Exactly as in the first occurrence. The authoring session's suite stayed green: it had 234 assertions and a mutation check on the default root, and none of them sent a refusing sidecar. Both blind `/pre-merge` sub-agents returned the regression as their top Concern in one pass, and each reproduced it independently.
+
+**What this adds to the entry.**
+- *This deletion was code, not prose.* The Rule Scope's code inversion (*"the compiler enumerates consumers for you"*) does not hold for executable shell embedded in a `SKILL.md`. There is no type checker, and the suite tests what the author thought of. "Code with a test suite" is not enough; read it as *code with a test that sends the guarded input*.
+- *The second function was a guard rather than a declaration.* The seam-word tell still fires, but its shape is different: an `exit`, `return`, `refuse`, `|| …` or `case` arm in the deleted lines is a function, and it sends some inputs elsewhere.
+- *A dedup is a deletion.* "Move this to one owner" reads as additive (it builds a single source), but it deletes N copies. Each copy may carry a check that the new owner does not reproduce. The owner reproduces the *value*, and the guard has to be moved on purpose.
+
+**Fix.** 91e0cfc moved the miss decision into the resolver: `archive-dir` refuses when any current key has an owner. A test sends a sidecar whose `research` path is a plain file and asserts exit 1 with an empty archive.
+
+**Mechanism.** This is the second recording, so prose alone is not an exit. The preventing change belongs to the pack: `/execute` Step 4's Deletion Completeness rung fires only on a deleted or renamed module, so a guard removed from a file that survives never reaches it. Filed as chrislacey89/skills#487. The instance itself is pinned by the test in 91e0cfc.
+
 ## Planning / Calibration Notes
 
 - **What widened the work:** the blind review pass at `/pre-merge`, producing one Concern and one follow-up commit. Nothing widened at implementation time — the three cuts landed exactly as specified, all six contract suites stayed green throughout, and the mispricing was invisible to every check that ran before review.
@@ -139,6 +163,7 @@ What remains of the proposal: add **sole-site declarations and exemptions** to t
 ## Related
 
 - PR #232 — the three subtractions, the dangling-pointer fix, and the restoration commit
+- PR #479, issues #470 and #481 — the second occurrence (dedup deleted a guard); chrislacey89/skills#487 — the pack-level mechanism
 - Issue #231 — the audit; see its "Recommended Changes" row 3 and the Mediator's Chesterton's-fence note
 - Issue #157 — tracks the standing audit Cut B removed from `CLAUDE.md`; `docs/skill-anatomy.md` now routes there
 - Issue #195 — `docs/solutions/` Shelf Life has no runner; adjacent to Cut C
