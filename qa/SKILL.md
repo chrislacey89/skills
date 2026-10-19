@@ -121,7 +121,7 @@ If a prior rejection surfaces:
 - If the new report is the same idea with no new evidence, link the prior closed issue back to the user with a one-sentence summary of why it was rejected, and ask whether they want to reopen with new evidence or accept the prior decision. Do not silently file a duplicate.
 - If unsure, link the prior issue in the new issue's body so the rejection rationale is one click away for the next reviewer.
 
-This is a process check, not an enforcement gate — closed-wontfix history is treated as durable state that lives in GitHub. Skill Kit deliberately does not maintain a parallel filesystem archive of rejected enhancements (per `SYSTEM-OVERVIEW.md` "Where State Lives": state never lives in the project tree, and GitHub already holds this record).
+This is a process check, not an enforcement gate — closed-wontfix history is treated as durable state that lives in GitHub. Skill Kit deliberately does not maintain a parallel filesystem archive of rejected enhancements (see [references/SYSTEM-OVERVIEW.md](references/SYSTEM-OVERVIEW.md) § Where State Lives; GitHub already holds this record).
 
 #### 4b. Match the repo's label convention (before filing)
 
