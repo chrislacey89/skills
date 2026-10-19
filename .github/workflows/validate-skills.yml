@@ -288,7 +288,8 @@ jobs:
       # `git config` in a fixture without clearing it writes into the real repo
       # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every
       # pre-push suite, read from lefthook.yml, from a scratch linked worktree
-      # with GIT_DIR exported and fails on any change to its shared config.
+      # with GIT_DIR exported and fails on any change to its shared config,
+      # refs, or HEAD. CI is the only place it runs; the suite header says why.
       - name: Run fixture git-isolation suite
         run: bash scripts/test-fixture-git-isolation.sh
 
