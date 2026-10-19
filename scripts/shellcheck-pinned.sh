@@ -14,7 +14,8 @@
 # Behavior:
 #   - local shellcheck already matches the pin -> use it, no network
 #   - otherwise use a cached pinned binary, downloading it on first use
-#   - download impossible (offline, unknown platform) -> fall back to the
+#   - download impossible (offline, unknown platform), or the cached binary
+#     will not run on this CPU -> fall back to the
 #     local binary and say LOUDLY that this run is not the gate's instrument
 #
 # The version is derived from .shellcheck-version, never restated here — the
@@ -87,6 +88,23 @@ MSG
         lint shellcheck
         exit 0
     fi
+fi
+
+# A cached binary is not a runnable one: on Apple Silicon without Rosetta the
+# darwin.x86_64 build exits 126 ("Bad CPU type"), and xargs turned that into a
+# failed pre-push with no shellcheck finding behind it.
+if ! "$cached" --version >/dev/null 2>&1; then
+    cat >&2 <<MSG
+shellcheck-pinned: the cached shellcheck $pinned at $cached will not run on
+  this machine (on Apple Silicon: install Rosetta with
+  \`softwareupdate --install-rosetta\`). Falling back to the local shellcheck —
+  THIS RUN IS NOT THE MERGE GATE'S INSTRUMENT, and findings differ between
+  releases in both directions. Read the PR's shellcheck check before reporting
+  "clean".
+MSG
+    command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck-pinned: and no local shellcheck exists either" >&2; exit 1; }
+    lint shellcheck
+    exit 0
 fi
 
 lint "$cached"
