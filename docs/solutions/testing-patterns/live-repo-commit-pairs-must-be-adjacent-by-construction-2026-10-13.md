@@ -73,7 +73,7 @@ A non-merge commit has exactly one parent, so `stamp_sha..head_oid` is exactly t
 
 - PR #403, commits `4aee9ee` (checkout depth) and `7e38d1b` (adjacent pair)
 - #349 (the first red prod run), #402 (the feature whose verification exposed it)
-- Defect clustering: this is the second recording of the pattern `scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md` names in the same category. That entry's mechanism is a per-suite `unset`; this one's is the CI checkout shape, which catches the adjacency form for every suite at once.
+- Defect clustering: this is the second recording of the pattern `scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md` names in the same category. That entry's mechanism is stated in its Prevention section; this one's is the CI checkout shape, which catches the adjacency form for every suite at once.
 
 ## Shelf Life
 
