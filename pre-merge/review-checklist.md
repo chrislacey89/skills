@@ -65,7 +65,7 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 - New state directories: `docs/brainstorms/`, `docs/specs/`
 - Any new persistent markdown file that tracks state outside of GitHub issues or `docs/solutions/`
 
-Research files produced by `/research`, and solutions entries `/compound` writes to the sidecar, live in the project's sidecar, a private git repository outside the repo resolved by `sidecar.sh`. They are not a state-discipline violation because they never enter the working tree.
+Research files are written at the path `/research` Phase 5c writes, and solutions entries `/compound` writes to the sidecar live in the project's sidecar, a private git repository outside the repo resolved by `sidecar.sh`. They are not a state-discipline violation because they never enter the working tree.
 
 **Out of scope:** Git history cleanliness (pre-commit hooks handle formatting and linting).
 
