@@ -574,8 +574,12 @@ check "the entry is readable through an old archive path" "yes" \
 check "the project's tree is untouched by Phase 5c" "" "$(git -C "$MIG" status --porcelain)"
 # /write-a-prd's reader on the same sidecar: the found branch lists what
 # Phase 5c just committed, and never falls back to the pre-sidecar archive.
+# The archive root is an empty scratch dir: the migrated fixture's old archive
+# folder is a symlink to the sidecar's research/, so it would hold the same
+# entry and a reader that listed it instead would pass.
 if [ -n "$prd_read" ]; then
-    out="$(cd "$MIG" && bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    EMPTYARCH="$tmp/emptyarch"; mkdir -p "$EMPTYARCH"
+    out="$(cd "$MIG" && SKILL_KIT_RESEARCH_ARCHIVE="$EMPTYARCH" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
     check "the /write-a-prd read block on a sidecar hit runs cleanly" 0 "$rc"
     contains "on a hit /write-a-prd lists the entry Phase 5c wrote" "search-index-2026-10-17.md" "$out"
     lacks "on a hit /write-a-prd does not read the pre-sidecar archive" "pre-sidecar archive" "$out"
