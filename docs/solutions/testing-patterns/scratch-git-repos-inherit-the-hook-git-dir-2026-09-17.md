@@ -81,9 +81,9 @@ To recover a config that is already damaged, fix the suites first, then remove `
 
 ## Prevention
 
-**Code-level:** each suite that builds a scratch repo carries the `unset` line (PRs #427, #433), and `scripts/test-fixture-git-isolation.sh` (PR #438) catches the next suite that does not. It runs every pre-push suite from a linked worktree of a scratch clone with `GIT_DIR` exported, and fails naming any suite that changed the clone's shared config. Its header states what it does not reach. For a new suite, the line is still the guard, and that check is what fails when the line is missing.
+**Code-level:** each suite that builds a scratch repo carries the `unset` line (PRs #427, #433), and `scripts/test-fixture-git-isolation.sh` (PR #438) catches the next suite that does not. It runs every pre-push suite from a linked worktree of a scratch clone with `GIT_DIR` exported, and fails naming any suite that changed the clone's shared config. Its header states what it does not reach.
 
-**Outside the suites:** no check covers a script that is not a pre-push suite, but runs git against a repository other than its caller's and can run under a hook. A sidecar `git -C <dir> commit` is one example (`scripts/test-sidecar-resolution.sh` pins that case). The Rule Scope above still applies there, and the `unset` stays a per-script decision.
+**What the check does not reach:** see "WHAT THIS DOES NOT CATCH" in the header of `scripts/test-fixture-git-isolation.sh`. The Rule Scope above still applies there, and the `unset` stays a per-script decision.
 
 **Process-level:** never reproduce this against a real checkout. A reviewer on #373 did, to confirm the finding, and flipped the maintainer's shared config to bare; it was restored by hand. Any sub-agent brief that tests hook-environment behavior should require a throwaway clone with its own worktree, and should end by checking `core.bare` on the real shared config.
 
