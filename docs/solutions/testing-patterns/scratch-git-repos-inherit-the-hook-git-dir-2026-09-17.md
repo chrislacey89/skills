@@ -12,7 +12,7 @@ volatility: evergreen
 
 ## Problem
 
-A contract suite that builds a scratch repo with `git init <dir>` and configures it with `git config` does not clear the git environment it inherits. When git runs that suite as a hook from a linked worktree, `GIT_DIR` is already set, and the suite's fixture commands land on the real repository instead of the scratch one. It writes `core.bare=true` into the shared config, and sometimes the fixture's identity and `core.hooksPath` too. The suite still passes.
+A contract suite that builds a scratch repo with `git init <dir>` and configures it with `git config` does not clear the git environment it inherits. When git runs that suite as a hook from a linked worktree, `GIT_DIR` is already set, and the suite's fixture commands land on the real repository instead of the scratch one. It writes `core.bare=true` into the shared config, and sometimes the fixture's identity and `core.hooksPath` too. Fixtures that commit move the pushing worktree's branch to fixture commits and can leave stray fixture branches in the shared refs. The suite still passes.
 
 ## Context
 
@@ -22,6 +22,7 @@ This came up during the delta review of PR #373. That PR added a classification-
 
 - **Every worktree breaks at once.** `git status` and `git diff` fail with "must be run in a work tree", because the shared config now reads `core.bare=true`.
 - **The shared config carries a fixture identity.** Here that was `user.name=t` / `user.email=t@example.com`, so a session's git-status banner reports the user as `t`.
+- **The pushing worktree's branch points at a fixture commit**, and a stray `feature` branch can appear in the shared refs. A full sandbox pre-push with this damage went red with 14 unrelated suites failing as it spread, so in practice it can also look like a blocked push with many unrelated failures.
 - **`core.hooksPath` points at a temp directory that no longer exists** (`…/tmp.XXXX/no-hooks`). That silently disables lefthook in every worktree.
 - **The triggering run reports green.** The compound re-stamp handoff suite printed **17 passed, 0 failed** while doing all of the above. Nothing points at the suite that did it, and the damage surfaces sessions later as "hooks don't run" or "git user is t".
 
@@ -38,6 +39,8 @@ Measured in a sandbox clone with a linked worktree, one suite per run, `GIT_DIR`
 | compound re-stamp handoff | `core.bare=true`, `core.hooksPath=<deleted temp>/no-hooks` | 17 passed, 0 failed |
 | population covers untracked | `core.bare=true`, `user.name=t` | FATAL (fixture) |
 | classification marker, before the fix | `core.bare=true` | 20 passed, 0 failed |
+
+That table was the first count. A follow-up measurement on chrislacey89/skills#374 found three more suites with the same defect (documented git commands, markdown diff attribute, syntax palette contract). Each wrote a fixture identity into the shared config and moved the worktree's branch to a fixture commit, and two of them still passed.
 
 A real `git push` from a sandbox worktree, whose pre-push hook dumped its environment, carried `GIT_DIR`, `GIT_EDITOR`, `GIT_EXEC_PATH` and `GIT_PREFIX`. A push made with `git -c` also carries `GIT_CONFIG_PARAMETERS`. Pre-commit hooks add `GIT_INDEX_FILE`. A push from the main checkout carries no `GIT_DIR`, which is why the hazard is specific to worktrees.
 
@@ -77,18 +80,18 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 A breaker confirmed this against a real pre-push hook fired by a real `git push` from a worktree. With the line, `core.bare` stayed `false` and the suite passed. With the line deleted, `core.bare` flipped to `true` and the suite still passed.
 
-To recover a config that is already damaged, fix the suites first, then remove `core.bare=true`, the fixture identity, and the dead `core.hooksPath` from the shared config. Doing it in the other order means the next worktree push re-corrupts it.
+To recover a repository that is already damaged, fix the suites first. Then remove `core.bare=true`, the fixture identity, and the dead `core.hooksPath` from the shared config, reset any branch moved to a fixture commit, and delete stray fixture branches. Doing it in the other order means the next worktree push re-corrupts it.
 
 ## Prevention
 
-**Code-level:** four older suites still have this defect, filed as chrislacey89/skills#374. The cheapest guard is to unset the variables in each suite. The mechanism that catches the next instance is a check across all suites: any `scripts/test-*.sh` that runs `git init` or `git config` must unset `GIT_DIR` before its first git call. That check belongs to #374, because it protects every suite and not just one. Until it exists, deleting the `unset` line from the classification-marker suite is not caught: the suite passes either way.
+**Code-level:** every `scripts/test-*.sh` that builds scratch git state now unsets `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` before its first git call (#427, #433, #403). The mechanism that catches the next instance is `scripts/test-fixture-git-isolation.sh`. It runs every suite pre-push runs, read from `lefthook.yml`, from a linked worktree of a throwaway clone with a hook-style `GIT_DIR`, and it fails naming any suite that changed the shared config, any ref, or the worktree's HEAD. It checks behavior rather than grepping for the `unset` line, because a grep proves the line exists, not that the suite stays out of the real repo. It first runs against planted leaks of each shape (init, config, ref, HEAD) and a planted guarded suite, and must tell them apart. Its stated blind spots are writes to hooks, objects, the index, or worktree files, and leaks on code paths the scratch run never reaches.
 
 **Process-level:** never reproduce this against a real checkout. A reviewer on #373 did, to confirm the finding, and flipped the maintainer's shared config to bare; it was restored by hand. Any sub-agent brief that tests hook-environment behavior should require a throwaway clone with its own worktree, and should end by checking `core.bare` on the real shared config.
 
 ## Defect Classification
 
 **Origin phase:** Coding error in test fixtures. The fixtures were written to run from an interactive shell, where `GIT_DIR` is unset, and the pre-push wiring put them in an environment nobody modeled.
-**Fix type:** Correction in `scripts/test-lfg-marker.sh`. The other four suites are open under #374, and until they are fixed the shared-config cleanup is a workaround that the next worktree push undoes.
+**Fix type:** Correction in `scripts/test-lfg-marker.sh`, then in the six other suites (#427, #433, #403), plus a detector across all suites, `scripts/test-fixture-git-isolation.sh` (#438, extended to refs under chrislacey89/skills#374).
 
 ## Clustering check
 
@@ -97,9 +100,10 @@ This is the first recording of this pattern. The nearest entry is `devops/local-
 ## Related
 
 - PR #373: the delta review that found it, and commit 1527e43, the fix and its breaker verdict
-- chrislacey89/skills#374: the four older suites, and where the cross-suite check belongs
+- chrislacey89/skills#374: the seven-suite scope, the ref damage, and the cross-suite check
+- `scripts/test-fixture-git-isolation.sh`: the detector
 - `../devops/local-gates-absent-in-a-fresh-worktree-2026-08-24.md`: the downstream symptom
 
 ## Shelf Life
 
-Retire when every `scripts/test-*.sh` that builds a scratch repo clears the inherited git environment and a check across all suites enforces it (#374). The git behavior itself is stable. The mechanism is evergreen until then.
+The fix and its detector have landed, so the entry no longer tracks open work. Keep it while `scripts/test-fixture-git-isolation.sh` exists: it records why that suite exists and what its planted leaks stand for. Retire it if pre-push stops running suites from linked worktrees. The git behavior itself is stable, so **evergreen** until then.

@@ -55,7 +55,7 @@ Two independent facts that compose badly.
 
 - **Applies when:** the repo delegates checks to a hook manager requiring per-clone installation (`lefthook install`, `husky install`, `pre-commit install`); **and** the working copy was not set up by the person who installed those hooks — a fresh clone, a `git worktree add`, or a host-provisioned workspace (Conductor, Codespaces, devcontainer, cloud IDE).
 - **Inverts or does not apply when:**
-  - **`core.hooksPath` points at a tracked directory.** Then hooks *are* tracked and every checkout has them; the failure cannot occur, and adding a checklist item is noise.
+  - **`core.hooksPath` points at a tracked directory.** Then hooks *are* tracked and every checkout has them, so per-clone installation can't be the cause and adding a checklist item is noise. The setting itself can still be overwritten: a test fixture run from a worktree hook wrote a dead `core.hooksPath` into the shared config (`../testing-patterns/scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md`), so confirm it still points where you think it does.
   - **CI runs the same checks and nothing is claimed before CI reports.** The gap is latency only. It becomes real the moment a local run is *reported as* a merge signal — which is the failure mode, not the missing hook.
   - **The checks are slow enough that hooks were deliberately skipped.** Then the absence is a decision, and the fix is to record it in the review notes rather than to install anything.
 - **Sibling docs:**
