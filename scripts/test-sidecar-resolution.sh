@@ -537,18 +537,21 @@ check "the first directory moved" "$SKILL_KIT_SIDECAR_ROOT/clash/research" "$(re
 section "/research: Phase 3 read, Phase 5a storage, Phase 5c write"
 
 # first_bash_after <file> <start-regex> — the first ```bash block after the
-# first line matching the regex.
+# first line matching the regex. A fence inside a list item is indented; the
+# fence's own indent is stripped from every line of the block.
 first_bash_after() {
     awk -v pat="$2" '$0 ~ pat { on = 1; next }
-                     on && /^```bash$/ { inb = 1; next }
-                     inb && /^```$/ { exit }
-                     inb { print }' "$1"
+                     on && !inb && /^ *```bash$/ { ind = $0; sub(/```bash$/, "", ind); inb = 1; next }
+                     inb && $0 == ind "```" { exit }
+                     inb { if (index($0, ind) == 1) $0 = substr($0, length(ind) + 1); print }' "$1"
 }
 with_sc() { printf '%s\n' "$1" | sed -e "s|^SC=.*|SC=\"$SC\"|"; }
 
 p5c="$(first_bash_after "$RESEARCH" '^<!-- sidecar-write: research -->$')"
 p3="$(first_bash_after "$RESEARCH" '^### Phase 3: ')"
 p5a="$(first_bash_after "$RESEARCH" '^#### Phase 5a: ')"
+# /write-a-prd's archive-mode reader. Its block sits in a numbered list.
+prd_read="$(first_bash_after "$repo_root/write-a-prd/SKILL.md" '^ *<!-- sidecar-read: research -->$')"
 for pair in "Phase 3:$p3" "Phase 5a:$p5a" "Phase 5c:$p5c"; do
     name="${pair%%:*}"; body="${pair#*:}"
     if [ -z "$body" ]; then
@@ -569,6 +572,14 @@ check "the research entry is the sidecar's HEAD commit" "research/search-index-2
 check "the entry is readable through an old archive path" "yes" \
     "$(if [ -f "$A/mimir/search-index-2026-10-17.md" ]; then echo yes; fi)"
 check "the project's tree is untouched by Phase 5c" "" "$(git -C "$MIG" status --porcelain)"
+# /write-a-prd's reader on the same sidecar: the found branch lists what
+# Phase 5c just committed, and never falls back to the pre-sidecar archive.
+if [ -n "$prd_read" ]; then
+    out="$(cd "$MIG" && bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    check "the /write-a-prd read block on a sidecar hit runs cleanly" 0 "$rc"
+    contains "on a hit /write-a-prd lists the entry Phase 5c wrote" "search-index-2026-10-17.md" "$out"
+    lacks "on a hit /write-a-prd does not read the pre-sidecar archive" "pre-sidecar archive" "$out"
+fi
 
 # Phase 5c on a SIDECAR MISS: the entry lands in the pre-sidecar archive
 # (a private archive root, never the real ~/.claude/research), uncommitted.
@@ -591,11 +602,6 @@ check "the project's tree is untouched by a missed Phase 5c" "" "$(git -C "$MISS
 # (#419). The reader used to be prose and its own remote-derived slug, so on a
 # case-sensitive filesystem it listed a directory the writer never made. The
 # second fixture's remote is mixed-case and dotted, the shape #419 measured.
-# The block sits in a numbered list, so its fence is indented.
-prd_read="$(awk '/^ *<!-- sidecar-read: research -->$/ { on = 1; next }
-                 on && /^ *```bash$/ { inb = 1; next }
-                 inb && /^ *```$/ { exit }
-                 inb { sub(/^   /, ""); print }' "$repo_root/write-a-prd/SKILL.md")"
 if [ -z "$prd_read" ]; then
     bad "write-a-prd/SKILL.md carries the archive-mode read block" "no bash block after <!-- sidecar-read: research -->"
 else
@@ -603,6 +609,8 @@ else
     out="$(cd "$MISSREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$MISSARCH" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
     check "the /write-a-prd read block on a miss runs cleanly" 0 "$rc"
     contains "on a miss /write-a-prd lists the entry Phase 5c wrote" "miss-case-2026-10-17.md" "$out"
+    contains "on a miss /write-a-prd shows the user the init command" \
+        "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
     DOTREPO="$tmp/dotrepo"
     mkrepo "$DOTREPO"
     git -C "$DOTREPO" remote add origin https://github.com/Own.Er/My.Repo.git
@@ -682,6 +690,11 @@ strays="$(git -C "$repo_root" grep -nIF -- "$root_tok" \
     | grep -v -e "$sc_exempt" -e '^CHANGELOG\.md:' -e '^docs/solutions/' \
     | grep -v -e '^[^:]*:[0-9]*:[[:space:]]*#')"
 check "no tracked file outside the exemptions mentions the default archive root path" "" "$strays"
+# The census exempts sidecar.sh, so a second ${...:-default} inside it (the
+# #470 shape, once in migrate_archive) would pass. The env var's name cannot
+# drift the way the path can: it is read on exactly one code line.
+check "sidecar.sh reads SKILL_KIT_RESEARCH_ARCHIVE on exactly one code line" 1 \
+    "$(grep -v '^[[:space:]]*#' "$SC" | grep -c 'SKILL_KIT_RESEARCH_ARCHIVE')"
 # Both skill blocks must get the root from the resolver, not from the env var.
 for pair in "Phase 5c:$p5c" "/write-a-prd read:$prd_read"; do
     contains "the ${pair%%:*} block calls archive-dir" "archive-dir" "${pair#*:}"
