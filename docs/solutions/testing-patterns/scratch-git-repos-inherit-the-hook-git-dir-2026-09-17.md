@@ -81,7 +81,7 @@ To recover a config that is already damaged, fix the suites first, then remove `
 
 ## Prevention
 
-**Code-level:** each suite that builds a scratch repo carries the `unset` line (PRs #427, #433), and `scripts/test-fixture-git-isolation.sh` (PR #438) catches the next suite that does not. It runs every pre-push suite from a linked worktree of a scratch clone with `GIT_DIR` exported, and fails naming any suite that changed the clone's shared config. Its header states what it does not reach.
+**Code-level:** each suite that builds a scratch repo carries the `unset` line (PRs #427, #433). `scripts/test-fixture-git-isolation.sh` (PR #438) runs every pre-push suite from a linked worktree of a scratch clone with `GIT_DIR` exported, and fails naming any suite that changed the clone's shared config. Its header states what it does not reach.
 
 **What the check does not reach:** see "WHAT THIS DOES NOT CATCH" in the header of `scripts/test-fixture-git-isolation.sh`. The Rule Scope above still applies there, and the `unset` stays a per-script decision.
 
@@ -105,4 +105,4 @@ This is the first recording of this pattern. The nearest entry is `devops/local-
 
 ## Shelf Life
 
-Evergreen. The retirement condition this entry originally carried, that every scratch-repo suite clears the inherited environment and a cross-suite check enforces it, was met by PR #438. The entry stays because its Rule Scope reaches scripts that check does not run, and because other entries and suite headers cite it for the hazard itself. The git behavior is stable.
+Evergreen. The retirement condition this entry originally carried, that every scratch-repo suite clears the inherited environment, was met by PR #438. The entry stays because its Rule Scope reaches scripts that check does not run, and because other entries and suite headers cite it for the hazard itself. The git behavior is stable.
