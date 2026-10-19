@@ -230,6 +230,12 @@ out=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/b/entry.md" 2
 check "require resolves a bare name in a sibling category folder and prints that folder" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp/lessons" && bash "$SC" require "a/sibling.md" --from "elsewhere" 2>&1); rc=$?
 check "require prints a cwd-relative hit as an absolute path" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
+# #454: a bare cd on a relative folder consults an inherited CDPATH, which can
+# land in a different tree and echo that folder too. Plant a decoy tree holding
+# the same relative path and require one line naming the real one.
+mkdir -p "$tmp/decoy/lessons/a"; : > "$tmp/decoy/lessons/a/sibling.md"
+out=$(cd "$tmp" && CDPATH="$tmp/decoy" bash "$SC" require "sibling.md" --from "lessons/b/entry.md" 2>&1); rc=$?
+check "require under an exported CDPATH prints one line naming the real tree" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "nowhere.md" --from "lessons/b/entry.md" 2>&1); rc=$?
 check "require on a bare name absent from every category still reports MISSING" "1:MISSING: nowhere.md (referenced by lessons/b/entry.md)" "$rc:$out"
 run "$tmp"
