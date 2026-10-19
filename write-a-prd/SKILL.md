@@ -99,12 +99,9 @@ List matches from both locations; one does not shadow the other. A match under a
    if DIR="$(bash "$SC" path research 2>/dev/null)"; then
      ls "$DIR"
    else
-     # SIDECAR MISS: /research Phase 5c's pre-sidecar archive, keyed by the slug the miss line suggests.
-     MISS="$(bash "$SC" path research 2>&1 >/dev/null)"
-     printf '%s\n' "$MISS" >&2
-     SLUG="$(printf '%s' "$MISS" | sed -n 's/.*--name \([^ ]*\) .*/\1/p')"
-     case "$SLUG" in ''|.*|*/*|*[!a-z0-9._-]*) exit 1 ;; esac
-     DIR="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}/$SLUG"
+     # SIDECAR MISS: /research Phase 5c's pre-sidecar archive; the resolver names the directory.
+     bash "$SC" path research >/dev/null
+     DIR="$(bash "$SC" archive-dir)" || exit 1
      echo "pre-sidecar archive: $DIR"
      if [ -d "$DIR" ]; then ls "$DIR"; else echo "(empty: no research entries)"; fi
    fi

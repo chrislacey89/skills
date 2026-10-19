@@ -607,7 +607,39 @@ else
     check "Phase 5c writes the dotted, mixed-case remote's entry somewhere" "yes" "$(if [ -n "$written" ]; then echo yes; fi)"
     contains "/write-a-prd names the directory Phase 5c wrote to" "pre-sidecar archive: $MISSARCH/${written%/*}" "$out"
     contains "/write-a-prd lists the dotted remote's entry" "dotted-2026-10-18.md" "$out"
+
+    # The archive root's default, not only its override (#470). The suite
+    # exports SKILL_KIT_RESEARCH_ARCHIVE above, so without this case the `:-`
+    # default never runs and a mutated copy stays green. Unset it under a
+    # scratch HOME, so the real ~/.claude/research is never touched.
+    HOMEX="$tmp/home"
+    mkdir -p "$HOMEX"
+    DEFDIR="$HOMEX/.claude/research/foo-bar-baz"
+    run_default() { (cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$HOMEX" bash -c "$1" 2>&1); }
+    out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$HOMEX" bash "$SC" archive-dir 2>/dev/null)"
+    check "with the override unset, archive-dir names \$HOME/.claude/research/<slug>" "$DEFDIR" "$out"
+    script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|default-root|g' -e 's|<YYYY-MM-DD>|2026-10-18|g')"
+    out="$(run_default "$script")"; rc=$?
+    check "the Phase 5c block on a miss runs cleanly with the override unset" 0 "$rc"
+    check "with the override unset, Phase 5c writes under \$HOME/.claude/research" "yes" \
+        "$(if [ -f "$DEFDIR/default-root-2026-10-18.md" ]; then echo yes; fi)"
+    out="$(run_default "$(with_sc "$prd_read")")"
+    contains "with the override unset, /write-a-prd names the directory Phase 5c wrote to" "pre-sidecar archive: $DEFDIR" "$out"
+    contains "with the override unset, /write-a-prd lists the entry" "default-root-2026-10-18.md" "$out"
 fi
+
+# One site owns the archive root (#470, docs/restated-claims.md). The writer
+# and the reader ask the resolver for the directory; neither carries the
+# default or re-parses the miss line's slug.
+for pair in "research Phase 5c:$p5c" "write-a-prd:$prd_read"; do
+    name="${pair%%:*}"; body="${pair#*:}"
+    lacks "the $name block carries no archive root of its own" 'SKILL_KIT_RESEARCH_ARCHIVE' "$body"
+    lacks "the $name block does not re-parse the miss line's slug" '--name' "$body"
+    contains "the $name block asks the resolver for the archive dir" 'archive-dir' "$body"
+done
+check "the archive root's default is written once, in sidecar.sh" \
+    "init-pipeline/scripts/sidecar.sh:1" \
+    "$(cd "$repo_root" && grep -c -F '.claude/research}' research/SKILL.md write-a-prd/SKILL.md init-pipeline/scripts/sidecar.sh | grep -v ':0$')"
 
 # Phase 3, with matches in both stores, then with in_tree_path none.
 SOLS="$(cd "$MIG" && bash "$SC" path solutions)"

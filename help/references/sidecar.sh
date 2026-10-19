@@ -16,11 +16,12 @@
 #   sidecar.sh path <research|solutions>
 #   sidecar.sh commit -- <path>... -m <msg>
 #   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
+#   sidecar.sh archive-dir   (the pre-sidecar archive directory a SIDECAR MISS writes to)
 #
 # Exit codes: 0 success, 1 miss or refusal, 2 usage.
 #
 # Archive migration. init, by default, moves the files of each directory under
-# ${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research} whose name matches this
+# the pre-sidecar archive root (ARCHIVE_ROOT below) whose name matches this
 # project into <sidecar>/research/, and leaves a symlink at the old directory
 # pointing there. --no-migrate-archive skips it. A directory matches when its
 # lowercased name is owner-repo cut from a remote key, or, only when the
@@ -55,6 +56,9 @@
 set -u
 
 SIDECAR_ROOT="${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}"
+# The pre-sidecar research archive. This line is the one statement of its root:
+# /research Phase 5c and /write-a-prd reach it through `archive-dir`.
+ARCHIVE_ROOT="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}"
 # Keys and paths are split on newlines only: a checkout path may contain spaces.
 IFS=$'\n'
 
@@ -360,7 +364,7 @@ archive_names() {
 # printed on stderr; stdout stays the sidecar path.
 migrate_archive() {
     local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0
-    archive="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}"
+    archive="$ARCHIVE_ROOT"
     [ -d "$archive" ] || return 0
     dest="$sc/research"
     mkdir -p "$dest" || refuse "init: cannot create $dest"
@@ -494,6 +498,17 @@ cmd_require() {
     printf '%s/%s\n' "$(cd "$(dirname "$probe")" && pwd -P)" "$(basename "$probe")"
 }
 
+# The pre-sidecar archive directory for this project, keyed by the name the
+# miss line suggests, so a writer and a reader on a miss cannot disagree.
+cmd_archive_dir() {
+    local slug
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh archive-dir"
+    in_repo || refuse "not inside a git repository"
+    slug="$(suggest_name)"
+    case "$slug" in ''|.*|*/*|*[!a-z0-9._-]*) refuse "archive-dir: unusable project name: $slug" ;; esac
+    printf '%s/%s\n' "$ARCHIVE_ROOT" "$slug"
+}
+
 verb="${1:-}"
 [ $# -gt 0 ] && shift
 case "$verb" in
@@ -503,5 +518,6 @@ case "$verb" in
     path)    cmd_path "$@" ;;
     commit)  cmd_commit "$@" ;;
     require) cmd_require "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|path|commit|require> ..." ;;
+    archive-dir) cmd_archive_dir "$@" ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|path|commit|require|archive-dir> ..." ;;
 esac
