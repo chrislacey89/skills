@@ -262,7 +262,7 @@ A companion to Boundary Maps. The Boundary Map answers *what flows between slice
 
 ## Where State Lives
 
-State never lives in the project tree. It lives in three places: GitHub (issues and milestones), the project's sidecar (a private, local-only git repository outside the working tree at `~/.claude/sidecars/<name>/`, holding `sidecar.json`, `research/`, and `solutions/`, and reached only through `sidecar.sh`), and code the project commits on purpose (skills, and `docs/solutions/` when the project writes solutions in-tree).
+On Skill Kit's own path, durable state never lives in the project tree. It lives in GitHub (issues and milestones) and in the project's sidecar (a private, local-only git repository outside the working tree at `~/.claude/sidecars/<name>/`, holding `sidecar.json`, `research/`, and `solutions/`, and reached only through `sidecar.sh`). The one exception is a project's own choice. A project that already commits `docs/solutions/` can tell `/compound` to write lessons there (`solutions.write: in-tree`). That directory, like the project's skills, is then code the project commits on purpose, not pipeline state.
 
 | State | Location | Why |
 |-------|----------|-----|
@@ -273,7 +273,7 @@ State never lives in the project tree. It lives in three places: GitHub (issues 
 | Decisions register | Ubiquitous language doc (decisions section) | Co-located with terminology, single source of truth |
 | Technical research | Per-project, selected by `research.storage` in the project's `sidecar.json`. Default `archive` → file in the sidecar at `<sidecar>/research/<feature>-<date>.md`. Opt-in `spike-issue` → closed `research`-labeled GitHub issue in the same repo as the PRD | Storage location matches the project's audience flow without forcing a global rule. Archive is right for solo / single-machine / private work. Spike-issue is right for public, portfolio, OSS, multi-contributor, or multi-machine work where the PRD's audience reads via GitHub. Both carry the same frontmatter and equivalent authority |
 | Per-project configuration | `sidecar.json` in the project's sidecar (`mode`, `solutions.write`, `solutions.in_tree_path`, `research.storage`, `forge`, `tracker`, `verify`) | Read with `sidecar.sh config get`; never written into the project's tree |
-| Institutional knowledge | `docs/solutions/` in repo, or `<sidecar>/solutions/` when the sidecar's `solutions.write` is `sidecar`; readers consult both | Compounds over time, consulted during planning |
+| Institutional knowledge | `<sidecar>/solutions/` by default; `docs/solutions/` in repo when the sidecar's `solutions.write` is `in-tree`; readers consult both | Compounds over time, consulted during planning |
 | Workflow definitions | `.claude/skills/` in repo | Composable, load-on-demand, version-controlled |
 
 ### What is NOT in the project tree

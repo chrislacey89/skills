@@ -14,6 +14,8 @@ SYSTEM-OVERVIEW.md              help
 SYSTEM-OVERVIEW.md              correct-course
 SYSTEM-OVERVIEW.md              setup-ralph-loop
 SYSTEM-OVERVIEW.md              improve-pipeline
+SYSTEM-OVERVIEW.md              pre-merge
+SYSTEM-OVERVIEW.md              qa
 docs/writing-for-humans.md      pre-merge
 docs/writing-for-humans.md      triage-issue
 docs/writing-for-humans.md      prd-to-issues
