@@ -501,9 +501,15 @@ cmd_require() {
 # The pre-sidecar archive directory for this project, keyed by the name the
 # miss line suggests, so a writer and a reader on a miss cannot disagree.
 cmd_archive_dir() {
-    local slug
+    local slug key
     [ $# -eq 0 ] || die_usage "usage: sidecar.sh archive-dir"
     in_repo || refuse "not inside a git repository"
+    # The archive is the answer to a miss only. When any current key has an
+    # owner a sidecar resolves, and a caller that could not use it must fail
+    # rather than write where nothing will ever migrate the entry (chrislacey89/skills#481).
+    for key in $(current_keys); do
+        [ -z "$(owners_of "$key")" ] || refuse "archive-dir: a sidecar resolves for this project; the pre-sidecar archive is for a miss only"
+    done
     slug="$(suggest_name)"
     case "$slug" in ''|.*|*/*|*[!a-z0-9._-]*) refuse "archive-dir: unusable project name: $slug" ;; esac
     printf '%s/%s\n' "$ARCHIVE_ROOT" "$slug"

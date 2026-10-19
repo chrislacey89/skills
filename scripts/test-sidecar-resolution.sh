@@ -581,6 +581,25 @@ contains "on a miss the user is shown the init command with an absolute path" \
 check "on a miss no sidecar is created" "$sc_before" "$(ls "$SKILL_KIT_SIDECAR_ROOT")"
 check "the project's tree is untouched by a missed Phase 5c" "" "$(git -C "$MISSREPO" status --porcelain)"
 
+# A sidecar that resolves but refuses `path research` is not a miss (#481):
+# the block must fail and leave the pre-sidecar archive empty, not fall into it.
+REFREPO="$tmp/refrepo"
+mkrepo "$REFREPO"
+git -C "$REFREPO" remote add origin git@github.com:Foo/Refuse.git
+run "$REFREPO" init --name refuse --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "init for the refusing-sidecar case succeeds" 0 "$rc"
+rm -rf "$SKILL_KIT_SIDECAR_ROOT/refuse/research"
+: > "$SKILL_KIT_SIDECAR_ROOT/refuse/research"
+REFARCH="$tmp/refarch"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|refuse-case|g' -e 's|<YYYY-MM-DD>|2026-10-17|g')"
+out="$(cd "$REFREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$REFARCH" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block fails when a resolving sidecar refuses path research" 1 "$rc"
+check "nothing is written to the pre-sidecar archive when the sidecar refuses" "" \
+    "$(find "$REFARCH" -type f 2>/dev/null)"
+lacks "a refusing sidecar is not reported as a SIDECAR MISS" "SIDECAR MISS" "$out"
+run "$REFREPO" archive-dir
+check "archive-dir refuses when a sidecar resolves" 1 "$rc"
+
 # /write-a-prd's archive-mode reader, run against what Phase 5c just wrote
 # (#419). The reader used to be prose and its own remote-derived slug, so on a
 # case-sensitive filesystem it listed a directory the writer never made. The
