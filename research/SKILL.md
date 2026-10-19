@@ -321,7 +321,7 @@ callback_contracts_snapshot:
 When the storage mode is `archive`, write the research document outside the working tree. The block below is the one statement of where, and it has two outcomes:
 
 - **A sidecar resolves:** the entry goes into `<sidecar>/research/` and is committed there.
-- **`SIDECAR MISS`:** the entry goes into the pre-sidecar archive, `${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}/<slug>/`, and is committed nowhere (see *On `SIDECAR MISS`* below).
+- **`SIDECAR MISS`:** the entry goes into the pre-sidecar archive directory that `sidecar.sh archive-dir` prints, `<archive root>/<slug>/`, and is committed nowhere (see *On `SIDECAR MISS`* below).
 
 `<feature-slug>` is a short kebab-case phrase naming the feature, and `<YYYY-MM-DD>` is today's date; the resolver supplies the directory:
 
@@ -332,12 +332,9 @@ if DIR="$(bash "$SC" path research 2>/dev/null)"; then
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=yes
 else
-  # SIDECAR MISS: pre-sidecar archive, keyed by the slug the miss line suggests.
-  MISS="$(bash "$SC" path research 2>&1 >/dev/null)"
-  printf '%s\n' "$MISS" >&2
-  SLUG="$(printf '%s' "$MISS" | sed -n 's/.*--name \([^ ]*\) .*/\1/p')"
-  case "$SLUG" in ''|.*|*/*|*[!a-z0-9._-]*) exit 1 ;; esac
-  DIR="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}/$SLUG"
+  # SIDECAR MISS: show the miss line, then write to the pre-sidecar archive.
+  bash "$SC" path research >/dev/null
+  DIR="$(bash "$SC" archive-dir)" || exit 1
   mkdir -p "$DIR" || exit 1
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=no
@@ -351,7 +348,7 @@ bash "$SC" require "$ENTRY" --from "/research Phase 5c" || exit 1
 
 `commit` never pushes, and nothing here touches the project's tree or its `.git`. `scripts/test-sidecar-resolution.sh` runs this block as written.
 
-**On `SIDECAR MISS`** (the resolver exits 1 and prints the `init` command with its absolute path), the block still writes the entry, to the pre-sidecar archive directory `<slug>/`, where `<slug>` is the `--name` the miss line suggests (`owner-repo`, lowercased). `/write-a-prd`'s archive-mode read block finds it by parsing the same miss line, and `scripts/test-sidecar-resolution.sh` runs that block against this one's output. That fallback is the migration path: it keeps the research-to-PRD handoff alive until a sidecar exists, and `sidecar.sh init` later moves those files into the sidecar. It is not committed anywhere. Show the user the miss line's `init` command exactly as printed so the next run lands in the sidecar, and do not run it yourself. In an AFK run, write the entry and note the miss in the handoff. Creating a sidecar is a human act: auto-creating one is how the old archive split one project across several directories.
+**On `SIDECAR MISS`** (the resolver exits 1 and prints the `init` command with its absolute path), the block still writes the entry, to the pre-sidecar archive directory `<slug>/`, where `<slug>` is the `--name` the miss line suggests (`owner-repo`, lowercased). `sidecar.sh archive-dir` prints that directory and is the one place its root is defined; `/write-a-prd`'s archive-mode read block asks the same verb, and `scripts/test-sidecar-resolution.sh` runs that block against this one's output. That fallback is the migration path: it keeps the research-to-PRD handoff alive until a sidecar exists, and `sidecar.sh init` later moves those files into the sidecar. It is not committed anywhere. Show the user the miss line's `init` command exactly as printed so the next run lands in the sidecar, and do not run it yourself. In an AFK run, write the entry and note the miss in the handoff. Creating a sidecar is a human act: auto-creating one is how the old archive split one project across several directories.
 
 **Why outside the repo:** the archive is per-user working memory, not team-shared artifact. Branch switches, worktree cleanup, and `.gitignore` hygiene cannot accidentally destroy it. It is not committed to the project and is never visible to collaborators.
 

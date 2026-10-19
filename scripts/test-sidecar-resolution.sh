@@ -615,6 +615,40 @@ else
     contains "/write-a-prd lists the dotted remote's entry" "dotted-2026-10-18.md" "$out"
 fi
 
+# The default archive root (#470). Every run above exports
+# SKILL_KIT_RESEARCH_ARCHIVE, so the ${...:-default} branch never ran, and a
+# copy of the default in a skill block could drift with the suite green. Here
+# the var is unset and HOME is a scratch directory, so the real
+# ~/.claude/research is never touched; then a census holds the default to
+# the one file that defines it.
+SCRATCH_HOME="$tmp/home"
+mkdir -p "$SCRATCH_HOME"
+DEFAULT_DIR="$SCRATCH_HOME/.claude/research/foo-bar-baz"
+out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$SCRATCH_HOME" bash "$SC" archive-dir 2>&1)"; rc=$?
+check "archive-dir with the var unset prints the default root plus the suggested name" "0 $DEFAULT_DIR" "$rc $out"
+out="$(cd "$MISSREPO" && bash "$SC" archive-dir 2>&1)"
+check "archive-dir honors SKILL_KIT_RESEARCH_ARCHIVE" "$SKILL_KIT_RESEARCH_ARCHIVE/foo-bar-baz" "$out"
+out="$(cd "$tmp" && bash "$SC" archive-dir 2>&1)"; rc=$?
+check "archive-dir outside a git repository exits 1" 1 "$rc"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|default-root|g' -e 's|<YYYY-MM-DD>|2026-10-18|g')"
+out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$SCRATCH_HOME" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block with the var unset runs cleanly" 0 "$rc"
+contains "with the var unset Phase 5c still shows the miss line" "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
+check "with the var unset Phase 5c writes under the default root" "yes" \
+    "$(if [ -f "$DEFAULT_DIR/default-root-2026-10-18.md" ]; then echo yes; fi)"
+if [ -n "$prd_read" ]; then
+    out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$SCRATCH_HOME" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    check "the /write-a-prd read block with the var unset runs cleanly" 0 "$rc"
+    contains "with the var unset /write-a-prd names the default root" "pre-sidecar archive: $DEFAULT_DIR" "$out"
+    contains "with the var unset /write-a-prd lists the entry Phase 5c wrote" "default-root-2026-10-18.md" "$out"
+fi
+# Census: the default is spelled only in sidecar.sh and its bundled copies.
+# The pattern is assembled so this file does not match itself.
+# shellcheck disable=SC2016 # the literal text, unexpanded, is what the census looks for
+default_lit=':-$HOME/.claude'"/research"
+strays="$(git -C "$repo_root" grep -lF -- "$default_lit" | grep -v '\(^\|/\)sidecar\.sh$')"
+check "the archive's default root is spelled only in sidecar.sh" "" "$strays"
+
 # Phase 3, with matches in both stores, then with in_tree_path none.
 SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
 mkdir -p "$SOLS/perf" "$MIG/docs/adr"
