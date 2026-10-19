@@ -615,6 +615,79 @@ else
     contains "/write-a-prd lists the dotted remote's entry" "dotted-2026-10-18.md" "$out"
 fi
 
+# A sidecar exists but `path research` refuses (research is a file, so the
+# directory cannot be created). That is not a SIDECAR MISS: both blocks must
+# show the resolver's refusal and exit 1, and nothing may land in the
+# pre-sidecar archive. The blocks used to fall back on any failure.
+REFREPO="$tmp/refrepo"
+mkrepo "$REFREPO"
+SAVED_ROOT="$SKILL_KIT_SIDECAR_ROOT"
+export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars-refuse"
+run "$REFREPO" init --name ref-sc --mode guest --write sidecar --in-tree-path none
+check "refusal fixture: the sidecar is created" 0 "$rc"
+rm -rf "$SKILL_KIT_SIDECAR_ROOT/ref-sc/research"
+printf 'not a directory\n' > "$SKILL_KIT_SIDECAR_ROOT/ref-sc/research"
+REFARCH="$tmp/refarch"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|refused|g' -e 's|<YYYY-MM-DD>|2026-10-19|g')"
+out="$(cd "$REFREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$REFARCH" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block exits 1 when a sidecar exists but path research refuses" 1 "$rc"
+lacks "the refusal is not reported as a SIDECAR MISS" "SIDECAR MISS" "$out"
+check "a refused Phase 5c writes nothing to the pre-sidecar archive" "" "$(find "$REFARCH" -type f 2>/dev/null)"
+if [ -n "$prd_read" ]; then
+    out="$(cd "$REFREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$REFARCH" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    check "the /write-a-prd read block exits 1 when path research refuses" 1 "$rc"
+    lacks "/write-a-prd does not list the pre-sidecar archive on a refusal" "pre-sidecar archive" "$out"
+fi
+export SKILL_KIT_SIDECAR_ROOT="$SAVED_ROOT"
+
+# The default archive root (#470). Every run above exports
+# SKILL_KIT_RESEARCH_ARCHIVE, so the ${...:-default} branch never ran, and a
+# copy of the default in a skill block could drift with the suite green. Here
+# the var is unset and HOME is a scratch directory, so the real
+# ~/.claude/research is never touched; then a census holds the default to
+# the one file that defines it.
+SCRATCH_HOME="$tmp/home"
+mkdir -p "$SCRATCH_HOME"
+DEFAULT_DIR="$SCRATCH_HOME/.claude/""research/foo-bar-baz"
+out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$SCRATCH_HOME" bash "$SC" archive-dir 2>&1)"; rc=$?
+check "archive-dir with the var unset prints the default root plus the suggested name" "0 $DEFAULT_DIR" "$rc $out"
+out="$(cd "$MISSREPO" && bash "$SC" archive-dir 2>&1)"
+check "archive-dir honors SKILL_KIT_RESEARCH_ARCHIVE" "$SKILL_KIT_RESEARCH_ARCHIVE/foo-bar-baz" "$out"
+out="$(cd "$tmp" && bash "$SC" archive-dir 2>&1)"; rc=$?
+check "archive-dir outside a git repository exits 1" 1 "$rc"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|default-root|g' -e 's|<YYYY-MM-DD>|2026-10-18|g')"
+out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$SCRATCH_HOME" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block with the var unset runs cleanly" 0 "$rc"
+contains "with the var unset Phase 5c still shows the miss line" "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
+check "with the var unset Phase 5c writes under the default root" "yes" \
+    "$(if [ -f "$DEFAULT_DIR/default-root-2026-10-18.md" ]; then echo yes; fi)"
+if [ -n "$prd_read" ]; then
+    out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$SCRATCH_HOME" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    check "the /write-a-prd read block with the var unset runs cleanly" 0 "$rc"
+    contains "with the var unset /write-a-prd names the default root" "pre-sidecar archive: $DEFAULT_DIR" "$out"
+    contains "with the var unset /write-a-prd lists the entry Phase 5c wrote" "default-root-2026-10-18.md" "$out"
+fi
+# Census: the default root, however it is spelled, is not restated outside
+# sidecar.sh. The token is the path itself, not one spelling of the
+# ${...:-default} expansion, so $HOME vs ${HOME}, a quoted copy, or an inlined
+# literal all match. Exempt: the definition (init-pipeline/scripts/sidecar.sh)
+# and the bundled copies the manifest lists, by exact path and never by file
+# name (a stray docs/sidecar.sh must still be caught), CHANGELOG.md and docs/solutions/ (history and lessons that name the
+# path as prose), and comment-only lines. The token is assembled so this file
+# does not match itself.
+root_tok=".claude""/research"
+sc_exempt="$(awk '$1 == "init-pipeline/scripts/sidecar.sh" { print "^" $2 "/references/sidecar\\.sh:" }' \
+    "$repo_root/scripts/skill-references.manifest"; echo '^init-pipeline/scripts/sidecar\.sh:')"
+strays="$(git -C "$repo_root" grep -nIF -- "$root_tok" \
+    | grep -v -e "$sc_exempt" -e '^CHANGELOG\.md:' -e '^docs/solutions/' \
+    | grep -v -e '^[^:]*:[0-9]*:[[:space:]]*#')"
+check "no tracked file outside the exemptions mentions the default archive root path" "" "$strays"
+# Both skill blocks must get the root from the resolver, not from the env var.
+for pair in "Phase 5c:$p5c" "/write-a-prd read:$prd_read"; do
+    contains "the ${pair%%:*} block calls archive-dir" "archive-dir" "${pair#*:}"
+    lacks "the ${pair%%:*} block does not name SKILL_KIT_RESEARCH_ARCHIVE" "SKILL_KIT_RESEARCH_ARCHIVE" "${pair#*:}"
+done
+
 # Phase 3, with matches in both stores, then with in_tree_path none.
 SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
 mkdir -p "$SOLS/perf" "$MIG/docs/adr"

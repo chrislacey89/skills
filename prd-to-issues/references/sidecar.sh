@@ -14,18 +14,24 @@
 #                   [--migrate-archive | --no-migrate-archive] [--archive-alias <dir>]...
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh path <research|solutions>
+#   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
 #   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
 #
 # Exit codes: 0 success, 1 miss or refusal, 2 usage.
 #
+# Archive root. The pre-sidecar research archive lives under ARCHIVE_ROOT
+# below; this file is the only place that default is spelled. On a miss,
+# /research writes its entry to the directory archive-dir prints and
+# /write-a-prd lists it from there, so the two cannot name different places.
+#
 # Archive migration. init, by default, moves the files of each directory under
-# ${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research} whose name matches this
-# project into <sidecar>/research/, and leaves a symlink at the old directory
-# pointing there. --no-migrate-archive skips it. A directory matches when its
-# lowercased name is owner-repo cut from a remote key, or, only when the
-# checkout has no remote, the main checkout's basename (the one form the old
-# /research improvised, and only for repos without a remote). A basename is not
+# ARCHIVE_ROOT whose name matches this project into <sidecar>/research/, and
+# leaves a symlink at the old directory pointing there. --no-migrate-archive
+# skips it. A directory matches when its lowercased name is owner-repo cut from
+# a remote key, or, only when the checkout has no remote, the main checkout's
+# basename (the one form the old /research improvised, and only for repos
+# without a remote). A basename is not
 # project identity: a remote-less project archived as api/ must not be claimed
 # by an unrelated repo that happens to be checked out at .../api. A project
 # archived under its basename before it gained a remote opts that directory in
@@ -59,6 +65,7 @@ set -u
 unset CDPATH
 
 SIDECAR_ROOT="${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}"
+ARCHIVE_ROOT="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}"
 # Keys and paths are split on newlines only: a checkout path may contain spaces.
 IFS=$'\n'
 
@@ -364,7 +371,7 @@ archive_names() {
 # printed on stderr; stdout stays the sidecar path.
 migrate_archive() {
     local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0
-    archive="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}"
+    archive="$ARCHIVE_ROOT"
     [ -d "$archive" ] || return 0
     dest="$sc/research"
     mkdir -p "$dest" || refuse "init: cannot create $dest"
@@ -424,6 +431,18 @@ cmd_path() {
     sc="$(do_resolve)" || exit 1
     mkdir -p "$sc/$1" || refuse "path: cannot create $sc/$1"
     printf '%s\n' "$sc/$1"
+}
+
+# The pre-sidecar archive directory for this checkout, keyed by the same name
+# the SIDECAR MISS line suggests. Prints it whether or not a sidecar resolves,
+# and does not create it.
+cmd_archive_dir() {
+    local name
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh archive-dir"
+    in_repo || refuse "not inside a git repository"
+    name="$(suggest_name)"
+    case "$name" in ''|.*|*/*|*[!a-z0-9._-]*) refuse "archive-dir: no usable name for this checkout: [$name]" ;; esac
+    printf '%s/%s\n' "$ARCHIVE_ROOT" "$name"
 }
 
 cmd_commit() {
@@ -505,7 +524,8 @@ case "$verb" in
     init)    cmd_init "$@" ;;
     config)  cmd_config "$@" ;;
     path)    cmd_path "$@" ;;
+    archive-dir) cmd_archive_dir "$@" ;;
     commit)  cmd_commit "$@" ;;
     require) cmd_require "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|path|commit|require> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|path|archive-dir|commit|require> ..." ;;
 esac
