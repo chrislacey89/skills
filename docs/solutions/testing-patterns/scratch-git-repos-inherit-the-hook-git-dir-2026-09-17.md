@@ -81,25 +81,28 @@ To recover a config that is already damaged, fix the suites first, then remove `
 
 ## Prevention
 
-**Code-level:** four older suites still have this defect, filed as chrislacey89/skills#374. The cheapest guard is to unset the variables in each suite. The mechanism that catches the next instance is a check across all suites: any `scripts/test-*.sh` that runs `git init` or `git config` must unset `GIT_DIR` before its first git call. That check belongs to #374, because it protects every suite and not just one. Until it exists, deleting the `unset` line from the classification-marker suite is not caught: the suite passes either way.
+**Code-level:** each suite that builds a scratch repo carries the `unset` line (PRs #427, #433), and `scripts/test-fixture-git-isolation.sh` (PR #438) catches the next suite that does not. It runs every pre-push suite from a linked worktree of a scratch clone with `GIT_DIR` exported, and fails naming any suite that changed the clone's shared config. Its header states what it does not reach. For a new suite, the line is still the guard, and that check is what fails when the line is missing.
+
+**Outside the suites:** no check covers a script that is not a pre-push suite, but runs git against a repository other than its caller's and can run under a hook. A sidecar `git -C <dir> commit` is one example (`scripts/test-sidecar-resolution.sh` pins that case). The Rule Scope above still applies there, and the `unset` stays a per-script decision.
 
 **Process-level:** never reproduce this against a real checkout. A reviewer on #373 did, to confirm the finding, and flipped the maintainer's shared config to bare; it was restored by hand. Any sub-agent brief that tests hook-environment behavior should require a throwaway clone with its own worktree, and should end by checking `core.bare` on the real shared config.
 
 ## Defect Classification
 
 **Origin phase:** Coding error in test fixtures. The fixtures were written to run from an interactive shell, where `GIT_DIR` is unset, and the pre-push wiring put them in an environment nobody modeled.
-**Fix type:** Correction in `scripts/test-lfg-marker.sh`. The other four suites are open under #374, and until they are fixed the shared-config cleanup is a workaround that the next worktree push undoes.
+**Fix type:** Correction. Commit 1527e43 fixed `scripts/test-lfg-marker.sh`. PR #427 fixed the compound re-stamp handoff suite, PR #433 fixed the remaining suites, and PR #438 added the cross-suite check that closes chrislacey89/skills#374.
 
 ## Clustering check
 
-This is the first recording of this pattern. The nearest entry is `devops/local-gates-absent-in-a-fresh-worktree-2026-08-24.md`. That entry is about a hook manager never installed in a worktree, and this one is about fixtures that corrupt the shared config and leave a dead `hooksPath` behind. They share the symptom "local gates don't run" but not the mechanism, so this is a different pattern. It still records the mechanism: chrislacey89/skills#374.
+This is the first recording of this pattern. The nearest entry is `devops/local-gates-absent-in-a-fresh-worktree-2026-08-24.md`. That entry is about a hook manager never installed in a worktree, and this one is about fixtures that corrupt the shared config and leave a dead `hooksPath` behind. They share the symptom "local gates don't run" but not the mechanism, so this is a different pattern. Its mechanism is `scripts/test-fixture-git-isolation.sh` (PR #438).
 
 ## Related
 
 - PR #373: the delta review that found it, and commit 1527e43, the fix and its breaker verdict
-- chrislacey89/skills#374: the four older suites, and where the cross-suite check belongs
+- chrislacey89/skills#374: the older suites with the same defect, fixed in PRs #427 and #433
+- PR #438 / `scripts/test-fixture-git-isolation.sh`: the cross-suite check
 - `../devops/local-gates-absent-in-a-fresh-worktree-2026-08-24.md`: the downstream symptom
 
 ## Shelf Life
 
-Retire when every `scripts/test-*.sh` that builds a scratch repo clears the inherited git environment and a check across all suites enforces it (#374). The git behavior itself is stable. The mechanism is evergreen until then.
+Evergreen. The retirement condition this entry originally carried, that every scratch-repo suite clears the inherited environment and a cross-suite check enforces it, was met by PR #438. The entry stays because its Rule Scope reaches scripts that check does not run, and because other entries and suite headers cite it for the hazard itself. The git behavior is stable.
