@@ -31,14 +31,14 @@ The pipeline order is the default path, not a prison. `Ralph` is the AFK executi
 **Artifact precedence.** When a skill consults multiple artifacts, resolve conflicts using this priority order:
 
 1. Working code in the repository (ground truth)
-2. The research artifact for this feature — research archive entry in the project's sidecar or closed `research`-labeled spike issue, depending on the project's `research.storage` setting (verified against installed versions at the `date` in its frontmatter; storage location does not affect trust)
+2. The research artifact for this feature — research archive entry (at the path `/research` Phase 5c writes) or closed `research`-labeled spike issue, depending on the project's `research.storage` setting (verified against installed versions at the `date` in its frontmatter; storage location does not affect trust)
 3. `docs/solutions/` (compounded knowledge, possibly stale)
 4. Framework reference skills (general best practices)
 5. Model training data (least reliable for version-specific details)
 
 When the research artifact and `docs/solutions/` disagree, the research artifact wins because it was produced more recently and verified against installed versions — subject to the `date` and `installed_versions_snapshot` in its frontmatter still being plausibly current. The research artifact may live in either the per-user archive or as a closed `research`-labeled GitHub spike issue, depending on the project's `research.storage` setting; both carry equivalent authority because their bodies are produced by the same `/research` skill against the same Phase 0/1 verification. Storage location is a discoverability decision, not a trust decision. Flag the conflict to the user rather than silently choosing. Load `docs/solutions/` on demand — grep for relevant keywords first, read only matching files — rather than loading everything upfront.
 
-**Planning-chain compression.** Each pipeline handoff has a compression artifact: the closing summary (`/shape`), the research file archived in the sidecar (`/research`), the PRD issue (`/write-a-prd`). The downstream skill should work from the written artifact, not from the full prior conversation. If a session is running long after multiple planning skills, start the next pipeline step in a fresh session using the written artifact as its entry point.
+**Planning-chain compression.** Each pipeline handoff has a compression artifact: the closing summary (`/shape`), the research file (`/research`, at the path Phase 5c writes), the PRD issue (`/write-a-prd`). The downstream skill should work from the written artifact, not from the full prior conversation. If a session is running long after multiple planning skills, start the next pipeline step in a fresh session using the written artifact as its entry point.
 
 **Runtime handoff line.** Every primary pipeline skill prints a `**Next session:**` block at the end of its closing output, in this exact shape:
 
@@ -144,7 +144,7 @@ Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot
 
 **Key enhancement to /execute:** Branch isolation gate. Before starting any implementation, `/execute` verifies the current branch is appropriate — not a stale feature branch from previous work. **Isolation may be host-provided.** A host environment (Conductor workspaces, GitHub Codespaces, devcontainers) often hands the session a dedicated isolated worktree+branch before `/execute` runs; in that case the pipeline does not own provisioning and must *stand down* rather than nest a worktree or read the host's workspace-named branch as stale. Inflow detection answers only *"am I already isolated?"* — settled by a `.claude/settings.json` `worktree.provisioning` key (`host | pipeline | auto`, default `auto`, mirroring `research.storage`), where `auto` reads a host env-var hint (counted only when it names the current tree, not merely present in the shell) or "toplevel ≠ primary working tree." When no host provides isolation, `/execute` provisions it itself: if worktrunk (`wt`) is available, it uses `wt switch --create` to create an isolated worktree + branch from the appropriate base; otherwise, a plain `git checkout -b` from the appropriate base. The default is the repo's base branch; for a slice with an unmerged `Consumes from #N` dependency that produces symbols the new slice imports, the appropriate base is that sibling slice's branch (Hammant *Trunk-Based Development* Ch. 13 — multiple PRs per story). After creating the worktree, `/execute` *enters* it as a session via the harness `EnterWorktree { path }` tool, so the session's working directory genuinely is the worktree — the cwd tells the truth about where work lands (Norman, knowledge in the world) instead of papering over it with a per-command `cd` prefix; `/closeout` exits that session before teardown (the outflow).
 
-**Key enhancement to /execute:** Now consults `docs/solutions/` and the research archive entry for this feature (in the sidecar) before implementation, so past lessons and technical decisions don't need re-discovery each iteration.
+**Key enhancement to /execute:** Now consults `docs/solutions/` and the research archive entry for this feature (at the path `/research` Phase 5c writes) before implementation, so past lessons and technical decisions don't need re-discovery each iteration.
 
 **Key enhancement to /execute:** When a project uses Next.js or React, Ralph loads `/vercel-react-best-practices`, `/vercel-composition-patterns`, `/next-best-practices`, and `/next-cache-components` before implementation so framework guidance is present in every iteration.
 
@@ -271,7 +271,7 @@ On Skill Kit's own path, durable state never lives in the project tree. It lives
 | Work items (slices) | GitHub issues with blocking relationships | Native kanban, Ralph reads them |
 | QA bugs | GitHub issues | Created during manual QA, closed by Ralph |
 | Decisions register | Ubiquitous language doc (decisions section) | Co-located with terminology, single source of truth |
-| Technical research | Per-project, selected by `research.storage` in the project's `sidecar.json`. Default `archive` → file in the sidecar at `<sidecar>/research/<feature>-<date>.md`. Opt-in `spike-issue` → closed `research`-labeled GitHub issue in the same repo as the PRD | Storage location matches the project's audience flow without forcing a global rule. Archive is right for solo / single-machine / private work. Spike-issue is right for public, portfolio, OSS, multi-contributor, or multi-machine work where the PRD's audience reads via GitHub. Both carry the same frontmatter and equivalent authority |
+| Technical research | Per-project, selected by `research.storage` in the project's `sidecar.json`. Default `archive` → file outside the repo, at the path `/research` Phase 5c writes. Opt-in `spike-issue` → closed `research`-labeled GitHub issue in the same repo as the PRD | Storage location matches the project's audience flow without forcing a global rule. Archive is right for solo / single-machine / private work. Spike-issue is right for public, portfolio, OSS, multi-contributor, or multi-machine work where the PRD's audience reads via GitHub. Both carry the same frontmatter and equivalent authority |
 | Per-project configuration | `sidecar.json` in the project's sidecar (`mode`, `solutions.write`, `solutions.in_tree_path`, `research.storage`, `forge`, `tracker`, `verify`) | Read with `sidecar.sh config get`; never written into the project's tree |
 | Institutional knowledge | `<sidecar>/solutions/` by default; `docs/solutions/` in repo when the sidecar's `solutions.write` is `in-tree`; readers consult both | Compounds over time, consulted during planning |
 | Workflow definitions | `.claude/skills/` in repo | Composable, load-on-demand, version-controlled |
@@ -283,7 +283,7 @@ The sidecar is on disk, but outside the working tree and its `.git`, so nothing 
 - No `.gsd/` directory
 - No `STATE.md`, `ROADMAP.md`, `CONTEXT.md`, `PLAN.md` per slice
 - No `progress.txt` as durable task state
-- No `docs/brainstorms/`, `docs/specs/` (research lives in the project's sidecar outside the repo, not under `docs/`)
+- No `docs/brainstorms/`, `docs/specs/` (research lives outside the repo, at the path `/research` Phase 5c writes, not under `docs/`)
 - No monolithic AGENTS.md consuming 36K tokens
 
 ---
@@ -309,7 +309,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 |---|---|---|---|
 | `/shape` | Fuzzy problem, unclear scope | Shared understanding — choices, assumptions, impositions, signals | `/research` (or `/create-milestone` for multi-PRD work) |
 | `/create-milestone` | `/shape` closing summary for a multi-PRD tranche | GitHub milestone plus sequenced feature issues | `/research` on a `research-ready` feature |
-| `/research` | Clarified problem from `/shape` | Research artifact with verified versions and doc links — the sidecar at `<sidecar>/research/<feature>-<date>.md` (default), or closed `research`-labeled GitHub spike issue when the project opts in via `research.storage = spike-issue` in `sidecar.json` | `/write-a-prd` (may invoke `/api-design-review`) |
+| `/research` | Clarified problem from `/shape` | Research artifact with verified versions and doc links — a file at the path `/research` Phase 5c writes (default), or closed `research`-labeled GitHub spike issue when the project opts in via `research.storage = spike-issue` in `sidecar.json` | `/write-a-prd` (may invoke `/api-design-review`) |
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |
 | `/prd-to-issues` | Shaped PRD issue | Slice issues with boundary maps and dependency order | `/execute` |
 | `/execute` | Concrete slice or task with enough scope clarity | Verified commits, one per logical unit, plus a `## Review Notes` block of re-runnable verification claims for the reviewer | `/pre-merge` — author-mode after Step 5 PR-review confirmation, loop-mode on AFK exits |
@@ -510,7 +510,7 @@ Do **not** introduce a committed `progress.txt` file in this repo. Ralph's durab
 | Capture lessons learned | `/compound` — by default onto the open PR, then a `/pre-merge` re-run re-stamps before `/closeout` merges, so the lesson is reviewed and merged with the code that taught it; post-merge as the fallback for lessons that surface at/after merge |
 | Define domain terms | `/ubiquitous-language` to build or update the glossary + decisions register, then reuse that language in shaping, QA, and issue writing |
 | Record a decision | Add a row to the decisions register in ubiquitous language doc |
-| Clean up after ship | Close the PRD issue and any remaining slice issues; the research artifact persists (archive file in the sidecar, or closed spike issue in GitHub) and is never deleted — supersede with a new dated artifact if research changes |
+| Clean up after ship | Close the PRD issue and any remaining slice issues; the research artifact persists (archive file at the path `/research` Phase 5c writes, or closed spike issue in GitHub) and is never deleted — supersede with a new dated artifact if research changes |
 | Audit TypeScript code quality | `/ts-audit` on a file, directory, or glob — produces a structured report of type-safety findings |
 | Onboard to a legacy repo with no written decisions | `/excavate [--since <date>] [--paths <pathspec>]` — mines git and PR history into a hotspot ranking, cited recovered decisions, and a who-to-ask map, then offers `docs/solutions/` entries on a PR; run it once, then `/shape` |
 | Figure out where I am in the pipeline | `/help` — reads repo state (branch, PRs, issues, research archive, milestones) and recommends the next skill with a one-line reason |

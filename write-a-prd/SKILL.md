@@ -339,7 +339,7 @@ Implementors should read the spike issue before starting work (`gh issue view <s
 
 **Archive mode (fallback when no spike issue exists):**
 
-Technical research for this feature is documented at `<absolute path to the research entry>` (the project's sidecar, outside the repo). Key recommendations:
+Technical research for this feature is documented at `<absolute path to the research entry>` (outside the repo). Key recommendations:
 
 - [Recommended approach from research]
 - [Key constraint or tradeoff from research]
