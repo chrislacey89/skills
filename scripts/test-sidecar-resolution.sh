@@ -615,6 +615,31 @@ else
     contains "/write-a-prd lists the dotted remote's entry" "dotted-2026-10-18.md" "$out"
 fi
 
+# A sidecar exists but `path research` refuses (research is a file, so the
+# directory cannot be created). That is not a SIDECAR MISS: both blocks must
+# show the resolver's refusal and exit 1, and nothing may land in the
+# pre-sidecar archive. The blocks used to fall back on any failure.
+REFREPO="$tmp/refrepo"
+mkrepo "$REFREPO"
+SAVED_ROOT="$SKILL_KIT_SIDECAR_ROOT"
+export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars-refuse"
+run "$REFREPO" init --name ref-sc --mode guest --write sidecar --in-tree-path none
+check "refusal fixture: the sidecar is created" 0 "$rc"
+rm -rf "$SKILL_KIT_SIDECAR_ROOT/ref-sc/research"
+printf 'not a directory\n' > "$SKILL_KIT_SIDECAR_ROOT/ref-sc/research"
+REFARCH="$tmp/refarch"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|refused|g' -e 's|<YYYY-MM-DD>|2026-10-19|g')"
+out="$(cd "$REFREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$REFARCH" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block exits 1 when a sidecar exists but path research refuses" 1 "$rc"
+lacks "the refusal is not reported as a SIDECAR MISS" "SIDECAR MISS" "$out"
+check "a refused Phase 5c writes nothing to the pre-sidecar archive" "" "$(find "$REFARCH" -type f 2>/dev/null)"
+if [ -n "$prd_read" ]; then
+    out="$(cd "$REFREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$REFARCH" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    check "the /write-a-prd read block exits 1 when path research refuses" 1 "$rc"
+    lacks "/write-a-prd does not list the pre-sidecar archive on a refusal" "pre-sidecar archive" "$out"
+fi
+export SKILL_KIT_SIDECAR_ROOT="$SAVED_ROOT"
+
 # The default archive root (#470). Every run above exports
 # SKILL_KIT_RESEARCH_ARCHIVE, so the ${...:-default} branch never ran, and a
 # copy of the default in a skill block could drift with the suite green. Here

@@ -328,12 +328,16 @@ When the storage mode is `archive`, write the research document outside the work
 <!-- sidecar-write: research -->
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-if DIR="$(bash "$SC" path research 2>/dev/null)"; then
+ERR="$(mktemp)" || exit 1
+if DIR="$(bash "$SC" path research 2>"$ERR")"; then
+  rm -f "$ERR"
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=yes
 else
-  # SIDECAR MISS: show the miss line, then write to the pre-sidecar archive.
-  bash "$SC" path research >/dev/null
+  cat "$ERR" >&2
+  # Only a SIDECAR MISS falls back; any other failure is a refusal, not a miss.
+  grep -q 'SIDECAR MISS:' "$ERR" || { rm -f "$ERR"; exit 1; }
+  rm -f "$ERR"
   DIR="$(bash "$SC" archive-dir)" || exit 1
   mkdir -p "$DIR" || exit 1
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"

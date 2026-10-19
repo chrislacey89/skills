@@ -96,11 +96,15 @@ List matches from both locations; one does not shadow the other. A match under a
    <!-- sidecar-read: research -->
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
-   if DIR="$(bash "$SC" path research 2>/dev/null)"; then
+   ERR="$(mktemp)" || exit 1
+   if DIR="$(bash "$SC" path research 2>"$ERR")"; then
+     rm -f "$ERR"
      ls "$DIR"
    else
-     # SIDECAR MISS: show the miss line, then list /research Phase 5c's pre-sidecar archive.
-     bash "$SC" path research >/dev/null
+     cat "$ERR" >&2
+     # Only a SIDECAR MISS falls back; any other failure is a refusal, not a miss.
+     grep -q 'SIDECAR MISS:' "$ERR" || { rm -f "$ERR"; exit 1; }
+     rm -f "$ERR"
      DIR="$(bash "$SC" archive-dir)" || exit 1
      echo "pre-sidecar archive: $DIR"
      if [ -d "$DIR" ]; then ls "$DIR"; else echo "(empty: no research entries)"; fi
