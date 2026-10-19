@@ -51,7 +51,7 @@ A real `git push` from a sandbox worktree, whose pre-push hook dumped its enviro
 
 ## Rule Scope
 
-- **Applies when:** a script runs git commands meant for a directory other than the repository it was launched from (`git init <dir>`, `git config` inside a scratch repo, `git -C <scratch> …`), and anything could run the script as, or from, a git hook. In this repo that means every `scripts/test-*.sh`, because `lefthook.yml` runs them on pre-push.
+- **Applies when:** a script runs git commands meant for a directory other than the repository it was launched from (`git init <dir>`, `git config` inside a scratch repo, `git -C <scratch> …`), and anything could run the script as, or from, a git hook. In this repo that means every `scripts/test-*.sh`, because `lefthook.yml` runs them on pre-push. Outside the suites, a sidecar `git -C <dir> commit` is one example (`scripts/test-sidecar-resolution.sh` pins that case).
 - **Inverts or does not apply when:** the script is supposed to act on its caller's repository through the inherited variables. A hook body that reads `GIT_DIR` to find the repo it serves is correct, and unsetting would break it. The unset belongs only in code that builds or targets its own repository. It also doesn't apply to git commands that act on the repo the suite lives in (`git ls-files`, `git check-ignore` against `$repo_root`). Those resolve correctly from the working directory once the variables are gone, and resolved correctly with them set as long as they pointed at the same repo.
 - **Sibling docs:** `../devops/local-gates-absent-in-a-fresh-worktree-2026-08-24.md` covers the state this defect leaves behind (hooks not running). It is a different pattern with a shared symptom. `dead-guards-report-coverage-they-do-not-have-2026-08-27.md` is a different pattern: its scratch repo sits under a hostile `core.hooksPath` rather than an inherited `GIT_DIR`.
 
@@ -95,7 +95,7 @@ To recover a repository that is already damaged, fix the suites first. Then remo
 
 ## Clustering check
 
-This is the first recording of this pattern. The nearest entry is `devops/local-gates-absent-in-a-fresh-worktree-2026-08-24.md`. That entry is about a hook manager never installed in a worktree, and this one is about fixtures that corrupt the shared config and leave a dead `hooksPath` behind. They share the symptom "local gates don't run" but not the mechanism, so this is a different pattern. It still records the mechanism: chrislacey89/skills#374.
+This is the first recording of this pattern. The nearest entry is `devops/local-gates-absent-in-a-fresh-worktree-2026-08-24.md`. That entry is about a hook manager never installed in a worktree, and this one is about fixtures that corrupt the shared config and leave a dead `hooksPath` behind. They share the symptom "local gates don't run" but not the mechanism, so this is a different pattern. Its mechanism is `scripts/test-fixture-git-isolation.sh` (PR #438).
 
 ## Related
 
