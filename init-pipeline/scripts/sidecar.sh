@@ -53,6 +53,10 @@
 # scripts/test-sidecar-resolution.sh runs this file against scratch repos.
 
 set -u
+# An inherited CDPATH sends every `cd "<relative dir>"` below into another tree
+# and echoes it into the captured path; the paths this script prints must not
+# depend on the caller's shell.
+unset CDPATH
 
 SIDECAR_ROOT="${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}"
 # Keys and paths are split on newlines only: a checkout path may contain spaces.
