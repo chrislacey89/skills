@@ -3,7 +3,7 @@
 # "which slices are takeable" selection idiom.
 #
 # Five hand-maintained files decide what is unblocked: /prd-to-issues §9,
-# /execute's Blocked-slice gate, /help's frontier call, /setup-ralph-loop's two
+# /execute's issue-shape and blocker gate, /help's frontier call, /setup-ralph-loop's two
 # FRONTIER copies, and SYSTEM-OVERVIEW.md's Ralph example. They read the same
 # graph and are asserted in prose to "agree by construction rather than by
 # coincidence" (help/SKILL.md, SYSTEM-OVERVIEW.md).
@@ -152,6 +152,76 @@ if [[ -z "$bad_refs" ]]; then
 else
     bad "cross-skill Step reference does not resolve" "$bad_refs"
 fi
+
+# -----------------------------------------------------------------------------
+section "/execute's issue-shape and blocker gate decides by running, not reading"
+
+# #488: a session ran /execute on an issue an open PR already closed. Its GitHub
+# read came back without the comment that said so, and it judged the PRD-marker
+# check by eye and passed a body that carried two of the markers. The gate is
+# now one executable block; this section pins its verdict logic against canned
+# responses so "empty is not clear" is something the suite checks.
+gate_jq="$(awk '
+    /^VERDICT_JQ=\x27$/ {c=1; next}
+    c && /^end\x27$/    {print "end"; exit}
+    c                   {print}
+' execute/SKILL.md)"
+if [[ -n "$gate_jq" ]]; then
+    ok "found VERDICT_JQ in execute/SKILL.md"
+else
+    bad "VERDICT_JQ block not found in execute/SKILL.md"
+fi
+
+gate_block="$(awk '/^N=<n>$/{c=1} c{print} c && /^jq -r/{exit}' execute/SKILL.md)"
+for field in 'closedByPullRequestsReferences' 'state headRefName' 'blockedBy(first: 50) { totalCount' 'number title body'; do
+    if grep -qF -- "$field" <<<"$gate_block"; then
+        ok "the gate's query requests: $field"
+    else
+        bad "the gate's query no longer requests: $field"
+    fi
+done
+if grep -qF '|| RESP=null' <<<"$gate_block" && grep -qF '|| echo unknown' <<<"$gate_block" \
+    && grep -qF 'jq -rn ' <<<"$gate_block"; then
+    ok "a failed gh call or jq run maps to unknown"
+else
+    bad "the gate no longer maps a failed gh call or jq run to unknown"
+fi
+
+# The marker list is stated in prose once and executed once; they must match.
+# shellcheck disable=SC2016  # backticks below are literal markdown, not expansion
+prose_markers="$(grep -F '**`undecomposed-prd`**' execute/SKILL.md \
+    | grep -o '(`[^)]*)' | head -1 | grep -o '`[^`]*`' | tr -d '`' | sort | paste -sd'|' -)"
+code_markers="$(grep -o '(Appetite|[^)]*)' <<<"$gate_jq" | tr -d '()' | tr '|' '\n' | sort | paste -sd'|' -)"
+assert_eq "$prose_markers" "$code_markers" "prose marker list matches the block's marker regex"
+
+run_gate() { # $1 = response JSON, $2 = current branch
+    jq -rn --argjson n 7 --arg branch "${2:-task-branch}" "$gate_jq" <<<"$1" 2>/dev/null || echo unknown
+}
+fixture() { # jq expression applied to a healthy, takeable base response
+    jq -cn "{data: {repository: {issue: {
+        number: 7, title: \"t\", body: \"## Problem\nx\",
+        comments: {totalCount: 0, nodes: []},
+        blockedBy: {totalCount: 0, nodes: []},
+        closedByPullRequestsReferences: {nodes: []}}}}} | $1"
+}
+verdict() { cut -d' ' -f1 <<<"$1"; }
+
+assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture .)")")" "healthy response -> takeable"
+assert_eq "unknown"   "$(run_gate 'null')" "null response -> unknown"
+assert_eq "unknown"   "$(run_gate '')" "empty response -> unknown"
+assert_eq "unknown"   "$(run_gate '{}')" "empty object -> unknown"
+assert_eq "unknown"   "$(run_gate "$(fixture '.errors = [{message: "x"}]')")" "GraphQL errors -> unknown"
+assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.number = 8')")" "wrong number echoed -> unknown"
+assert_eq "unknown"   "$(run_gate "$(fixture 'del(.data.repository.issue.title)')")" "missing title -> unknown"
+assert_eq "unknown"   "$(run_gate "$(fixture 'del(.data.repository.issue.closedByPullRequestsReferences)')")" "missing PR field -> unknown"
+assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.comments.totalCount = 1')")" "comment list shorter than its count -> unknown"
+assert_eq "undecomposed-prd" "$(run_gate "$(fixture '.data.repository.issue.body = "## Rabbit Holes\nx"')")" "PRD marker, no decomposition -> undecomposed-prd"
+assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.body = "## No-gos\nx" | .data.repository.issue.comments = {totalCount: 1, nodes: [{body: "Decomposed into: #8, #9"}]}')")")" "decomposed PRD -> falls through to takeable"
+assert_eq "blocked"   "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")")" "open blocker -> blocked"
+assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "CLOSED"}]}')")")" "closed blocker -> takeable"
+assert_eq "in-flight" "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "OPEN", headRefName: "other"}]')")")" "open PR on another branch -> in-flight"
+assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "OPEN", headRefName: "mine"}]')" mine)")" "open PR on the current branch -> takeable"
+assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "CLOSED", headRefName: "other"}]')")")" "closed PR -> takeable"
 
 # -----------------------------------------------------------------------------
 section "the by-construction claim is backed by this suite"

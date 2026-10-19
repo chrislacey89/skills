@@ -368,7 +368,7 @@ After all slice issues are created, post a single comment on the parent PRD issu
 Decomposed into: #<slice-1>, #<slice-2>, #<slice-3>
 ```
 
-This comment is the signal downstream skills read to know the PRD has been decomposed. `/execute`'s issue-shape detection gate checks for it before accepting a PRD-shaped issue as a slice task.
+This comment is the signal downstream skills read to know the PRD has been decomposed. `/execute`'s issue-shape and blocker gate checks for it before accepting a PRD-shaped issue as a slice task.
 
 If a PRD is re-decomposed later (e.g., after `/correct-course`), post a new `Decomposed into:` comment; readers consume the most recent one. Keeping only one authoritative comment is this skill's responsibility.
 

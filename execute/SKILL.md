@@ -116,25 +116,59 @@ install = "pnpm install"
 - [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, and `.claude/.lfg-active` do not exist in the worktree (fresh slate; Step 3 creates one)
 - [ ] **Post-review lock flags absent** — `.claude/.review-stamped` and `.claude/.fix-findings-active` do not exist. Both belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete either one you find — you are at the start of a branch that has had no review, so neither can be describing this one
 
-**Issue-shape detection gate.** If the task is a GitHub issue, verify it is a slice (implementation-ready), not an undecomposed PRD. Run `gh issue view <n> --comments` and check for a comment matching `^Decomposed into: #\d+`.
-
-- If such a comment exists: proceed. The PRD has been decomposed; the operator is presumably working on one of its child slices (and should have supplied that slice's number, not the PRD's).
-- If no such comment exists AND the issue body contains shaped-pitch markers (sections named `Appetite`, `Rabbit Holes`, `No-gos`, `User Stories`, or `Implementation Decisions`): halt. This is an undecomposed PRD. Invoke `/prd-to-issues <this-issue-number>` to produce implementation-ready slices, then restart `/execute` against one of the child slice issues.
-- If multiple `Decomposed into:` comments exist, read the most recent; `/prd-to-issues` is responsible for ensuring only one is authoritative.
-
-Skip this gate for one-off tasks not tied to a GitHub issue.
-
-**Blocked-slice gate.** Still on the issue, confirm the slice is actually takeable before implementing it. Read the edges themselves rather than a summary count, which can be served stale right after a mutation:
+**Issue-shape and blocker gate.** If the task is a GitHub issue, confirm it is a takeable slice before implementing it: not an undecomposed PRD, not blocked, and not already being closed by someone else's open PR. One GraphQL read answers all three, and the block decides — do not judge any of it by eye:
 
 ```bash
-gh issue view <n> --json blockedBy \
-  --jq '{open_blockers: [.blockedBy.nodes[] | select(.state == "OPEN") | {number, title}],
-         ever_wired: .blockedBy.totalCount}'
+N=<n>
+VERDICT_JQ='
+def lines: split("\n")[];
+[inputs][0] | if (.errors // [] | length) > 0 then "unknown" else
+.data.repository.issue as $i
+| if $i == null or $i.number != $n or (($i.title // "") == "")
+     or ($i.body | type) != "string"
+     or ($i.comments.nodes | type) != "array"
+     or ($i.blockedBy.nodes | type) != "array"
+     or ($i.closedByPullRequestsReferences.nodes | type) != "array"
+     or ($i.comments.nodes | length) != ([$i.comments.totalCount, 100] | min)
+     or ($i.blockedBy.nodes | length) != ([$i.blockedBy.totalCount, 50] | min)
+  then "unknown"
+  else
+    ([$i.comments.nodes[].body | lines | select(test("^Decomposed into: #[0-9]+"))] | length > 0) as $decomposed
+    | ([$i.body | lines | select(test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\b"; "i"))] | length > 0) as $prd
+    | [$i.blockedBy.nodes[] | select(.state == "OPEN") | {number, title}] as $open_blockers
+    | [$i.closedByPullRequestsReferences.nodes[] | select(.state == "OPEN" and .headRefName != $branch) | {number, headRefName}] as $in_flight
+    | if $prd and ($decomposed | not) then "undecomposed-prd"
+      elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
+      elif ($in_flight | length) > 0 then "in-flight \($in_flight | tojson)"
+      else "takeable ever_wired=\($i.blockedBy.totalCount) comments=\($i.comments.totalCount)"
+      end
+  end
+end'
+RESP=$(gh api graphql -F owner='{owner}' -F repo='{repo}' -F n="$N" -f query='
+  query($owner: String!, $repo: String!, $n: Int!) {
+    repository(owner: $owner, name: $repo) {
+      issue(number: $n) {
+        number title body
+        comments(last: 100) { totalCount nodes { body } }
+        blockedBy(first: 50) { totalCount nodes { number title state } }
+        closedByPullRequestsReferences(first: 20) { nodes { number state headRefName } }
+      }
+    }
+  }') || RESP=null
+jq -rn --argjson n "$N" --arg branch "$(git branch --show-current)" "$VERDICT_JQ" <<<"${RESP:-null}" 2>/dev/null || echo unknown
 ```
 
-`open_blockers` empty means takeable — proceed. Any open blocker means **stop**: name the blocking issues to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
+It prints exactly one verdict, and each one names its action:
 
-**Read `ever_wired` before trusting an empty list.** Empty has two causes: the slice genuinely has no open blockers, or the repo predates the edge wiring in `/prd-to-issues` §7 and has no edges at all. `totalCount` counts blockers in every state, so it separates them — `ever_wired > 0` means this slice *was* wired and its blockers have since closed, so the empty list is real. `ever_wired == 0` means no edge was ever written and the empty list proves nothing; if the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand.
+- **`unknown`** — `gh` failed, the response carried GraphQL errors, the issue's own `number` or `title` did not come back, a field came back missing, or a returned list is shorter than its own `totalCount` says it should be. **Stop.** Re-run once; if it is still `unknown`, tell the user the read failed. Never proceed on it: an empty answer looks exactly like an issue with no comments, no blockers, and no PRs, and every check below fails open on it. A session once built a duplicate implementation of an issue an open PR already closed, because its read came back without the comment that said so.
+- **`undecomposed-prd`** — the body carries a shaped-pitch section heading (`Appetite`, `Rabbit Holes`, `No-gos`, `User Stories`, or `Implementation Decisions`) and no comment matches `^Decomposed into: #\d+`. **Stop.** Invoke `/prd-to-issues <this-issue-number>` to produce implementation-ready slices, then restart `/execute` against one of the child slice issues. A decomposed PRD falls through to the checks below; the operator should still have supplied the child slice's number rather than the PRD's. `/prd-to-issues` is responsible for keeping only one `Decomposed into:` comment authoritative. A heading added to the shaped-pitch template is added to the block's list in the same change.
+- **`blocked [...]`** — the listed issues are open blockers. **Stop:** name them to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
+- **`in-flight [...]`** — an open PR closes this issue and its head is not the current branch. **Stop and name it.** The user decides whether to continue that PR, take it over, or override because it is abandoned or only a partial fix.
+- **`takeable ever_wired=<k> comments=<m>`** — proceed. Keep `comments=<m>` for Step 1's thread read.
+
+**Read `ever_wired` before trusting an empty blocker list.** Empty has two causes: the slice genuinely has no open blockers, or the repo predates the edge wiring in `/prd-to-issues` §7 and has no edges at all. `totalCount` counts blockers in every state, so it separates them — `ever_wired > 0` means this slice *was* wired and its blockers have since closed, so the empty list is real. `ever_wired == 0` means no edge was ever written and the empty list proves nothing; if the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand.
+
+**The in-flight check sees only linked PRs.** `closedByPullRequestsReferences` lists PRs that close the issue through a `Closes`/`Fixes`/`Resolves` keyword or a manual link in the sidebar. A PR that only says `Refs #N`, or names the issue nowhere, is invisible to it, so `takeable` means no *linked* PR is open, not that nobody is working on the issue.
 
 Note `state` here is the GraphQL enum — uppercase `OPEN`, not the REST endpoint's lowercase `open`.
 
@@ -220,7 +254,7 @@ This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror c
 
 Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understand the relevant files, patterns, and conventions. If the task is ambiguous, ask the user to clarify scope before proceeding.
 
-**Read the issue comment thread (issue-based work only).** When the task is a GitHub issue, read its comment thread before implementing — do not stop at the body. Step 0's issue-shape detection gate already ran `gh issue view <n> --comments`, so the thread is in context; reuse it rather than re-fetching. The comments are where the pipeline's continuation state lives: prior-iteration handoff notes (what was done, what remains, the exact error output a previous context window hit), plateau-stop notes naming what did *not* advance, post-hoc correction comments filed against this issue when an upstream boundary map drifted, and explicit human scope changes added after the issue was authored. In AFK Ralph loops this is load-bearing — iteration N+1 is designed to continue from what iteration N wrote into the thread, so skipping it re-derives or repeats work the previous iteration already explained.
+**Read the issue comment thread (issue-based work only).** When the task is a GitHub issue, read its comment thread before implementing — do not stop at the body. Step 0's issue-shape and blocker gate read the thread to decide its verdict but printed only the verdict, so fetch it now with `gh issue view <n> --json comments --jq '.comments[].body'`. The gate's `takeable` line carries `comments=<m>`; if this read returns fewer than `<m>` comments, it came back thin — re-run it, and never read a short or empty result as an empty thread. The comments are where the pipeline's continuation state lives: prior-iteration handoff notes (what was done, what remains, the exact error output a previous context window hit), plateau-stop notes naming what did *not* advance, post-hoc correction comments filed against this issue when an upstream boundary map drifted, and explicit human scope changes added after the issue was authored. In AFK Ralph loops this is load-bearing — iteration N+1 is designed to continue from what iteration N wrote into the thread, so skipping it re-derives or repeats work the previous iteration already explained.
 
 **Precedence rule.** The issue body remains the durable contract. Comments augment it; they do not silently override it. A comment is an authoritative addition only when it is (a) a pipeline-authored continuation or correction comment, or (b) an explicit human scope change. Freeform discussion is context, never an override. If a comment appears to contradict the body on scope, and it is not a clear pipeline-authored correction or human scope change, flag the conflict to the user rather than acting on the comment.
 
