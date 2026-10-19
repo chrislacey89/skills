@@ -328,12 +328,11 @@ When the storage mode is `archive`, write the research document outside the work
 <!-- sidecar-write: research -->
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-if DIR="$(bash "$SC" path research 2>/dev/null)"; then
+if DIR="$(bash "$SC" path research)"; then
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=yes
 else
   # SIDECAR MISS: the pre-sidecar archive; the resolver names the directory.
-  bash "$SC" path research >/dev/null
   DIR="$(bash "$SC" archive-dir)" || exit 1
   mkdir -p "$DIR" || exit 1
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"

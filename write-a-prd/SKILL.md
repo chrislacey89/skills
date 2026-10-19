@@ -96,11 +96,10 @@ List matches from both locations; one does not shadow the other. A match under a
    <!-- sidecar-read: research -->
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
-   if DIR="$(bash "$SC" path research 2>/dev/null)"; then
+   if DIR="$(bash "$SC" path research)"; then
      ls "$DIR"
    else
      # SIDECAR MISS: /research Phase 5c's pre-sidecar archive; the resolver names the directory.
-     bash "$SC" path research >/dev/null
      DIR="$(bash "$SC" archive-dir)" || exit 1
      echo "pre-sidecar archive: $DIR"
      if [ -d "$DIR" ]; then ls "$DIR"; else echo "(empty: no research entries)"; fi
