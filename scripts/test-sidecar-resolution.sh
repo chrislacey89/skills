@@ -24,7 +24,8 @@
 #
 # Section 9 runs the /compound sidecar block extracted from compound/SKILL.md,
 # and the "/research" section runs research/SKILL.md's Phase 3 read, Phase 5a
-# storage read, and Phase 5c write, and the "/help" section runs help/SKILL.md's
+# storage read, and Phase 5c write, plus /write-a-prd's archive-mode read of
+# what that write left, and the "/help" section runs help/SKILL.md's
 # Phase 1b sidecar block, so an edit to any of them is tested as written.
 #
 # Fixtures are built after unsetting the inherited git environment, with a
@@ -579,6 +580,34 @@ contains "on a miss the user is shown the init command with an absolute path" \
     "SIDECAR MISS: run: bash $SC init --name foo-bar-baz" "$out"
 check "on a miss no sidecar is created" "$sc_before" "$(ls "$SKILL_KIT_SIDECAR_ROOT")"
 check "the project's tree is untouched by a missed Phase 5c" "" "$(git -C "$MISSREPO" status --porcelain)"
+
+# /write-a-prd's archive-mode reader, run against what Phase 5c just wrote
+# (#419). The reader used to be prose and its own remote-derived slug, so on a
+# case-sensitive filesystem it listed a directory the writer never made. The
+# second fixture's remote is mixed-case and dotted, the shape #419 measured.
+# The block sits in a numbered list, so its fence is indented.
+prd_read="$(awk '/^ *<!-- sidecar-read: research -->$/ { on = 1; next }
+                 on && /^ *```bash$/ { inb = 1; next }
+                 inb && /^ *```$/ { exit }
+                 inb { sub(/^   /, ""); print }' "$repo_root/write-a-prd/SKILL.md")"
+if [ -z "$prd_read" ]; then
+    bad "write-a-prd/SKILL.md carries the archive-mode read block" "no bash block after <!-- sidecar-read: research -->"
+else
+    ok "write-a-prd/SKILL.md carries the archive-mode read block"
+    out="$(cd "$MISSREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$MISSARCH" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    check "the /write-a-prd read block on a miss runs cleanly" 0 "$rc"
+    contains "on a miss /write-a-prd lists the entry Phase 5c wrote" "miss-case-2026-10-17.md" "$out"
+    DOTREPO="$tmp/dotrepo"
+    mkrepo "$DOTREPO"
+    git -C "$DOTREPO" remote add origin https://github.com/Own.Er/My.Repo.git
+    script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|dotted|g' -e 's|<YYYY-MM-DD>|2026-10-18|g')"
+    (cd "$DOTREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$MISSARCH" bash -c "$script" >/dev/null 2>&1)
+    written="$(cd "$MISSARCH" && find . -name 'dotted-2026-10-18.md' | sed 's|^\./||')"
+    out="$(cd "$DOTREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$MISSARCH" bash -c "$(with_sc "$prd_read")" 2>&1)"; rc=$?
+    check "Phase 5c writes the dotted, mixed-case remote's entry somewhere" "yes" "$(if [ -n "$written" ]; then echo yes; fi)"
+    contains "/write-a-prd names the directory Phase 5c wrote to" "pre-sidecar archive: $MISSARCH/${written%/*}" "$out"
+    contains "/write-a-prd lists the dotted remote's entry" "dotted-2026-10-18.md" "$out"
+fi
 
 # Phase 3, with matches in both stores, then with in_tree_path none.
 SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
