@@ -670,13 +670,16 @@ fi
 # Census: the default root, however it is spelled, is not restated outside
 # sidecar.sh. The token is the path itself, not one spelling of the
 # ${...:-default} expansion, so $HOME vs ${HOME}, a quoted copy, or an inlined
-# literal all match. Exempt: sidecar.sh files (the definition and its bundled
-# copies), CHANGELOG.md and docs/solutions/ (history and lessons that name the
+# literal all match. Exempt: the definition (init-pipeline/scripts/sidecar.sh)
+# and the bundled copies the manifest lists, by exact path and never by file
+# name (a stray docs/sidecar.sh must still be caught), CHANGELOG.md and docs/solutions/ (history and lessons that name the
 # path as prose), and comment-only lines. The token is assembled so this file
 # does not match itself.
 root_tok=".claude""/research"
+sc_exempt="$(awk '$1 == "init-pipeline/scripts/sidecar.sh" { print "^" $2 "/references/sidecar\\.sh:" }' \
+    "$repo_root/scripts/skill-references.manifest"; echo '^init-pipeline/scripts/sidecar\.sh:')"
 strays="$(git -C "$repo_root" grep -nIF -- "$root_tok" \
-    | grep -v -e '^\(.*/\)\{0,1\}sidecar\.sh:' -e '^CHANGELOG\.md:' -e '^docs/solutions/' \
+    | grep -v -e "$sc_exempt" -e '^CHANGELOG\.md:' -e '^docs/solutions/' \
     | grep -v -e '^[^:]*:[0-9]*:[[:space:]]*#')"
 check "no tracked file outside the exemptions mentions the default archive root path" "" "$strays"
 # Both skill blocks must get the root from the resolver, not from the env var.
