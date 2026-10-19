@@ -648,7 +648,7 @@ export SKILL_KIT_SIDECAR_ROOT="$SAVED_ROOT"
 # the one file that defines it.
 SCRATCH_HOME="$tmp/home"
 mkdir -p "$SCRATCH_HOME"
-DEFAULT_DIR="$SCRATCH_HOME/.claude/research/foo-bar-baz"
+DEFAULT_DIR="$SCRATCH_HOME/.claude/""research/foo-bar-baz"
 out="$(cd "$MISSREPO" && env -u SKILL_KIT_RESEARCH_ARCHIVE HOME="$SCRATCH_HOME" bash "$SC" archive-dir 2>&1)"; rc=$?
 check "archive-dir with the var unset prints the default root plus the suggested name" "0 $DEFAULT_DIR" "$rc $out"
 out="$(cd "$MISSREPO" && bash "$SC" archive-dir 2>&1)"
@@ -667,12 +667,23 @@ if [ -n "$prd_read" ]; then
     contains "with the var unset /write-a-prd names the default root" "pre-sidecar archive: $DEFAULT_DIR" "$out"
     contains "with the var unset /write-a-prd lists the entry Phase 5c wrote" "default-root-2026-10-18.md" "$out"
 fi
-# Census: the default is spelled only in sidecar.sh and its bundled copies.
-# The pattern is assembled so this file does not match itself.
-# shellcheck disable=SC2016 # the literal text, unexpanded, is what the census looks for
-default_lit=':-$HOME/.claude'"/research"
-strays="$(git -C "$repo_root" grep -lF -- "$default_lit" | grep -v '\(^\|/\)sidecar\.sh$')"
-check "the archive's default root is spelled only in sidecar.sh" "" "$strays"
+# Census: the default root, however it is spelled, is not restated outside
+# sidecar.sh. The token is the path itself, not one spelling of the
+# ${...:-default} expansion, so $HOME vs ${HOME}, a quoted copy, or an inlined
+# literal all match. Exempt: sidecar.sh files (the definition and its bundled
+# copies), CHANGELOG.md and docs/solutions/ (history and lessons that name the
+# path as prose), and comment-only lines. The token is assembled so this file
+# does not match itself.
+root_tok=".claude""/research"
+strays="$(git -C "$repo_root" grep -nIF -- "$root_tok" \
+    | grep -v -e '^\(.*/\)\{0,1\}sidecar\.sh:' -e '^CHANGELOG\.md:' -e '^docs/solutions/' \
+    | grep -v -e '^[^:]*:[0-9]*:[[:space:]]*#')"
+check "no tracked file outside the exemptions mentions the default archive root path" "" "$strays"
+# Both skill blocks must get the root from the resolver, not from the env var.
+for pair in "Phase 5c:$p5c" "/write-a-prd read:$prd_read"; do
+    contains "the ${pair%%:*} block calls archive-dir" "archive-dir" "${pair#*:}"
+    lacks "the ${pair%%:*} block does not name SKILL_KIT_RESEARCH_ARCHIVE" "SKILL_KIT_RESEARCH_ARCHIVE" "${pair#*:}"
+done
 
 # Phase 3, with matches in both stores, then with in_tree_path none.
 SOLS="$(cd "$MIG" && bash "$SC" path solutions)"
