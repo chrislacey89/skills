@@ -326,16 +326,17 @@ When the storage mode is `archive`, write the research document outside the work
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 ERR="$(mktemp)" || exit 1
-if DIR="$(bash "$SC" path research 2>"$ERR")"; then
+DIR="$(bash "$SC" path research 2>"$ERR")"; RC=$?
+cat "$ERR" >&2   # warnings such as ALIAS COLLISION print on both branches
+if [ "$RC" -eq 0 ]; then
   rm -f "$ERR"
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=yes
 else
-  cat "$ERR" >&2
   # Only a SIDECAR MISS falls back; any other failure is a refusal, not a miss.
   grep -q 'SIDECAR MISS:' "$ERR" || { rm -f "$ERR"; exit 1; }
   rm -f "$ERR"
-  DIR="$(bash "$SC" archive-dir)" || exit 1
+  DIR="$(bash "$SC" archive-dir)" || { echo "research entry NOT written: no usable archive directory for this checkout" >&2; exit 1; }
   mkdir -p "$DIR" || exit 1
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=no

@@ -774,6 +774,38 @@ if [ -n "$prd_read" ]; then
 fi
 export SKILL_KIT_SIDECAR_ROOT="$SAVED_ROOT"
 
+# #420: the resolver's warnings reach the user on the hit branch too. Two
+# sidecars claim this checkout's keys; the first is used and ALIAS COLLISION
+# is printed, which the fallback used to discard.
+COLREPO="$tmp/colrepo"
+mkrepo "$COLREPO"
+SAVED_ROOT="$SKILL_KIT_SIDECAR_ROOT"
+export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars-collide"
+run "$COLREPO" init --name col-a --mode guest --write sidecar --in-tree-path none
+mkdir -p "$SKILL_KIT_SIDECAR_ROOT/col-b"
+cp "$SKILL_KIT_SIDECAR_ROOT/col-a/sidecar.json" "$SKILL_KIT_SIDECAR_ROOT/col-b/sidecar.json"
+# commit and require resolve too and would print the same warning, which would
+# mask a block that dropped it; this wrapper silences every verb but path.
+# shellcheck disable=SC2016 # the wrapper body is meant to be literal
+printf '#!/usr/bin/env bash\ncase "$1" in path) exec bash "%s" "$@" ;; *) exec bash "%s" "$@" 2>/dev/null ;; esac\n' "$SC" "$SC" > "$tmp/path-only-stderr.sh"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|collide|g' -e 's|<YYYY-MM-DD>|2026-10-20|g' -e "s|^SC=.*|SC=\"$tmp/path-only-stderr.sh\"|")"
+out="$(cd "$COLREPO" && bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block still writes on an alias collision" 0 "$rc"
+contains "the Phase 5c block prints ALIAS COLLISION on the hit branch" "ALIAS COLLISION" "$out"
+check "the colliding entry went to the first sidecar" "yes" "$(if [ -f "$SKILL_KIT_SIDECAR_ROOT/col-a/research/collide-2026-10-20.md" ]; then echo yes; fi)"
+export SKILL_KIT_SIDECAR_ROOT="$SAVED_ROOT"
+
+# A checkout whose name archive-dir refuses (a leading dot) cannot be filed in
+# the pre-sidecar archive; the block must say the entry was not written.
+mkdir -p "$tmp/slug"
+SLUGREPO="$tmp/slug/.hidden"
+mkrepo "$SLUGREPO"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|slugless|g' -e 's|<YYYY-MM-DD>|2026-10-20|g')"
+out="$(cd "$SLUGREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$tmp/slugarch" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block exits 1 when archive-dir rejects the name" 1 "$rc"
+contains "a rejected slug says the entry was not written" "research entry NOT written" "$out"
+check "a rejected slug writes nothing" "" "$(find "$tmp/slugarch" -type f 2>/dev/null)"
+
 # The default archive root (#470). Every run above exports
 # SKILL_KIT_RESEARCH_ARCHIVE, so the ${...:-default} branch never ran, and a
 # copy of the default in a skill block could drift with the suite green. Here
@@ -925,6 +957,14 @@ else
     contains "the skill's require block surfaces the MISSING line" \
         "MISSING: $DOSSIER (referenced by /research Phase 3)" "$out"
     contains "the skill's require block signals the miss" "dossier missing" "$out"
+    # The HIT path: the same block with the dossier present prints where it
+    # found it and does not signal a miss.
+    printf 'dossier\n' > "$DOSSIER"
+    out="$(cd "$MIG" && bash -c "$script" 2>&1)"
+    contains "on a hit the skill's require block prints the resolved dossier path" "$DOSSIER" "$out"
+    lacks "on a hit the skill's require block reports no miss" "dossier missing" "$out"
+    lacks "on a hit the skill's require block prints no MISSING line" "MISSING:" "$out"
+    rm -f "$DOSSIER"
 fi
 
 # -----------------------------------------------------------------------------
