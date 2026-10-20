@@ -150,6 +150,7 @@ Also from the same pass, and the same idea one level up: a floor over a whole po
 - #298 / PR #299 — the census and clone-bearing fixture this section extended
 - #261 — `/closeout`'s unpinned invocations; the deferred fallback-loop gap
 - `mechanism-generality-lags-the-pattern-2026-08-23.md`, `../architecture-decisions/self-review-blind-to-composition-2026-08-13.md`
+- `../architecture-decisions/advisory-to-executed-rule-promotion-2026-08-07.md` Instance 3 (PR #491): the corpus rule was followed and still missed a CRLF body, because no corpus artifact carried CRLF. Drawing from the corpus covers only the variants the corpus holds
 
 ## Shelf Life
 

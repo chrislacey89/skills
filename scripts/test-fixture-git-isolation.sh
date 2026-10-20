@@ -14,8 +14,8 @@
 #
 # WHY A MECHANISM RATHER THAN A RULE. The guard is one line
 # (`unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE`), and nothing made a suite
-# carry it: some did, with a comment explaining why, and some did not. The next
-# suite written will not either, unless something fails when it is missing.
+# carry it. The next suite written will not either, unless something fails when
+# it is missing.
 #
 # WHAT THIS DOES. Clones this repo into a scratch directory, adds a linked
 # worktree to the clone, overlays the working tree onto it (so uncommitted and
