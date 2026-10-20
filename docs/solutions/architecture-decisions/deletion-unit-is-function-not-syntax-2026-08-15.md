@@ -1,8 +1,8 @@
 ---
 date: 2026-08-15
 category: architecture-decisions
-problem_type: a subtractive change reviewed at the granularity of the deleted syntax rather than the functions that syntax served — second occurrence appended 2026-10-19, in executable shell, where the second function was a guard
-components: [execute, pre-merge, improve-pipeline, research, write-a-prd, init-pipeline]
+problem_type: a subtractive change reviewed at the granularity of the deleted syntax rather than the functions that syntax served — second occurrence appended 2026-10-19, in executable shell, where the second function was a guard; third appended 2026-10-20, a frontmatter flag whose second function was gating a lock's escape route
+components: [execute, pre-merge, improve-pipeline, research, write-a-prd, init-pipeline, fix-findings]
 technologies: [pipeline-design, prose-artifacts, code-review, subtractive-change]
 severity: medium
 volatility: stable
@@ -138,6 +138,21 @@ PR #484 replaced both copies with `DIR="$(bash "$SC" archive-dir)"`. So did PR #
 
 **Mechanism.** This is the second recording, so prose alone is not an exit. The preventing change belongs to the pack: `/execute` Step 4's Deletion Completeness rung fires only on a deleted or renamed module, so a guard removed from a file that survives never reaches it. Filed as chrislacey89/skills#487. The instance itself is pinned by the test in 0c8a0be.
 
+## Third occurrence (2026-10-20): a frontmatter flag that was also part of a lock
+
+**What was deleted.** PR #493 removed `disable-model-invocation: true` from `/fix-findings` so that `/pre-merge`'s next-step menu option **Fix a finding on this branch first** could actually run the skill. The stated function of the flag was cost: it kept the description out of every session's context. The rationale priced that, and it is correct.
+
+**The function it did not price.** The flag was also why the post-review edit lock held. The skill's harness line writes `.claude/.fix-findings-active` when the skill loads, and that file opens the lock. The lock's refusal message told the blocked session to "invoke /fix-findings <numbers>". While only a human could invoke the skill, that advice was safe. Once the flag was gone, the session the lock was meant to stop, including an unattended one, could follow it.
+
+**What this adds to the entry.**
+- *The deleted text said there was no second function.* The paragraph removed with the flag read: "nothing below depends on the key being honored." A sole-site declaration that is false still gets inherited. The deletion trusted it and did not check the hook.
+- *The second function lived in another file.* The guard was neither in the deleted line nor in anything that pointed at it. It was in `init-pipeline`'s hook message, which names the skill as a way out. For a capability flag, look for whatever names the gated thing as an escape, not for references to the flag.
+- *The authoring session missed it again, and a blind `/pre-merge` pass caught it in one try.* This makes three of three in this entry.
+
+**Fix.** A `/fix-findings` fixer (02aa25e) changed the refusal message to "ask the human which findings to fix and run /fix-findings with exactly the numbers they name". It also added "the model invokes `/fix-findings` on its own" to the known ways past the lock in `init-pipeline/SKILL.md` and `fix-findings/SKILL.md`. The breaker returned `survived`: restoring the old message leaves `scripts/test-post-review-edit-lock.sh` green. So nothing enforces the gate. The message only advises.
+
+**Mechanism.** This is the third recording, and the preventing change belongs to the pack. Flag flips are gated by chrislacey89/skills#157, whose gate checks only that a *wrong* flag does not break an auto-invoke chain. That covers adding the flag and misses removing it. Added as a proposed gate item on #157 (comment 6281222695): before a skill becomes model-invocable, list what it does at load time and every hook message or skill text that names it as a way out, because each was safe only while a human had to type the command.
+
 ## Planning / Calibration Notes
 
 - **What widened the work:** the blind review pass at `/pre-merge`, producing one Concern and one follow-up commit. Nothing widened at implementation time — the three cuts landed exactly as specified, all six contract suites stayed green throughout, and the mispricing was invisible to every check that ran before review.
@@ -163,6 +178,7 @@ PR #484 replaced both copies with `DIR="$(bash "$SC" archive-dir)"`. So did PR #
 ## Related
 
 - PR #232 — the three subtractions, the dangling-pointer fix, and the restoration commit
+- PR #493 and its fix 02aa25e — the third occurrence (a removed flag gated the edit lock's escape route); chrislacey89/skills#157 — the flag-flip gate the mechanism extends
 - PR #484 (and the closed parallel PR #479), issues #470 and #481 — the second occurrence (dedup deleted a guard); chrislacey89/skills#487 — the pack-level mechanism
 - Issue #231 — the audit; see its "Recommended Changes" row 3 and the Mediator's Chesterton's-fence note
 - Issue #157 — tracks the standing audit Cut B removed from `CLAUDE.md`; `docs/skill-anatomy.md` now routes there
