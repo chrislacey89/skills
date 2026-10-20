@@ -121,7 +121,7 @@ Three complications dissolved rather than needing answers, which is the usual si
 
 ## Related
 
-- PR #491 / issue #488 — Instance 3. Its two `/fix-findings` rounds show both directions of the matcher defect. While building it, the session's own `gh issue view 488 --comments` printed nothing, not even the body: the thin read #488 exists to refuse
+- PR #491 / issue #488 — Instance 3. Its two `/fix-findings` rounds show both directions of the matcher defect.
 - chrislacey89/skills#499 — the pack-level mechanism for Instance 3's class; #498 tracks the gate's remaining test gaps
 - `authored-mutations-inherit-the-authors-blind-spot-2026-08-28.md` — the same corpus-over-author rule applied to mutations. Instance 3 is its fixture-side twin: a hand-typed body is an authored fixture
 - PR #188 — implements loop-mode's recording half; its own `/pre-merge` review is the evidence behind the split
