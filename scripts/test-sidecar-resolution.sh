@@ -753,8 +753,8 @@ if [ -z "$req" ]; then
 else
     ok "research/SKILL.md carries the dossier require block"
     DOSSIER="$MSC/research/excavation-2026-01-01.md"
-    script="SC=\"$SC\"
-$(printf '%s\n' "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
+    script="$(with_sc "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
+    contains "the dossier require block sets SC itself (#430)" 'SC="' "$req"
     out="$(cd "$MIG" && bash -c "$script" 2>&1)"
     contains "the skill's require block surfaces the MISSING line" \
         "MISSING: $DOSSIER (referenced by /research Phase 3)" "$out"
@@ -807,7 +807,22 @@ SCDIR="$tmp/scblocks"
 SCREPO="$tmp/screpo"
 mkdir -p "$SCDIR"
 mkrepo "$SCREPO"
-for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1; do
+# A stub resolver in a fake skill directory records every call, so a block whose
+# SC= points at a missing file is visible even when the block hides stderr and the
+# exit code (`2>/dev/null) || SIDE=""`, #430). The stub exits 0 on every verb.
+STUBDIR="$tmp/stubskill"; STUBLOG="$tmp/stub.log"; STUBSTORE="$tmp/stubstore"
+mkdir -p "$STUBDIR/references" "$STUBSTORE"
+cat > "$STUBDIR/references/sidecar.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUBLOG"
+case "${1:-}" in
+    path|archive-dir) mkdir -p "$STUBSTORE/${2:-x}"; printf '%s\n' "$STUBSTORE/${2:-x}" ;;
+    config) printf 'none\n' ;;
+esac
+exit 0
+STUB
+export STUBLOG STUBSTORE
+for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1 research:research/SKILL.md:4 compound:compound/SKILL.md:3; do
     skill="${entry%%:*}"; rest="${entry#*:}"; rel="${rest%%:*}"; min="${rest##*:}"
     skdir="$repo_root/$skill"
     blocks_using_sc "$repo_root/$rel" "$SCDIR" "$skill"
@@ -819,7 +834,12 @@ for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-m
         script="$(sed -e "s|<this skill's directory>|$skdir|g" -e 's|<[A-Za-z][^<>]*>|x|g' "$f")"
         out="$(cd "$SCREPO" && env -u SC bash -c "$script" 2>&1 </dev/null)"; rc=$?
         label="$(basename "$f") from $rel"
-        if grep -q 'SC=' "$f"; then ok "$label defines SC itself"; else bad "$label defines SC itself" "uses \$SC with no SC= in the block"; fi
+        # SC= as a whole word: SIDE_SC= or MYSC= is a different variable (#430).
+        if grep -Eq '(^|[^A-Za-z0-9_])SC=' "$f"; then ok "$label defines SC itself"; else bad "$label defines SC itself" "uses \$SC with no SC= in the block"; fi
+        : > "$STUBLOG"
+        stubscript="$(sed -e "s|<this skill's directory>|$STUBDIR|g" -e 's|<[A-Za-z][^<>]*>|x|g' "$f")"
+        (cd "$SCREPO" && env -u SC bash -c "$stubscript" >/dev/null 2>&1 </dev/null)
+        if [ -s "$STUBLOG" ]; then ok "$label reaches its resolver (stub saw a call)"; else bad "$label reaches its resolver" "the stub resolver was never called: SC is unset, misnamed, or points at the wrong file"; fi
         if [ "$rc" -eq 127 ] || [ "$rc" -eq 126 ] || case "$out" in *"No such file or directory"*) true ;; *) false ;; esac; then
             bad "$label runs in a fresh shell" "rc=$rc: $out"
         else
