@@ -915,6 +915,13 @@ for site in $base_sites; do
                 assert_eq '' "$out" \
                     "$site: '$line' stays silent on a branch that deletes nothing"
                 ;;
+            "git diff -U0 "*)
+                # /execute's removed-guard sweep. This fixture branch removes no
+                # lines, so the candidate list must be empty; the section below
+                # plants a removed guard and checks the list names it.
+                assert_eq '' "$out" \
+                    "$site: '$line' stays silent on a branch that removes no lines"
+                ;;
             "git log"*)
                 assert_eq "$truth_commits" "$(printf '%s' "$out" | grep -c .)" \
                     "$site: '$line' lists only the branch's own commits"
@@ -1335,7 +1342,7 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # section exists to prevent. The value class carries `%` for the same reason:
 # #347's `--format=%H` and `--format=%B` were the first valued flags with one,
 # and without it both lines dropped out and the reconciliation caught it again.
-range_pattern='git (diff|log)( +--?[a-z-]+(=[A-Za-z0-9%,._-]+)?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+range_pattern='git (diff|log)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+)?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies
@@ -2698,6 +2705,41 @@ else
     printf '  ok   M7: the vars.sh line-count assertion FAILS when the second process re-runs Step 0 instead of sourcing\n'
     pass=$((pass + 1))
 fi
+
+# -----------------------------------------------------------------------------
+
+section "the removed-guard sweep lists a guard removed from a file that survives"
+
+# /execute Step 4's removed-guard sweep (#487). The module rung above only sees
+# deleted files; this line exists for a guard edited out of a file that stays.
+# Plant exactly that: one surviving file loses an `exit`, an `||` fallback, a
+# plain assignment, and a line whose only guard-like word is a substring
+# (`exitcode`). The first two must be listed; the last two must not.
+guard_line="$(extract_range_lines "$repo_root/execute/SKILL.md" | grep -m1 '^git diff -U0 ' || true)"
+[[ -n "$guard_line" ]] || fatal "execute/SKILL.md no longer documents the removed-guard sweep's 'git diff -U0' line"
+guard_repo="$base_sandbox/guard"
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+(
+    mkdir -p "$guard_repo" && cd "$guard_repo"
+    git init -q -b prod .
+    git config user.email skillkit@example.invalid
+    git config user.name 'Skill Kit Test'
+    git config commit.gpgsign false
+    printf '%s\n' 'slug=$(parse "$line")' '[ -n "$slug" ] || exit 1' 'resolve "$x" || fallback' 'count=3' 'exitcode=4' 'echo kept' > owner.sh
+    git add owner.sh && git commit -q -m base
+    git switch -q -c feature
+    printf '%s\n' 'slug=$(owner archive-dir)' 'echo kept' > owner.sh
+    git commit -q -am feature
+)
+guard_out="$( cd "$guard_repo" && BASE_REF=prod; eval "$guard_line" 2>&1 || true )"
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+assert_contains "$guard_out" '-[ -n "$slug" ] || exit 1' "the sweep lists a removed 'exit' guard inside a surviving file"
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+assert_contains "$guard_out" '-resolve "$x" || fallback' "the sweep lists a removed '||' fallback"
+assert_eq 0 "$(printf '%s\n' "$guard_out" | grep -cE '^-(count=3|exitcode=4)$' || true)" \
+    "the sweep skips a removed assignment and a substring-only match ('exitcode')"
+assert_eq 0 "$(printf '%s\n' "$guard_out" | grep -c '^---' || true)" \
+    "the sweep drops the diff's '---' file header"
 
 # -----------------------------------------------------------------------------
 
