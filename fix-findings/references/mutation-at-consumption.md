@@ -61,7 +61,9 @@ holds no instance yet, take the nearest real line and say in the test's comment
 that the fixture is synthetic — a declared narrowness is checkable, and an
 undeclared one reads as coverage. The tell that you skipped this: every fixture
 in your battery is one you wrote, and each is simpler than anything the corpus
-actually contains.
+actually contains. The corpus also covers only the encodings it holds: when the
+artifact can arrive as CRLF, or with trailing whitespace, and no corpus artifact
+does yet, add that variant as a declared-synthetic fixture.
 
 ## The apparatus check comes before the verdict
 

@@ -170,9 +170,12 @@ site the finding anchored on:
 
 **The controller reads the after-state off the fix, not off the report.** Before
 spawning a breaker for a prose-claim finding, run `git show --word-diff
-"$FIX_SHA" -- <path>` on the anchored file and look at the site: a deletion adds
-no words there, and a pointer adds only the reference. If the site adds anything
-else, the after-state is `rejected: reworded` whatever the fixer reported. Revert
+"$FIX_SHA" -- <path>` on the anchored file and look at the site: a deletion
+removes the claim's whole sentence and adds no words, and a pointer adds only the
+reference. Removing words while the sentence survives (one member of a list, a
+qualifier, a clause) is a reword: what remains is a narrower claim no review has
+read. If the site holds anything else, the after-state is `rejected: reworded`
+whatever the fixer reported. Revert
 the commit with `git revert --no-edit "$FIX_SHA"`, spawn no breaker, and leave
 the finding for § Handoff's menu — a reworded sentence left on the branch would
 be the next `/pre-merge` re-run's subject.
