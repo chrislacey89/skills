@@ -173,7 +173,7 @@ else
 fi
 
 gate_block="$(awk '/^N=<n>$/{c=1} c{print} c && /^jq -r/{exit}' execute/SKILL.md)"
-for field in 'closedByPullRequestsReferences' 'state headRefName' 'blockedBy(first: 50) { totalCount' 'number title body'; do
+for field in 'closedByPullRequestsReferences' 'state headRefName' 'blockedBy(first: 50) { totalCount nodes { number title state } }' 'number title body'; do
     if grep -qF -- "$field" <<<"$gate_block"; then
         ok "the gate's query requests: $field"
     else
@@ -194,8 +194,21 @@ prose_markers="$(grep -F '**`undecomposed-prd`**' execute/SKILL.md \
 code_markers="$(grep -o '(Appetite|[^)]*)' <<<"$gate_jq" | tr -d '()' | tr '|' '\n' | sort | paste -sd'|' -)"
 assert_eq "$prose_markers" "$code_markers" "prose marker list matches the block's marker regex"
 
-run_gate() { # $1 = response JSON, $2 = current branch
-    jq -rn --argjson n 7 --arg branch "${2:-task-branch}" "$gate_jq" <<<"$1" 2>/dev/null || echo unknown
+# Run the real block, not a retyped copy: gate_block is the fenced bash from
+# execute/SKILL.md (N=<n> through the final jq line), evaluated with `gh` and
+# `git` stubbed as functions so the canned response flows through the file's own
+# jq invocation. Editing that invocation, VERDICT_JQ, or the query's blocker
+# fields in the file changes what this runs (guard-and-subject-must-be-one-artifact).
+gate_exec="${gate_block/N=<n>/N=7}"
+# shellcheck disable=SC2317,SC2329  # the stubs are called from the eval'd block
+run_gate() { # $1 = response JSON ("GHFAIL" makes gh exit 1), $2 = current branch
+    (
+        resp="$1"
+        branch="${2:-task-branch}"
+        gh() { [[ "$resp" != GHFAIL ]] || return 1; printf '%s' "$resp"; }
+        git() { printf '%s\n' "$branch"; }
+        eval "$gate_exec"
+    ) 2>/dev/null || echo unknown
 }
 fixture() { # jq expression applied to a healthy, takeable base response
     jq -cn "{data: {repository: {issue: {
@@ -208,6 +221,7 @@ verdict() { cut -d' ' -f1 <<<"$1"; }
 
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture .)")")" "healthy response -> takeable"
 assert_eq "unknown"   "$(run_gate 'null')" "null response -> unknown"
+assert_eq "unknown"   "$(run_gate GHFAIL)" "failed gh call -> unknown"
 assert_eq "unknown"   "$(run_gate '')" "empty response -> unknown"
 assert_eq "unknown"   "$(run_gate '{}')" "empty object -> unknown"
 assert_eq "unknown"   "$(run_gate "$(fixture '.errors = [{message: "x"}]')")" "GraphQL errors -> unknown"
@@ -230,6 +244,8 @@ slice_resp="$(jq -c --arg b "$slice_body" '.data.repository.issue.body = $b' <<<
 assert_eq "takeable" "$(verdict "$(run_gate "$slice_resp")")" "real slice template headings -> takeable, not undecomposed-prd"
 assert_eq "blocked"   "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")")" "open blocker -> blocked"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "CLOSED"}]}')")")" "closed blocker -> takeable"
+assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 2, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")" "blocker list shorter than its count -> unknown"
+assert_eq "undecomposed-prd" "$(run_gate "$(fixture '.data.repository.issue.body = "## Appetite\nx" | .data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")" "PRD heading plus open blocker -> undecomposed-prd (order pinned)"
 assert_eq "in-flight" "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "OPEN", headRefName: "other"}]')")")" "open PR on another branch -> in-flight"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "OPEN", headRefName: "mine"}]')" mine)")" "open PR on the current branch -> takeable"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "CLOSED", headRefName: "other"}]')")")" "closed PR -> takeable"
