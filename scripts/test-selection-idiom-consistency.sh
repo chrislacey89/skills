@@ -272,6 +272,26 @@ else
 fi
 slice_resp="$(jq -c --arg b "$slice_body" '.data.repository.issue.body = $b' <<<"$(fixture .)")"
 assert_eq "takeable" "$(verdict "$(run_gate "$slice_resp")")" "real slice template headings -> takeable, not undecomposed-prd"
+# Mirror image: the real PRD template must still be flagged. For each marker the
+# gate's regex names, /write-a-prd's <pitch-template> must carry it as a bare
+# heading (a suffix such as "## Appetite (6 weeks)" would let that PRD read
+# takeable), and a body of just that template heading must read undecomposed-prd.
+# Per marker, because one surviving bare marker would otherwise mask a suffixed one.
+prd_headings="$(awk '/^<pitch-template>$/{c=1; next} /^<\/pitch-template>$/{c=0} c && /^#+ /{print}' write-a-prd/SKILL.md)"
+if [ -n "$code_markers" ] && grep -qiE '^#+ *Appetite *$' <<<"$prd_headings"; then
+    ok "extracted the PRD template's headings (incl. a bare Appetite)"
+else
+    bad "PRD template headings not extracted from write-a-prd/SKILL.md"
+fi
+while IFS= read -r m; do
+    [ -n "$m" ] || continue
+    h="$(grep -iE "^#+ *${m} *\$" <<<"$prd_headings" | head -1 || true)"
+    if [ -z "$h" ]; then
+        bad "write-a-prd <pitch-template> has no bare '## $m' heading the gate would flag"
+        continue
+    fi
+    assert_eq "undecomposed-prd" "$(run_gate "$(jq -c --arg b "$h" '.data.repository.issue.body = $b' <<<"$(fixture .)")")" "real PRD template heading '$h' -> undecomposed-prd"
+done < <(tr '|' '\n' <<<"$code_markers")
 assert_eq "blocked"   "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")")" "open blocker -> blocked"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "CLOSED"}]}')")")" "closed blocker -> takeable"
 assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 2, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")" "blocker list shorter than its count -> unknown"
