@@ -212,7 +212,8 @@ read_suites() {
 # Apparatus: a suite registered as a `run: |` block must show up as unread.
 sed 's/^\([[:space:]]*\)run: bash scripts\/test-sync-references\.sh$/\1run: |\
 \1  bash scripts\/test-sync-references.sh/' "$repo_root/lefthook.yml" >"$tmp/lefthook.block.yml"
-if read_suites "$tmp/lefthook.block.yml" "$tmp/suites.block" | grep -qF "scripts/test-sync-references.sh is on disk"; then
+block_mismatch="$(read_suites "$tmp/lefthook.block.yml" "$tmp/suites.block")"
+if grep -qF "scripts/test-sync-references.sh is on disk" <<<"$block_mismatch"; then
   ok "apparatus: a suite registered as a run: | block is reported as unread"
 else bad "apparatus: a suite registered as a run: | block was NOT reported — the set check is not measuring the extraction"; fi
 
