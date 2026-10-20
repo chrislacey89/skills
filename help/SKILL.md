@@ -98,12 +98,11 @@ SC="<this skill's directory>/references/sidecar.sh"
 # Read-only git against the sidecar, with the project's git environment cleared.
 sgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$SIDECAR" "$@"; }
 SC_ERR="$(mktemp)"
-SIDE="" ITP="docs/solutions"
+SIDE=""
 if SIDECAR="$(bash "$SC" resolve 2>"$SC_ERR")"; then
   echo "Sidecar: $SIDECAR (last commit $(sgit log -1 --format=%cs))"
   RESEARCH="$(bash "$SC" path research 2>/dev/null)"
   SIDE="$(bash "$SC" path solutions 2>/dev/null)"
-  ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)"
   echo "research entries:"; [ -n "$RESEARCH" ] && ls -t "$RESEARCH"
   echo "excavation dossier:"; [ -n "$RESEARCH" ] && ls "$RESEARCH"/excavation-*.md 2>/dev/null
 else
@@ -111,14 +110,18 @@ else
 fi
 cat "$SC_ERR" >&2; rm -f "$SC_ERR"
 
-# Solutions entries in both locations: solutions.in_tree_path (skipped when it is
-# none) and the sidecar's solutions/. Row 10 reads the counts, row 11 the dates.
-case "${ITP:-docs/solutions}" in none) ITP="" ;; *) ITP="${ITP:-docs/solutions}" ;; esac
-IN_TREE_N=0 SIDE_N=0 NEWEST=0
-if [ -n "$ITP" ] && [ -d "$ITP" ]; then
-  IN_TREE_N=$(find "$ITP" -type f ! -name '.*' | wc -l | tr -d ' ')
-  NEWEST=$(git log -1 --format=%ct "$BASE_REF" -- "$ITP")
-fi
+# Solutions entries in every directory `sidecar.sh solutions-dirs` prints (its
+# header owns that policy); the sidecar's solutions/ is counted apart. Row 10
+# reads the counts, row 11 the dates.
+ITP="" IN_TREE_N=0 SIDE_N=0 NEWEST=0
+while IFS= read -r DIR; do
+  [ -n "$DIR" ] && [ "$DIR" != "$SIDE" ] || continue
+  ITP="${ITP:+$ITP,}$DIR"
+  [ -d "$DIR" ] || continue
+  IN_TREE_N=$((IN_TREE_N + $(find "$DIR" -type f ! -name '.*' | wc -l)))
+  T=$(git log -1 --format=%ct "$BASE_REF" -- "$DIR")
+  [ "${T:-0}" -gt "${NEWEST:-0}" ] && NEWEST=$T
+done <<< "$(bash "$SC" solutions-dirs 2>/dev/null)"
 if [ -n "$SIDE" ]; then
   SIDE_N=$(find "$SIDE" -type f -name '*.md' | wc -l | tr -d ' ')
   T=$(sgit log -1 --format=%ct -- solutions)
@@ -167,7 +170,7 @@ Walk through these checks in priority order. The first one that matches is the r
 | 7 | Recent entry in the sidecar's `research/` (excluding `excavation-*.md`, which is `/excavate`'s dossier, not a feature), no open PRD issue matching its feature | `/write-a-prd` | "A recent research file for `<feature>` is archived but there is no PRD issue — `/write-a-prd` turns it into a shaped pitch." |
 | 8 | Planning milestone with a `research-ready` feature issue | `/research` on the `research-ready` feature | "Milestone `<name>` has a `research-ready` feature — run `/research` on it." |
 | 9 | Planning milestone with only `roadmap bet` features | Promote one feature to `research-ready`, then `/research` | "Milestone `<name>` has only `roadmap bet` features — pick one, promote it, then `/research`." |
-| 10 | No entries at `solutions.in_tree_path` (or it is `none`) **and** no entries in the sidecar's `solutions/` (both counts 0 on the `solutions entries:` line), root commit older than ~6 months, not a shallow clone, and no `excavation-*.md` in the sidecar's `research/` | `/excavate` | "This repo has history but no written decisions or research archive — `/excavate` recovers hotspots and cited decisions from git before the first feature." |
+| 10 | No solutions entries in-tree or in the sidecar's `solutions/` (both counts 0 on the `solutions entries:` line), root commit older than ~6 months, not a shallow clone, and no `excavation-*.md` in the sidecar's `research/` | `/excavate` | "This repo has history but no written decisions or research archive — `/excavate` recovers hotspots and cited decisions from git before the first feature." |
 | 11 | Shipped work but no entry in either solutions location since the last merge (`last merge compounded: no`) | `/compound` | "The last merge shipped work that has not yet been compounded — run `/compound`." |
 | 12 | QA bugs open and no active feature work | `/execute` on the highest-priority QA bug | "You have `<N>` open QA bug issues — `/execute` to work through them." |
 | 13 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |

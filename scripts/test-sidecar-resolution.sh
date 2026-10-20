@@ -911,7 +911,12 @@ check "solutions-dirs outside a git repository still names the default store" "0
 # Policy lives in one place: /research and /compound both ask the verb, and the
 # compound block runs as written.
 c_read="$(first_bash_after "$COMPOUND" '^Search every place a lesson can live, not just')"
-for pair in "research Phase 3:$p3" "compound overlap:$c_read"; do
+# #503 review finding 1: /execute, /write-a-prd, /help and /pre-merge kept a
+# copy of the old policy that skipped docs/solutions when in_tree_path is none.
+# shellcheck disable=SC2016  # backticks and $SC below are literal patterns
+e_read="$(first_bash_after "$repo_root/execute/SKILL.md" '^Consult `docs/solutions/` and the sidecar for relevant past solutions')"
+w_read="$(first_bash_after "$repo_root/write-a-prd/SKILL.md" '^\*\*Past solutions\*\*')"
+for pair in "research Phase 3:$p3" "compound overlap:$c_read" "execute past-solutions:$e_read" "write-a-prd past-solutions:$w_read"; do
     contains "the ${pair%%:*} block calls solutions-dirs" "solutions-dirs" "${pair#*:}"
     lacks "the ${pair%%:*} block derives no path itself" "path solutions" "${pair#*:}"
 done
@@ -921,6 +926,19 @@ out="$(cd "$MIG" && bash -c "$(with_sc "$c_read" | sed -e 's|^KW=.*|KW="needle"|
 check "the compound overlap block runs cleanly" 0 "$rc"
 contains "the compound overlap block lists the sidecar match" "$SOLS/perf/a.md" "$out"
 contains "the compound overlap block lists the docs/solutions match" "docs/solutions/planted2.md" "$out"
+jq '.solutions.in_tree_path = "none"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+for pair in "execute past-solutions:$e_read" "write-a-prd past-solutions:$w_read"; do
+    out="$(cd "$MIG" && bash -c "$(with_sc "${pair#*:}" | sed -e 's|^KW=.*|KW="needle"|')" 2>/dev/null)"; rc=$?
+    check "the ${pair%%:*} block runs cleanly" 0 "$rc"
+    contains "with in_tree_path none, the ${pair%%:*} block lists the sidecar match" "$SOLS/perf/a.md" "$out"
+    contains "with in_tree_path none, the ${pair%%:*} block still reads an existing docs/solutions" "docs/solutions/planted2.md" "$out"
+done
+git -C "$MSC" checkout -q -- sidecar.json
+pm_text="$(cat "$repo_root/pre-merge/review-checklist.md")"
+# shellcheck disable=SC2016  # literal patterns
+contains "pre-merge's docs/solutions dimension asks solutions-dirs" 'bash "$SC" solutions-dirs' "$pm_text"
+# shellcheck disable=SC2016  # literal pattern
+lacks "pre-merge restates no in_tree_path-none skip" 'unless it is `none`' "$pm_text"
 rm -f "$MIG/docs/solutions/planted2.md"; rmdir "$MIG/docs/solutions"
 
 # Phase 5a: sidecar value, settings fallback with no sidecar, then the default.
@@ -1130,6 +1148,14 @@ contains "entries at in_tree_path docs/adr are counted (row 10 does not fire)" "
 contains "an in-tree entry committed after the previous landing counts as compounding the last merge" \
     "last merge compounded: yes" "$hout"
 git -C "$HSC" checkout -q -- sidecar.json
+
+# #503 review finding 1: with in_tree_path none, an /excavate PR's docs/solutions
+# entries are still in-tree entries, so row 10 does not re-fire.
+mkdir -p "$HR/docs/solutions/history"
+printf 'excavated\n' > "$HR/docs/solutions/history/a.md"
+hrun "$HR"
+contains "with in_tree_path none, an existing docs/solutions is counted (row 10 does not fire)" "in-tree (docs/solutions)=1" "$hout"
+rm -rf "$HR/docs/solutions"
 
 # Two sidecars claiming one key: a warning naming both, and the block still reports a sidecar.
 DUP="$SKILL_KIT_SIDECAR_ROOT/dup-helprepo"
