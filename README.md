@@ -73,7 +73,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 |-------|-------------|
 | [execute](execute/) | Execute a unit of work end-to-end with verification |
 | [tdd](tdd/) | Test-driven development with red-green-refactor loop (invoked from `/execute`) |
-| [fix-findings](fix-findings/) | Fix the `/pre-merge` findings you chose, with a fresh sub-agent writing each fix and a second one trying to break it — user-invoked only, never selects findings, never stamps |
+| [fix-findings](fix-findings/) | Fix the `/pre-merge` findings you chose, with a fresh sub-agent writing each fix and a second one trying to break it — run from the `/pre-merge` menu or typed, never selects findings, never stamps |
 | [triage-issue](triage-issue/) | Deep bug diagnosis + root cause + TDD fix plan (invoked from `/qa` per issue) |
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |

@@ -1,7 +1,6 @@
 ---
 name: fix-findings
-description: "Invoked helper skill for fixing the /pre-merge findings a human has already chosen, with a fresh sub-agent writing each fix and a second fresh sub-agent trying to break it. User-invoked only — type /fix-findings <numbers> after picking findings from a review. Not for choosing which findings to act on, not for stamping review currency, and not for merging."
-disable-model-invocation: true
+description: "Invoked helper skill for fixing the /pre-merge findings a human has already chosen, with a fresh sub-agent writing each fix and a second fresh sub-agent trying to break it. Enter from the /pre-merge next-step menu option "Fix a finding on this branch first" or by typing /fix-findings <numbers>; never self-trigger without finding numbers the human picked. Not for choosing which findings to act on, not for stamping review currency, and not for merging."
 sources:
   primary:
     - "Engineering a Safer World — Nancy Leveson"
@@ -37,16 +36,16 @@ is why a second agent attacks the fix rather than the fixer re-checking it.
 
 ## Invocation Position
 
-**Invoked helper, and user-invoked only.** It fires when a human types
-`/fix-findings <numbers>`; it never self-triggers. `disable-model-invocation:
-true` is what enforces that, and it is the reason this skill costs nothing in a
-downstream session's context window until it is actually wanted (`CLAUDE.md`
-§ *Invocation mechanics*). If a future install strips that key the skill becomes
-model-invocable — a context cost, not a correctness failure; nothing below
-depends on the key being honored.
-
-Enter it from `/pre-merge` Phase 4's next-step menu — the option **Fix a finding
-on this branch first** — or by typing it directly after reading a review.
+**Invoked helper, model-invocable but human-gated.** It fires in two ways: the
+human picks **Fix a finding on this branch first** from `/pre-merge` Phase 4's
+next-step menu and then names the finding numbers, and `/pre-merge` invokes it
+with those numbers; or the human types `/fix-findings <numbers>` directly after
+reading a review. It is model-invocable so the menu choice can actually run it —
+the cost is its `description` in every session's context window (`CLAUDE.md`
+§ *Invocation mechanics*). What gates it is the input, not the flag: never
+invoke it without finding numbers a human named in this session. A model that
+picks the numbers itself has selected findings, which is the first thing this
+skill is not.
 
 Do **not** enter it to decide what to fix, to review a diff (that is
 `/pre-merge`), to merge (that is `/closeout`), or on an AFK run — there is no
@@ -73,7 +72,8 @@ human to dispose of findings, so there is no valid input.
 
 ## Inputs
 
-- **The finding numbers**, as typed: `/fix-findings 1 3 4`.
+- **The finding numbers** the human named — typed as `/fix-findings 1 3 4`, or
+  given in answer to `/pre-merge`'s follow-up question after the menu choice.
 - **The findings themselves.** In author-mode they are terminal output from the
   `/pre-merge` run still in this session. If that session is gone, read the
   `## Review Disposition Ledger` on the PR, which loop-mode wrote for exactly
