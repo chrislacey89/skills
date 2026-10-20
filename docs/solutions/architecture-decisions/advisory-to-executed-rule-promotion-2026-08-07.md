@@ -2,7 +2,7 @@
 date: 2026-08-07
 category: architecture-decisions
 problem_type: a rule promoted from advisory-to-human to executed-by-machine keeps evidence and precision that were only adequate for advice
-components: [pre-merge, execute, prototype, research, prd-to-issues, write-a-prd]
+components: [pre-merge, execute, prototype, research, prd-to-issues, write-a-prd, scripts]
 technologies: [pipeline-design, ai-judges, feasibility-spikes]
 severity: medium
 volatility: stable
@@ -35,15 +35,15 @@ Two rules inside it were promotions from advisory to executed, and both carried 
 
 The design decision it was cited to support was different: *may the loop act on those classifications?* That turns on **validity**: are the classifications correct? A reliable instrument can be consistently wrong, and this one demonstrably was — the same corpus contained a finding all three classifiers rated high-confidence actionable that was a false positive against an established repo convention. Three independent agents agreeing on a wrong answer is a perfectly reliable, invalid measurement.
 
-**Instance 3 — match semantics, two months later (#488, PR #491).** `/execute` Step 0's issue-shape gate said: halt when the issue body carries shaped-pitch markers, "sections named `Appetite`, `Rabbit Holes`, `No-gos`, `User Stories`, or `Implementation Decisions`." Read by eye, that sentence never stopped a slice. The slice template `/prd-to-issues` writes has a `## User Stories Addressed` heading, and no human reading "sections named `User Stories`" counts it. #488 promoted the sentence to a `jq` regex, `^#+ *(…|User Stories|…)\b`. `\b` matches before the space in `User Stories Addressed`, and slices never get a `Decomposed into:` comment. So every slice printed `undecomposed-prd` and stopped. That is the default `/execute` path and every AFK iteration.
-
-The first fix anchored the match to the whole line (`*$`). That closed the over-match and opened an under-match: a CRLF body keeps its `\r` after splitting on `\n`, so a PRD edited in a browser read `takeable`, the failure the gate exists to stop. The fix round's breaker drew its mutation from the corpus and still missed it, because no corpus artifact carried CRLF. A second review pass caught it. The settled form is `\s*$`, with fixtures extracted from both real templates and one CRLF fixture.
-
-This is Instance 1's shape with the qualifier hidden in the matcher, not the prose. "Sections named X" is unambiguous to a reader and ambiguous to a regex in two directions (prefix or whole heading; which line terminator). Neither direction had needed to be decidable before.
-
 **The structural part is what happened next.** The gap was *noticed*. A comment on #182 states it plainly: *"The spike measured whether classifiers agree. It did not measure whether the findings they classify are true — and at least 1 of 14 was not. Finding validity is a separate eval, currently unbuilt."* That sentence was written, published, and never disputed — and the Mediator verdict still specified a loop that acts on findings. The knowledge existed and changed nothing, because nothing connected *"the eval that would justify this is unbuilt"* to *"therefore do not ship the half that depends on it."*
 
 An acknowledged limitation that gates nothing is not a constraint. It is a footnote.
+
+**Instance 3 — match semantics, two months later (#488, PR #491).** `/execute` Step 0's issue-shape gate said: halt when the issue body carries shaped-pitch markers, "sections named `Appetite`, `Rabbit Holes`, `No-gos`, `User Stories`, or `Implementation Decisions`." Read by eye, that sentence never stopped a slice. The slice template `/prd-to-issues` writes has a `## User Stories Addressed` heading, and no human reading "sections named `User Stories`" counts it. #488 promoted the sentence to a `jq` regex, `^#+ *(…|User Stories|…)\b`. `\b` matches before the space in `User Stories Addressed`, and slices never get a `Decomposed into:` comment. So every slice would print `undecomposed-prd` and stop, on the default `/execute` path and every AFK iteration. Review caught it before the PR merged.
+
+The first fix anchored the match to the whole line (` *$`). That closed the over-match and opened an under-match: a CRLF body keeps its `\r` after splitting on `\n`, so a PRD edited in a browser read `takeable`, the failure the gate exists to stop. The fix round's breaker drew its mutation from the corpus and still missed it, because no corpus artifact carried CRLF. A second review pass caught it. The settled form is `\s*$`, with fixtures extracted from both real templates and one CRLF fixture.
+
+This is Instance 1's shape with the qualifier hidden in the matcher, not the prose. "Sections named X" is unambiguous to a reader and ambiguous to a regex in two directions (prefix or whole heading; which line terminator). Neither direction had needed to be decidable before.
 
 ## Learning Level
 
@@ -52,10 +52,10 @@ An acknowledged limitation that gates nothing is not a constraint. It is a footn
 
 ## Rule Scope
 
-- **Applies when** a rule changes from *a human reads it and decides* to *an agent evaluates it and acts*. Both halves matter and both are checkable at review time:
+- **Applies when** a rule changes from *a human reads it and decides* to *an agent evaluates it and acts*. Each condition below is checkable at review time:
   - the rule contains a qualifier only a human can resolve (*significant*, *large*, *where appropriate*, *when it makes sense*, *if the diff warrants it*); **or**
   - the evidence cited for the rule measures **agreement, consistency, or reproducibility** among judges, raters, or runs, while the decision authorizes an actor to **act** on those judgments; **or**
-  - the rule names text to match ("sections named X", "a comment matching Y") over artifacts another skill produces. The matcher's semantics (prefix or whole token, line terminator, case) must be checked against each real producing template and the encodings it arrives in. Hand-typed fixture bodies test the matcher against the author's model of the input, not the input (Instance 3).
+  - the rule names text to match ("sections named X", "a comment matching Y") over artifacts another skill produces. The matcher's semantics (prefix or whole token, line terminator, case) must be checked against each real producing template and the encodings it arrives in. Hand-typed fixture bodies alone test the matcher against the author's model of the input, not the input (Instance 3).
 - **Inverts or does not apply when:**
   - The rule stays advisory. A soft qualifier is the *right* bar for a mention-rule; replacing it with a threshold there is false precision that will misfire at the edges for no benefit.
   - The evidence measures the outcome directly — did the change work, did the test pass, did the deploy hold — rather than measuring whether raters concur about it. Reliability evidence is sufficient when the decision it supports is itself only about *observing* or *recording*.
@@ -123,7 +123,7 @@ Three complications dissolved rather than needing answers, which is the usual si
 
 - PR #491 / issue #488 — Instance 3. Its two `/fix-findings` rounds show both directions of the matcher defect.
 - chrislacey89/skills#499 — the pack-level mechanism for Instance 3's class; #498 tracks the gate's remaining test gaps
-- `authored-mutations-inherit-the-authors-blind-spot-2026-08-28.md` — the same corpus-over-author rule applied to mutations. Instance 3 is its fixture-side twin: a hand-typed body is an authored fixture
+- `../testing-patterns/authored-mutations-inherit-the-authors-blind-spot-2026-08-28.md` — the same corpus-over-author rule applied to mutations. Instance 3 is its fixture-side twin: a hand-typed body is an authored fixture
 - PR #188 — implements loop-mode's recording half; its own `/pre-merge` review is the evidence behind the split
 - Issue #182 — the original proposal, including the FEASIBILITY spike and the comment that names the validity gap
 - Issue #190 — the deferred acting half, with entry conditions and an explicit unimplemented-is-acceptable outcome
@@ -133,4 +133,4 @@ Three complications dissolved rather than needing answers, which is the usual si
 
 ## Shelf Life
 
-Retire the *instances* when they stop being live: instance 1 when `/ts-audit`'s trigger is set from data rather than by analogy, instance 2 when #190 is either implemented on evidence or closed unimplemented, and instance 3 when #499 lands a checklist line or is closed. The general rule — a promotion from advisory to executed raises the bar on trigger precision and evidence scope — outlives both and should migrate rather than be deleted.
+Retire the *instances* when they stop being live: instance 1 when `/ts-audit`'s trigger is set from data rather than by analogy, instance 2 when #190 is either implemented on evidence or closed unimplemented, and instance 3 when #499 lands a checklist line or is closed. The general rule — a promotion from advisory to executed raises the bar on trigger precision and evidence scope — outlives the instances and should migrate rather than be deleted.
