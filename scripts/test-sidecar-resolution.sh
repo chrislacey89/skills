@@ -540,7 +540,7 @@ run "$API" init --name api-server --mode owned --write sidecar --in-tree-path no
 check "init beside an unrelated api/ archive succeeds" 0 "$rc"
 check "the unrelated api/ archive is still a real directory with its file" "dir theirs" \
     "$(if [ -L "$A/api" ]; then echo link; else echo dir; fi) $(cat "$A/api/theirs.md")"
-lacks "nothing is reported moved from api/" "$A/api" "$out"
+lacks "nothing is reported moved from api/" "from $A/api into" "$out"
 # A remote-less checkout is the one case the basename still means something.
 NOREM="$tmp/mig/norem/solo"
 mkdir -p "$A/solo"; printf 's\n' > "$A/solo/s.md"
@@ -596,6 +596,64 @@ run "$CFG_O" config set mode
 check "config set mode needs a value" 2 "$rc"
 # The skill points at the verb for mode.
 contains "/init-pipeline section 8 tells the reader to change mode with the verb" 'config set mode' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# -----------------------------------------------------------------------------
+section "migrate-archive verb, --archive-alias validation, skipped-folder hint (#420)"
+
+mkdir -p "$tmp/mv"
+MV="$tmp/mv/Widget"
+mkrepo "$MV"
+git -C "$MV" remote add origin git@github.com:acme/widget-core.git
+mkdir -p "$A/widget" "$A/acme-widget-core"
+printf 'w\n' > "$A/widget/w-2026-01-01.md"
+printf 'c\n' > "$A/acme-widget-core/c-2026-01-02.md"
+
+# A sidecar made before migration existed (or with --no-migrate-archive): the
+# old folders are still real directories, and init now refuses to run again.
+run "$MV" init --name widget --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+WSC="$SKILL_KIT_SIDECAR_ROOT/widget"
+check "fixture: a sidecar exists with the archive unmigrated" "dir dir" \
+    "$(if [ -L "$A/widget" ]; then echo link; else echo dir; fi) $(if [ -L "$A/acme-widget-core" ]; then echo link; else echo dir; fi)"
+
+# A newline in --archive-alias registered two aliases; reject it in both verbs.
+run "$MV" migrate-archive --archive-alias $'x\nacme-widget-core'
+check "migrate-archive rejects an alias containing a newline" 2 "$rc"
+check "a rejected alias migrates nothing" "dir" "$(if [ -L "$A/acme-widget-core" ]; then echo link; else echo dir; fi)"
+run "$MV" init --name widget-nl --mode owned --write sidecar --in-tree-path none --archive-alias $'x\nfoo'
+check "init rejects an alias containing a newline" 2 "$rc"
+check "a rejected init creates no sidecar" "" "$(ls -d "$SKILL_KIT_SIDECAR_ROOT/widget-nl" 2>/dev/null)"
+
+# The skipped basename folder names the way out; the remote-derived one migrates.
+run "$MV" migrate-archive
+check "migrate-archive succeeds on an existing sidecar" 0 "$rc"
+check "the remote-derived folder is migrated" "$WSC/research" "$(readlink "$A/acme-widget-core")"
+contains "the skipped basename folder gets a hint naming --archive-alias" "migrate-archive --archive-alias widget" "$out"
+contains "the hint names the folder it skipped" "skipped $A/widget" "$out"
+check "the skipped folder is left a directory" "dir" "$(if [ -L "$A/widget" ]; then echo link; else echo dir; fi)"
+run "$MV" migrate-archive --archive-alias Widget
+check "following the hint migrates the basename folder" "$WSC/research" "$(readlink "$A/widget")"
+check "both archive files are in the sidecar and committed" "2 " \
+    "$(git -C "$WSC" ls-files research | wc -l | tr -d ' ') $(git -C "$WSC" status --porcelain)"
+run "$MV" migrate-archive --archive-alias widget
+check "migrate-archive is idempotent: a re-run succeeds" 0 "$rc"
+lacks "a re-run moves nothing" "moved" "$out"
+check "a re-run adds no commit" "" "$(git -C "$WSC" status --porcelain)"
+
+# A migration that fails partway can be retried, and never leaves the old path
+# missing. `ln` fails; the folder must still exist, then a plain retry links it.
+mkdir -p "$A/widget-retry" "$tmp/shim"
+printf 'r\n' > "$A/widget-retry/r.md"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/shim/ln"; chmod +x "$tmp/shim/ln"
+out="$(cd "$MV" && PATH="$tmp/shim:$PATH" bash "$SC" migrate-archive --archive-alias widget-retry 2>&1)"; rc=$?
+check "a failing ln makes migrate-archive exit 1" 1 "$rc"
+check "a failing ln leaves the old path in place (never missing)" "yes" "$(if [ -d "$A/widget-retry" ] && [ ! -L "$A/widget-retry" ]; then echo yes; fi)"
+check "a failing ln leaves no stray temp link" "" "$(find "$A" -maxdepth 1 -name '*sidecar-link*')"
+run "$MV" migrate-archive --archive-alias widget-retry
+check "the retry succeeds" 0 "$rc"
+check "the retry links the folder" "$WSC/research" "$(readlink "$A/widget-retry")"
+check "the retried file is in the sidecar" "yes" "$(if [ -f "$WSC/research/r.md" ]; then echo yes; fi)"
+run "$tmp" migrate-archive
+check "migrate-archive outside a git repository exits 1" 1 "$rc"
 
 # -----------------------------------------------------------------------------
 section "/research: Phase 3 read, Phase 5a storage, Phase 5c write"

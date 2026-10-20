@@ -15,6 +15,7 @@
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh path <research|solutions>
+#   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
 #   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
@@ -101,6 +102,9 @@ pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git "$@"; }
 sgit() { local dir="$1"; shift; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$dir" "$@"; }
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# One path component, no newline: a newline would register two aliases.
+alias_ok() { case "$1" in ''|*/*|.|..|*$'\n'*) return 1 ;; esac; }
 
 # forge_kind_of <keys>: the forge a remote key's host belongs to, or none.
 forge_kind_of() {
@@ -300,7 +304,7 @@ cmd_init() {
             --no-migrate-archive) migrate=0; shift ;;
             --archive-alias)
                 [ $# -ge 2 ] || die_usage "--archive-alias needs a value"
-                case "$2" in ''|*/*|.|..) die_usage "init: --archive-alias must be one directory name: $2" ;; esac
+                alias_ok "$2" || die_usage "init: --archive-alias must be one directory name: $2"
                 aliases="${aliases:+$aliases$'\n'}$(lower "$2")"; shift 2 ;;
             *) die_usage "init: unknown argument: $1" ;;
         esac
@@ -405,18 +409,26 @@ archive_names() {
 # exists in research/ with different content is left untouched. Actions are
 # printed on stderr; stdout stays the sidecar path.
 migrate_archive() {
-    local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0
+    local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0 mbase self tmpl
     archive="$ARCHIVE_ROOT"
+    mbase="$(lower "$(basename "$(main_checkout)")")"
+    self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
     [ -d "$archive" ] || return 0
     dest="$sc/research"
-    mkdir -p "$dest" || refuse "init: cannot create $dest"
+    mkdir -p "$dest" || refuse "archive: cannot create $dest"
     names="$({ archive_names "$keys"; [ -z "$aliases" ] || printf '%s\n' "$aliases"; } | LC_ALL=C sort -u)"
     [ -n "$names" ] || return 0
     for d in "$archive"/*; do
         [ -d "$d" ] || continue
         [ -L "$d" ] && continue
         base="$(lower "$(basename "$d")")"
-        printf '%s\n' "$names" | grep -qxF -- "$base" || continue
+        if ! printf '%s\n' "$names" | grep -qxF -- "$base"; then
+            if [ "$base" = "$mbase" ]; then
+                printf 'sidecar.sh: archive: skipped %s: this checkout has a remote, so a folder named for the checkout is not claimed; if it is this project'"'"'s, run: bash %s migrate-archive --archive-alias %s\n' \
+                    "$d" "$self" "$base" >&2
+            fi
+            continue
+        fi
         conflict=0
         for e in "$d"/* "$d"/.[!.]* "$d"/..?*; do
             [ -e "$e" ] || [ -L "$e" ] || continue
@@ -436,12 +448,17 @@ migrate_archive() {
             if [ -e "$target" ]; then
                 rm -f "$e"
             else
-                mv "$e" "$target" || refuse "init: archive: could not move $e into $dest"
+                mv "$e" "$target" || refuse "archive: could not move $e into $dest"
             fi
             moved=$((moved + 1))
         done
-        rmdir "$d" || refuse "init: archive: $d is not empty after the move; left in place"
-        ln -s "$dest" "$d" || refuse "init: archive: could not link $d to $dest"
+        # The link is made at a temp name first, so a failed ln leaves the old
+        # directory in place; if the final rename fails, the directory is
+        # recreated so the old path is never left missing.
+        tmpl="$d.sidecar-link.$$"
+        ln -s "$dest" "$tmpl" || refuse "archive: could not link $d to $dest"
+        rmdir "$d" || { rm -f "$tmpl"; refuse "archive: $d is not empty after the move; left in place"; }
+        mv -f "$tmpl" "$d" || { rm -f "$tmpl"; mkdir -p "$d"; refuse "archive: could not link $d to $dest"; }
         printf 'sidecar.sh: archive: moved %s file(s) from %s into %s; %s is now a symlink to it\n' \
             "$moved" "$d" "$dest" "$d" >&2
         any=1
@@ -477,6 +494,22 @@ cmd_config() {
             ;;
         *) die_usage "usage: sidecar.sh config <get <dotted.key>|set mode <owned|guest>>" ;;
     esac
+}
+
+cmd_migrate_archive() {
+    local aliases="" sc keys
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --archive-alias)
+                [ $# -ge 2 ] || die_usage "--archive-alias needs a value"
+                alias_ok "$2" || die_usage "migrate-archive: --archive-alias must be one directory name: $2"
+                aliases="${aliases:+$aliases$'\n'}$(lower "$2")"; shift 2 ;;
+            *) die_usage "migrate-archive: unknown argument: $1" ;;
+        esac
+    done
+    sc="$(do_resolve)" || exit 1
+    keys="$(current_keys)"
+    migrate_archive "$sc" "$keys" "$aliases" || exit 1
 }
 
 cmd_path() {
@@ -588,8 +621,9 @@ case "$verb" in
     init)    cmd_init "$@" ;;
     config)  cmd_config "$@" ;;
     path)    cmd_path "$@" ;;
+    migrate-archive) cmd_migrate_archive "$@" ;;
     archive-dir) cmd_archive_dir "$@" ;;
     commit)  cmd_commit "$@" ;;
     require) cmd_require "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|archive-dir|commit|require> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|migrate-archive|archive-dir|commit|require> ..." ;;
 esac
