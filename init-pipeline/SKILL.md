@@ -95,7 +95,7 @@ fi
 # loads and removes it when it reports. Between those two, an implementation
 # edit is a post-review fix authored by the session the review just went around.
 if [ -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active" ]; then
-  echo '{"decision":"block","reason":"BLOCKED: this branch has been reviewed and stamped. A post-review fix needs an independent author. Either invoke /fix-findings <numbers>, or delete .claude/.review-stamped to take the edit yourself."}' >&2
+  echo '{"decision":"block","reason":"BLOCKED: this branch has been reviewed and stamped. A post-review fix needs an independent author. Ask the human which findings to fix and run /fix-findings with exactly the numbers they name (never numbers you chose), or delete .claude/.review-stamped to take the edit yourself."}' >&2
   exit 2
 fi
 exit 0
@@ -111,7 +111,9 @@ ever presented to it — `sed -i`, `tee`, a heredoc, `printf >`, or `rm
 .claude/.review-stamped` itself — and within Write/Edit it refuses only a path
 that matches `IMPL_PATTERNS` and survives the skip logic, which leaves
 `.claude/.fix-findings-active`, this hook script, and `.claude/settings.json`
-all writable while the lock is armed. Install it as a stop on the *default*
+all writable while the lock is armed, and leaves the model free to invoke
+`/fix-findings` itself (it is model-invocable and its load-time marker opens the
+lock), which is why the refusal sends it to the human for the numbers. Install it as a stop on the *default*
 post-review edit, not as an enclosure around the branch.
 
 **What the clause does not cover, in the matcher's terms rather than a file's

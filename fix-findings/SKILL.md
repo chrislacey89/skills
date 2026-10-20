@@ -416,8 +416,10 @@ after fixing" is exactly the prospective act the field record shows being
 skipped). Read that as a stop on the *default* post-review edit, not as an
 enclosure: the hook is registered on `PreToolUse` `"matcher": "Write|Edit"` and
 refuses only a path that matches `IMPL_PATTERNS` and survives the skip logic, so
-several routes are already past it and leave no trace at all. Writing
-`.claude/.fix-findings-active` opens the lock with no sub-agent behind it;
+several routes are already past it and leave no trace at all. Invoking
+this skill on finding numbers the model chose itself (it is model-invocable, and its
+load-time marker opens the lock before any rule below is read) is past it too;
+writing `.claude/.fix-findings-active` opens the lock with no sub-agent behind it;
 writing `.claude/hooks/enforce-classification.sh` rewrites the gate (`.sh` is not
 an implementation pattern); writing `.claude/settings.json` deregisters it; and
 no `Bash` write reaches this hook, `rm .claude/.review-stamped` included.
