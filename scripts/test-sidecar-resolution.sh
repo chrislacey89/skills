@@ -926,5 +926,11 @@ contains "a miss relays the resolver's init command" "SIDECAR MISS: run: bash $S
 contains "a miss probes the default in-tree store" "in-tree (docs/solutions)=0 sidecar=0" "$hout"
 check "a miss creates no sidecar" "$sc_before" "$(ls "$SKILL_KIT_SIDECAR_ROOT")"
 
+# /correct-course's no-PRD research lookup points at /write-a-prd's whole
+# "Research document" lookup (#495); the pointer must name text that exists.
+cc_ptr="$(grep -c 'write-a-prd` § 4.s "Research document" lookup' "$repo_root/correct-course/SKILL.md")"
+check "correct-course points at write-a-prd's Research document lookup" "1" "$cc_ptr"
+contains "write-a-prd carries the Research document lookup correct-course points at" '**Research document** — Find the most recent research artifact' "$(cat "$repo_root/write-a-prd/SKILL.md")"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
