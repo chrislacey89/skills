@@ -204,6 +204,7 @@ If relevant solutions exist, read them and incorporate their lessons. Note which
 When the shaped input, an issue, or the user cites a specific dossier path, check that it exists before relying on it:
 
 ```bash
+SC="<this skill's directory>/references/sidecar.sh"
 bash "$SC" require "<cited dossier path>" --from "/research Phase 3" || echo "dossier missing"
 ```
 

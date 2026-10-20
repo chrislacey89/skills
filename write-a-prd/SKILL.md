@@ -326,7 +326,7 @@ DO render **locked contract shapes** in code form when the PRD's decision lives 
 
 ## Research Reference
 
-[Include only if a matching research artifact exists. Use the form that matches the project's `research.storage` mode. In archive mode, write the absolute path § 4's listing printed, never a `~` or `<repo-slug>` form, so `/execute` can check it with `sidecar.sh require` as written.]
+[Include only if a matching research artifact exists. Use the form that matches the project's `research.storage` mode. In archive mode, write the absolute path § 4's listing printed.]
 
 **Spike-issue mode (preferred when present):**
 

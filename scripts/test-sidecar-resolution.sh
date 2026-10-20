@@ -238,6 +238,38 @@ out=$(cd "$tmp" && CDPATH="$tmp/decoy" bash "$SC" require "sibling.md" --from "l
 check "require under an exported CDPATH prints one line naming the real tree" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "nowhere.md" --from "lessons/b/entry.md" 2>&1); rc=$?
 check "require on a bare name absent from every category still reports MISSING" "1:MISSING: nowhere.md (referenced by lessons/b/entry.md)" "$rc:$out"
+# #432: the rest of require's resolution order, pinned as the header states it.
+# A "path:line" referrer is a label, not a file, so it disables the lookup beside
+# the lesson and across category folders.
+out=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/a/entry.md:12" 2>&1); rc=$?
+check "a --from <file>:<line> referrer disables the lookup beside the lesson" "1:MISSING: sibling.md (referenced by lessons/a/entry.md:12)" "$rc:$out"
+mkdir -p "$tmp/cwdwin" "$tmp/lessons/c"; : > "$tmp/cwdwin/sibling.md"; : > "$tmp/lessons/c/entry.md"
+out=$(cd "$tmp/cwdwin" && bash "$SC" require "sibling.md" --from "$tmp/lessons/a/entry.md" 2>&1); rc=$?
+check "the current directory wins over the real sibling" "0:$tmp/cwdwin/sibling.md" "$rc:$out"
+: > "$tmp/lessons/a/dup.md"; : > "$tmp/lessons/b/dup.md"
+out=$(cd "$tmp" && bash "$SC" require "dup.md" --from "lessons/c/entry.md" 2>/dev/null); rc=$?
+check "a name in two category folders resolves to the alphabetically first" "0:$tmp/lessons/a/dup.md" "$rc:$out"
+err=$(cd "$tmp" && bash "$SC" require "dup.md" --from "lessons/c/entry.md" 2>&1 >/dev/null)
+contains "the ambiguity warning names the first match" "lessons/a/dup.md" "$err"
+contains "the ambiguity warning names the other match" "lessons/b/dup.md" "$err"
+err=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/b/entry.md" 2>&1 >/dev/null)
+check "a name found in one category folder prints no warning" "" "$err"
+out=$(cd "$tmp" && bash "$SC" require "sibling.md#why" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require strips a #anchor and finds the file" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
+out=$(cd "$tmp" && bash "$SC" require "nowhere.md#why" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require on an absent name with an anchor reports the path as given" "1:MISSING: nowhere.md#why (referenced by lessons/a/entry.md)" "$rc:$out"
+# shellcheck disable=SC2088  # literal ~user and ~ are the inputs under test
+out=$(HOME="$tmp/home" bash "$SC" require "~user/r/a.md" --from "PRD #1" 2>&1); rc=$?
+# shellcheck disable=SC2088
+check "require leaves ~user/ alone" "1:MISSING: ~user/r/a.md (referenced by PRD #1)" "$rc:$out"
+# shellcheck disable=SC2088
+out=$(cd "$tmp" && HOME="$tmp/home" bash "$SC" require "~" --from "PRD #1" 2>&1); rc=$?
+# shellcheck disable=SC2088
+check "require leaves a bare ~ alone (it is not expanded to \$HOME)" "1:MISSING: ~ (referenced by PRD #1)" "$rc:$out"
+# The printed path is physical (pwd -P): a symlinked folder resolves to its target.
+mkdir -p "$tmp/realdir"; : > "$tmp/realdir/linked.md"; ln -s "$tmp/realdir" "$tmp/linkdir"
+out=$(cd "$tmp" && bash "$SC" require "linkdir/linked.md" --from "PRD #1" 2>&1); rc=$?
+check "require prints the physical path, resolving a symlinked folder" "0:$tmp/realdir/linked.md" "$rc:$out"
 run "$tmp"
 check "no verb is a usage error" 2 "$rc"
 run "$PROJ" path dossier
@@ -753,8 +785,8 @@ if [ -z "$req" ]; then
 else
     ok "research/SKILL.md carries the dossier require block"
     DOSSIER="$MSC/research/excavation-2026-01-01.md"
-    script="SC=\"$SC\"
-$(printf '%s\n' "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
+    script="$(with_sc "$req" | sed -e "s|<cited dossier path>|$DOSSIER|")"
+    contains "the dossier require block sets SC itself (#430)" 'SC="' "$req"
     out="$(cd "$MIG" && bash -c "$script" 2>&1)"
     contains "the skill's require block surfaces the MISSING line" \
         "MISSING: $DOSSIER (referenced by /research Phase 3)" "$out"
@@ -807,7 +839,22 @@ SCDIR="$tmp/scblocks"
 SCREPO="$tmp/screpo"
 mkdir -p "$SCDIR"
 mkrepo "$SCREPO"
-for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1; do
+# A stub resolver in a fake skill directory records every call, so a block whose
+# SC= points at a missing file is visible even when the block hides stderr and the
+# exit code (`2>/dev/null) || SIDE=""`, #430). The stub exits 0 on every verb.
+STUBDIR="$tmp/stubskill"; STUBLOG="$tmp/stub.log"; STUBSTORE="$tmp/stubstore"
+mkdir -p "$STUBDIR/references" "$STUBSTORE"
+cat > "$STUBDIR/references/sidecar.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$STUBLOG"
+case "${1:-}" in
+    path|archive-dir) mkdir -p "$STUBSTORE/${2:-x}"; printf '%s\n' "$STUBSTORE/${2:-x}" ;;
+    config) printf 'none\n' ;;
+esac
+exit 0
+STUB
+export STUBLOG STUBSTORE
+for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1 research:research/SKILL.md:4 compound:compound/SKILL.md:3; do
     skill="${entry%%:*}"; rest="${entry#*:}"; rel="${rest%%:*}"; min="${rest##*:}"
     skdir="$repo_root/$skill"
     blocks_using_sc "$repo_root/$rel" "$SCDIR" "$skill"
@@ -819,7 +866,12 @@ for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-m
         script="$(sed -e "s|<this skill's directory>|$skdir|g" -e 's|<[A-Za-z][^<>]*>|x|g' "$f")"
         out="$(cd "$SCREPO" && env -u SC bash -c "$script" 2>&1 </dev/null)"; rc=$?
         label="$(basename "$f") from $rel"
-        if grep -q 'SC=' "$f"; then ok "$label defines SC itself"; else bad "$label defines SC itself" "uses \$SC with no SC= in the block"; fi
+        # SC= as a whole word: SIDE_SC= or MYSC= is a different variable (#430).
+        if grep -Eq '(^|[^A-Za-z0-9_])SC=' "$f"; then ok "$label defines SC itself"; else bad "$label defines SC itself" "uses \$SC with no SC= in the block"; fi
+        : > "$STUBLOG"
+        stubscript="$(sed -e "s|<this skill's directory>|$STUBDIR|g" -e 's|<[A-Za-z][^<>]*>|x|g' "$f")"
+        (cd "$SCREPO" && env -u SC bash -c "$stubscript" >/dev/null 2>&1 </dev/null)
+        if [ -s "$STUBLOG" ]; then ok "$label reaches its resolver (stub saw a call)"; else bad "$label reaches its resolver" "the stub resolver was never called: SC is unset, misnamed, or points at the wrong file"; fi
         if [ "$rc" -eq 127 ] || [ "$rc" -eq 126 ] || case "$out" in *"No such file or directory"*) true ;; *) false ;; esac; then
             bad "$label runs in a fresh shell" "rc=$rc: $out"
         else
