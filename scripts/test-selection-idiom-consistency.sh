@@ -173,7 +173,7 @@ else
 fi
 
 gate_block="$(awk '/^N=<n>$/{c=1} c{print} c && /^jq -r/{exit}' execute/SKILL.md)"
-for field in 'closedByPullRequestsReferences' 'state headRefName' 'blockedBy(first: 50) { totalCount nodes { number title state } }' 'number title body'; do
+for field in 'closedByPullRequestsReferences' 'state headRefName' 'blockedBy(first: 50) { totalCount nodes { number title state } }' 'comments(last: 100) { totalCount nodes { body } }' 'closedByPullRequestsReferences(first: 20) { totalCount nodes { number state headRefName } }' 'number title body'; do
     if grep -qF -- "$field" <<<"$gate_block"; then
         ok "the gate's query requests: $field"
     else
@@ -204,13 +204,23 @@ gate_exec="${gate_block/N=<n>/N=7}"
 # redirect a reader's stderr to /dev/null): it lands in $gate_err so a fixture
 # can assert the gate's own jq error survives. Stdout alone is the verdict.
 gate_err="$(mktemp)"
-trap 'rm -f "$gate_err"' EXIT
+gate_n="$(mktemp)"
+trap 'rm -f "$gate_err" "$gate_n"' EXIT
 # shellcheck disable=SC2317,SC2329  # the stubs are called from the eval'd block
 run_gate() { # $1 = response JSON ("GHFAIL" makes gh exit 1), $2 = current branch, $3 = script (default: the real block)
     (
         resp="$1"
         branch="${2:-task-branch}"
-        gh() { [[ "$resp" != GHFAIL ]] || return 1; printf '%s' "$resp"; }
+        # Records the value of the -F n=... argument it receives into $gate_n.
+        gh() {
+            local prev="" a
+            for a in "$@"; do
+                [[ "$prev" == -F && "$a" == n=* ]] && printf '%s' "$a" >"$gate_n"
+                prev="$a"
+            done
+            [[ "$resp" != GHFAIL ]] || return 1
+            printf '%s' "$resp"
+        }
         git() { printf '%s\n' "$branch"; }
         eval "${3:-$gate_exec}"
     ) 2>"$gate_err" || echo unknown
@@ -225,6 +235,7 @@ fixture() { # jq expression applied to a healthy, takeable base response
 verdict() { cut -d' ' -f1 <<<"$1"; }
 
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture .)")")" "healthy response -> takeable"
+assert_eq "n=7" "$(cat "$gate_n")" "the gate passes the issue number it was given as -F n="
 # A broken program must say so: the verdict is still unknown, and the real
 # block's own jq error must reach stderr. Putting 2>/dev/null back on the gate's
 # final line leaves stdout identical and empties this, so this goes red.
