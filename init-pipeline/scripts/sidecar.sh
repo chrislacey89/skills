@@ -13,7 +13,10 @@
 #   sidecar.sh init [--name <n>] --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>
 #                   [--migrate-archive | --no-migrate-archive] [--archive-alias <dir>]...
 #   sidecar.sh config get <dotted.key>
+#   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh path <research|solutions>
+#   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
+#   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
 #   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
@@ -53,6 +56,18 @@
 # by an unrelated repo that happens to be checked out at .../api. A project
 # archived under its basename before it gained a remote opts that directory in
 # with --archive-alias <dir> (repeatable, matched lowercased, one path component).
+#
+# solutions-dirs policy. The directories a reader searches for lessons, one per
+# line: the sidecar's solutions/ (created if absent), then the project's
+# solutions.in_tree_path unless it is "none", then docs/solutions when that
+# directory exists in the tree and is not already listed (a /excavate PR commits
+# there whatever in_tree_path says). With no sidecar it prints docs/solutions
+# alone. In-tree entries are relative to the current directory.
+#
+# config set. forge.write is derived from mode (owned on a known forge gets
+# write access, guest gets none), so mode is changed through this verb and
+# never by editing sidecar.json. It overwrites forge.write with the derived
+# value.
 #
 # Identity. A sidecar is found by the keys in its sidecar.json, tried in order:
 #   root:<sha>               lexicographically first root commit; skipped in a
@@ -95,6 +110,31 @@ pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git "$@"; }
 sgit() { local dir="$1"; shift; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$dir" "$@"; }
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# One path component, no newline: a newline would register two aliases.
+alias_ok() { case "$1" in ''|*/*|.|..|*$'\n'*) return 1 ;; esac; }
+
+# forge_kind_of <keys>: the forge a remote key's host belongs to, or none.
+forge_kind_of() {
+    local host
+    host="$(printf '%s\n' "$1" | sed -n 's/^remote:\([^/]*\)\/.*/\1/p' | head -n 1)"
+    case "$host" in
+        github.com|*.github.com) echo github ;;
+        gitlab.com|gitlab.*)     echo gitlab ;;
+        bitbucket.org)           echo bitbucket ;;
+        *)                       echo none ;;
+    esac
+}
+
+# derive_forge_write <mode> <forge_kind>: the forge.write JSON array. The one
+# place mode becomes write permission; init and config set both call it.
+derive_forge_write() {
+    if [ "$1" = "owned" ] && [ "$2" != "none" ]; then
+        printf '%s' '["issues","labels","milestones","prs"]'
+    else
+        printf '%s' '[]'
+    fi
+}
 
 # Normalize a remote URL to host/full/path, or print nothing.
 norm_remote() {
@@ -261,7 +301,7 @@ $k"
 }
 
 cmd_init() {
-    local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind host forge_write migrate=1 aliases=""
+    local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind forge_write migrate=1 aliases=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)         [ $# -ge 2 ] || die_usage "--name needs a value"; name="$2"; shift 2 ;;
@@ -272,7 +312,7 @@ cmd_init() {
             --no-migrate-archive) migrate=0; shift ;;
             --archive-alias)
                 [ $# -ge 2 ] || die_usage "--archive-alias needs a value"
-                case "$2" in ''|*/*|.|..) die_usage "init: --archive-alias must be one directory name: $2" ;; esac
+                alias_ok "$2" || die_usage "init: --archive-alias must be one directory name: $2"
                 aliases="${aliases:+$aliases$'\n'}$(lower "$2")"; shift 2 ;;
             *) die_usage "init: unknown argument: $1" ;;
         esac
@@ -308,18 +348,8 @@ cmd_init() {
     storage="$(jq -r '.research.storage // "archive"' "$top/.claude/settings.json" 2>/dev/null || echo archive)"
     case "$storage" in archive|spike-issue) ;; *) storage=archive ;; esac
 
-    forge_kind=none
-    host="$(printf '%s\n' "$keys" | sed -n 's/^remote:\([^/]*\)\/.*/\1/p' | head -n 1)"
-    case "$host" in
-        github.com|*.github.com) forge_kind=github ;;
-        gitlab.com|gitlab.*)     forge_kind=gitlab ;;
-        bitbucket.org)           forge_kind=bitbucket ;;
-    esac
-    if [ "$mode" = "owned" ] && [ "$forge_kind" != "none" ]; then
-        forge_write='["issues","labels","milestones","prs"]'
-    else
-        forge_write='[]'
-    fi
+    forge_kind="$(forge_kind_of "$keys")"
+    forge_write="$(derive_forge_write "$mode" "$forge_kind")"
 
     mkdir -p "$dir" || refuse "init: cannot create $dir"
     # $dir did not exist above, so init created it. Any failure from here on
@@ -387,18 +417,26 @@ archive_names() {
 # exists in research/ with different content is left untouched. Actions are
 # printed on stderr; stdout stays the sidecar path.
 migrate_archive() {
-    local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0
+    local sc="$1" keys="$2" aliases="${3:-}" archive dest names d base e target moved conflict any=0 mbase self tmpl
     archive="$ARCHIVE_ROOT"
+    mbase="$(lower "$(basename "$(main_checkout)")")"
+    self="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
     [ -d "$archive" ] || return 0
     dest="$sc/research"
-    mkdir -p "$dest" || refuse "init: cannot create $dest"
+    mkdir -p "$dest" || refuse "archive: cannot create $dest"
     names="$({ archive_names "$keys"; [ -z "$aliases" ] || printf '%s\n' "$aliases"; } | LC_ALL=C sort -u)"
     [ -n "$names" ] || return 0
     for d in "$archive"/*; do
         [ -d "$d" ] || continue
         [ -L "$d" ] && continue
         base="$(lower "$(basename "$d")")"
-        printf '%s\n' "$names" | grep -qxF -- "$base" || continue
+        if ! printf '%s\n' "$names" | grep -qxF -- "$base"; then
+            if [ "$base" = "$mbase" ]; then
+                printf 'sidecar.sh: archive: skipped %s: this checkout has a remote, so a folder named for the checkout is not claimed; if it is this project'"'"'s, run: bash %s migrate-archive --archive-alias %s\n' \
+                    "$d" "$self" "$base" >&2
+            fi
+            continue
+        fi
         conflict=0
         for e in "$d"/* "$d"/.[!.]* "$d"/..?*; do
             [ -e "$e" ] || [ -L "$e" ] || continue
@@ -418,12 +456,17 @@ migrate_archive() {
             if [ -e "$target" ]; then
                 rm -f "$e"
             else
-                mv "$e" "$target" || refuse "init: archive: could not move $e into $dest"
+                mv "$e" "$target" || refuse "archive: could not move $e into $dest"
             fi
             moved=$((moved + 1))
         done
-        rmdir "$d" || refuse "init: archive: $d is not empty after the move; left in place"
-        ln -s "$dest" "$d" || refuse "init: archive: could not link $d to $dest"
+        # The link is made at a temp name first, so a failed ln leaves the old
+        # directory in place; if the final rename fails, the directory is
+        # recreated so the old path is never left missing.
+        tmpl="$d.sidecar-link.$$"
+        ln -s "$dest" "$tmpl" || refuse "archive: could not link $d to $dest"
+        rmdir "$d" || { rm -f "$tmpl"; refuse "archive: $d is not empty after the move; left in place"; }
+        mv -f "$tmpl" "$d" || { rm -f "$tmpl"; mkdir -p "$d"; refuse "archive: could not link $d to $dest"; }
         printf 'sidecar.sh: archive: moved %s file(s) from %s into %s; %s is now a symlink to it\n' \
             "$moved" "$d" "$dest" "$d" >&2
         any=1
@@ -435,10 +478,70 @@ migrate_archive() {
 }
 
 cmd_config() {
-    local sc
-    if ! { [ "${1:-}" = "get" ] && [ $# -eq 2 ]; }; then die_usage "usage: sidecar.sh config get <dotted.key>"; fi
+    local sc mode kind fw tmp
+    case "${1:-}" in
+        get)
+            [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
+            sc="$(do_resolve)" || exit 1
+            jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+            ;;
+        set)
+            if ! { [ $# -eq 3 ] && [ "$2" = "mode" ]; }; then die_usage "usage: sidecar.sh config set mode <owned|guest>"; fi
+            mode="$3"
+            case "$mode" in owned|guest) ;; *) die_usage "config set: mode must be owned or guest" ;; esac
+            sc="$(do_resolve)" || exit 1
+            kind="$(jq -r '.forge.kind // "none"' "$sc/sidecar.json")"
+            fw="$(derive_forge_write "$mode" "$kind")"
+            tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+            if jq --arg mode "$mode" --argjson fw "$fw" '.mode = $mode | .forge.write = $fw' < "$sc/sidecar.json" > "$tmp"; then
+                mv "$tmp" "$sc/sidecar.json"
+            else
+                rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+            fi
+            commit_paths "$sc" "sidecar: set mode $mode" sidecar.json || exit 1
+            ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set mode <owned|guest>>" ;;
+    esac
+}
+
+cmd_migrate_archive() {
+    local aliases="" sc keys
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --archive-alias)
+                [ $# -ge 2 ] || die_usage "--archive-alias needs a value"
+                alias_ok "$2" || die_usage "migrate-archive: --archive-alias must be one directory name: $2"
+                aliases="${aliases:+$aliases$'\n'}$(lower "$2")"; shift 2 ;;
+            *) die_usage "migrate-archive: unknown argument: $1" ;;
+        esac
+    done
     sc="$(do_resolve)" || exit 1
-    jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+    keys="$(current_keys)"
+    migrate_archive "$sc" "$keys" "$aliases" || exit 1
+}
+
+# The directories a reader searches for lessons; the policy is in the header.
+cmd_solutions_dirs() {
+    local sc="" err itp seen=""
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh solutions-dirs"
+    err="$(mktemp)" || refuse "solutions-dirs: cannot create a temp file"
+    if sc="$(do_resolve 2>"$err")"; then
+        cat "$err" >&2
+        mkdir -p "$sc/solutions" || { rm -f "$err"; refuse "solutions-dirs: cannot create $sc/solutions"; }
+        printf '%s\n' "$sc/solutions"
+        itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
+        case "$itp" in ''|none) ;; *) printf '%s\n' "$itp"; seen="$itp" ;; esac
+    else
+        sc=""
+        grep -q 'SIDECAR MISS:' "$err" || cat "$err" >&2
+    fi
+    rm -f "$err"
+    # A /excavate PR commits to docs/solutions whatever in_tree_path says, so an
+    # existing docs/solutions is read even when in_tree_path is none; with no
+    # sidecar it is the default store and is named whether or not it exists.
+    if [ "$seen" != "docs/solutions" ]; then
+        if [ -d docs/solutions ] || [ -z "$sc" ]; then printf 'docs/solutions\n'; fi
+    fi
 }
 
 cmd_path() {
@@ -550,8 +653,10 @@ case "$verb" in
     init)    cmd_init "$@" ;;
     config)  cmd_config "$@" ;;
     path)    cmd_path "$@" ;;
+    solutions-dirs) cmd_solutions_dirs "$@" ;;
+    migrate-archive) cmd_migrate_archive "$@" ;;
     archive-dir) cmd_archive_dir "$@" ;;
     commit)  cmd_commit "$@" ;;
     require) cmd_require "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|path|archive-dir|commit|require> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|solutions-dirs|migrate-archive|archive-dir|commit|require> ..." ;;
 esac

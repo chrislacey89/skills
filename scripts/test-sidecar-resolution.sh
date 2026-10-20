@@ -540,7 +540,7 @@ run "$API" init --name api-server --mode owned --write sidecar --in-tree-path no
 check "init beside an unrelated api/ archive succeeds" 0 "$rc"
 check "the unrelated api/ archive is still a real directory with its file" "dir theirs" \
     "$(if [ -L "$A/api" ]; then echo link; else echo dir; fi) $(cat "$A/api/theirs.md")"
-lacks "nothing is reported moved from api/" "$A/api" "$out"
+lacks "nothing is reported moved from api/" "from $A/api into" "$out"
 # A remote-less checkout is the one case the basename still means something.
 NOREM="$tmp/mig/norem/solo"
 mkdir -p "$A/solo"; printf 's\n' > "$A/solo/s.md"
@@ -564,6 +564,96 @@ contains "the conflict is reported" "left $A/clash untouched: n.md already exist
 check "the conflicting directory is still a directory with its own file" "dir two" \
     "$(if [ -L "$A/clash" ]; then echo link; else echo dir; fi) $(cat "$A/clash/n.md")"
 check "the first directory moved" "$SKILL_KIT_SIDECAR_ROOT/clash/research" "$(readlink "$A/acme-clash")"
+
+# -----------------------------------------------------------------------------
+section "config set mode re-derives forge.write (#425)"
+
+# forge.write is derived from mode inside init, so a hand edit of mode left it
+# stale. The verb must produce exactly what init produces for the new mode:
+# the expected values come from real init runs, not from a restated literal.
+mkdir -p "$tmp/cfg"
+CFG_O="$tmp/cfg/own"; CFG_G="$tmp/cfg/guest"
+mkrepo "$CFG_O"; git -C "$CFG_O" remote add origin git@github.com:acme/cfg-own.git
+mkrepo "$CFG_G"; git -C "$CFG_G" remote add origin git@github.com:acme/cfg-guest.git
+run "$CFG_O" init --name cfg-own --mode owned --write sidecar --in-tree-path none
+run "$CFG_G" init --name cfg-guest --mode guest --write sidecar --in-tree-path none
+OWN_FW="$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+GUEST_FW="$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-guest/sidecar.json")"
+check "init gives an owned repo on a known forge write access (fixture sanity)" "yes" "$(if [ "$OWN_FW" != "[]" ]; then echo yes; fi)"
+run "$CFG_O" config set mode guest
+check "config set mode guest succeeds" 0 "$rc"
+check "mode is now guest" "guest" "$(jq -r '.mode' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+check "forge.write matches what init produces for guest" "$GUEST_FW" "$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+check "the change is committed" "" "$(git -C "$SKILL_KIT_SIDECAR_ROOT/cfg-own" status --porcelain)"
+check "the commit subject names the mode" "sidecar: set mode guest" "$(git -C "$SKILL_KIT_SIDECAR_ROOT/cfg-own" log -1 --format=%s)"
+run "$CFG_O" config set mode owned
+check "forge.write matches what init produces for owned, going back" "$OWN_FW" "$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+run "$CFG_O" config set mode admin
+check "config set mode rejects an unknown mode" 2 "$rc"
+run "$CFG_O" config set forge.kind none
+check "config set takes only mode" 2 "$rc"
+run "$CFG_O" config set mode
+check "config set mode needs a value" 2 "$rc"
+# The skill points at the verb for mode.
+contains "/init-pipeline section 8 tells the reader to change mode with the verb" 'config set mode' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# -----------------------------------------------------------------------------
+section "migrate-archive verb, --archive-alias validation, skipped-folder hint (#420)"
+
+mkdir -p "$tmp/mv"
+MV="$tmp/mv/Widget"
+mkrepo "$MV"
+git -C "$MV" remote add origin git@github.com:acme/widget-core.git
+mkdir -p "$A/widget" "$A/acme-widget-core"
+printf 'w\n' > "$A/widget/w-2026-01-01.md"
+printf 'c\n' > "$A/acme-widget-core/c-2026-01-02.md"
+
+# A sidecar made before migration existed (or with --no-migrate-archive): the
+# old folders are still real directories, and init now refuses to run again.
+run "$MV" init --name widget --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+WSC="$SKILL_KIT_SIDECAR_ROOT/widget"
+check "fixture: a sidecar exists with the archive unmigrated" "dir dir" \
+    "$(if [ -L "$A/widget" ]; then echo link; else echo dir; fi) $(if [ -L "$A/acme-widget-core" ]; then echo link; else echo dir; fi)"
+
+# A newline in --archive-alias registered two aliases; reject it in both verbs.
+run "$MV" migrate-archive --archive-alias $'x\nacme-widget-core'
+check "migrate-archive rejects an alias containing a newline" 2 "$rc"
+check "a rejected alias migrates nothing" "dir" "$(if [ -L "$A/acme-widget-core" ]; then echo link; else echo dir; fi)"
+run "$MV" init --name widget-nl --mode owned --write sidecar --in-tree-path none --archive-alias $'x\nfoo'
+check "init rejects an alias containing a newline" 2 "$rc"
+check "a rejected init creates no sidecar" "" "$(ls -d "$SKILL_KIT_SIDECAR_ROOT/widget-nl" 2>/dev/null)"
+
+# The skipped basename folder names the way out; the remote-derived one migrates.
+run "$MV" migrate-archive
+check "migrate-archive succeeds on an existing sidecar" 0 "$rc"
+check "the remote-derived folder is migrated" "$WSC/research" "$(readlink "$A/acme-widget-core")"
+contains "the skipped basename folder gets a hint naming --archive-alias" "migrate-archive --archive-alias widget" "$out"
+contains "the hint names the folder it skipped" "skipped $A/widget" "$out"
+check "the skipped folder is left a directory" "dir" "$(if [ -L "$A/widget" ]; then echo link; else echo dir; fi)"
+run "$MV" migrate-archive --archive-alias Widget
+check "following the hint migrates the basename folder" "$WSC/research" "$(readlink "$A/widget")"
+check "both archive files are in the sidecar and committed" "2 " \
+    "$(git -C "$WSC" ls-files research | wc -l | tr -d ' ') $(git -C "$WSC" status --porcelain)"
+run "$MV" migrate-archive --archive-alias widget
+check "migrate-archive is idempotent: a re-run succeeds" 0 "$rc"
+lacks "a re-run moves nothing" "moved" "$out"
+check "a re-run adds no commit" "" "$(git -C "$WSC" status --porcelain)"
+
+# A migration that fails partway can be retried, and never leaves the old path
+# missing. `ln` fails; the folder must still exist, then a plain retry links it.
+mkdir -p "$A/widget-retry" "$tmp/shim"
+printf 'r\n' > "$A/widget-retry/r.md"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/shim/ln"; chmod +x "$tmp/shim/ln"
+out="$(cd "$MV" && PATH="$tmp/shim:$PATH" bash "$SC" migrate-archive --archive-alias widget-retry 2>&1)"; rc=$?
+check "a failing ln makes migrate-archive exit 1" 1 "$rc"
+check "a failing ln leaves the old path in place (never missing)" "yes" "$(if [ -d "$A/widget-retry" ] && [ ! -L "$A/widget-retry" ]; then echo yes; fi)"
+check "a failing ln leaves no stray temp link" "" "$(find "$A" -maxdepth 1 -name '*sidecar-link*')"
+run "$MV" migrate-archive --archive-alias widget-retry
+check "the retry succeeds" 0 "$rc"
+check "the retry links the folder" "$WSC/research" "$(readlink "$A/widget-retry")"
+check "the retried file is in the sidecar" "yes" "$(if [ -f "$WSC/research/r.md" ]; then echo yes; fi)"
+run "$tmp" migrate-archive
+check "migrate-archive outside a git repository exits 1" 1 "$rc"
 
 # -----------------------------------------------------------------------------
 section "/research: Phase 3 read, Phase 5a storage, Phase 5c write"
@@ -684,6 +774,38 @@ if [ -n "$prd_read" ]; then
 fi
 export SKILL_KIT_SIDECAR_ROOT="$SAVED_ROOT"
 
+# #420: the resolver's warnings reach the user on the hit branch too. Two
+# sidecars claim this checkout's keys; the first is used and ALIAS COLLISION
+# is printed, which the fallback used to discard.
+COLREPO="$tmp/colrepo"
+mkrepo "$COLREPO"
+SAVED_ROOT="$SKILL_KIT_SIDECAR_ROOT"
+export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars-collide"
+run "$COLREPO" init --name col-a --mode guest --write sidecar --in-tree-path none
+mkdir -p "$SKILL_KIT_SIDECAR_ROOT/col-b"
+cp "$SKILL_KIT_SIDECAR_ROOT/col-a/sidecar.json" "$SKILL_KIT_SIDECAR_ROOT/col-b/sidecar.json"
+# commit and require resolve too and would print the same warning, which would
+# mask a block that dropped it; this wrapper silences every verb but path.
+# shellcheck disable=SC2016 # the wrapper body is meant to be literal
+printf '#!/usr/bin/env bash\ncase "$1" in path) exec bash "%s" "$@" ;; *) exec bash "%s" "$@" 2>/dev/null ;; esac\n' "$SC" "$SC" > "$tmp/path-only-stderr.sh"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|collide|g' -e 's|<YYYY-MM-DD>|2026-10-20|g' -e "s|^SC=.*|SC=\"$tmp/path-only-stderr.sh\"|")"
+out="$(cd "$COLREPO" && bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block still writes on an alias collision" 0 "$rc"
+contains "the Phase 5c block prints ALIAS COLLISION on the hit branch" "ALIAS COLLISION" "$out"
+check "the colliding entry went to the first sidecar" "yes" "$(if [ -f "$SKILL_KIT_SIDECAR_ROOT/col-a/research/collide-2026-10-20.md" ]; then echo yes; fi)"
+export SKILL_KIT_SIDECAR_ROOT="$SAVED_ROOT"
+
+# A checkout whose name archive-dir refuses (a leading dot) cannot be filed in
+# the pre-sidecar archive; the block must say the entry was not written.
+mkdir -p "$tmp/slug"
+SLUGREPO="$tmp/slug/.hidden"
+mkrepo "$SLUGREPO"
+script="$(with_sc "$p5c" | sed -e 's|<feature-slug>|slugless|g' -e 's|<YYYY-MM-DD>|2026-10-20|g')"
+out="$(cd "$SLUGREPO" && SKILL_KIT_RESEARCH_ARCHIVE="$tmp/slugarch" bash -c "$script" 2>&1)"; rc=$?
+check "the Phase 5c block exits 1 when archive-dir rejects the name" 1 "$rc"
+contains "a rejected slug says the entry was not written" "research entry NOT written" "$out"
+check "a rejected slug writes nothing" "" "$(find "$tmp/slugarch" -type f 2>/dev/null)"
+
 # The default archive root (#470). Every run above exports
 # SKILL_KIT_RESEARCH_ARCHIVE, so the ${...:-default} branch never ran, and a
 # copy of the default in a skill block could drift with the suite green. Here
@@ -754,8 +876,77 @@ jq '.solutions.in_tree_path = "none"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MS
 out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"
 contains "with in_tree_path none, Phase 3 still lists the sidecar match" "$SOLS/perf/a.md" "$out"
 lacks "with in_tree_path none, Phase 3 reads no in-tree path" "docs/adr" "$out"
-lacks "with in_tree_path none, Phase 3 never reads a planted docs/solutions" "docs/solutions/planted.md" "$out"
+# #420: an existing docs/solutions is read even when in_tree_path is none,
+# because a /excavate PR commits there whatever in_tree_path says.
+contains "with in_tree_path none, Phase 3 still reads an existing docs/solutions" "docs/solutions/planted.md" "$out"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs with in_tree_path none: the sidecar store, then the existing docs/solutions" \
+    "$SOLS
+docs/solutions" "$dirs"
+jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs lists the sidecar store, in_tree_path, then docs/solutions" "$SOLS
+docs/adr
+docs/solutions" "$dirs"
+jq '.solutions.in_tree_path = "docs/solutions"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs does not list docs/solutions twice" "$SOLS
+docs/solutions" "$dirs"
 git -C "$MSC" checkout -q -- sidecar.json
+rm -f "$MIG/docs/solutions/planted.md"; rmdir "$MIG/docs/solutions"
+jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "with no docs/solutions in the tree, solutions-dirs omits it" "$SOLS
+docs/adr" "$dirs"
+git -C "$MSC" checkout -q -- sidecar.json
+# No sidecar: the default store, named whether or not it exists; a SIDECAR MISS
+# is not an error here and prints nothing on stderr.
+NOSD="$tmp/mig/nosolutions"
+mkrepo "$NOSD"
+dirs="$(cd "$NOSD" && bash "$SC" solutions-dirs 2>"$tmp/sd.err")"; rc=$?
+check "solutions-dirs with no sidecar exits 0 and names docs/solutions" "0 docs/solutions" "$rc $dirs"
+check "solutions-dirs with no sidecar stays quiet on a SIDECAR MISS" "" "$(cat "$tmp/sd.err")"
+dirs="$(cd "$tmp" && bash "$SC" solutions-dirs 2>&1)"; rc=$?
+check "solutions-dirs outside a git repository still names the default store" "0 docs/solutions" "$rc $(printf '%s' "$dirs" | tail -n 1)"
+# Policy lives in one place: /research and /compound both ask the verb, and the
+# compound block runs as written.
+c_read="$(first_bash_after "$COMPOUND" '^Search every place a lesson can live, not just')"
+# #503 review finding 1: /execute, /write-a-prd, /help and /pre-merge kept a
+# copy of the old policy that skipped docs/solutions when in_tree_path is none.
+# shellcheck disable=SC2016  # backticks and $SC below are literal patterns
+e_read="$(first_bash_after "$repo_root/execute/SKILL.md" '^Consult `docs/solutions/` and the sidecar for relevant past solutions')"
+w_read="$(first_bash_after "$repo_root/write-a-prd/SKILL.md" '^\*\*Past solutions\*\*')"
+for pair in "research Phase 3:$p3" "compound overlap:$c_read" "execute past-solutions:$e_read" "write-a-prd past-solutions:$w_read"; do
+    contains "the ${pair%%:*} block calls solutions-dirs" "solutions-dirs" "${pair#*:}"
+    lacks "the ${pair%%:*} block derives no path itself" "path solutions" "${pair#*:}"
+done
+mkdir -p "$MIG/docs/solutions"
+printf 'needle again\n' > "$MIG/docs/solutions/planted2.md"
+out="$(cd "$MIG" && bash -c "$(with_sc "$c_read" | sed -e 's|^KW=.*|KW="needle"|')" 2>/dev/null)"; rc=$?
+check "the compound overlap block runs cleanly" 0 "$rc"
+contains "the compound overlap block lists the sidecar match" "$SOLS/perf/a.md" "$out"
+contains "the compound overlap block lists the docs/solutions match" "docs/solutions/planted2.md" "$out"
+jq '.solutions.in_tree_path = "none"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+for pair in "execute past-solutions:$e_read" "write-a-prd past-solutions:$w_read"; do
+    out="$(cd "$MIG" && bash -c "$(with_sc "${pair#*:}" | sed -e 's|^KW=.*|KW="needle"|')" 2>/dev/null)"; rc=$?
+    check "the ${pair%%:*} block runs cleanly" 0 "$rc"
+    contains "with in_tree_path none, the ${pair%%:*} block lists the sidecar match" "$SOLS/perf/a.md" "$out"
+    contains "with in_tree_path none, the ${pair%%:*} block still reads an existing docs/solutions" "docs/solutions/planted2.md" "$out"
+done
+git -C "$MSC" checkout -q -- sidecar.json
+pm_text="$(cat "$repo_root/pre-merge/review-checklist.md")"
+# shellcheck disable=SC2016  # literal patterns
+contains "pre-merge's docs/solutions dimension asks solutions-dirs" 'bash "$SC" solutions-dirs' "$pm_text"
+# shellcheck disable=SC2016  # literal pattern
+lacks "pre-merge restates no in_tree_path-none skip" 'unless it is `none`' "$pm_text"
+cc_text="$(cat "$repo_root/correct-course/SKILL.md")"
+# shellcheck disable=SC2016  # literal patterns
+contains "correct-course's stale-artifact check asks solutions-dirs" 'bash "$SC" solutions-dirs' "$cc_text"
+# shellcheck disable=SC2016  # literal pattern
+lacks "correct-course restates no in_tree_path-none skip" '(unless `none`)' "$cc_text"
+# shellcheck disable=SC2016  # literal pattern
+lacks "correct-course reads no solutions.in_tree_path itself" 'config get solutions.in_tree_path' "$cc_text"
+rm -f "$MIG/docs/solutions/planted2.md"; rmdir "$MIG/docs/solutions"
 
 # Phase 5a: sidecar value, settings fallback with no sidecar, then the default.
 script="$(with_sc "$p5a")"
@@ -791,6 +982,14 @@ else
     contains "the skill's require block surfaces the MISSING line" \
         "MISSING: $DOSSIER (referenced by /research Phase 3)" "$out"
     contains "the skill's require block signals the miss" "dossier missing" "$out"
+    # The HIT path: the same block with the dossier present prints where it
+    # found it and does not signal a miss.
+    printf 'dossier\n' > "$DOSSIER"
+    out="$(cd "$MIG" && bash -c "$script" 2>&1)"
+    contains "on a hit the skill's require block prints the resolved dossier path" "$DOSSIER" "$out"
+    lacks "on a hit the skill's require block reports no miss" "dossier missing" "$out"
+    lacks "on a hit the skill's require block prints no MISSING line" "MISSING:" "$out"
+    rm -f "$DOSSIER"
 fi
 
 # -----------------------------------------------------------------------------
@@ -956,6 +1155,14 @@ contains "entries at in_tree_path docs/adr are counted (row 10 does not fire)" "
 contains "an in-tree entry committed after the previous landing counts as compounding the last merge" \
     "last merge compounded: yes" "$hout"
 git -C "$HSC" checkout -q -- sidecar.json
+
+# #503 review finding 1: with in_tree_path none, an /excavate PR's docs/solutions
+# entries are still in-tree entries, so row 10 does not re-fire.
+mkdir -p "$HR/docs/solutions/history"
+printf 'excavated\n' > "$HR/docs/solutions/history/a.md"
+hrun "$HR"
+contains "with in_tree_path none, an existing docs/solutions is counted (row 10 does not fire)" "in-tree (docs/solutions)=1" "$hout"
+rm -rf "$HR/docs/solutions"
 
 # Two sidecars claiming one key: a warning naming both, and the block still reports a sidecar.
 DUP="$SKILL_KIT_SIDECAR_ROOT/dup-helprepo"

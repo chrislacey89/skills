@@ -178,16 +178,12 @@ Do not present these as a batch. State one constraint, get confirmation, then pr
 
 ### Phase 3: Consult Past Solutions
 
-Search every place a lesson can live: the project's sidecar and its in-tree path. Resolve both through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path yourself. The block searches the sidecar's `solutions/` directory and the project's `solutions.in_tree_path` (skipped when it is `none`); on `SIDECAR MISS`, or with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
+Search every place a lesson can live: the project's sidecar and its in-tree path. Resolve both through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path yourself. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it): the sidecar's `solutions/`, the project's `in_tree_path`, and an existing `docs/solutions/`; on `SIDECAR MISS`, or with no sidecar, `docs/solutions/` alone. Set `KW` to the keyword to look for:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 KW="relevant-keyword"
-SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
-ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
-[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
-for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
-  case "$DIR" in ""|none) continue ;; esac
+bash "$SC" solutions-dirs | while IFS= read -r DIR; do
   [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
 done
 true
@@ -330,16 +326,17 @@ When the storage mode is `archive`, write the research document outside the work
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 ERR="$(mktemp)" || exit 1
-if DIR="$(bash "$SC" path research 2>"$ERR")"; then
+DIR="$(bash "$SC" path research 2>"$ERR")"; RC=$?
+cat "$ERR" >&2   # warnings such as ALIAS COLLISION print on both branches
+if [ "$RC" -eq 0 ]; then
   rm -f "$ERR"
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=yes
 else
-  cat "$ERR" >&2
   # Only a SIDECAR MISS falls back; any other failure is a refusal, not a miss.
   grep -q 'SIDECAR MISS:' "$ERR" || { rm -f "$ERR"; exit 1; }
   rm -f "$ERR"
-  DIR="$(bash "$SC" archive-dir)" || exit 1
+  DIR="$(bash "$SC" archive-dir)" || { echo "research entry NOT written: no usable archive directory for this checkout" >&2; exit 1; }
   mkdir -p "$DIR" || exit 1
   ENTRY="$DIR/<feature-slug>-<YYYY-MM-DD>.md"
   COMMIT=no

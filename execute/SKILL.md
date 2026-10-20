@@ -302,16 +302,12 @@ Some legacy PRDs may still reference `research.md` in the repo root or `plans/` 
 
 Treat it as pointers, not truth. The anchors were written at decomposition time and siblings may have merged since; the code and the research artifact still win on any conflict, per the precedence rule below. A stale anchor is a correction to file on the issue, not a reason to skip the block.
 
-Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. The block searches the sidecar's `solutions/` directory and the project's `solutions.in_tree_path` (skipped when it is `none`); with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
+Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it). Set `KW` to the keyword to look for:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 KW="relevant-keyword"
-SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
-ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
-[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
-for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
-  case "$DIR" in ""|none) continue ;; esac
+bash "$SC" solutions-dirs | while IFS= read -r DIR; do
   [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
 done
 true
