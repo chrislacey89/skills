@@ -566,6 +566,38 @@ check "the conflicting directory is still a directory with its own file" "dir tw
 check "the first directory moved" "$SKILL_KIT_SIDECAR_ROOT/clash/research" "$(readlink "$A/acme-clash")"
 
 # -----------------------------------------------------------------------------
+section "config set mode re-derives forge.write (#425)"
+
+# forge.write is derived from mode inside init, so a hand edit of mode left it
+# stale. The verb must produce exactly what init produces for the new mode:
+# the expected values come from real init runs, not from a restated literal.
+mkdir -p "$tmp/cfg"
+CFG_O="$tmp/cfg/own"; CFG_G="$tmp/cfg/guest"
+mkrepo "$CFG_O"; git -C "$CFG_O" remote add origin git@github.com:acme/cfg-own.git
+mkrepo "$CFG_G"; git -C "$CFG_G" remote add origin git@github.com:acme/cfg-guest.git
+run "$CFG_O" init --name cfg-own --mode owned --write sidecar --in-tree-path none
+run "$CFG_G" init --name cfg-guest --mode guest --write sidecar --in-tree-path none
+OWN_FW="$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+GUEST_FW="$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-guest/sidecar.json")"
+check "init gives an owned repo on a known forge write access (fixture sanity)" "yes" "$(if [ "$OWN_FW" != "[]" ]; then echo yes; fi)"
+run "$CFG_O" config set mode guest
+check "config set mode guest succeeds" 0 "$rc"
+check "mode is now guest" "guest" "$(jq -r '.mode' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+check "forge.write matches what init produces for guest" "$GUEST_FW" "$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+check "the change is committed" "" "$(git -C "$SKILL_KIT_SIDECAR_ROOT/cfg-own" status --porcelain)"
+check "the commit subject names the mode" "sidecar: set mode guest" "$(git -C "$SKILL_KIT_SIDECAR_ROOT/cfg-own" log -1 --format=%s)"
+run "$CFG_O" config set mode owned
+check "forge.write matches what init produces for owned, going back" "$OWN_FW" "$(jq -c '.forge.write' "$SKILL_KIT_SIDECAR_ROOT/cfg-own/sidecar.json")"
+run "$CFG_O" config set mode admin
+check "config set mode rejects an unknown mode" 2 "$rc"
+run "$CFG_O" config set forge.kind none
+check "config set takes only mode" 2 "$rc"
+run "$CFG_O" config set mode
+check "config set mode needs a value" 2 "$rc"
+# The skill points at the verb for mode.
+contains "/init-pipeline section 8 tells the reader to change mode with the verb" 'config set mode' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# -----------------------------------------------------------------------------
 section "/research: Phase 3 read, Phase 5a storage, Phase 5c write"
 
 # first_bash_after <file> <start-regex> — the first ```bash block after the

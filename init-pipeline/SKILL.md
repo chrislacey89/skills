@@ -374,7 +374,7 @@ SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" resolve
 ```
 
-- **Hit** (exit 0, prints the sidecar path): show `mode` and `solutions` from its `sidecar.json` and offer to keep them; keep is the default. To change a value, edit `sidecar.json` and commit it with `bash "$SC" commit -- sidecar.json -m "sidecar: <what changed>"`. Do not run `init` again: it refuses a project that already has a sidecar.
+- **Hit** (exit 0, prints the sidecar path): show `mode` and `solutions` from its `sidecar.json` and offer to keep them; keep is the default. To change `mode`, run `bash "$SC" config set mode <owned|guest>`: `forge.write` is derived from `mode`, and the verb re-derives it and commits, where a hand edit would leave it stale. A key with no derived dependents (`solutions.*`) may be edited in `sidecar.json` and committed with `bash "$SC" commit -- sidecar.json -m "sidecar: <what changed>"`. Do not run `init` again: it refuses a project that already has a sidecar.
 - **Miss** (stderr carries a `SIDECAR MISS` line with an `init` command; exit 1 alone is not enough, because `resolve` also exits 1 outside a git repository and when it finds a sidecar but cannot commit a new alias, so on any other exit 1 stop and relay what it printed as printed, with no questions and no `init`): ask the three questions below, **one per turn**, each with the recommended answer first, then run `init`.
 
 **Q1 — mode.** `owned` (your repository: the pack may write issues, labels, milestones, and PRs on its forge) or `guest` (someone else's, such as a client's: the pack writes nothing to its forge). The script derives the forge permissions from this answer; do not ask about them separately.

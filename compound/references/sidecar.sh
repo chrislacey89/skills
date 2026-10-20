@@ -13,6 +13,7 @@
 #   sidecar.sh init [--name <n>] --mode <owned|guest> --write <sidecar|in-tree|ask> --in-tree-path <path|none>
 #                   [--migrate-archive | --no-migrate-archive] [--archive-alias <dir>]...
 #   sidecar.sh config get <dotted.key>
+#   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh path <research|solutions>
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
@@ -53,6 +54,11 @@
 # by an unrelated repo that happens to be checked out at .../api. A project
 # archived under its basename before it gained a remote opts that directory in
 # with --archive-alias <dir> (repeatable, matched lowercased, one path component).
+#
+# config set. forge.write is derived from mode (owned on a known forge gets
+# write access, guest gets none), so mode is changed through this verb and
+# never by editing sidecar.json. It overwrites forge.write with the derived
+# value.
 #
 # Identity. A sidecar is found by the keys in its sidecar.json, tried in order:
 #   root:<sha>               lexicographically first root commit; skipped in a
@@ -95,6 +101,28 @@ pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git "$@"; }
 sgit() { local dir="$1"; shift; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$dir" "$@"; }
 
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# forge_kind_of <keys>: the forge a remote key's host belongs to, or none.
+forge_kind_of() {
+    local host
+    host="$(printf '%s\n' "$1" | sed -n 's/^remote:\([^/]*\)\/.*/\1/p' | head -n 1)"
+    case "$host" in
+        github.com|*.github.com) echo github ;;
+        gitlab.com|gitlab.*)     echo gitlab ;;
+        bitbucket.org)           echo bitbucket ;;
+        *)                       echo none ;;
+    esac
+}
+
+# derive_forge_write <mode> <forge_kind>: the forge.write JSON array. The one
+# place mode becomes write permission; init and config set both call it.
+derive_forge_write() {
+    if [ "$1" = "owned" ] && [ "$2" != "none" ]; then
+        printf '%s' '["issues","labels","milestones","prs"]'
+    else
+        printf '%s' '[]'
+    fi
+}
 
 # Normalize a remote URL to host/full/path, or print nothing.
 norm_remote() {
@@ -261,7 +289,7 @@ $k"
 }
 
 cmd_init() {
-    local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind host forge_write migrate=1 aliases=""
+    local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind forge_write migrate=1 aliases=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --name)         [ $# -ge 2 ] || die_usage "--name needs a value"; name="$2"; shift 2 ;;
@@ -308,18 +336,8 @@ cmd_init() {
     storage="$(jq -r '.research.storage // "archive"' "$top/.claude/settings.json" 2>/dev/null || echo archive)"
     case "$storage" in archive|spike-issue) ;; *) storage=archive ;; esac
 
-    forge_kind=none
-    host="$(printf '%s\n' "$keys" | sed -n 's/^remote:\([^/]*\)\/.*/\1/p' | head -n 1)"
-    case "$host" in
-        github.com|*.github.com) forge_kind=github ;;
-        gitlab.com|gitlab.*)     forge_kind=gitlab ;;
-        bitbucket.org)           forge_kind=bitbucket ;;
-    esac
-    if [ "$mode" = "owned" ] && [ "$forge_kind" != "none" ]; then
-        forge_write='["issues","labels","milestones","prs"]'
-    else
-        forge_write='[]'
-    fi
+    forge_kind="$(forge_kind_of "$keys")"
+    forge_write="$(derive_forge_write "$mode" "$forge_kind")"
 
     mkdir -p "$dir" || refuse "init: cannot create $dir"
     # $dir did not exist above, so init created it. Any failure from here on
@@ -435,10 +453,30 @@ migrate_archive() {
 }
 
 cmd_config() {
-    local sc
-    if ! { [ "${1:-}" = "get" ] && [ $# -eq 2 ]; }; then die_usage "usage: sidecar.sh config get <dotted.key>"; fi
-    sc="$(do_resolve)" || exit 1
-    jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+    local sc mode kind fw tmp
+    case "${1:-}" in
+        get)
+            [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
+            sc="$(do_resolve)" || exit 1
+            jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+            ;;
+        set)
+            if ! { [ $# -eq 3 ] && [ "$2" = "mode" ]; }; then die_usage "usage: sidecar.sh config set mode <owned|guest>"; fi
+            mode="$3"
+            case "$mode" in owned|guest) ;; *) die_usage "config set: mode must be owned or guest" ;; esac
+            sc="$(do_resolve)" || exit 1
+            kind="$(jq -r '.forge.kind // "none"' "$sc/sidecar.json")"
+            fw="$(derive_forge_write "$mode" "$kind")"
+            tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+            if jq --arg mode "$mode" --argjson fw "$fw" '.mode = $mode | .forge.write = $fw' < "$sc/sidecar.json" > "$tmp"; then
+                mv "$tmp" "$sc/sidecar.json"
+            else
+                rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+            fi
+            commit_paths "$sc" "sidecar: set mode $mode" sidecar.json || exit 1
+            ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set mode <owned|guest>>" ;;
+    esac
 }
 
 cmd_path() {
@@ -553,5 +591,5 @@ case "$verb" in
     archive-dir) cmd_archive_dir "$@" ;;
     commit)  cmd_commit "$@" ;;
     require) cmd_require "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|path|archive-dir|commit|require> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|archive-dir|commit|require> ..." ;;
 esac
