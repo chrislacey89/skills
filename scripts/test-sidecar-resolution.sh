@@ -238,6 +238,38 @@ out=$(cd "$tmp" && CDPATH="$tmp/decoy" bash "$SC" require "sibling.md" --from "l
 check "require under an exported CDPATH prints one line naming the real tree" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "nowhere.md" --from "lessons/b/entry.md" 2>&1); rc=$?
 check "require on a bare name absent from every category still reports MISSING" "1:MISSING: nowhere.md (referenced by lessons/b/entry.md)" "$rc:$out"
+# #432: the rest of require's resolution order, pinned as the header states it.
+# A "path:line" referrer is a label, not a file, so it disables the lookup beside
+# the lesson and across category folders.
+out=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/a/entry.md:12" 2>&1); rc=$?
+check "a --from <file>:<line> referrer disables the lookup beside the lesson" "1:MISSING: sibling.md (referenced by lessons/a/entry.md:12)" "$rc:$out"
+mkdir -p "$tmp/cwdwin" "$tmp/lessons/c"; : > "$tmp/cwdwin/sibling.md"; : > "$tmp/lessons/c/entry.md"
+out=$(cd "$tmp/cwdwin" && bash "$SC" require "sibling.md" --from "$tmp/lessons/a/entry.md" 2>&1); rc=$?
+check "the current directory wins over the real sibling" "0:$tmp/cwdwin/sibling.md" "$rc:$out"
+: > "$tmp/lessons/a/dup.md"; : > "$tmp/lessons/b/dup.md"
+out=$(cd "$tmp" && bash "$SC" require "dup.md" --from "lessons/c/entry.md" 2>/dev/null); rc=$?
+check "a name in two category folders resolves to the alphabetically first" "0:$tmp/lessons/a/dup.md" "$rc:$out"
+err=$(cd "$tmp" && bash "$SC" require "dup.md" --from "lessons/c/entry.md" 2>&1 >/dev/null)
+contains "the ambiguity warning names the first match" "lessons/a/dup.md" "$err"
+contains "the ambiguity warning names the other match" "lessons/b/dup.md" "$err"
+err=$(cd "$tmp" && bash "$SC" require "sibling.md" --from "lessons/b/entry.md" 2>&1 >/dev/null)
+check "a name found in one category folder prints no warning" "" "$err"
+out=$(cd "$tmp" && bash "$SC" require "sibling.md#why" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require strips a #anchor and finds the file" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
+out=$(cd "$tmp" && bash "$SC" require "nowhere.md#why" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require on an absent name with an anchor reports the path as given" "1:MISSING: nowhere.md#why (referenced by lessons/a/entry.md)" "$rc:$out"
+# shellcheck disable=SC2088  # literal ~user and ~ are the inputs under test
+out=$(HOME="$tmp/home" bash "$SC" require "~user/r/a.md" --from "PRD #1" 2>&1); rc=$?
+# shellcheck disable=SC2088
+check "require leaves ~user/ alone" "1:MISSING: ~user/r/a.md (referenced by PRD #1)" "$rc:$out"
+# shellcheck disable=SC2088
+out=$(cd "$tmp" && HOME="$tmp/home" bash "$SC" require "~" --from "PRD #1" 2>&1); rc=$?
+# shellcheck disable=SC2088
+check "require leaves a bare ~ alone (it is not expanded to \$HOME)" "1:MISSING: ~ (referenced by PRD #1)" "$rc:$out"
+# The printed path is physical (pwd -P): a symlinked folder resolves to its target.
+mkdir -p "$tmp/realdir"; : > "$tmp/realdir/linked.md"; ln -s "$tmp/realdir" "$tmp/linkdir"
+out=$(cd "$tmp" && bash "$SC" require "linkdir/linked.md" --from "PRD #1" 2>&1); rc=$?
+check "require prints the physical path, resolving a symlinked folder" "0:$tmp/realdir/linked.md" "$rc:$out"
 run "$tmp"
 check "no verb is a usage error" 2 "$rc"
 run "$PROJ" path dossier

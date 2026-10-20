@@ -18,6 +18,23 @@
 #   sidecar.sh commit -- <path>... -m <msg>
 #   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
 #
+# require resolution order. The first candidate that exists wins; each step runs
+# only when the one before found nothing.
+#   1. <path> as given, relative to the current directory. A leading "~/" is
+#      expanded to $HOME; "~user/" and a bare "~" are left alone, so they are
+#      looked up literally and miss. A "#anchor" suffix is stripped when <path>
+#      does not exist with it, so name.md#section finds name.md.
+#   2. beside the referrer: dirname(<referrer>)/<path>, for a relative <path>.
+#   3. for a bare name (no "/"): <name> in each sibling category folder, that is
+#      dirname(dirname(<referrer>))/*/<name>, in glob (alphabetical) order. A name
+#      found in more than one prints a warning naming every match on stderr, then
+#      uses the first.
+# Steps 2 and 3 run only when <referrer> is an existing file. A "path:line" or a
+# prose referrer ("PRD #1") is only the label in the MISSING line, and disables
+# both. A hit prints the physical path (pwd -P: symlinked folders resolved) of
+# the file found; a miss prints "MISSING: <path> (referenced by <referrer>)" on
+# stderr and exits 1.
+#
 # Exit codes: 0 success, 1 miss or refusal, 2 usage.
 #
 # Archive root. The pre-sidecar research archive lives under ARCHIVE_ROOT
@@ -493,6 +510,8 @@ cmd_require() {
     local probe="$path"
     # shellcheck disable=SC2088  # the literal ~ is the point
     case "$path" in "~/"*) probe="$HOME/${path#"~/"}" ;; esac
+    # A link may carry a section anchor (name.md#section); look up the file.
+    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
     # A relative link inside a lesson is relative to the lesson's own folder, so when
     # --from names an existing file, also try the path beside it.
     if [ ! -e "$probe" ] && [ -f "$from" ]; then
@@ -503,9 +522,16 @@ cmd_require() {
     if [ ! -e "$probe" ] && [ -f "$from" ]; then
         case "$probe" in
             /*|*/*) ;;
-            *) for cand in "$(dirname "$(dirname "$from")")"/*/"$probe"; do
-                   [ -e "$cand" ] && { probe="$cand"; break; }
-               done ;;
+            *) local cand first="" hits=""
+               for cand in "$(dirname "$(dirname "$from")")"/*/"$probe"; do
+                   [ -e "$cand" ] || continue
+                   [ -n "$first" ] || first="$cand"
+                   hits="${hits:+$hits }$cand"
+               done
+               if [ -n "$first" ]; then
+                   [ "$hits" = "$first" ] || printf 'sidecar.sh: warning: %s is in more than one category folder: %s; using %s\n' "$probe" "$hits" "$first" >&2
+                   probe="$first"
+               fi ;;
         esac
     fi
     if [ ! -e "$probe" ]; then
