@@ -334,16 +334,12 @@ volatility: evergreen | stable | volatile
 
 Before committing, search for existing solutions that might overlap:
 
-Search every place a lesson can live, not just the project tree. Resolve both locations through this skill's bundled resolver (Phase 5's *Write target* names it; `SC` is the same path). The block searches the sidecar's `solutions/` directory and the project's `in_tree_path` (skipped when it is `none`); on `SIDECAR MISS`, or with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
+Search every place a lesson can live, not just the project tree. Resolve both locations through this skill's bundled resolver (Phase 5's *Write target* names it; `SC` is the same path). `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it): the sidecar's `solutions/`, the project's `in_tree_path`, and an existing `docs/solutions/`; on `SIDECAR MISS`, or with no sidecar, `docs/solutions/` alone. Set `KW` to the keyword to look for:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 KW="relevant-keyword"
-SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
-ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
-[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
-for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
-  case "$DIR" in ""|none) continue ;; esac
+bash "$SC" solutions-dirs | while IFS= read -r DIR; do
   [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
 done
 true

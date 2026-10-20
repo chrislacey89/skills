@@ -178,16 +178,12 @@ Do not present these as a batch. State one constraint, get confirmation, then pr
 
 ### Phase 3: Consult Past Solutions
 
-Search every place a lesson can live: the project's sidecar and its in-tree path. Resolve both through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path yourself. The block searches the sidecar's `solutions/` directory and the project's `solutions.in_tree_path` (skipped when it is `none`); on `SIDECAR MISS`, or with no sidecar, it searches `docs/solutions/` alone. Set `KW` to the keyword to look for:
+Search every place a lesson can live: the project's sidecar and its in-tree path. Resolve both through this skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh), using its absolute installed path; never compute a sidecar path yourself. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it): the sidecar's `solutions/`, the project's `in_tree_path`, and an existing `docs/solutions/`; on `SIDECAR MISS`, or with no sidecar, `docs/solutions/` alone. Set `KW` to the keyword to look for:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 KW="relevant-keyword"
-SIDE="$(bash "$SC" path solutions 2>/dev/null)" || SIDE=""
-ITP="$(bash "$SC" config get solutions.in_tree_path 2>/dev/null)" || ITP=""
-[ -n "$SIDE" ] || ITP="docs/solutions"          # SIDECAR MISS: fall back to the default store
-for DIR in "$SIDE" "${ITP:-docs/solutions}"; do
-  case "$DIR" in ""|none) continue ;; esac
+bash "$SC" solutions-dirs | while IFS= read -r DIR; do
   [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
 done
 true

@@ -844,8 +844,52 @@ jq '.solutions.in_tree_path = "none"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MS
 out="$(cd "$MIG" && bash -c "$script" 2>/dev/null)"
 contains "with in_tree_path none, Phase 3 still lists the sidecar match" "$SOLS/perf/a.md" "$out"
 lacks "with in_tree_path none, Phase 3 reads no in-tree path" "docs/adr" "$out"
-lacks "with in_tree_path none, Phase 3 never reads a planted docs/solutions" "docs/solutions/planted.md" "$out"
+# #420: an existing docs/solutions is read even when in_tree_path is none,
+# because a /excavate PR commits there whatever in_tree_path says.
+contains "with in_tree_path none, Phase 3 still reads an existing docs/solutions" "docs/solutions/planted.md" "$out"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs with in_tree_path none: the sidecar store, then the existing docs/solutions" \
+    "$SOLS
+docs/solutions" "$dirs"
+jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs lists the sidecar store, in_tree_path, then docs/solutions" "$SOLS
+docs/adr
+docs/solutions" "$dirs"
+jq '.solutions.in_tree_path = "docs/solutions"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs does not list docs/solutions twice" "$SOLS
+docs/solutions" "$dirs"
 git -C "$MSC" checkout -q -- sidecar.json
+rm -f "$MIG/docs/solutions/planted.md"; rmdir "$MIG/docs/solutions"
+jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "with no docs/solutions in the tree, solutions-dirs omits it" "$SOLS
+docs/adr" "$dirs"
+git -C "$MSC" checkout -q -- sidecar.json
+# No sidecar: the default store, named whether or not it exists; a SIDECAR MISS
+# is not an error here and prints nothing on stderr.
+NOSD="$tmp/mig/nosolutions"
+mkrepo "$NOSD"
+dirs="$(cd "$NOSD" && bash "$SC" solutions-dirs 2>"$tmp/sd.err")"; rc=$?
+check "solutions-dirs with no sidecar exits 0 and names docs/solutions" "0 docs/solutions" "$rc $dirs"
+check "solutions-dirs with no sidecar stays quiet on a SIDECAR MISS" "" "$(cat "$tmp/sd.err")"
+dirs="$(cd "$tmp" && bash "$SC" solutions-dirs 2>&1)"; rc=$?
+check "solutions-dirs outside a git repository still names the default store" "0 docs/solutions" "$rc $(printf '%s' "$dirs" | tail -n 1)"
+# Policy lives in one place: /research and /compound both ask the verb, and the
+# compound block runs as written.
+c_read="$(first_bash_after "$COMPOUND" '^Search every place a lesson can live, not just')"
+for pair in "research Phase 3:$p3" "compound overlap:$c_read"; do
+    contains "the ${pair%%:*} block calls solutions-dirs" "solutions-dirs" "${pair#*:}"
+    lacks "the ${pair%%:*} block derives no path itself" "path solutions" "${pair#*:}"
+done
+mkdir -p "$MIG/docs/solutions"
+printf 'needle again\n' > "$MIG/docs/solutions/planted2.md"
+out="$(cd "$MIG" && bash -c "$(with_sc "$c_read" | sed -e 's|^KW=.*|KW="needle"|')" 2>/dev/null)"; rc=$?
+check "the compound overlap block runs cleanly" 0 "$rc"
+contains "the compound overlap block lists the sidecar match" "$SOLS/perf/a.md" "$out"
+contains "the compound overlap block lists the docs/solutions match" "docs/solutions/planted2.md" "$out"
+rm -f "$MIG/docs/solutions/planted2.md"; rmdir "$MIG/docs/solutions"
 
 # Phase 5a: sidecar value, settings fallback with no sidecar, then the default.
 script="$(with_sc "$p5a")"

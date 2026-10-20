@@ -15,6 +15,7 @@
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh path <research|solutions>
+#   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
 #   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
@@ -55,6 +56,13 @@
 # by an unrelated repo that happens to be checked out at .../api. A project
 # archived under its basename before it gained a remote opts that directory in
 # with --archive-alias <dir> (repeatable, matched lowercased, one path component).
+#
+# solutions-dirs policy. The directories a reader searches for lessons, one per
+# line: the sidecar's solutions/ (created if absent), then the project's
+# solutions.in_tree_path unless it is "none", then docs/solutions when that
+# directory exists in the tree and is not already listed (a /excavate PR commits
+# there whatever in_tree_path says). With no sidecar it prints docs/solutions
+# alone. In-tree entries are relative to the current directory.
 #
 # config set. forge.write is derived from mode (owned on a known forge gets
 # write access, guest gets none), so mode is changed through this verb and
@@ -512,6 +520,30 @@ cmd_migrate_archive() {
     migrate_archive "$sc" "$keys" "$aliases" || exit 1
 }
 
+# The directories a reader searches for lessons; the policy is in the header.
+cmd_solutions_dirs() {
+    local sc="" err itp seen=""
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh solutions-dirs"
+    err="$(mktemp)" || refuse "solutions-dirs: cannot create a temp file"
+    if sc="$(do_resolve 2>"$err")"; then
+        cat "$err" >&2
+        mkdir -p "$sc/solutions" || { rm -f "$err"; refuse "solutions-dirs: cannot create $sc/solutions"; }
+        printf '%s\n' "$sc/solutions"
+        itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
+        case "$itp" in ''|none) ;; *) printf '%s\n' "$itp"; seen="$itp" ;; esac
+    else
+        sc=""
+        grep -q 'SIDECAR MISS:' "$err" || cat "$err" >&2
+    fi
+    rm -f "$err"
+    # A /excavate PR commits to docs/solutions whatever in_tree_path says, so an
+    # existing docs/solutions is read even when in_tree_path is none; with no
+    # sidecar it is the default store and is named whether or not it exists.
+    if [ "$seen" != "docs/solutions" ]; then
+        if [ -d docs/solutions ] || [ -z "$sc" ]; then printf 'docs/solutions\n'; fi
+    fi
+}
+
 cmd_path() {
     local sc
     [ $# -eq 1 ] || die_usage "usage: sidecar.sh path <research|solutions>"
@@ -621,9 +653,10 @@ case "$verb" in
     init)    cmd_init "$@" ;;
     config)  cmd_config "$@" ;;
     path)    cmd_path "$@" ;;
+    solutions-dirs) cmd_solutions_dirs "$@" ;;
     migrate-archive) cmd_migrate_archive "$@" ;;
     archive-dir) cmd_archive_dir "$@" ;;
     commit)  cmd_commit "$@" ;;
     require) cmd_require "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|migrate-archive|archive-dir|commit|require> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|solutions-dirs|migrate-archive|archive-dir|commit|require> ..." ;;
 esac
