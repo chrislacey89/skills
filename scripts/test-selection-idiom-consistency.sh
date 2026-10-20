@@ -200,9 +200,11 @@ assert_eq "$prose_markers" "$code_markers" "prose marker list matches the block'
 # to the template forces a decision about the gate instead of passing silently.
 expected_markers='Appetite|Implementation Decisions|No-gos|Rabbit Holes|User Stories'
 assert_eq "$expected_markers" "$code_markers" "the gate's marker regex names exactly the pinned shaped-pitch markers"
-# Not markers: Problem is a generic heading any issue may carry; the rest are
-# optional or conditional sections a hand-written PRD may omit, and the five
-# markers above are the sections every template-built PRD carries.
+# Not markers. The marker set is the one #488 chose; these headings are listed
+# so that each is a recorded decision rather than an omission. Problem and
+# Solution also head issues that are not PRDs (/triage-issue bugs,
+# /create-milestone features, /request-refactor-plan RFCs), so matching them
+# would stop work the gate should let through.
 pitch_unmarked='Problem|Target / Estimate / Commitment|Uncertainty / Confidence|Solution|API Contract Sketch|Research Reference|Lessons from Past Solutions'
 pitch_h2="$(awk '/^<pitch-template>$/{c=1; next} /^<\/pitch-template>$/{c=0} c && /^## /{sub(/^## /, ""); print}' write-a-prd/SKILL.md)"
 while IFS= read -r h; do
