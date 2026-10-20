@@ -200,15 +200,20 @@ assert_eq "$prose_markers" "$code_markers" "prose marker list matches the block'
 # jq invocation. Editing that invocation, VERDICT_JQ, or the query's blocker
 # fields in the file changes what this runs (guard-and-subject-must-be-one-artifact).
 gate_exec="${gate_block/N=<n>/N=7}"
+# stderr is kept, not discarded (guard-and-subject-must-be-one-artifact: never
+# redirect a reader's stderr to /dev/null): it lands in $gate_err so a fixture
+# can assert the gate's own jq error survives. Stdout alone is the verdict.
+gate_err="$(mktemp)"
+trap 'rm -f "$gate_err"' EXIT
 # shellcheck disable=SC2317,SC2329  # the stubs are called from the eval'd block
-run_gate() { # $1 = response JSON ("GHFAIL" makes gh exit 1), $2 = current branch
+run_gate() { # $1 = response JSON ("GHFAIL" makes gh exit 1), $2 = current branch, $3 = script (default: the real block)
     (
         resp="$1"
         branch="${2:-task-branch}"
         gh() { [[ "$resp" != GHFAIL ]] || return 1; printf '%s' "$resp"; }
         git() { printf '%s\n' "$branch"; }
-        eval "$gate_exec"
-    ) 2>/dev/null || echo unknown
+        eval "${3:-$gate_exec}"
+    ) 2>"$gate_err" || echo unknown
 }
 fixture() { # jq expression applied to a healthy, takeable base response
     jq -cn "{data: {repository: {issue: {
@@ -220,6 +225,19 @@ fixture() { # jq expression applied to a healthy, takeable base response
 verdict() { cut -d' ' -f1 <<<"$1"; }
 
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture .)")")" "healthy response -> takeable"
+# A broken program must say so: the verdict is still unknown, and the real
+# block's own jq error must reach stderr. Putting 2>/dev/null back on the gate's
+# final line leaves stdout identical and empties this, so this goes red.
+broken_exec="${gate_exec/\"\$VERDICT_JQ\"/\"\$VERDICT_JQ ) broken ( \"}"
+if [[ "$broken_exec" == "$gate_exec" ]]; then
+    bad "could not break the gate's jq program (the substitution matched nothing)"
+fi
+assert_eq "unknown" "$(run_gate "$(fixture .)" task-branch "$broken_exec")" "a broken jq program -> unknown"
+if grep -q 'jq: error' "$gate_err"; then
+    ok "a broken jq program's error reaches stderr (not swallowed)"
+else
+    bad "a broken jq program's error was swallowed" "stderr: $(cat "$gate_err")"
+fi
 assert_eq "unknown"   "$(run_gate 'null')" "null response -> unknown"
 assert_eq "unknown"   "$(run_gate GHFAIL)" "failed gh call -> unknown"
 assert_eq "unknown"   "$(run_gate '')" "empty response -> unknown"
