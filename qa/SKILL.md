@@ -218,7 +218,7 @@ When creating a breakdown:
 - **Create issues in dependency order** so you can reference real issue numbers in "Blocked by"
 - **Maximize parallelism** — the goal is that multiple people (or agents) can grab different issues simultaneously
 
-**Then wire each blocking relationship as a native GitHub dependency.** The prose `## Blocked by` section records *why* a bug is gated and survives a tracker migration, but no tool reads it. The native edge is what automated selection queries — including `/execute`'s Blocked-slice gate, which stops before implementing a slice with an open blocker. A `/qa` bug filed with prose only returns no edges from that gate, so a genuinely blocked bug reads as takeable.
+**Then wire each blocking relationship as a native GitHub dependency.** The prose `## Blocked by` section records *why* a bug is gated and survives a tracker migration, but no tool reads it. The native edge is what automated selection queries — including `/execute` Step 0's issue-shape and blocker gate, which stops before implementing a slice with an open blocker. A `/qa` bug filed with prose only returns no edges from that gate, so a genuinely blocked bug reads as takeable.
 
 Once the issues exist and you have real numbers, wire one edge per `Blocked by` entry:
 
