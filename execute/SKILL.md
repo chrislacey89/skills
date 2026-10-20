@@ -131,6 +131,7 @@ def lines: split("\n")[];
      or ($i.closedByPullRequestsReferences.nodes | type) != "array"
      or ($i.comments.nodes | length) != ([$i.comments.totalCount, 100] | min)
      or ($i.blockedBy.nodes | length) != ([$i.blockedBy.totalCount, 50] | min)
+     or ($i.closedByPullRequestsReferences.nodes | length) != ([$i.closedByPullRequestsReferences.totalCount, 20] | min)
   then "unknown"
   else
     ([$i.comments.nodes[].body | lines | select(test("^Decomposed into: #[0-9]+"))] | length > 0) as $decomposed
@@ -151,7 +152,7 @@ RESP=$(gh api graphql -F owner='{owner}' -F repo='{repo}' -F n="$N" -f query='
         number title body
         comments(last: 100) { totalCount nodes { body } }
         blockedBy(first: 50) { totalCount nodes { number title state } }
-        closedByPullRequestsReferences(first: 20) { nodes { number state headRefName } }
+        closedByPullRequestsReferences(first: 20) { totalCount nodes { number state headRefName } }
       }
     }
   }') || RESP=null

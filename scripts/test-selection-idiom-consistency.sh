@@ -215,7 +215,7 @@ fixture() { # jq expression applied to a healthy, takeable base response
         number: 7, title: \"t\", body: \"## Problem\nx\",
         comments: {totalCount: 0, nodes: []},
         blockedBy: {totalCount: 0, nodes: []},
-        closedByPullRequestsReferences: {nodes: []}}}}} | $1"
+        closedByPullRequestsReferences: {totalCount: 0, nodes: []}}}}} | $1"
 }
 verdict() { cut -d' ' -f1 <<<"$1"; }
 
@@ -246,9 +246,10 @@ assert_eq "blocked"   "$(verdict "$(run_gate "$(fixture '.data.repository.issue.
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "CLOSED"}]}')")")" "closed blocker -> takeable"
 assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 2, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")" "blocker list shorter than its count -> unknown"
 assert_eq "undecomposed-prd" "$(run_gate "$(fixture '.data.repository.issue.body = "## Appetite\nx" | .data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")" "PRD heading plus open blocker -> undecomposed-prd (order pinned)"
-assert_eq "in-flight" "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "OPEN", headRefName: "other"}]')")")" "open PR on another branch -> in-flight"
-assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "OPEN", headRefName: "mine"}]')" mine)")" "open PR on the current branch -> takeable"
-assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "CLOSED", headRefName: "other"}]')")")" "closed PR -> takeable"
+assert_eq "in-flight" "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences = {totalCount: 1, nodes: [{number: 5, state: "OPEN", headRefName: "other"}]}')")")" "open PR on another branch -> in-flight"
+assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences = {totalCount: 1, nodes: [{number: 5, state: "OPEN", headRefName: "mine"}]}')" mine)")" "open PR on the current branch -> takeable"
+assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences = {totalCount: 1, nodes: [{number: 5, state: "CLOSED", headRefName: "other"}]}')")")" "closed PR -> takeable"
+assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences = {totalCount: 2, nodes: [{number: 5, state: "OPEN", headRefName: "other"}]}')")" "PR list shorter than its count -> unknown"
 
 # -----------------------------------------------------------------------------
 section "the by-construction claim is backed by this suite"
