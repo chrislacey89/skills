@@ -217,6 +217,17 @@ assert_eq "unknown"   "$(run_gate "$(fixture 'del(.data.repository.issue.closedB
 assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.comments.totalCount = 1')")" "comment list shorter than its count -> unknown"
 assert_eq "undecomposed-prd" "$(run_gate "$(fixture '.data.repository.issue.body = "## Rabbit Holes\nx"')")" "PRD marker, no decomposition -> undecomposed-prd"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.body = "## No-gos\nx" | .data.repository.issue.comments = {totalCount: 1, nodes: [{body: "Decomposed into: #8, #9"}]}')")")" "decomposed PRD -> falls through to takeable"
+# A real slice is not a PRD: its body is the headings /prd-to-issues' own issue
+# template writes (extracted from the file, so a heading added there is checked),
+# including "## User Stories Addressed", and it never gets a Decomposed comment.
+slice_body="$(awk '/^<issue-template>$/{c=1; next} /^<\/issue-template>$/{c=0} c && /^#+ /{print}' prd-to-issues/SKILL.md)"
+if grep -qF 'User Stories Addressed' <<<"$slice_body"; then
+    ok "extracted the slice template's headings (incl. User Stories Addressed)"
+else
+    bad "slice template headings not extracted from prd-to-issues/SKILL.md"
+fi
+slice_resp="$(jq -c --arg b "$slice_body" '.data.repository.issue.body = $b' <<<"$(fixture .)")"
+assert_eq "takeable" "$(verdict "$(run_gate "$slice_resp")")" "real slice template headings -> takeable, not undecomposed-prd"
 assert_eq "blocked"   "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")")" "open blocker -> blocked"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "CLOSED"}]}')")")" "closed blocker -> takeable"
 assert_eq "in-flight" "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences.nodes = [{number: 5, state: "OPEN", headRefName: "other"}]')")")" "open PR on another branch -> in-flight"
