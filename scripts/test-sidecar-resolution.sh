@@ -939,6 +939,13 @@ pm_text="$(cat "$repo_root/pre-merge/review-checklist.md")"
 contains "pre-merge's docs/solutions dimension asks solutions-dirs" 'bash "$SC" solutions-dirs' "$pm_text"
 # shellcheck disable=SC2016  # literal pattern
 lacks "pre-merge restates no in_tree_path-none skip" 'unless it is `none`' "$pm_text"
+cc_text="$(cat "$repo_root/correct-course/SKILL.md")"
+# shellcheck disable=SC2016  # literal patterns
+contains "correct-course's stale-artifact check asks solutions-dirs" 'bash "$SC" solutions-dirs' "$cc_text"
+# shellcheck disable=SC2016  # literal pattern
+lacks "correct-course restates no in_tree_path-none skip" '(unless `none`)' "$cc_text"
+# shellcheck disable=SC2016  # literal pattern
+lacks "correct-course reads no solutions.in_tree_path itself" 'config get solutions.in_tree_path' "$cc_text"
 rm -f "$MIG/docs/solutions/planted2.md"; rmdir "$MIG/docs/solutions"
 
 # Phase 5a: sidecar value, settings fallback with no sidecar, then the default.
