@@ -230,6 +230,7 @@ assert_eq "unknown"   "$(run_gate "$(fixture 'del(.data.repository.issue.title)'
 assert_eq "unknown"   "$(run_gate "$(fixture 'del(.data.repository.issue.closedByPullRequestsReferences)')")" "missing PR field -> unknown"
 assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.comments.totalCount = 1')")" "comment list shorter than its count -> unknown"
 assert_eq "undecomposed-prd" "$(run_gate "$(fixture '.data.repository.issue.body = "## Rabbit Holes\nx"')")" "PRD marker, no decomposition -> undecomposed-prd"
+assert_eq "undecomposed-prd" "$(run_gate "$(fixture '.data.repository.issue.body = "## Appetite\r\nx\r\n"')")" "CRLF PRD heading (web-editor line endings) -> undecomposed-prd"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.body = "## No-gos\nx" | .data.repository.issue.comments = {totalCount: 1, nodes: [{body: "Decomposed into: #8, #9"}]}')")")" "decomposed PRD -> falls through to takeable"
 # A real slice is not a PRD: its body is the headings /prd-to-issues' own issue
 # template writes (extracted from the file, so a heading added there is checked),

@@ -135,7 +135,7 @@ def lines: split("\n")[];
   then "unknown"
   else
     ([$i.comments.nodes[].body | lines | select(test("^Decomposed into: #[0-9]+"))] | length > 0) as $decomposed
-    | ([$i.body | lines | select(test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions) *$"; "i"))] | length > 0) as $prd
+    | ([$i.body | lines | select(test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\s*$"; "i"))] | length > 0) as $prd
     | [$i.blockedBy.nodes[] | select(.state == "OPEN") | {number, title}] as $open_blockers
     | [$i.closedByPullRequestsReferences.nodes[] | select(.state == "OPEN" and .headRefName != $branch) | {number, headRefName}] as $in_flight
     | if $prd and ($decomposed | not) then "undecomposed-prd"
