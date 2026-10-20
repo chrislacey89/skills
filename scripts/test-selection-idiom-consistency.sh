@@ -193,6 +193,33 @@ prose_markers="$(grep -F '**`undecomposed-prd`**' execute/SKILL.md \
     | grep -o '(`[^)]*)' | head -1 | grep -o '`[^`]*`' | tr -d '`' | sort | paste -sd'|' -)"
 code_markers="$(grep -o '(Appetite|[^)]*)' <<<"$gate_jq" | tr -d '()' | tr '|' '\n' | sort | paste -sd'|' -)"
 assert_eq "$prose_markers" "$code_markers" "prose marker list matches the block's marker regex"
+# The regex must also name every pitch-template section that marks a shaped PRD,
+# so shrinking it (e.g. dropping No-gos from both the regex and the prose) is
+# red (#498). The marker set is pinned here; every other level-2 template
+# heading must be listed in pitch_unmarked with its reason, so a heading added
+# to the template forces a decision about the gate instead of passing silently.
+expected_markers='Appetite|Implementation Decisions|No-gos|Rabbit Holes|User Stories'
+assert_eq "$expected_markers" "$code_markers" "the gate's marker regex names exactly the pinned shaped-pitch markers"
+# Not markers: Problem is a generic heading any issue may carry; the rest are
+# optional or conditional sections a hand-written PRD may omit, and the five
+# markers above are the sections every template-built PRD carries.
+pitch_unmarked='Problem|Target / Estimate / Commitment|Uncertainty / Confidence|Solution|API Contract Sketch|Research Reference|Lessons from Past Solutions'
+pitch_h2="$(awk '/^<pitch-template>$/{c=1; next} /^<\/pitch-template>$/{c=0} c && /^## /{sub(/^## /, ""); print}' write-a-prd/SKILL.md)"
+while IFS= read -r h; do
+    [ -n "$h" ] || continue
+    if grep -qxF -- "$h" < <(tr '|' '\n' <<<"$expected_markers"; tr '|' '\n' <<<"$pitch_unmarked"); then
+        ok "pitch-template section '$h' is classified (marker or stated exclusion)"
+    else
+        bad "pitch-template section '$h' is neither a gate marker nor a stated exclusion"
+    fi
+done <<<"$pitch_h2"
+while IFS= read -r m; do
+    if grep -qxF -- "$m" <<<"$pitch_h2"; then
+        ok "pinned marker '$m' is a pitch-template section"
+    else
+        bad "pinned marker '$m' is not a ## section of write-a-prd's <pitch-template>"
+    fi
+done < <(tr '|' '\n' <<<"$expected_markers")
 
 # Run the real block, not a retyped copy: gate_block is the fenced bash from
 # execute/SKILL.md (N=<n> through the final jq line), evaluated with `gh` and
@@ -205,17 +232,21 @@ gate_exec="${gate_block/N=<n>/N=7}"
 # can assert the gate's own jq error survives. Stdout alone is the verdict.
 gate_err="$(mktemp)"
 gate_n="$(mktemp)"
-trap 'rm -f "$gate_err" "$gate_n"' EXIT
+gate_fargs="$(mktemp)"
+trap 'rm -f "$gate_err" "$gate_n" "$gate_fargs"' EXIT
 # shellcheck disable=SC2317,SC2329  # the stubs are called from the eval'd block
 run_gate() { # $1 = response JSON ("GHFAIL" makes gh exit 1), $2 = current branch, $3 = script (default: the real block)
     (
         resp="$1"
         branch="${2:-task-branch}"
-        # Records the value of the -F n=... argument it receives into $gate_n.
+        # Records the value of the -F n=... argument it receives into $gate_n, and
+        # every -F argument (one per line) into $gate_fargs.
         gh() {
             local prev="" a
+            : >"$gate_fargs"
             for a in "$@"; do
                 [[ "$prev" == -F && "$a" == n=* ]] && printf '%s' "$a" >"$gate_n"
+                [[ "$prev" == -F ]] && printf '%s\n' "$a" >>"$gate_fargs"
                 prev="$a"
             done
             [[ "$resp" != GHFAIL ]] || return 1
@@ -236,6 +267,14 @@ verdict() { cut -d' ' -f1 <<<"$1"; }
 
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture .)")")" "healthy response -> takeable"
 assert_eq "n=7" "$(cat "$gate_n")" "the gate passes the issue number it was given as -F n="
+# All three -F arguments the query's variables bind to. gh resolves {owner} and
+# {repo} itself, so the literal placeholders are the contract; dropping either
+# makes `gh api graphql` fail and the gate print unknown on every issue (#498).
+assert_eq "n=7|owner={owner}|repo={repo}" "$(sort "$gate_fargs" | paste -sd'|' -)" "the gate passes -F owner, -F repo and -F n to gh api graphql"
+# The query header must declare exactly the variables those arguments bind,
+# extracted from the real block rather than restated.
+# shellcheck disable=SC2016  # the $ names are literal GraphQL variables
+assert_eq 'query($owner: String!, $repo: String!, $n: Int!) {' "$(grep -F 'query($' <<<"$gate_block" | sed 's/^ *//')" "the gate's query header declares the owner, repo and n variables"
 # A broken program must say so: the verdict is still unknown, and the real
 # block's own jq error must reach stderr. Putting 2>/dev/null back on the gate's
 # final line leaves stdout identical and empties this, so this goes red.
