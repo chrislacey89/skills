@@ -262,7 +262,7 @@ A companion to Boundary Maps. The Boundary Map answers *what flows between slice
 
 ## Where State Lives
 
-On Skill Kit's own path, durable state never lives in the project tree. It lives in GitHub (issues and milestones) and in the project's sidecar (a private, local-only git repository outside the working tree at `~/.claude/sidecars/<name>/`, holding `sidecar.json`, `research/`, and `solutions/`, and reached only through `sidecar.sh`); the Where State Lives table below gives each kind's place. The one exception is a project's own choice. A project that already commits `docs/solutions/` can tell `/compound` to write lessons there (`solutions.write: in-tree`). That directory, like the project's skills, is then code the project commits on purpose, not pipeline state.
+On Skill Kit's own path, durable state never lives in the project tree; the table below gives each kind's place. Its main homes are GitHub (issues and milestones) and the project's sidecar (a private, local-only git repository outside the working tree at `~/.claude/sidecars/<name>/`, holding `sidecar.json`, `research/`, and `solutions/`, and reached only through `sidecar.sh`). The one exception is a project's own choice. A project that already commits `docs/solutions/` can tell `/compound` to write lessons there (`solutions.write: in-tree`). That directory, like the project's skills, is then code the project commits on purpose, not pipeline state.
 
 | State | Location | Why |
 |-------|----------|-----|

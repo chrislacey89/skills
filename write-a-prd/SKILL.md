@@ -344,7 +344,7 @@ Technical research for this feature is documented at `<absolute path to the rese
 - [Recommended approach from research]
 - [Key constraint or tradeoff from research]
 
-Implementors should read the research document before starting work. Paths are not openable by readers other than the originating user — for cross-machine, multi-contributor, or public-audience PRDs, opt the project into spike-issue mode (see `/research` Phase 5a).
+Implementors should read the research document before starting work. The cited path is outside the repository (`/research` Phase 5c states where), so it is not openable by readers other than the originating user — for cross-machine, multi-contributor, or public-audience PRDs, opt the project into spike-issue mode (see `/research` Phase 5a).
 
 ## Lessons from Past Solutions
 
