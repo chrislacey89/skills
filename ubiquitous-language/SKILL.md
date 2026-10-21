@@ -1,6 +1,7 @@
 ---
 name: ubiquitous-language
-description: "Side-route skill for hardening domain vocabulary. Use when terminology is fuzzy, competing terms are causing confusion, or a glossary would improve shaping, QA, and refactor conversations. Produces UBIQUITOUS_LANGUAGE.md, then returns to the workflow that needed sharper language."
+description: "User-invoked side-route for hardening domain vocabulary. Type it when terminology is fuzzy, competing terms are causing confusion, or a glossary would improve shaping, QA, and refactor conversations. Produces UBIQUITOUS_LANGUAGE.md, then returns to the workflow that needed sharper language."
+disable-model-invocation: true
 sources:
   primary:
     - "Domain-Driven Design — Eric Evans"
@@ -41,11 +42,11 @@ Do not use it as a substitute for feature shaping or implementation. Its job is 
    - Same word used for different concepts (ambiguity)
    - Different words used for the same concept (synonyms)
    - Vague or overloaded terms
-5. **Propose a canonical glossary** with opinionated term choices
+5. **Propose a canonical glossary** with opinionated term choices, and ask the user to confirm each term's name and definition — one term per turn
 6. **Check model-code correspondence** (when a codebase is present). Two checks, both recorded under **Model-code fractures**:
    - Names: scan class, module, and function names for terms that diverge from the glossary.
    - Behavior: when the user states a rule about a term ("an Order can be canceled until it ships"), make one search for the code that enforces it and read it. If the code contradicts the rule, say so before the term is written, citing file and line — the glossary must not record a rule the system does not keep. If nothing enforces it, record the rule as *unenforced* rather than searching further. When the code, not the rule, looks wrong, recommend `/triage-issue`; do not edit the glossary to match a bug.
-7. **Write each term as it settles.** A term is settled when the user confirms its canonical name and definition (step 5's agreement), not when it is first mentioned. Create `UBIQUITOUS_LANGUAGE.md` in the working directory on the first settled term and add or revise an entry at each confirmation, so a conversation that stops early still leaves every agreed term on disk. The file follows the format below from the first write.
+7. **Write each term as it settles.** A term is settled when the user has confirmed its canonical name and definition (step 5) and step 6 has run on any rule the user stated about it — not when it is first mentioned. Create `UBIQUITOUS_LANGUAGE.md` in the working directory on the first settled term and add or revise an entry at each confirmation, so a conversation that stops early still leaves every agreed term on disk. The file follows the format below from the first write; writing inline is not permission to log every answer.
 8. **Output a summary** inline in the conversation once the walk is finished
 
 ## Output Format
@@ -102,7 +103,7 @@ _Include only when a codebase was scanned._
 
 - **Expected input:** domain language ambiguity, competing terminology, or a need to harden vocabulary before downstream work
 - **Produces:** `UBIQUITOUS_LANGUAGE.md` and clearer naming for issues, specs, QA, and refactor discussion
-- **Supports:** `/shape`, `/write-a-prd`, `/qa`, `/triage-issue`, and refactor planning by giving those skills sharper domain terms
+- **Read by:** `/qa` (to learn an area's language), `/prd-to-issues` (as a slice anchor), and `/re-pitch` (for glosses) — each only when `UBIQUITOUS_LANGUAGE.md` exists; `/re-pitch` may recommend this skill when the same terms keep needing glosses
 - **What comes next:** return to the workflow that needed better language, now using the glossary consistently
 
 ## Rules
@@ -111,7 +112,7 @@ _Include only when a codebase was scanned._
 - **Be opinionated.** When multiple words exist for the same concept, pick the best one and list the others as aliases to avoid.
 - **Flag conflicts explicitly.** If a term is used ambiguously in the conversation, call it out in the "Flagged ambiguities" section with a clear recommendation. If the same word legitimately means different things in different subdomains, note it as cross-context divergence rather than a defect.
 - **Name the unnamed.** When a concept appears only as clauses, conditionals, or procedural descriptions ("if X and Y and not Z..."), propose a canonical name for it (e.g., "Free Shipping Eligibility," "Booking Validity"). These are often the highest-value terms in the glossary.
-- **Only include domain terms.** The file holds terms, relationships, and the flagged sections below. Skip generic programming concepts (array, function, endpoint) and module/class names unless they have meaning in the domain language, and keep implementation notes, specs, and scratch out of it — writing inline is not permission to log every answer.
+- **Only include domain terms.** The file holds the sections in Output Format and nothing else. Skip generic programming concepts (array, function, endpoint) and module/class names unless they have meaning in the domain language, and keep implementation notes, specs, and scratch out of it.
 - **Keep definitions tight.** One sentence max. Define what it IS, not what it does.
 - **Show relationships.** Use bold term names and express cardinality where obvious.
 - **Group terms into multiple tables** when natural clusters emerge (e.g. by subdomain, lifecycle, or actor). Each group gets its own heading and table. If all terms belong to a single cohesive domain, one table is fine — don't force groupings.
@@ -123,7 +124,7 @@ _Include only when a codebase was scanned._
 When invoked again in the same conversation:
 
 1. Read the existing `UBIQUITOUS_LANGUAGE.md`
-2. Incorporate any new terms from subsequent discussion
+2. Incorporate any new terms from subsequent discussion through steps 5–7
 3. Surface any newly implicit concepts from subsequent discussion
 4. Update definitions if understanding has evolved — each change is a model change, not just a wording fix
 5. Re-flag any new ambiguities

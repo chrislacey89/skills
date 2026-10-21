@@ -88,9 +88,10 @@ This is the heart of the interview — walking the decision tree one branch at a
 
 **End by agreement, not completion.** The session ends when you and the user have shared understanding of what to build — not when every conceivable question has been answered. Some questions will be answered by `/research`; some will be resolved during PRD writing; some will emerge during implementation. The goal is "enough understanding to research intelligently," not "every detail specified." Accept imperfection and proceed.
 
-**Present a closing summary.** Before ending, summarize the decisions made in four categories:
+**Present a closing summary.** Before ending, summarize the decisions made in these categories:
 
 - **Choices** — decisions that are settled. The user chose these deliberately. Example: "We're building a real-time presence indicator for the lesson page." These are locked — downstream skills should not re-debate them. Classification schemes, scoring rubrics, taxonomies, role/permission matrices, and decision rules are Choices that must be **enumerated** in the summary, not named in the abstract — listing the categories or levels by name, not just by their count.
+- **Terms** — domain words coined or contested in this shape, each with a one-sentence definition and the alias to avoid. Example: "**Lesson** (not *session*, *class*) — one scheduled meeting of a cohort." Omit the category when no term was contested.
 - **Assumptions** — things we believe to be true but haven't verified. Tag each with a confidence level (see below). Example: "[Uncertain] We assume Ably's free tier handles our expected concurrent user count."
 - **Impositions** — external constraints we can't change. Example: "The app uses Next.js App Router; we can't switch frameworks."
 - **Structural signals** — recurring symptoms, delayed effects, missing feedback loops, or stakeholder goal conflicts that suggest the visible problem may not be the underlying one. Keep this list short and concrete. These are prompts for better `/research` and `/write-a-prd`, not a request to fully solve the system during the interview.
