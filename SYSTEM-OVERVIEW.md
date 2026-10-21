@@ -306,7 +306,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 
 | Skill | Expects | Produces | Next |
 |---|---|---|---|
-| `/shape` | Fuzzy problem, unclear scope | Shared understanding — choices, assumptions, impositions, signals | `/research` (or `/create-milestone` for multi-PRD work) |
+| `/shape` | Fuzzy problem, unclear scope | Shared understanding — the closing summary's categories (`/shape` Phase 3) | `/research` (or `/create-milestone` for multi-PRD work) |
 | `/create-milestone` | `/shape` closing summary for a multi-PRD tranche | GitHub milestone plus sequenced feature issues | `/research` on a `research-ready` feature |
 | `/research` | Clarified problem from `/shape` | Research artifact with verified versions and doc links — a file at the path `/research` Phase 5c writes (default), or closed `research`-labeled GitHub spike issue when the project opts in via `research.storage = spike-issue` in `sidecar.json` | `/write-a-prd` (may invoke `/api-design-review`) |
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |

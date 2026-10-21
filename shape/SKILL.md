@@ -134,7 +134,7 @@ For the milestone branch, print `/create-milestone <feature-slug>` instead of `/
 
 Hand off to `/research` by default. For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features that each need their own research-PRD cycle — branch to `/create-milestone` instead. Big-batch work (6 weeks) that fits a single PRD stays on the default path and gets a container milestone from `/write-a-prd`. Treat assumptions by confidence tag: `Uncertain` and `Speculative` assumptions are first-priority research targets because they carry the most downstream risk. `Likely` assumptions can usually be confirmed during PRD writing. `Established` assumptions need only targeted verification.
 
-- **Carries forward:** choices, assumptions with their confidence tags, impositions, and structural signals
+- **Carries forward:** the closing summary (Phase 3's categories)
 - **Comes next by default:** `/research`, or `/create-milestone` when the shaped work requires multiple independent PRDs
 
 **Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/research` (recommended — verify the unknowns before the PRD)**, **→ `/create-milestone` (this needs multiple independent PRDs)**, **Keep shaping — the problem is still fuzzy**. The platform's free-text "Other" option is the escape hatch — don't add one.
