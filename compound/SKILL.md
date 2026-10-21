@@ -377,7 +377,7 @@ bash "$SC" config get solutions.in_tree_path   # docs/solutions | docs/adr | <pa
 - **`in-tree`** — commit in the project on the in-PR path below, whatever `in_tree_path` is. When it is not `docs/solutions`, the entry goes under `in_tree_path` in the shape Phase 3 imitated and is still committed on the PR branch and handed to the `/pre-merge` re-run; how that re-run reads a delta outside `docs/solutions/` is `/pre-merge` Phase 4's rule, not restated here.
 - **`SIDECAR MISS`** (the resolver exits 1 and prints the `init` command) — if the repo has a committed `docs/solutions/`, it predates the sidecar: show the miss line as a notice and continue in-tree as below. Otherwise stop, print the `init` command exactly as the resolver gave it, and write nothing; creating a sidecar is a human act.
 
-**Sidecar branch.** The entry is written into the sidecar and committed there. The project's tree, its `.git`, and the PR branch are not touched, so the head does not move past the review stamp and the `/pre-merge` re-run below does not apply. Two content rules hold in this branch because a guest sidecar is a personal store outside the client's review: apply the same secret redaction as an in-tree entry, and copy no fenced block longer than 20 lines from the client's tree — describe the code and cite its path instead.
+**Sidecar branch.** The entry is written into the sidecar and committed there. Writing the entry does not touch the project's tree, its `.git`, or the PR branch, so the entry alone does not move the head past the review stamp and the `/pre-merge` re-run below does not apply to it. Two content rules hold in this branch because a guest sidecar is a personal store outside the client's review: apply the same secret redaction as an in-tree entry, and copy no fenced block longer than 20 lines from the client's tree — describe the code and cite its path instead.
 
 <!-- sidecar-write: compound -->
 ```bash
@@ -392,7 +392,7 @@ bash "$SC" require "$ENTRY" --from "/compound Phase 5" || exit 1
 bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
 ```
 
-`commit` never pushes. Phase 4's mechanism, if any, lives in the project and goes through the in-PR path on its own; the sidecar holds the lesson only. Then go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
+`commit` never pushes. Phase 4's mechanism and Phase 1's glossary edit, if any, live in the project and go through the in-PR path on their own; the sidecar holds the lesson only. Then go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
 
 **In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR. Committing does not review it — the hand-back below is what makes it reviewed and merged with the code that taught it:
 
@@ -457,7 +457,7 @@ This will be consulted automatically during future /research and /write-a-prd se
 **Loop closed.** Next: /help when you return to this repo.
 ```
 
-**Sidecar path** — the lesson is committed in the sidecar, and the PR head did not move, so no re-run follows:
+**Sidecar path** — the lesson is committed in the sidecar, and the entry did not move the PR head, so no re-run follows on its account:
 
 ```
 Compounded to sidecar: <absolute path to the entry>
@@ -469,7 +469,7 @@ Key lesson: [One sentence summary of the most important takeaway]
 The sidecar is local and never pushed; readers consult it alongside the repo's in-tree path.
 ```
 
-If Phase 4's mechanism was committed onto the PR, that commit did move the head, so name the `/pre-merge` re-run as the next step in prose. Otherwise this path ends here like the post-merge one.
+If Phase 4's mechanism or Phase 1's glossary edit was committed onto the PR, that commit did move the head, so name the `/pre-merge` re-run as the next step in prose. Otherwise this path ends here like the post-merge one.
 
 On the in-PR path two steps still follow — `/pre-merge` re-reads the delta and re-stamps, then `/closeout` performs the merge — so `/compound` hands to the first of them with a `**Next session:**` line. On the post-merge path `/compound` is the end of the loop, so it prints the loop-closed line instead. `/help` is only a suggested re-entry point; the user may also re-enter via `/shape`, `/qa`, or any other appropriate skill.
 
