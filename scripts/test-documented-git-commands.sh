@@ -2590,7 +2590,7 @@ assert_eq "$(wc -l < "$log_file" | tr -d ' ')" "$(vars_second_log "${excavate_bl
 # count is zero and the re-rank changes nothing.
 assert_eq 0 "$(xb "$b_dups")" "dups: the main fixture plants no repeated patch, so the count is 0"
 assert_eq 0 "$(wc -l < "$excavate_out/main/work/dups.txt" | tr -d ' ')" "dups: dups.txt is written and empty in the main fixture"
-assert_eq "top five without duplicates: set same, order same" "$(xb "$b_rerank")" "rerank: with no duplicates the knee is unchanged"
+assert_eq "$(printf 'top five without duplicates (revisions with copies counted -> copies left out):\n'; head -5 "$excavate_out/main/work/hotspots.txt" | awk -F'\t' '{ printf "%d -> %d\t%s\n", $1, $1, $3 }')" "$(xb "$b_rerank")" "rerank: with no duplicates every top-five file keeps its count"
 
 # --- Duplicated history: a release-branch flow -------------------------------
 #
@@ -2661,7 +2661,7 @@ assert_eq 3 "$(count_for "$dup_out/work/freq.txt" hot.txt)" "dups: the shared lo
 assert_eq "hot.txt" "$(sed -n 1p "$dup_out/work/hotspots.txt" | cut -f3)" "dups: hot.txt leads the ranking with its copies counted"
 assert_eq "warm.txt" "$(sed -n 1p "$dup_out/work/hotspots-dedup.txt" | cut -f3)" "rerank: warm.txt leads once the copies are set aside"
 assert_eq 1 "$(awk -F'\t' '$3 == "hot.txt" { print $1 }' "$dup_out/work/hotspots-dedup.txt")" "rerank: hot.txt counts its one original revision"
-assert_eq "top five without duplicates: set same, order changed" "$(cat "$dup_out/b$b_rerank.out")" "rerank: same files, different order"
+assert_eq "$(printf 'top five without duplicates (revisions with copies counted -> copies left out):\n3 -> 1\thot.txt\n2 -> 2\twarm.txt')" "$(cat "$dup_out/b$b_rerank.out")" "rerank: the block prints both counts, so hot.txt's drop from 3 to 1 shows"
 
 # M-dup: drop --reverse, so the first copy seen is the newest. The original fix
 # is then listed as the duplicate, and the keep-oldest assertion above must fail.

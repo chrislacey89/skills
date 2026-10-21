@@ -437,25 +437,23 @@ awk -v d="$WORK/dups.txt" 'BEGIN { while ((getline s < d) > 0) x[s] = 1 } /^@@/ 
 { awk -F'\t' '{ print "H\t" $2 "\t" $3 }' "$WORK/hotspots.txt"; awk '{ c = $1; sub(/^ *[0-9]+ /, ""); print "F\t" c "\t" $0 }' "$WORK/freq-dedup.txt"; } \
   | awk -F'\t' '$1 == "H" { loc[$3] = $2; next } $1 == "F" { fq[$3] = $2 } END { for (p in loc) printf "%d\t%d\t%s\n", fq[p], loc[p], p }' \
   | sort -t"$(printf '\t')" -k1,1nr -k2,2nr > "$WORK/hotspots-dedup.txt"
-{ head -5 "$WORK/hotspots.txt" | cut -f3 | sed 's/^/A\t/'; head -5 "$WORK/hotspots-dedup.txt" | cut -f3 | sed 's/^/B\t/'; } \
-  | awk -F'\t' '$1 == "A" { a[++na] = $2; ina[$2] = 1; next } { b[++nb] = $2; inb[$2] = 1 }
-      END { set = (na == nb) ? "same" : "changed"; ord = set
-            for (i = 1; i <= na; i++) { if (!(a[i] in inb)) set = "changed"; if (a[i] != b[i]) ord = "changed" }
-            for (i = 1; i <= nb; i++) if (!(b[i] in ina)) set = "changed"
-            if (set == "changed") ord = "changed"
-            printf "top five without duplicates: set %s, order %s\n", set, ord }'
+awk -F'\t' 'FILENAME == ARGV[1] { w[$3] = $1; rw[$3] = FNR; if (FNR <= 5) o[++n] = $3; next }
+    { d[$3] = $1; if (FNR <= 5 && !(rw[$3] && rw[$3] <= 5)) o[++n] = $3 }
+    END { print "top five without duplicates (revisions with copies counted -> copies left out):"
+          for (i = 1; i <= n; i++) printf "%d -> %d\t%s\n", w[o[i]], d[o[i]], o[i] }' "$WORK/hotspots.txt" "$WORK/hotspots-dedup.txt"
 ```
 
 Write the answer into the dossier's Hotspots section as one measured sentence
-next to the knee table, with the counts from both rankings where the order
-moved. This replaces a caveat written from impression. A changed order alone
-means only near-ties moved. A changed **set** means a file entered or left the
-top five: give both lists with their counts, and say whether the swap is
-between near-ties at the edge (48 and 47 trading fifth place) or a file that
-moved by more than a few revisions. Only the second is a finding for Limits,
-because there the knee depends on how this repo ships.
+next to the knee table, with the counts from both rankings. This replaces a
+caveat written from impression. Judge the move from those counts, not from
+whether the order changed: a file that keeps nearly its count (48 -> 47) only
+traded places with a near-tie, but a file that falls from 40 to 6 has lost
+most of its revisions to copies, and that is a finding for Limits even when it
+stays in the top five, because there the knee depends on how this repo ships.
+A file listed that was not in the original top five entered it only because
+others lost their copies; give both counts for it too.
 
-**Fix-labeled commits.** First check the convention rate, because the count is
+Fix-labeled commits.** First check the convention rate, because the count is
 noise in a repo whose authors do not label fixes:
 
 ```bash
