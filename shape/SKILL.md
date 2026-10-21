@@ -88,9 +88,10 @@ This is the heart of the interview — walking the decision tree one branch at a
 
 **End by agreement, not completion.** The session ends when you and the user have shared understanding of what to build — not when every conceivable question has been answered. Some questions will be answered by `/research`; some will be resolved during PRD writing; some will emerge during implementation. The goal is "enough understanding to research intelligently," not "every detail specified." Accept imperfection and proceed.
 
-**Present a closing summary.** Before ending, summarize the decisions made in four categories:
+**Present a closing summary.** Before ending, summarize the decisions made in these categories:
 
 - **Choices** — decisions that are settled. The user chose these deliberately. Example: "We're building a real-time presence indicator for the lesson page." These are locked — downstream skills should not re-debate them. Classification schemes, scoring rubrics, taxonomies, role/permission matrices, and decision rules are Choices that must be **enumerated** in the summary, not named in the abstract — listing the categories or levels by name, not just by their count.
+- **Terms** — domain words coined or contested in this shape, each with a one-sentence definition and the alias to avoid. Example: "**Lesson** (not *session*, *class*) — one scheduled meeting of a cohort." Omit the category when no term was contested.
 - **Assumptions** — things we believe to be true but haven't verified. Tag each with a confidence level (see below). Example: "[Uncertain] We assume Ably's free tier handles our expected concurrent user count."
 - **Impositions** — external constraints we can't change. Example: "The app uses Next.js App Router; we can't switch frameworks."
 - **Structural signals** — recurring symptoms, delayed effects, missing feedback loops, or stakeholder goal conflicts that suggest the visible problem may not be the underlying one. Keep this list short and concrete. These are prompts for better `/research` and `/write-a-prd`, not a request to fully solve the system during the interview.
@@ -133,7 +134,7 @@ For the milestone branch, print `/create-milestone <feature-slug>` instead of `/
 
 Hand off to `/research` by default. For work that requires multiple independent PRDs — where the shaped outcome decomposes into several features that each need their own research-PRD cycle — branch to `/create-milestone` instead. Big-batch work (6 weeks) that fits a single PRD stays on the default path and gets a container milestone from `/write-a-prd`. Treat assumptions by confidence tag: `Uncertain` and `Speculative` assumptions are first-priority research targets because they carry the most downstream risk. `Likely` assumptions can usually be confirmed during PRD writing. `Established` assumptions need only targeted verification.
 
-- **Carries forward:** choices, assumptions with their confidence tags, impositions, and structural signals
+- **Carries forward:** the closing summary (Phase 3's categories)
 - **Comes next by default:** `/research`, or `/create-milestone` when the shaped work requires multiple independent PRDs
 
 **Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/research` (recommended — verify the unknowns before the PRD)**, **→ `/create-milestone` (this needs multiple independent PRDs)**, **Keep shaping — the problem is still fuzzy**. The platform's free-text "Other" option is the escape hatch — don't add one.

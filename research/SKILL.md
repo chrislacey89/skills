@@ -595,7 +595,7 @@ For archive mode, the input is the absolute `$ENTRY` path Phase 5c wrote. For sp
 
 ## Handoff
 
-- **Expected input:** clarified problem framing from `/shape`, including choices, assumptions, impositions, and structural signals
+- **Expected input:** clarified problem framing from `/shape`'s closing summary
 - **Produces:** a research artifact carrying verified version and documentation guidance plus an estimate-readiness posture. Storage location depends on the project's `research.storage` setting:
   - **`archive`** (default): file at the path Phase 5c wrote (see Phase 5c)
   - **`spike-issue`**: closed GitHub issue labeled `research` in the same repo as the PRD, plus a cache copy in the sidecar when one resolves

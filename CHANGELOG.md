@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.31.0 — /ubiquitous-language is typed-only, /shape names the terms a shape contested, and the glossary's readers are named truthfully (#512)
+
+Six months after release no downstream repo has a `UBIQUITOUS_LANGUAGE.md`. Nothing in the pipeline invokes `/ubiquitous-language`, `/shape` — where a feature's nouns are first spoken — produces no file and names no terms, and the skill's Handoff claimed three consumers that never read it. Its description was loading into every downstream session for a skill that had never fired. #40's usage audit resolves as keep, demoted: the deep procedure stays, the always-on cost goes, and one line at `/shape` records whether vocabulary is ever contested — the evidence a glossary-maintenance loop would need before it is built.
+
+### Changes
+
+- **`/ubiquitous-language` is user-invoked (#512)** — `disable-model-invocation: true`, the `/lfg`/`/excavate` pattern; the description reads as a typed entry. Zero context cost; a bulk glossary session is still one command away.
+- **Its Handoff names the three skills that read the file (#512)** — `/qa`, `/prd-to-issues`, `/re-pitch`, each only when the file exists. The former `Supports` line named `/shape`, `/write-a-prd`, and `/triage-issue`, none of which mention it.
+- **`/shape`'s closing summary gains a `Terms` category (#512)** — domain words coined or contested in the shape, with a one-sentence definition and the alias to avoid; omitted when none.
+- **`/compound` Phase 1 gains a Vocabulary check (#512)** — did the shipped change introduce, rename, or contradict a domain term? When yes, the term is written to the root `UBIQUITOUS_LANGUAGE.md` and staged with the entry, so the glossary has a writer at the retrospective seam. #512 deferred this behind the `Terms` signal; the owner pulled it forward at review, and the mechanical objection that deferred it is answered: `/pre-merge`'s re-run guard and `/closeout` Step 2 now count the root glossary with `docs/solutions/` as the paths a compound commit may carry and still be the captured lesson, with `scripts/test-compound-restamp-handoff.sh` extended by glossary-only and glossary-plus-code fixtures. The re-run still reviews the glossary edit; it just does not hand back to `/compound`.
+- **#511's three review Suggestions land (#512)** — a term is settled only after the user confirms it *and* step 6 has checked any rule stated about it; the "Only include domain terms" rule points at Output Format instead of enumerating it; the inline-writing clause lives in step 7 alone.
+
 ## v1.30.0 — /ubiquitous-language writes each term as it is confirmed and checks a stated rule against the code; the decisions-register claim is subtracted (#510, #283)
 
 `/ubiquitous-language` wrote `UBIQUITOUS_LANGUAGE.md` in one pass at its last step, so a conversation that stopped early left nothing on disk, and a rule the user stated about a term was recorded as stated whether or not the code kept it. Both gaps surfaced by reading the skill beside its upstream successor, `/domain-modeling` in mattpocock/skills (#510). Separately, three inventory surfaces told readers the skill produces a "decisions register"; it never has, and no skill reads one (#283).
