@@ -178,7 +178,7 @@ Create a GitHub issue using `gh issue create` with the template below. Do NOT as
 
 ## Problem
 
-Open with a short plain-language walkthrough (usually a single paragraph) that frames the bug for a reader who doesn't have the codebase in their head: what part of the system this touches in domain terms, what the user or system was trying to do, and why the failure matters. Then the concrete details:
+Open with a short plain-language walkthrough (usually a single paragraph) that frames the bug for a reader who doesn't have the codebase in their head: what part of the system this touches in domain terms (check UBIQUITOUS_LANGUAGE.md if it exists), what the user or system was trying to do, and why the failure matters. Then the concrete details:
 
 - What happens (actual behavior)
 - What should happen (expected behavior)
@@ -188,7 +188,7 @@ Skip the walkthrough only for narrow, self-evident failures whose domain meaning
 
 ## Verification destination
 
-[The destination the fix's effect must reach, named in domain terms — a user-observable behavior, a log/trace observation, a dashboard view, an assertion in a test. Distinct from the source-of-change. See `references/destination-check.md` for substantive vs vacuous examples. The TDD Fix Plan below should land its final passing assertion at this destination, not at a paraphrase of the source.]
+[The destination the fix's effect must reach, named in domain terms (check UBIQUITOUS_LANGUAGE.md if it exists) — a user-observable behavior, a log/trace observation, a dashboard view, an assertion in a test. Distinct from the source-of-change. See `references/destination-check.md` for substantive vs vacuous examples. The TDD Fix Plan below should land its final passing assertion at this destination, not at a paraphrase of the source.]
 
 ## Root Cause Analysis
 
