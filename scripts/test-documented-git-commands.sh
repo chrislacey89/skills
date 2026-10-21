@@ -2603,6 +2603,13 @@ assert_eq "$(printf 'top five without duplicates (revisions with copies counted 
 # once the copies are set aside. The roll-up is the NEWEST copy, so a dedupe
 # that kept the first line of newest-first output would keep the roll-up and
 # list the original fix as the duplicate (the #546/#573 case in #514).
+#
+# A second backport branch carries nothing but a cherry-pick of a change already
+# on main (tidy.txt), merged back with no change of its own. That merge is
+# TREESAME to main, so the pathspec in the shared log skips the branch and its
+# copy never reaches log.txt. The dups block reads the same pathspec, so the
+# copy must stay off dups.txt too; drop the pathspec from the block and it is
+# listed (M-dup-pathspec below).
 dup_repo="$excavate_out/dup-repo"
 mkdir -p "$dup_repo"
 (
@@ -2623,6 +2630,15 @@ mkdir -p "$dup_repo"
     git rev-parse HEAD > ../dup-original
     printf 'w1\n' >> warm.txt; git add warm.txt; dc 2020-07-05 "$author_a" "edit warm 1"
     printf 'w2\n' >> warm.txt; git add warm.txt; dc 2020-07-10 "$author_b" "edit warm 2"
+    printf 'tidy\n' > tidy.txt; git add tidy.txt; dc 2020-07-11 "$author_a" "tidy"
+    git switch -q -c backport "$root"
+    printf 'tidy\n' > tidy.txt; git add tidy.txt; dc 2020-07-12 "$author_a" "tidy"
+    git rev-parse HEAD > ../dup-skipped
+    git switch -q main
+    GIT_AUTHOR_NAME="$author_a" GIT_COMMITTER_NAME="$author_a" \
+        GIT_AUTHOR_EMAIL=noreply@example.invalid GIT_COMMITTER_EMAIL=noreply@example.invalid \
+        GIT_AUTHOR_DATE=2020-07-12T13:00:00+0000 GIT_COMMITTER_DATE=2020-07-12T13:00:00+0000 \
+        git merge -q --no-ff --no-edit backport >/dev/null
     git switch -q -c hotfix "$root"
     printf 'guard\n' >> hot.txt; git add hot.txt; dc 2020-07-12 "$author_a" "fix: guard hot (cherry picked)"
     git rev-parse HEAD > ../dup-cherry
@@ -2636,10 +2652,10 @@ mkdir -p "$dup_repo"
         GIT_AUTHOR_DATE=2020-07-20T12:00:00+0000 GIT_COMMITTER_DATE=2020-07-20T12:00:00+0000 \
         git merge -q --no-edit hotfix release >/dev/null
 )
-[[ "$(git -C "$dup_repo" rev-list --count --no-merges HEAD)" -eq 7 ]] \
-    || fatal "the duplicated-history fixture did not produce 7 non-merge commits (seed, fix, 2 warm edits, cherry-pick, notes, roll-up)"
-[[ "$(git -C "$dup_repo" rev-list --count --merges HEAD)" -eq 1 ]] \
-    || fatal "the duplicated-history fixture did not merge both branches back"
+[[ "$(git -C "$dup_repo" rev-list --count --no-merges HEAD)" -eq 9 ]] \
+    || fatal "the duplicated-history fixture did not produce 9 non-merge commits (seed, fix, 2 warm edits, tidy twice, cherry-pick, notes, roll-up)"
+[[ "$(git -C "$dup_repo" rev-list --count --merges HEAD)" -eq 2 ]] \
+    || fatal "the duplicated-history fixture did not merge the backport branch and the octopus back"
 
 dup_run() {   # outdir dups-block-text
     local saved_sandbox="$excavate_sandbox" saved_dups="${excavate_blocks[b_dups]}" st=0
@@ -2657,6 +2673,13 @@ assert_eq 2 "$(cat "$dup_out/b$b_dups.out")" "dups: the cherry-pick and the roll
 assert_eq "$(sort "$excavate_out/dup-cherry" "$excavate_out/dup-rollup")" "$(sort "$dup_out/work/dups.txt")" "dups: dups.txt lists the cherry-pick and the roll-up, and not the original fix (the oldest copy is kept)"
 dups_in_log="$(awk -v d="$dup_out/work/dups.txt" 'BEGIN { while ((getline s < d) > 0) x[s] = 1 } /^@@/ && (substr($1, 3) in x) { n++ } END { print n + 0 }' "$dup_out/work/log.txt")"
 assert_eq 2 "$dups_in_log" "dups: every listed copy is a commit the shared log reads (same window and pathspec)"
+if grep -qxF "$(cat "$excavate_out/dup-skipped")" "$dup_out/work/dups.txt" || grep -qF "@@$(cat "$excavate_out/dup-skipped")" "$dup_out/work/log.txt"; then
+    printf '  FAIL dups: the backport branch'"'"'s copy (a TREESAME merge the pathspec skips) reached dups.txt or log.txt\n'
+    fail=$((fail + 1))
+else
+    printf '  ok   dups: a copy on a branch the pathspec skips is absent from both dups.txt and log.txt\n'
+    pass=$((pass + 1))
+fi
 assert_eq 3 "$(count_for "$dup_out/work/freq.txt" hot.txt)" "dups: the shared log still counts all three copies (counted, not excluded)"
 assert_eq "hot.txt" "$(sed -n 1p "$dup_out/work/hotspots.txt" | cut -f3)" "dups: hot.txt leads the ranking with its copies counted"
 assert_eq "warm.txt" "$(sed -n 1p "$dup_out/work/hotspots-dedup.txt" | cut -f3)" "rerank: warm.txt leads once the copies are set aside"
@@ -2674,6 +2697,23 @@ if grep -qxF "$(cat "$excavate_out/dup-original")" "$excavate_out/dup-m/work/dup
     pass=$((pass + 1))
 else
     printf '  FAIL M-dup: dropping --reverse still left the original fix off dups.txt; the keep-oldest assertion cannot see the order\n'
+    fail=$((fail + 1))
+fi
+
+# M-dup-pathspec: drop the pathspec from the dups block. Nothing is simplified
+# away then, so the backport branch's copy is listed and the assertion above
+# must fail on it.
+# shellcheck disable=SC2016  # literal text to match against, not an expansion
+pathspec=' -- . "${NONDOMAIN[@]}"'
+mut="${excavate_blocks[b_dups]/"$pathspec"/}"
+[[ "$mut" != "${excavate_blocks[b_dups]}" ]] || fatal "mutation M-dup-pathspec did not change the dups block; the pathspec moved"
+rm_dp=0; dup_run "$excavate_out/dup-p" "$mut" || rm_dp=$?
+assert_eq 0 "$rm_dp" "M-dup-pathspec (no pathspec) still runs"
+if grep -qxF "$(cat "$excavate_out/dup-skipped")" "$excavate_out/dup-p/work/dups.txt"; then
+    printf '  ok   M-dup-pathspec: without the pathspec the skipped branch'"'"'s copy is listed, so the same-pathspec assertion bites\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL M-dup-pathspec: dropping the pathspec left dups.txt unchanged; the same-pathspec assertion cannot see it\n'
     fail=$((fail + 1))
 fi
 
