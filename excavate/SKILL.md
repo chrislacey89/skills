@@ -195,7 +195,34 @@ The four lines are: shallow or not, commits in the window, root-commit date
 (the shallow boundary if shallow, so say "unknown" then), and the squash ratio.
 A high squash ratio means each commit is a whole PR, so commit-level coupling
 is PR-level coupling already; a low ratio with squash-merged PRs elsewhere is
-the case to watch. Probe `gh auth status` and whether the remote is GitHub;
+the case to watch.
+
+Then count the commits that land a change already in the window, because a
+repo that ships through release branches carries the same change as an
+original, a cherry-pick, and a release or sync roll-up, and every count below
+sees each copy as a separate revision:
+
+```bash
+git log --since="$SINCE" --no-merges --reverse -p --format='commit %H' HEAD -- . "${NONDOMAIN[@]}" </dev/null \
+  | git patch-id --stable | awk 'seen[$1]++ { print $2 }' > "$WORK/dups.txt"
+wc -l < "$WORK/dups.txt" | tr -d ' '
+```
+
+`dups.txt` lists every commit whose patch ID
+([git-patch-id](https://git-scm.com/docs/git-patch-id)) an earlier in-window
+commit already had, so the oldest copy is the one left off the list. It reads
+the same window and pathspec as the shared log in Step 2, so it counts copies
+among the commits the ranking reads; a merged branch whose changes are already
+on the main line is skipped by `git log`'s history simplification in both. The count
+goes in the Coverage block, and Step 3 re-ranks the knee without these commits.
+They are **counted, not excluded**: a re-landed change is still work someone
+did, a roll-up can be the only record of the changes it carries, and every
+later block reads history through its own `git log` or `git rev-list`, so a
+filter applied to the shared log alone would leave the steps disagreeing. Name
+any release or sync roll-ups you see in the subjects at the scope gate; they
+are not excluded either.
+
+Probe `gh auth status` and whether the remote is GitHub;
 record `gh: yes` or `gh: no`. Resolve the dossier directory with
 `bash "$SC" path research`, where `SC` is the absolute installed path of this
 skill's bundled resolver, [references/sidecar.sh](references/sidecar.sh); never
@@ -219,6 +246,7 @@ Window:        <START> → today (<SINCE>)
 Commits:       <N> non-merge (<M> excluded as bulk > MAXFILES files)
 Shallow:       yes | no
 Squash ratio:  <s>/<t>
+Duplicates:    <d> commits repeat an earlier commit's patch ID (counted, not excluded)
 gh:            yes (<fetched> of <total> merged PRs; <closed> closed unmerged) | no
 Fix labels:    <k> of <N> commits match the fix pattern (a lower bound; filled in at Step 3)
 Excluded:      <NONDOMAIN list, one line>
@@ -399,6 +427,33 @@ awk -F'\t' -v knee=5 '{ r[NR] = $1; t += $1 } END { if (NR) { for (i = 1; i <= k
 Files below the LOC floor are listed separately as "churny but
 small" (usually config), and large files with zero or one revision as
 "big and cold" (leave them alone; stability is a design property).
+
+**Does duplication move the knee?** Re-rank the same files with Step 0's
+`dups.txt` commits left out, then compare the top five:
+
+```bash
+awk -v d="$WORK/dups.txt" 'BEGIN { while ((getline s < d) > 0) x[s] = 1 } /^@@/ { sha = substr($1, 3); next } NF && !(sha in x)' "$WORK/log.txt" \
+  | sort | uniq -c | sort -rn > "$WORK/freq-dedup.txt"
+{ awk -F'\t' '{ print "H\t" $2 "\t" $3 }' "$WORK/hotspots.txt"; awk '{ c = $1; sub(/^ *[0-9]+ /, ""); print "F\t" c "\t" $0 }' "$WORK/freq-dedup.txt"; } \
+  | awk -F'\t' '$1 == "H" { loc[$3] = $2; next } $1 == "F" { fq[$3] = $2 } END { for (p in loc) printf "%d\t%d\t%s\n", fq[p], loc[p], p }' \
+  | sort -t"$(printf '\t')" -k1,1nr -k2,2nr > "$WORK/hotspots-dedup.txt"
+{ head -5 "$WORK/hotspots.txt" | cut -f3 | sed 's/^/A\t/'; head -5 "$WORK/hotspots-dedup.txt" | cut -f3 | sed 's/^/B\t/'; } \
+  | awk -F'\t' '$1 == "A" { a[++na] = $2; ina[$2] = 1; next } { b[++nb] = $2; inb[$2] = 1 }
+      END { set = (na == nb) ? "same" : "changed"; ord = set
+            for (i = 1; i <= na; i++) { if (!(a[i] in inb)) set = "changed"; if (a[i] != b[i]) ord = "changed" }
+            for (i = 1; i <= nb; i++) if (!(b[i] in ina)) set = "changed"
+            if (set == "changed") ord = "changed"
+            printf "top five without duplicates: set %s, order %s\n", set, ord }'
+```
+
+Write the answer into the dossier's Hotspots section as one measured sentence
+next to the knee table, with the counts from both rankings where the order
+moved. This replaces a caveat written from impression. A changed order alone
+means only near-ties moved. A changed **set** means a file entered or left the
+top five: give both lists with their counts, and say whether the swap is
+between near-ties at the edge (48 and 47 trading fifth place) or a file that
+moved by more than a few revisions. Only the second is a finding for Limits,
+because there the knee depends on how this repo ships.
 
 **Fix-labeled commits.** First check the convention rate, because the count is
 noise in a repo whose authors do not label fixes:
@@ -748,6 +803,8 @@ the `**Next session:**` line, then the menu in § Handoff.
   entries or the first-moves list.
 - A name, email, or `@handle` anywhere under `docs/solutions/`.
 - A coupling section on a squash-merged repo with no "PR-level" label.
+- A caveat that duplicated history inflates the counts, with no `Duplicates:`
+  line and no re-rank sentence behind it.
 - A `gh` failure treated as an error instead of `gh: no` in the Coverage block.
 - A window widened or narrowed without the Coverage block saying so.
 - `git fetch --unshallow`, a merge, or a review-currency stamp.

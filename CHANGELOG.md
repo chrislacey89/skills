@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.31.0 — /excavate measures duplicated history instead of leaving each run to improvise a caveat (#514)
+
+On a repo that ships through release branches, one change lands in the window two or three times: as the original commit, a cherry-pick, and a release or sync roll-up. `/excavate`'s first two field runs both found this inflating their revision and fix-labeled counts and each wrote a different caveat by hand, because the skill never mentioned it. The Coverage block exists so the skill never degrades silently, and this was a known, measurable distortion it did not report.
+
+### Changes
+
+- **Step 0 counts duplicated commits (#514)** — a documented `git log -p | git patch-id --stable` block over the shared log's window and pathspec writes every commit whose patch ID an earlier in-window commit already had to `$WORK/dups.txt`, keeping the oldest copy off the list, and the Coverage block gains a `Duplicates:` line. They are counted, not excluded: a roll-up can be the only record of the changes it carries (one field roll-up bundled seven fixes that exist nowhere else on the branch), a re-landed change is real work, and the later steps read history through their own `git log`/`git rev-list`, so filtering the shared log alone would leave the dossier's numbers disagreeing.
+- **Step 3 re-ranks the knee without the duplicates (#514)** — one block compares the top five with and without `dups.txt` and prints whether the set and the order hold; the dossier states the answer as one measured sentence, and a set change only reaches Limits when a file moved by more than a near-tie. On the field repo that prompted this (47 duplicates), the only change was a one-revision swap at fifth place.
+- **`scripts/test-documented-git-commands.sh` plants a release-branch flow (#514)** — one fix on main, a cherry-pick on a hotfix branch, and a `Release` roll-up as the newest copy, both merged back. It asserts the count, that the original fix is the copy kept, that the shared log still counts all three, and the re-rank verdict; a mutant without `--reverse` keeps the roll-up instead and is shown to fail. Building it surfaced that `git log`'s history simplification under a pathspec skips a merged branch whose changes are already on the main line, which is why the duplicate count reads the same pathspec as the shared log.
+
 ## v1.30.0 — /ubiquitous-language writes each term as it is confirmed and checks a stated rule against the code; the decisions-register claim is subtracted (#510, #283)
 
 `/ubiquitous-language` wrote `UBIQUITOUS_LANGUAGE.md` in one pass at its last step, so a conversation that stopped early left nothing on disk, and a rule the user stated about a term was recorded as stated whether or not the code kept it. Both gaps surfaced by reading the skill beside its upstream successor, `/domain-modeling` in mattpocock/skills (#510). Separately, three inventory surfaces told readers the skill produces a "decisions register"; it never has, and no skill reads one (#283).

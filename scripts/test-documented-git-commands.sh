@@ -2059,7 +2059,11 @@ excavate_find() {   # $1 = fixed substring that must occur in exactly one block;
 # Declared here so ShellCheck can see the assignments excavate_find makes via printf -v.
 b_cover=; b_log=; b_rev1=; b_rev2=; b_rename=; b_manifest=; b_freq=; b_loc=; b_hot=; b_conv=
 b_fix=; b_pairs=; b_soc=; b_trend=; b_contrib=; b_persist=; b_baseline=; b_base=; b_names=; b_vars=
+b_dups=; b_rerank=
 excavate_find 'is-shallow-repository' b_cover
+# shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
+excavate_find '> "$WORK/dups.txt"' b_dups
+excavate_find 'top five without duplicates' b_rerank
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
 excavate_find '> "$WORK/log.txt"' b_log
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
@@ -2090,7 +2094,7 @@ excavate_find 'git shortlog' b_contrib
 excavate_find '> "$WORK/persist.txt"' b_persist
 excavate_find 'knee share' b_baseline
 
-for b in "$b_cover" "$b_vars" "$b_log" "$b_names" "$b_rev1" "$b_rev2" "$b_rename" "$b_manifest" "$b_freq" "$b_loc" "$b_hot" "$b_conv" "$b_fix" "$b_pairs" "$b_soc" "$b_trend" "$b_contrib" "$b_persist" "$b_baseline"; do
+for b in "$b_cover" "$b_dups" "$b_rerank" "$b_vars" "$b_log" "$b_names" "$b_rev1" "$b_rev2" "$b_rename" "$b_manifest" "$b_freq" "$b_loc" "$b_hot" "$b_conv" "$b_fix" "$b_pairs" "$b_soc" "$b_trend" "$b_contrib" "$b_persist" "$b_baseline"; do
     [[ "${excavate_class[b]}" == git ]] || fatal "block $b was located by content but is classed '${excavate_class[b]}', not git"
 done
 
@@ -2581,6 +2585,97 @@ vars_second_log() {   # the block text to run after sourcing
     run_timed 60 bash "$out/run.sh" 2>"$out/stderr" </dev/null
 }
 assert_eq "$(wc -l < "$log_file" | tr -d ' ')" "$(vars_second_log "${excavate_blocks[b_log]}")" "vars.sh: the shared log rebuilt in a second process that only sources it has the main pass's line count"
+
+# Duplicates in the main fixture: every planted change is distinct, so the
+# count is zero and the re-rank changes nothing.
+assert_eq 0 "$(xb "$b_dups")" "dups: the main fixture plants no repeated patch, so the count is 0"
+assert_eq 0 "$(wc -l < "$excavate_out/main/work/dups.txt" | tr -d ' ')" "dups: dups.txt is written and empty in the main fixture"
+assert_eq "top five without duplicates: set same, order same" "$(xb "$b_rerank")" "rerank: with no duplicates the knee is unchanged"
+
+# --- Duplicated history: a release-branch flow -------------------------------
+#
+# One fix lands three times: on main (oldest), as a cherry-pick on a hotfix
+# branch, and inside a "Release" roll-up on a release branch, both branches
+# merged back. The hotfix branch also carries a change of its own, as release
+# branches do: a merge whose tree equals the main line is skipped by git log's
+# history simplification under a pathspec, and its copies never reach the log.
+# hot.txt therefore counts 3 revisions to warm.txt's 2, and only 1
+# once the copies are set aside. The roll-up is the NEWEST copy, so a dedupe
+# that kept the first line of newest-first output would keep the roll-up and
+# list the original fix as the duplicate (the #546/#573 case in #514).
+dup_repo="$excavate_out/dup-repo"
+mkdir -p "$dup_repo"
+(
+    cd "$dup_repo"
+    git init -q -b main .
+    git config commit.gpgsign false
+    dc() {   # date author subject
+        GIT_AUTHOR_NAME="$2" GIT_COMMITTER_NAME="$2" \
+            GIT_AUTHOR_EMAIL=noreply@example.invalid GIT_COMMITTER_EMAIL=noreply@example.invalid \
+            GIT_AUTHOR_DATE="$1T12:00:00+0000" GIT_COMMITTER_DATE="$1T12:00:00+0000" \
+            git commit -q -m "$3"
+    }
+    for k in $(seq 1 60); do printf 'hot line %d\n' "$k"; done > hot.txt
+    for k in $(seq 1 60); do printf 'warm line %d\n' "$k"; done > warm.txt
+    git add -A; dc 2020-01-15 "$author_a" "seed fixture"
+    root="$(git rev-parse HEAD)"
+    printf 'guard\n' >> hot.txt; git add hot.txt; dc 2020-07-01 "$author_a" "fix: guard hot"
+    git rev-parse HEAD > ../dup-original
+    printf 'w1\n' >> warm.txt; git add warm.txt; dc 2020-07-05 "$author_a" "edit warm 1"
+    printf 'w2\n' >> warm.txt; git add warm.txt; dc 2020-07-10 "$author_b" "edit warm 2"
+    git switch -q -c hotfix "$root"
+    printf 'guard\n' >> hot.txt; git add hot.txt; dc 2020-07-12 "$author_a" "fix: guard hot (cherry picked)"
+    git rev-parse HEAD > ../dup-cherry
+    printf 'hotfix notes\n' > notes.txt; git add notes.txt; dc 2020-07-13 "$author_a" "hotfix notes"
+    git switch -q -c release "$root"
+    printf 'guard\n' >> hot.txt; git add hot.txt; dc 2020-07-15 "$author_b" "Release v1 (#9)"
+    git rev-parse HEAD > ../dup-rollup
+    git switch -q main
+    GIT_AUTHOR_NAME="$author_a" GIT_COMMITTER_NAME="$author_a" \
+        GIT_AUTHOR_EMAIL=noreply@example.invalid GIT_COMMITTER_EMAIL=noreply@example.invalid \
+        GIT_AUTHOR_DATE=2020-07-20T12:00:00+0000 GIT_COMMITTER_DATE=2020-07-20T12:00:00+0000 \
+        git merge -q --no-edit hotfix release >/dev/null
+)
+[[ "$(git -C "$dup_repo" rev-list --count --no-merges HEAD)" -eq 7 ]] \
+    || fatal "the duplicated-history fixture did not produce 7 non-merge commits (seed, fix, 2 warm edits, cherry-pick, notes, roll-up)"
+[[ "$(git -C "$dup_repo" rev-list --count --merges HEAD)" -eq 1 ]] \
+    || fatal "the duplicated-history fixture did not merge both branches back"
+
+dup_run() {   # outdir dups-block-text
+    local saved_sandbox="$excavate_sandbox" saved_dups="${excavate_blocks[b_dups]}" st=0
+    excavate_sandbox="$dup_repo"
+    excavate_blocks[b_dups]="$2"
+    xc_run "$1" 120 UNUSED "$b_dups" "$b_log" "$b_freq" "$b_loc" "$b_hot" "$b_rerank" || st=$?
+    excavate_sandbox="$saved_sandbox"
+    excavate_blocks[b_dups]="$saved_dups"
+    return "$st"
+}
+dup_out="$excavate_out/dup"
+rd=0; dup_run "$dup_out" "${excavate_blocks[b_dups]}" || rd=$?
+assert_eq 0 "$rd" "the duplicated-history pass completes"
+assert_eq 2 "$(cat "$dup_out/b$b_dups.out")" "dups: the cherry-pick and the roll-up repeat the fix's patch ID (count 2)"
+assert_eq "$(sort "$excavate_out/dup-cherry" "$excavate_out/dup-rollup")" "$(sort "$dup_out/work/dups.txt")" "dups: dups.txt lists the cherry-pick and the roll-up, and not the original fix (the oldest copy is kept)"
+dups_in_log="$(awk -v d="$dup_out/work/dups.txt" 'BEGIN { while ((getline s < d) > 0) x[s] = 1 } /^@@/ && (substr($1, 3) in x) { n++ } END { print n + 0 }' "$dup_out/work/log.txt")"
+assert_eq 2 "$dups_in_log" "dups: every listed copy is a commit the shared log reads (same window and pathspec)"
+assert_eq 3 "$(count_for "$dup_out/work/freq.txt" hot.txt)" "dups: the shared log still counts all three copies (counted, not excluded)"
+assert_eq "hot.txt" "$(sed -n 1p "$dup_out/work/hotspots.txt" | cut -f3)" "dups: hot.txt leads the ranking with its copies counted"
+assert_eq "warm.txt" "$(sed -n 1p "$dup_out/work/hotspots-dedup.txt" | cut -f3)" "rerank: warm.txt leads once the copies are set aside"
+assert_eq 1 "$(awk -F'\t' '$3 == "hot.txt" { print $1 }' "$dup_out/work/hotspots-dedup.txt")" "rerank: hot.txt counts its one original revision"
+assert_eq "top five without duplicates: set same, order changed" "$(cat "$dup_out/b$b_rerank.out")" "rerank: same files, different order"
+
+# M-dup: drop --reverse, so the first copy seen is the newest. The original fix
+# is then listed as the duplicate, and the keep-oldest assertion above must fail.
+mut="${excavate_blocks[b_dups]/ --reverse/}"
+[[ "$mut" != "${excavate_blocks[b_dups]}" ]] || fatal "mutation M-dup did not change the dups block; --reverse moved"
+rm_dup=0; dup_run "$excavate_out/dup-m" "$mut" || rm_dup=$?
+assert_eq 0 "$rm_dup" "M-dup (no --reverse) still runs"
+if grep -qxF "$(cat "$excavate_out/dup-original")" "$excavate_out/dup-m/work/dups.txt"; then
+    printf '  ok   M-dup: without --reverse the original fix is listed as the duplicate, so the keep-oldest assertion bites\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL M-dup: dropping --reverse still left the original fix off dups.txt; the keep-oldest assertion cannot see the order\n'
+    fail=$((fail + 1))
+fi
 
 # --- Mutations: prove the assertions bite ------------------------------------
 #
