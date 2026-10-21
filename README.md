@@ -101,7 +101,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR, handed back to `/pre-merge` so the entry is reviewed and re-stamped before `/closeout` merges (default), or post-merge as the fallback |
 | [excavate](excavate/) | Mine a legacy repo's last 12 months of git history (and PR threads via `gh`) into ranked hotspots, cited recovered decisions, and a who-to-ask map, then offer a PR of `docs/solutions/` entries the pipeline already reads. User-invoked only (`disable-model-invocation: true`); never merges |
 | [improve-pipeline](improve-pipeline/) | File a Skill Kit improvement proposal as a GitHub issue when the lesson is about the pipeline rather than the project |
-| [ubiquitous-language](ubiquitous-language/) | DDD glossary with decisions register |
+| [ubiquitous-language](ubiquitous-language/) | DDD glossary |
 
 ### Orientation & Recovery
 

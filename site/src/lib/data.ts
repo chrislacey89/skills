@@ -91,7 +91,7 @@ export const mappings: Mapping[] = [
 	{ principle: "Appetite before solution", source: "Shape Up", skill: "/write-a-prd", what: "Sets a time budget, names rabbit holes, declares no-gos." },
 	{ principle: "Red — green — refactor", source: "TDD By Example", skill: "/tdd", what: "A disciplined loop invoked from every execution." },
 	{ principle: "Small, reversible steps", source: "Refactoring", skill: "/request-refactor-plan", what: "Plans refactors as tiny commits that always run." },
-	{ principle: "Ubiquitous language", source: "Domain-Driven Design", skill: "/ubiquitous-language", what: "A living glossary with a decisions register." },
+	{ principle: "Ubiquitous language", source: "Domain-Driven Design", skill: "/ubiquitous-language", what: "A living glossary of domain terms." },
 	{ principle: "Always releasable", source: "Continuous Delivery", skill: "/pre-merge · /closeout", what: "Architectural review, clean merges, clean teardowns." },
 ];
 
