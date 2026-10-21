@@ -104,6 +104,7 @@ _Include only when a codebase was scanned._
 - **Expected input:** domain language ambiguity, competing terminology, or a need to harden vocabulary before downstream work
 - **Produces:** `UBIQUITOUS_LANGUAGE.md` and clearer naming for issues, specs, QA, and refactor discussion
 - **Read by:** `/qa` (to learn an area's language), `/prd-to-issues` (as a slice anchor), and `/re-pitch` (for glosses) — each only when `UBIQUITOUS_LANGUAGE.md` exists; `/re-pitch` may recommend this skill when the same terms keep needing glosses
+- **Also written by:** `/compound` Phase 1's Vocabulary check, one term at a time, when a shipped change introduced, renamed, or contradicted a term — in this file's format, on the open PR
 - **What comes next:** return to the workflow that needed better language, now using the glossary consistently
 
 ## Rules

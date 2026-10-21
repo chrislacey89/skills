@@ -185,6 +185,8 @@ If the main lesson is not about the downstream project but about Skill Kit itsel
 
 You do not need formal project accounting. A few truthful lines about what actually widened or narrowed the work are enough to improve future planning.
 
+**Vocabulary check.** Also ask: did this change introduce a domain term, rename one, or ship behavior that contradicts a rule the glossary states? Read `UBIQUITOUS_LANGUAGE.md` at the project root when it exists, and the `Terms` line of `/shape`'s closing summary when it is reachable. When the answer is yes, write the term into `UBIQUITOUS_LANGUAGE.md` — in the file's own format when it exists, in `/ubiquitous-language`'s Output Format when this is the first term — and stage it with the entry in Phase 5. A term the code introduced without a name enters under the name the code uses; a contradiction between a stated rule and shipped behavior enters as a Model-code fractures row, and the entry's `Key Decision` says which side won. When the answer is no, write nothing — the file is not touched on a change that moved no vocabulary. A change in the language is a change to the model, and the merge is the last moment the author can still say what the word means.
+
 ### Phase 2: Classify the Problem
 
 Determine the category for filing. Use the most specific category that fits:
@@ -397,11 +399,14 @@ bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
 ```bash
 git add <path/to/entry>   # docs/solutions/<category>/<filename>.md, or the file Phase 3 wrote under in_tree_path
 git add <path/to/mechanism>   # Phase 4's mechanism — omit when Phase 4 did not fire, or recorded that none could be built
+git add UBIQUITOUS_LANGUAGE.md   # Phase 1's Vocabulary check — omit when it wrote nothing
 git commit -m "docs: compound — <brief description of what was learned>"
 git push        # in-PR path: push so the entry joins the open PR for review
 ```
 
 An entry claiming a mechanism, committed while that mechanism sits unstaged, is the unenforced-claim shape Phase 4 exists to close.
+
+The glossary edit rides this same commit on purpose. The `/pre-merge` re-run below and `/closeout` Step 2 count `UBIQUITOUS_LANGUAGE.md` alongside `docs/solutions/` as the paths a compound commit may carry and still be the captured lesson rather than a code delta — pinned by `scripts/test-compound-restamp-handoff.sh` — so the re-run still reviews the glossary edit and still does not hand back to `/compound`.
 
 **Pack-level filing check (DO-CONFIRM — verify before committing the entry).** The fifth Q4 name has nothing to stage — it lives in another repo. Its equivalent of staging is that the issue is **already filed** and its number is cited in the entry before this commit. Committing an entry that says a pack-level issue will be filed is the same unenforced claim with a longer fuse, so confirm the issue exists rather than asserting it:
 
@@ -490,7 +495,7 @@ During review, check each document's **Shelf Life** section. If the expiration c
 ## Handoff
 
 - **Expected input:** a durable lesson worth reusing — known at PR time (the in-PR default) or surfacing during/after merge (the post-merge fallback), plus solved bugs or meaningful lessons from implementation, QA, or review
-- **Produces:** durable `docs/solutions/` knowledge that feeds future `/research` and `/write-a-prd` sessions — riding the PR on the in-PR path, committed to base (or a small doc PR) on the post-merge path
+- **Produces:** durable `docs/solutions/` knowledge that feeds future `/research` and `/write-a-prd` sessions — riding the PR on the in-PR path, committed to base (or a small doc PR) on the post-merge path — and, when Phase 1's Vocabulary check fired, the `UBIQUITOUS_LANGUAGE.md` entry for a term the change introduced, renamed, or contradicted
 - **Comes after:** `/pre-merge` on the in-PR default path (capture onto the PR branch, hand back for a re-run that reviews the new commit and re-stamps, then `/closeout` merges code + lesson together); `/closeout` on the post-merge fallback path. `/compound` captures the lesson — it never merges, and it never writes the review-currency stamp
 - **Closes the loop on:** `/pre-merge`, `/closeout`, and shipped implementation work
 - **What comes next:** in-PR, a `/pre-merge` re-run in author-mode reviews the compound commit as the post-stamp delta and re-stamps, then `/closeout` merges the PR carrying the lesson; post-merge, the loop is closed. Either way, future features consult the compounded knowledge during discovery, research, and shaping

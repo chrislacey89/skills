@@ -214,15 +214,27 @@ build_fixture() {
     printf 'export const guard = 1\n' > src/guard.test.ts
     git add -A && git commit -q -m "docs: compound — entry plus its mechanism"
     WITH_CODE_SHA="$(git rev-parse HEAD)"
+    # /compound Phase 1's Vocabulary check stages the root glossary with the
+    # entry (#512). It is a docs-class path: the re-run reviews it and does not
+    # hand back to /compound. A glossary edit next to code is still code.
+    printf 'lesson\n' > docs/solutions/testing-patterns/with-glossary.md
+    printf '| **Order** | a request to buy | purchase |\n' > UBIQUITOUS_LANGUAGE.md
+    git add -A && git commit -q -m "docs: compound — entry plus a glossary term"
+    WITH_GLOSSARY_SHA="$(git rev-parse HEAD)"
+    printf '| **Invoice** | a request for payment | bill |\n' >> UBIQUITOUS_LANGUAGE.md
+    printf 'export const invoice = 1\n' > src/invoice.ts
+    git add -A && git commit -q -m "docs: compound — glossary term plus code"
+    GLOSSARY_AND_CODE_SHA="$(git rev-parse HEAD)"
     printf 'b\n' >> src/a.txt
     git add -A && git commit -q -m "fix: something unrelated"
     HEAD_SHA="$(git rev-parse HEAD)"
 }
 build_fixture
-# Non-vacuity: four distinct commits, or the ranges below degenerate and every
+# Non-vacuity: six distinct commits, or the ranges below degenerate and every
 # assertion passes against nothing.
-[[ "$REVIEWED_SHA" != "$HEAD_SHA" && "$DOCS_ONLY_SHA" != "$WITH_CODE_SHA" ]] \
-    || fatal "fixture did not build four distinct commits"
+[[ "$REVIEWED_SHA" != "$HEAD_SHA" && "$DOCS_ONLY_SHA" != "$WITH_CODE_SHA" \
+    && "$WITH_GLOSSARY_SHA" != "$GLOSSARY_AND_CODE_SHA" && "$WITH_CODE_SHA" != "$WITH_GLOSSARY_SHA" ]] \
+    || fatal "fixture did not build six distinct commits"
 
 # run_closeout <reviewed> <head> — the extracted /closeout block, nothing else.
 run_closeout() {
@@ -255,6 +267,21 @@ assert_eq "    src/guard.test.ts" \
     "$(grep -F 'src/guard.test.ts' <<<"$out" || true)" \
     "/closeout shows the path that makes it a code delta, so the menu is answered on the diff"
 
+# The glossary is docs-class (#512): an entry plus a root UBIQUITOUS_LANGUAGE.md
+# edit is still the captured lesson, and is named as such.
+assert_eq "$WITH_GLOSSARY_SHA  docs-only /compound entry" \
+    "$(grep -F "$WITH_GLOSSARY_SHA" <<<"$out" || true)" \
+    "/closeout names a compound commit carrying the root glossary as the expected post-stamp delta"
+
+# A glossary edit beside code is code. The discount is for the path set, not for
+# the presence of the glossary.
+assert_eq "$GLOSSARY_AND_CODE_SHA  'docs: compound' subject, but also touches:" \
+    "$(grep -F "$GLOSSARY_AND_CODE_SHA" <<<"$out" || true)" \
+    "/closeout refuses the docs-only label when the glossary edit ships with code"
+assert_eq "    src/invoice.ts" \
+    "$(grep -F 'src/invoice.ts' <<<"$out" || true)" \
+    "/closeout shows the code path beside the glossary edit, not the glossary"
+
 # The unrelated commit has no `docs: compound` subject and must not be reported
 # at all — a classifier that labels every post-stamp commit says nothing.
 assert_eq "" "$(grep -cF "$HEAD_SHA" <<<"$out" | grep -v '^0$' || true)" \
@@ -277,6 +304,18 @@ assert_eq "delta is a /compound entry — do not re-recommend /compound; the exi
 # a wrong answer here hides a code commit behind a docs-shaped subject.
 assert_eq "" "$(run_premerge "$WITH_CODE_SHA" "$REVIEWED_SHA")" \
     "/pre-merge does NOT suppress it when the delta carries a path outside docs/solutions/"
+
+# Delta = entry plus the root glossary (#512): the glossary is the Vocabulary
+# check's output, staged with the lesson, so this is still the re-run /compound
+# handed back and the recommendation is suppressed.
+assert_eq "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout" \
+    "$(run_premerge "$WITH_GLOSSARY_SHA" "$WITH_CODE_SHA")" \
+    "/pre-merge suppresses the recommendation when the delta holds docs/solutions/ and the root glossary only"
+
+# Delta = glossary plus code: not suppressed. The glossary buys no discount for
+# the code beside it.
+assert_eq "" "$(run_premerge "$GLOSSARY_AND_CODE_SHA" "$WITH_GLOSSARY_SHA")" \
+    "/pre-merge does NOT suppress it when a glossary edit ships beside code"
 
 # --- the guard, EXECUTED rather than matched ---------------------------------
 #
@@ -377,12 +416,15 @@ assert_eq "grep -qv" \
 section "self-test: the assertions above can go red"
 
 # #296's lesson — a guard nobody has watched fire is not known to fire. Mutate
-# the path literal inside the EXTRACTED block (not a copy of it) so that the
-# code path `src/` also counts as a compound path, and confirm the direction
-# that matters flips. If this prints "did not flip", the two assertions above
-# are passing on something other than the skill's own literal.
-mutated="${premerge_block//\^docs\/solutions\/}"
-[[ "$mutated" != "$premerge_block" ]] || fatal "the /pre-merge block no longer contains '^docs/solutions/' to mutate"
+# the path literal inside the EXTRACTED block (not a copy of it): replacing the
+# `docs/solutions/` alternative with `.` makes the group match any path, so the
+# code path `src/` also counts as a compound path, and the direction that
+# matters flips. (An empty alternative is not portable — BSD grep does not read
+# `^(|x)` as "anything" — which is why the mutation substitutes rather than
+# deletes.) If this prints "did not flip", the two assertions above are passing
+# on something other than the skill's own literal.
+mutated="${premerge_block//docs\/solutions\//.}"
+[[ "$mutated" != "$premerge_block" ]] || fatal "the /pre-merge block no longer contains 'docs/solutions/' to mutate"
 mutated_verdict="$(run_premerge "$WITH_CODE_SHA" "$REVIEWED_SHA" "$mutated")"
 if [[ -n "$mutated_verdict" ]]; then
     ok "widening the path literal flips the code-carrying case to suppressed — the assertion reads the real literal"

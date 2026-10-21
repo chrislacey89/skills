@@ -429,13 +429,13 @@ mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
 # the exact inversion of the verdict, in the direction that suppresses the
 # recommendation on a delta carrying code. `grep -v` without `-q` is correct
 # under both.
-outside=$(git diff --name-only "$SCOPE_FROM...HEAD" | grep -v '^docs/solutions/' || true)
+outside=$(git diff --name-only "$SCOPE_FROM...HEAD" | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
 if [ -z "$outside" ]; then
   echo "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout"
 fi
 ```
 
-A delta carrying anything outside `docs/solutions/` is not that case, including a `docs: compound` commit that also staged Phase 4's mechanism — the subject line is not evidence of what the commit contains, which is `/closeout` Step 2's discriminator too.
+Two paths count as the captured lesson: `docs/solutions/` and the root `UBIQUITOUS_LANGUAGE.md` that `/compound` Phase 1's Vocabulary check stages in the same commit. A delta carrying anything else is not that case, including a `docs: compound` commit that also staged Phase 4's mechanism — the subject line is not evidence of what the commit contains, which is `/closeout` Step 2's discriminator too.
 
 Substitute `<pr-number>` with the PR created in Phase 2. Skip the line when the work was a clean execution of a pre-shaped plan with no surprises, rework, or non-obvious decisions — the issue body and PR description already carry that record, and a `docs/solutions/` entry with no reusable lesson trains future readers to skim. When in doubt, skip. Signals that a lesson is worth capturing: a tricky bug whose root cause was non-obvious, a Rabbit Hole from the PRD that actually bit, an architectural decision with significant tradeoffs, or a pattern that should be reused. See `/compound`'s "When NOT to Use" for the full skip list.
 
