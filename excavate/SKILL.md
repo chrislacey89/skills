@@ -453,7 +453,7 @@ stays in the top five, because there the knee depends on how this repo ships.
 A file listed that was not in the original top five entered it only because
 others lost their copies; give both counts for it too.
 
-Fix-labeled commits.** First check the convention rate, because the count is
+**Fix-labeled commits.** First check the convention rate, because the count is
 noise in a repo whose authors do not label fixes:
 
 ```bash
