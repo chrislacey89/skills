@@ -318,8 +318,9 @@ data.
 
 - **Miner A, hotspots** (deterministic shell; it runs the blocks in Steps 3 and
   5 and writes `freq.txt`, `fix.txt`, `loc.txt`, `hotspots.txt`, `pairs.txt`,
-  `soc.txt`, `trend-<file>.txt`, `contributors-<file>.txt`). No judgment is
-  asked of it.
+  `soc.txt`, `freq-dedup.txt`, `hotspots-dedup.txt`, `trend-<file>.txt`,
+  `contributors-<file>.txt`; its summary carries the re-rank block's printed
+  lines). No judgment is asked of it.
 - **Miner B, decisions** (reads, in this order: ADR directories `docs/adr`,
   `docs/adrs`, `docs/decisions`; CHANGELOG and README; PR bodies, reviews,
   inline threads, and linked issues via `gh` when available; commit bodies
