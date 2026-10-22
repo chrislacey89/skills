@@ -446,9 +446,10 @@ awk -F'\t' 'FILENAME == ARGV[1] { w[$3] = $1; rw[$3] = FNR; if (FNR <= 5) o[++n]
 Write the answer into the dossier's Hotspots section as one measured sentence
 next to the knee table, with the counts from both rankings. This replaces a
 caveat written from impression. Judge the move from those counts, not from
-whether the order changed: a file that keeps nearly its count (48 -> 47) only
-traded places with a near-tie, but a file that falls from 40 to 6 has lost
-most of its revisions to copies, and that is a finding for Limits even when it
+whether the order changed: a file that keeps at least three quarters of its
+count (48 -> 47) only traded places with a near-tie, but a file that loses
+more than a quarter of it (40 -> 6, and also 20 -> 14) has lost a real share
+of its revisions to copies, and that is a finding for Limits even when it
 stays in the top five, because there the knee depends on how this repo ships.
 A file listed that was not in the original top five entered it only because
 others lost their copies; give both counts for it too.
