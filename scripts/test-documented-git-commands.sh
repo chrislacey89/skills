@@ -2657,9 +2657,9 @@ mkdir -p "$dup_repo"
 [[ "$(git -C "$dup_repo" rev-list --count --merges HEAD)" -eq 2 ]] \
     || fatal "the duplicated-history fixture did not merge the backport branch and the octopus back"
 
-dup_run() {   # outdir dups-block-text
+dup_run() {   # outdir dups-block-text [repo]
     local saved_sandbox="$excavate_sandbox" saved_dups="${excavate_blocks[b_dups]}" st=0
-    excavate_sandbox="$dup_repo"
+    excavate_sandbox="${3:-$dup_repo}"
     excavate_blocks[b_dups]="$2"
     xc_run "$1" 120 UNUSED "$b_dups" "$b_log" "$b_freq" "$b_loc" "$b_hot" "$b_rerank" || st=$?
     excavate_sandbox="$saved_sandbox"
@@ -2716,6 +2716,57 @@ else
     printf '  FAIL M-dup-pathspec: dropping the pathspec left dups.txt unchanged; the same-pathspec assertion cannot see it\n'
     fail=$((fail + 1))
 fi
+
+# --- Duplicated history: a file enters the top five ---------------------------
+#
+# The re-rank block's second clause lists a file that was NOT in the original top
+# five and is in the top five once copies are set aside. The fixture above has two
+# files over the LOC floor, so that clause never fires there. Here six files clear
+# the floor: a.txt carries a fix that lands three times (main, hotfix cherry-pick,
+# release roll-up) for 3 revisions in the window (the seed predates it), b..e carry 2
+# each, and f.txt carries 2 but ranks sixth on LOC. Set the copies aside and a.txt
+# falls to 1, so f.txt enters. Delete
+# the clause and the block stops printing f.txt's row; only this fixture sees it.
+ent_repo="$excavate_out/ent-repo"
+mkdir -p "$ent_repo"
+(
+    cd "$ent_repo"
+    git init -q -b main .
+    git config commit.gpgsign false
+    ec() {   # date author subject
+        GIT_AUTHOR_NAME="$2" GIT_COMMITTER_NAME="$2" \
+            GIT_AUTHOR_EMAIL=noreply@example.invalid GIT_COMMITTER_EMAIL=noreply@example.invalid \
+            GIT_AUTHOR_DATE="$1T12:00:00+0000" GIT_COMMITTER_DATE="$1T12:00:00+0000" \
+            git commit -q -m "$3"
+    }
+    for f in a:60 b:80 c:70 d:65 e:62 f:60; do
+        for k in $(seq 1 "${f#*:}"); do printf '%s line %d\n' "${f%%:*}" "$k"; done > "${f%%:*}.txt"
+    done
+    git add -A; ec 2020-01-15 "$author_a" "seed fixture"
+    root="$(git rev-parse HEAD)"
+    printf 'guard\n' >> a.txt; git add a.txt; ec 2020-07-01 "$author_a" "fix: guard a"
+    printf 'e1\n' | tee -a b.txt c.txt d.txt e.txt f.txt >/dev/null; git add -A; ec 2020-07-05 "$author_a" "edit b-f 1"
+    printf 'e2\n' | tee -a b.txt c.txt d.txt e.txt f.txt >/dev/null; git add -A; ec 2020-07-10 "$author_b" "edit b-f 2"
+    git switch -q -c hotfix "$root"
+    printf 'guard\n' >> a.txt; git add a.txt; ec 2020-07-12 "$author_a" "fix: guard a (cherry picked)"
+    printf 'hotfix notes\n' > notes.txt; git add notes.txt; ec 2020-07-13 "$author_a" "hotfix notes"
+    git switch -q -c release "$root"
+    printf 'guard\n' >> a.txt; git add a.txt; ec 2020-07-15 "$author_b" "Release v1 (#9)"
+    git switch -q main
+    GIT_AUTHOR_NAME="$author_a" GIT_COMMITTER_NAME="$author_a" \
+        GIT_AUTHOR_EMAIL=noreply@example.invalid GIT_COMMITTER_EMAIL=noreply@example.invalid \
+        GIT_AUTHOR_DATE=2020-07-20T12:00:00+0000 GIT_COMMITTER_DATE=2020-07-20T12:00:00+0000 \
+        git merge -q --no-edit hotfix release >/dev/null
+)
+[[ "$(git -C "$ent_repo" rev-list --count --no-merges HEAD)" -eq 7 ]] \
+    || fatal "the top-five-entry fixture did not produce 7 non-merge commits (seed, fix, 2 edits, cherry-pick, notes, roll-up)"
+[[ "$(git -C "$ent_repo" rev-list --count --merges HEAD)" -eq 1 ]] \
+    || fatal "the top-five-entry fixture did not merge the octopus back"
+ent_out="$excavate_out/ent"
+re=0; dup_run "$ent_out" "${excavate_blocks[b_dups]}" "$ent_repo" || re=$?
+assert_eq 0 "$re" "the top-five-entry pass completes"
+assert_eq "$(printf 'a.txt\nb.txt\nc.txt\nd.txt\ne.txt')" "$(head -5 "$ent_out/work/hotspots.txt" | cut -f3)" "enter: with copies counted, f.txt is sixth and a.txt is in the top five"
+assert_eq "$(printf 'top five without duplicates (revisions with copies counted -> copies left out):\n3 -> 1\ta.txt\n2 -> 2\tb.txt\n2 -> 2\tc.txt\n2 -> 2\td.txt\n2 -> 2\te.txt\n2 -> 2\tf.txt')" "$(cat "$ent_out/b$b_rerank.out")" "enter: f.txt is listed with both counts because a.txt's copies pushed it into the top five"
 
 # --- Mutations: prove the assertions bite ------------------------------------
 #
