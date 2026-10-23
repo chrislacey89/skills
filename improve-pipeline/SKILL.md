@@ -145,7 +145,7 @@ Before recommending edits, inspect the full repository surface area that could b
 
 Explicitly search for:
 
-- duplicated guidance that would become inconsistent
+- duplicated guidance that would become inconsistent — for each rule the proposal changes, grep the repo for that rule's most distinctive term and account for every hit, not just the ones in the closest skill. When a rule has no term specific enough to grep, say so in Repo-Wide Context rather than reporting a clean sweep.
 - adjacent skills whose boundaries would shift if this change lands
 - prompts or templates that would need synchronized updates
 - repo-level terminology that the change would affect
