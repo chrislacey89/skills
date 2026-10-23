@@ -146,7 +146,7 @@ Three outcomes, and only one of them interrupts:
   git log --format='%H %s' "$REVIEWED_SHA".."$HEAD_SHA" \
     | sed -n 's/^\([0-9a-f]*\) \(docs: compound.*\)$/\1/p' \
     | while read -r sha; do
-        outside=$(git show --name-only --format= "$sha" | grep -v '^docs/solutions/' || true)
+        outside=$(git show --name-only --format= "$sha" | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
         if [ -z "$outside" ]; then
           echo "$sha  docs-only /compound entry"
         else
@@ -156,7 +156,7 @@ Three outcomes, and only one of them interrupts:
       done
   ```
 
-  A commit the loop prints as a **docs-only `/compound` entry** is the expected post-stamp delta on the in-PR path, and saying so is worth one line — a divergence the operator cannot account for and one they can are different situations, and describing them identically is how the gate becomes wallpaper. It is still *unreviewed* unless the `/compound` handoff's `/pre-merge` re-run ran; naming it explains the delta, it does not discharge it. A commit that prints **paths outside `docs/solutions/`** is a code delta like any other and gets no discount at all: say that the subject line is misleading and show the paths, so the menu below is answered on the diff rather than on the prefix.
+  A commit the loop prints as a **docs-only `/compound` entry** is the expected post-stamp delta on the in-PR path, and saying so is worth one line — a divergence the operator cannot account for and one they can are different situations, and describing them identically is how the gate becomes wallpaper. It is still *unreviewed* unless the `/compound` handoff's `/pre-merge` re-run ran; naming it explains the delta, it does not discharge it. The root `UBIQUITOUS_LANGUAGE.md` counts with `docs/solutions/` here, because `/compound` Phase 1's Vocabulary check stages it in the same commit. A commit that prints **any other path** is a code delta like any other and gets no discount at all: say that the subject line is misleading and show the paths, so the menu below is answered on the diff rather than on the prefix.
 
   Then ask once, with a single `AskUserQuestion`, recommended option first:
 

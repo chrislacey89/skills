@@ -297,7 +297,7 @@ Use this taxonomy consistently:
 
 - **Primary pipeline skills** — the default feature-delivery path plus the milestone-planning branch for oversized work: `/shape`, `/create-milestone`, `/research`, `/write-a-prd`, `/prd-to-issues`, `/execute`, `/pre-merge`, `/closeout`, `/compound`
 - **Invoked helper skills** — delegated from another skill when a narrower question needs focused rigor: `/api-design-review`, `/design-an-interface`, `/tdd`, `/triage-issue`, `/fix-findings` (human-gated — invoked from `/pre-merge`'s next-step menu, or typed, with finding numbers the human chose)
-- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ubiquitous-language`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`, `/re-pitch`, `/lfg`, `/excavate` (the last two are user-invoked only; `disable-model-invocation: true`)
+- **Side-route skills** — alternate entry points or supporting paths that reconnect to the main workflow: `/qa`, `/prototype`, `/request-refactor-plan`, `/improve-codebase-architecture`, `/improve-pipeline`, `/ts-audit`, `/walk-commits`, `/visual-recap`, `/help`, `/correct-course`, `/handoff`, `/re-pitch`, `/lfg`, `/excavate`, `/ubiquitous-language` (the last three are user-invoked only; `disable-model-invocation: true`)
 - **Infrastructure skills** — repo setup and safety tooling, not feature-delivery stages: `/init-pipeline`, `/setup-pre-commit`, `/setup-ralph-loop`, `/git-guardrails-claude-code`
 
 ### Handoff Table
@@ -306,7 +306,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 
 | Skill | Expects | Produces | Next |
 |---|---|---|---|
-| `/shape` | Fuzzy problem, unclear scope | Shared understanding — choices, assumptions, impositions, signals | `/research` (or `/create-milestone` for multi-PRD work) |
+| `/shape` | Fuzzy problem, unclear scope | Shared understanding — the closing summary's categories (`/shape` Phase 3) | `/research` (or `/create-milestone` for multi-PRD work) |
 | `/create-milestone` | `/shape` closing summary for a multi-PRD tranche | GitHub milestone plus sequenced feature issues | `/research` on a `research-ready` feature |
 | `/research` | Clarified problem from `/shape` | Research artifact with verified versions and doc links — a file at the path `/research` Phase 5c writes (default), or closed `research`-labeled GitHub spike issue when the project opts in via `research.storage = spike-issue` in `sidecar.json` | `/write-a-prd` (may invoke `/api-design-review`) |
 | `/write-a-prd` | Validated research plus shaping context | Shaped PRD issue with appetite, rabbit holes, no-gos | `/prd-to-issues` (may invoke `/design-an-interface`) |

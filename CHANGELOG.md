@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.31.0 — /excavate measures duplicated history instead of leaving each run to improvise a caveat (#514)
+## v1.32.0 — /excavate measures duplicated history instead of leaving each run to improvise a caveat (#514)
 
 On a repo that ships through release branches, one change lands in the window two or three times: as the original commit, a cherry-pick, and a release or sync roll-up. `/excavate`'s first two field runs both found this inflating their revision and fix-labeled counts and each wrote a different caveat by hand, because the skill never mentioned it. The Coverage block exists so the skill never degrades silently, and this was a known, measurable distortion it did not report.
 
@@ -9,6 +9,18 @@ On a repo that ships through release branches, one change lands in the window tw
 - **Step 0 counts duplicated commits (#514)** — a documented `git log -p | git patch-id --stable` block over the shared log's window and pathspec writes every commit whose patch ID an earlier in-window commit already had to `$WORK/dups.txt`, keeping the oldest copy off the list, and the Coverage block gains a `Duplicates:` line. They are counted, not excluded: a roll-up can be the only record of the changes it carries (one field roll-up bundled seven fixes that exist nowhere else on the branch), a re-landed change is real work, and the later steps read history through their own `git log`/`git rev-list`, so filtering the shared log alone would leave the dossier's numbers disagreeing.
 - **Step 3 re-ranks the knee without the duplicates (#514)** — one block compares the top five with and without `dups.txt` and prints whether the set and the order hold; the dossier states the answer as one measured sentence, and a set change only reaches Limits when a file moved by more than a near-tie. On the field repo that prompted this (47 duplicates), the only change was a one-revision swap at fifth place.
 - **`scripts/test-documented-git-commands.sh` plants a release-branch flow (#514)** — one fix on main, a cherry-pick on a hotfix branch, and a `Release` roll-up as the newest copy, both merged back. It asserts the count, that the original fix is the copy kept, that the shared log still counts all three, and the re-rank verdict; a mutant without `--reverse` keeps the roll-up instead and is shown to fail. Building it surfaced that `git log`'s history simplification under a pathspec skips a merged branch whose changes are already on the main line, which is why the duplicate count reads the same pathspec as the shared log.
+
+## v1.31.0 — /ubiquitous-language is typed-only, /shape names the terms a shape contested, and the glossary's readers are named truthfully (#512)
+
+Six months after release no downstream repo has a `UBIQUITOUS_LANGUAGE.md`. Nothing in the pipeline invokes `/ubiquitous-language`, `/shape` — where a feature's nouns are first spoken — produces no file and names no terms, and the skill's Handoff claimed three consumers that never read it. Its description was loading into every downstream session for a skill that had never fired. #40's usage audit resolves as keep, demoted: the deep procedure stays, the always-on cost goes, and one line at `/shape` records whether vocabulary is ever contested — the evidence a glossary-maintenance loop would need before it is built.
+
+### Changes
+
+- **`/ubiquitous-language` is user-invoked (#512)** — `disable-model-invocation: true`, the `/lfg`/`/excavate` pattern; the description reads as a typed entry. Zero context cost; a bulk glossary session is still one command away.
+- **Its Handoff names the three skills that read the file (#512)** — `/qa`, `/prd-to-issues`, `/re-pitch`, each only when the file exists. The former `Supports` line named `/shape`, `/write-a-prd`, and `/triage-issue`, none of which mention it.
+- **`/shape`'s closing summary gains a `Terms` category (#512)** — domain words coined or contested in the shape, with a one-sentence definition and the alias to avoid; omitted when none.
+- **`/compound` Phase 1 gains a Vocabulary check (#512)** — did the shipped change introduce, rename, or contradict a domain term? When yes, the term is written to the root `UBIQUITOUS_LANGUAGE.md` and staged with the entry, so the glossary has a writer at the retrospective seam. #512 deferred this behind the `Terms` signal; the owner pulled it forward at review, and the mechanical objection that deferred it is answered: `/pre-merge`'s re-run guard and `/closeout` Step 2 now count the root glossary with `docs/solutions/` as the paths a compound commit may carry and still be the captured lesson, with `scripts/test-compound-restamp-handoff.sh` extended by glossary-only and glossary-plus-code fixtures. The re-run still reviews the glossary edit; it just does not hand back to `/compound`.
+- **#511's three review Suggestions land (#512)** — a term is settled only after the user confirms it *and* step 6 has checked any rule stated about it; the "Only include domain terms" rule points at Output Format instead of enumerating it; the inline-writing clause lives in step 7 alone.
 
 ## v1.30.0 — /ubiquitous-language writes each term as it is confirmed and checks a stated rule against the code; the decisions-register claim is subtracted (#510, #283)
 

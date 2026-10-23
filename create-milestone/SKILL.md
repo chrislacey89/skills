@@ -26,7 +26,7 @@ This skill bridges the gap between tranche-level shaping and feature-level deliv
 This is a primary planning branch that follows `/shape` only when the shaped work is too large for a single PRD.
 
 Use `/create-milestone` when:
-- `/shape` already produced a closing summary with choices, assumptions, impositions, and structural signals
+- `/shape` already produced a closing summary
 - the shaped work requires multiple independent PRDs rather than one bounded feature
 - you need to sequence feature bets in GitHub before running feature-level `/research`
 
@@ -188,7 +188,7 @@ Tracer bullet / Core capability / Follow-on / Polish
 
 ## Handoff
 
-- **Expected input:** a closing summary from `/shape` with choices, assumptions, impositions, and structural signals for work that is too large for a single PRD
+- **Expected input:** a closing summary from `/shape` for work that is too large for a single PRD
 - **Produces:** a GitHub milestone, sequenced feature issues in `roadmap bet` state, and a selected feature promoted to `research-ready`
 - **Re-enters the main pipeline at:** `/research` once a selected feature has been promoted to `research-ready`
 - **May backtrack to:** `/shape` if milestone-level decomposition reveals the original shaping was wrong or too coarse

@@ -166,7 +166,7 @@ nothing to a sidecar and skips this check.
 
 1. State 3–5 assumptions you are making about the ask.
 2. Ask `/shape` Phase 1's five questions, one per turn, each with your recommended answer. Point at `/shape` for the questions and do not rephrase them.
-3. Print `/shape` Phase 3's closing summary in its four categories.
+3. Print `/shape` Phase 3's closing summary.
 
 Stop there. Skip the rest of `/shape`: no name test, no branch walking, no stress
 test of decisions. Human involvement ends when the summary is printed, and the

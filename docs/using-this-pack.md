@@ -211,7 +211,7 @@ Rule:
 - impositions
 - structural signals
 
-Treat this closing summary as the compressed handoff artifact for the next stage. If `/research` or `/create-milestone` starts in a fresh session, carry these four categories forward explicitly rather than relying on the full conversation transcript.
+Treat this closing summary as the compressed handoff artifact for the next stage. If `/research` or `/create-milestone` starts in a fresh session, carry the closing summary's categories (`/shape` Phase 3) forward explicitly rather than relying on the full conversation transcript.
 
 For blank-project or major-tranche work, `/shape` can hand that closing summary to `/create-milestone` instead of directly to `/research`.
 
