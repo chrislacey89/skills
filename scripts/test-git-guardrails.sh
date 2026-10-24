@@ -1018,7 +1018,7 @@ sc_reviewed="$(fgit -C "$guest" rev-parse HEAD~1)"
 sc_head="$(fgit -C "$guest" rev-parse HEAD)"
 (cd "$guest" && env -u GIT_DIR bash "$bundled_sidecar" stamp write feature/x "$sc_reviewed") >/dev/null 2>&1 \
     || fatal "stamp write failed in $guest"
-(cd "$guest" && env -u GIT_DIR bash "$bundled_sidecar" backend stamp 2>/dev/null) | grep -qx sidecar \
+[[ "$(cd "$guest" && env -u GIT_DIR bash "$bundled_sidecar" backend stamp 2>/dev/null)" == sidecar ]] \
     || fatal "the guest fixture does not route the stamp to the sidecar"
 
 hook_dir="$sc_tmp/hooks"
@@ -1124,7 +1124,7 @@ assert_eq 0 "$(run_sc "$hook_dir" "$guest" 'gh pr merge https://github.com/o/r/p
 # The github backend, with the resolver installed: the PR-body read still refuses.
 owned="$sc_tmp/owned"
 mk_sidecar_project "$owned" owned
-(cd "$owned" && env -u GIT_DIR bash "$bundled_sidecar" backend stamp 2>/dev/null) | grep -qx github \
+[[ "$(cd "$owned" && env -u GIT_DIR bash "$bundled_sidecar" backend stamp 2>/dev/null)" == github ]] \
     || fatal "the owned fixture does not route the stamp to github"
 write_sc_gh feature/x "$sc_head" "<!-- reviewed-at: $sc_reviewed -->"
 assert_eq 2 "$(run_sc "$hook_dir" "$owned" 'gh pr merge 4821')" \
