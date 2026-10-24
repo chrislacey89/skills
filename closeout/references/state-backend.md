@@ -17,7 +17,7 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 
 `github` also needs `forge.kind` to be `github`. Every consumer of the `github` answer runs `gh`, and `forge.write` is derived from `mode` alone, so an owned GitLab or Bitbucket repo carries the full write list and would otherwise be routed to a CLI that cannot reach it.
 
-**No sidecar means `github`.** That was the behavior before the sidecar existed, so a project that never ran `sidecar.sh init` sees no change. `backend` prints `github` and exits 0 on a `SIDECAR MISS`. Any other failure, such as running outside a repository or a `forge.write` that is not an array, exits nonzero rather than guessing.
+**No sidecar means `github`.** That was the behavior before the sidecar existed, so a project that never ran `sidecar.sh init` sees no change. `backend` prints `github` and exits 0 on a `SIDECAR MISS`. Any other failure, such as running outside a repository or a `forge.write` that is not an array, exits nonzero rather than guessing. A corrupt or unreadable `sidecar.json` is such a failure for any repo that no readable sidecar claims, since it might be that repo's own; a repo a readable sidecar does claim resolves, and the file is named on stderr.
 
 **A caller branches on all three outcomes.** A nonzero exit prints nothing, so `if [ "$(backend)" = sidecar ]; then … else <gh> fi` reads a refusal as `github`, and the promise above never reaches the caller. Every call site is a `case` with a `github)` arm, a `sidecar)` arm, and a `*)` arm that aborts. `scripts/test-delta-review-scope.sh` and `scripts/test-review-currency-marker.sh` run each extracted block with a `backend` that refuses.
 

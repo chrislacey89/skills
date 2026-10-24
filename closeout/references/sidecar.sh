@@ -215,22 +215,38 @@ current_keys() {
 }
 
 # Sidecar directories whose sidecar.json carries key $1, one per line.
-# Returns 2 when any sidecar.json cannot be read: with -e, jq exits 1 for a
-# false result (this key is not listed) and 0 for a true one (see `man jq`,
-# --exit-status), so any other status is an error, which is not a miss. A caller
-# must check the status; `$(owners_of …)` inside a pipeline discards it.
+# With -e, jq exits 1 for a false result (this key is not listed) and 0 for a
+# true one (see `man jq`, --exit-status), so any other status is an error: the
+# file is corrupt or unreadable, which is not a miss. Such a file cannot be
+# ruled out as the key's owner without parsing it, so when no readable sidecar
+# claims the key this returns 2 and names it; when one does, the key is owned
+# and the unreadable file is only named, as a warning (#530: one corrupt
+# sidecar.json used to refuse every lookup in every repo). A caller must check
+# the status; `$(owners_of …)` inside a pipeline discards it.
 owners_of() {
-    local key="$1" f rc
+    local key="$1" f rc hits="" unread=""
     for f in "$SIDECAR_ROOT"/*/sidecar.json; do
         [ -f "$f" ] || continue
         rc=0
         jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1 || rc=$?
         case "$rc" in
-            0) dirname "$f" ;;
+            0) hits="${hits:+$hits$'\n'}$(dirname "$f")" ;;
             1) ;;
-            *) printf 'sidecar.sh: cannot read %s (jq exited %s); refusing to treat it as a miss\n' "$f" "$rc" >&2; return 2 ;;
+            *) unread="${unread:+$unread$'\n'}$f (jq exited $rc)" ;;
         esac
     done
+    if [ -n "$unread" ]; then
+        if [ -z "$hits" ]; then
+            printf '%s\n' "$unread" | while IFS= read -r f; do
+                printf 'sidecar.sh: cannot read %s; refusing to treat it as a miss\n' "$f" >&2
+            done
+            return 2
+        fi
+        printf '%s\n' "$unread" | while IFS= read -r f; do
+            printf 'sidecar.sh: warning: cannot read %s; ignored, because a readable sidecar claims %s\n' "$f" "$key" >&2
+        done
+    fi
+    [ -z "$hits" ] || printf '%s\n' "$hits"
 }
 
 suggest_name() {
@@ -301,7 +317,9 @@ do_resolve() {
     new_keys=""
     for k in $keys; do
         if ! jq -e --arg k "$k" '(.keys // []) | index($k) != null' "$hit/sidecar.json" >/dev/null 2>&1; then
-            other="$(owners_of "$k")" || exit 1
+            # An unreadable sidecar.json might claim this alias; skip adding it
+            # rather than refuse a resolve that already has its hit.
+            other="$(owners_of "$k")" || continue
             other="$(printf '%s\n' "$other" | head -n 1)"
             if [ -n "$other" ]; then
                 printf 'ALIAS COLLISION: %s already belongs to %s; not adding it to %s\n' "$k" "$other" "$hit" >&2
