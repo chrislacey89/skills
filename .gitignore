@@ -22,3 +22,6 @@ plans/
 # hold the lock shut or open across every future branch in this repo.
 .claude/.review-stamped
 .claude/.fix-findings-active
+
+# Reserved for /setup-ralph-loop.
+.claude/.ralph-checked
