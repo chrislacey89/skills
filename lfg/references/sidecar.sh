@@ -215,13 +215,21 @@ current_keys() {
 }
 
 # Sidecar directories whose sidecar.json carries key $1, one per line.
+# Returns 2 when any sidecar.json cannot be read: with -e, jq exits 1 for a
+# false result (this key is not listed) and 0 for a true one (see `man jq`,
+# --exit-status), so any other status is an error, which is not a miss. A caller
+# must check the status; `$(owners_of …)` inside a pipeline discards it.
 owners_of() {
-    local key="$1" f
+    local key="$1" f rc
     for f in "$SIDECAR_ROOT"/*/sidecar.json; do
         [ -f "$f" ] || continue
-        if jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1; then
-            dirname "$f"
-        fi
+        rc=0
+        jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1 || rc=$?
+        case "$rc" in
+            0) dirname "$f" ;;
+            1) ;;
+            *) printf 'sidecar.sh: cannot read %s (jq exited %s); refusing to treat it as a miss\n' "$f" "$rc" >&2; return 2 ;;
+        esac
     done
 }
 
@@ -273,7 +281,7 @@ do_resolve() {
     in_repo || refuse "not inside a git repository"
     keys="$(current_keys)"
     for key in $keys; do
-        owners="$(owners_of "$key")"
+        owners="$(owners_of "$key")" || exit 1
         [ -n "$owners" ] || continue
         count="$(printf '%s\n' "$owners" | wc -l | tr -d ' ')"
         hit="$(printf '%s\n' "$owners" | head -n 1)"
@@ -293,7 +301,8 @@ do_resolve() {
     new_keys=""
     for k in $keys; do
         if ! jq -e --arg k "$k" '(.keys // []) | index($k) != null' "$hit/sidecar.json" >/dev/null 2>&1; then
-            other="$(owners_of "$k" | head -n 1)"
+            other="$(owners_of "$k")" || exit 1
+            other="$(printf '%s\n' "$other" | head -n 1)"
             if [ -n "$other" ]; then
                 printf 'ALIAS COLLISION: %s already belongs to %s; not adding it to %s\n' "$k" "$other" "$hit" >&2
             else
@@ -350,7 +359,8 @@ cmd_init() {
     keys="$(current_keys)"
     [ -n "$keys" ] || refuse "init: this checkout has no root commit, remote, or path to key on"
     for key in $keys; do
-        owner="$(owners_of "$key" | head -n 1)"
+        owner="$(owners_of "$key")" || exit 1
+        owner="$(printf '%s\n' "$owner" | head -n 1)"
         [ -z "$owner" ] || refuse "init refused: $key already belongs to sidecar $(basename "$owner") ($owner)"
     done
     dir="$SIDECAR_ROOT/$name"

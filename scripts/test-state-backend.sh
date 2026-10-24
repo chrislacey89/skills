@@ -127,6 +127,42 @@ if PATH="$nojq" command -v jq >/dev/null 2>&1; then bad "the jq-less PATH really
 clean "jq absent: backend leaves the project clean" "$P"
 
 # -----------------------------------------------------------------------------
+section "backend: an unreadable sidecar.json is a refusal, never the github default"
+
+# jq is present but cannot read the sidecar: a corrupt file, or a jq that errors.
+# Either must not read as "no sidecar", whose answer is `github`.
+mkproj https://github.com/acme/corrupt.git
+runo "$P" init --name corrupt --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the unreadable-sidecar arms" "$err"
+badjq="$tmp/badjq-bin"; mkdir -p "$badjq"
+for d in /opt/homebrew/bin /usr/bin /bin; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+        b="${f##*/}"; [ "$b" = jq ] && continue
+        [ -e "$badjq/$b" ] || ln -s "$f" "$badjq/$b"
+    done
+done
+printf '#!/bin/sh\nexit 3\n' > "$badjq/jq"; chmod +x "$badjq/jq"
+cp "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" "$tmp/corrupt-good.json"
+for a in prds slices stamp; do
+    runo "$P" backend "$a"
+    check "well-formed sidecar (control): guest backend $a → sidecar" sidecar "$out"
+    saved_path="$PATH"
+    PATH="$badjq" runo "$P" backend "$a"
+    PATH="$saved_path"
+    check "jq exits 3: backend $a exits nonzero" 1 "$rc"
+    check "jq exits 3: backend $a prints nothing on stdout (not github)" "" "$out"
+    printf '{"keys": [' > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
+    runo "$P" backend "$a"
+    cp "$tmp/corrupt-good.json" "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
+    check "corrupt sidecar.json: backend $a exits nonzero" 1 "$rc"
+    check "corrupt sidecar.json: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *sidecar.json*) ok "corrupt sidecar.json: backend $a names the file on stderr" ;; *) bad "corrupt sidecar.json: backend $a names the file on stderr" "got [$err]" ;; esac
+done
+runo "$P" resolve
+check "corrupt sidecar.json restored: resolve succeeds again" 0 "$rc"
+
+# -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
 
 # expect <mode> <remote> <prds> <slices> <stamp>
