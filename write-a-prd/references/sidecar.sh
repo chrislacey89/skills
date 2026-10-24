@@ -232,6 +232,12 @@ current_keys() {
 # sidecar.json is skipped.
 owners_of() {
     local key="$1" d f rc hits="" unread=""
+    # A root that exists but cannot be listed and entered hides every sidecar
+    # in it; only a root that does not exist at all is a miss.
+    if [ -e "$SIDECAR_ROOT" ] && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
+        printf 'sidecar.sh: cannot list %s; refusing to treat it as a miss\n' "$SIDECAR_ROOT" >&2
+        return 2
+    fi
     for d in "$SIDECAR_ROOT"/*/; do
         [ -d "$d" ] || continue
         d="${d%/}"

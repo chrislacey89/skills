@@ -265,6 +265,25 @@ else
     chmod 755 "$dir_root/g"
     clean "unenterable-directory arms leave the guest project clean" "$dirguest"
     clean "unenterable-directory arms leave the claimed project clean" "$dirclaimed"
+
+    # The root itself. At mode 000 the */ glob returns its own pattern, and at
+    # 111 (searchable, not listable) it cannot list a single entry; either way
+    # the scan used to find nothing and read as a miss. A root that does not
+    # exist is still the honest miss, whose answer is github.
+    for m in 000 111; do
+        chmod "$m" "$dir_root"
+        for a in prds slices stamp; do
+            SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirguest" backend "$a"
+            check "sidecar root at mode $m: backend $a exits 1" 1 "$rc"
+            check "sidecar root at mode $m: backend $a prints nothing on stdout (not github)" "" "$out"
+            case "$err" in *"$dir_root"*) ok "sidecar root at mode $m: backend $a names the root on stderr" ;; *) bad "sidecar root at mode $m: backend $a names the root on stderr" "got [$err]" ;; esac
+        done
+        chmod 755 "$dir_root"
+    done
+    SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirguest" backend stamp
+    check "sidecar root restored: backend stamp answers sidecar again" sidecar "$out"
+    SKILL_KIT_SIDECAR_ROOT="$tmp/no-such-root" runo "$dirguest" backend stamp
+    check "absent sidecar root: backend stamp is still the github miss" "0:github" "$rc:$out"
 fi
 
 # -----------------------------------------------------------------------------
