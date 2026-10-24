@@ -672,6 +672,10 @@ cmd_backend() {
         stamp)       item="prs" ;;
         *) die_usage "backend: expected prds, slices, or stamp, got: $1" ;;
     esac
+    # Without jq no sidecar.json can be matched, so a guest's sidecar would read
+    # as SIDECAR MISS and the answer would be `github`: pack text in a client's
+    # PR body. "Could not look" must not share "no sidecar"'s answer.
+    command -v jq >/dev/null 2>&1 || refuse "backend: jq is required to read the sidecar and is not on PATH; refusing rather than answering github"
     errf="$(mktemp)" || refuse "backend: cannot create a temp file"
     if ! sc="$(do_resolve 2>"$errf")"; then
         if grep -q 'SIDECAR MISS:' "$errf"; then

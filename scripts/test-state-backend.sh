@@ -97,6 +97,36 @@ runo "$P" backend
 check "a missing artifact is a usage error" 2 "$rc"
 
 # -----------------------------------------------------------------------------
+section "backend: jq absent is a refusal, never the github default"
+
+# A guest sidecar on a github remote answers `sidecar` (the control). With a
+# PATH that holds every real binary except jq, the same repo must be refused:
+# without jq no sidecar matches, and the miss would otherwise read as `github`.
+nojq="$tmp/nojq-bin"; mkdir -p "$nojq"
+for d in /opt/homebrew/bin /usr/bin /bin; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+        b="${f##*/}"; [ "$b" = jq ] && continue
+        [ -e "$nojq/$b" ] || ln -s "$f" "$nojq/$b"
+    done
+done
+mkproj https://github.com/acme/nojq.git
+runo "$P" init --name nojq --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the no-jq arm" "$err"
+for a in prds slices stamp; do
+    runo "$P" backend "$a"
+    check "jq present (control): guest backend $a → sidecar" sidecar "$out"
+    saved_path="$PATH"
+    PATH="$nojq" runo "$P" backend "$a"
+    PATH="$saved_path"
+    check "jq absent: backend $a exits 1" 1 "$rc"
+    check "jq absent: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *jq*) ok "jq absent: backend $a names jq on stderr" ;; *) bad "jq absent: backend $a names jq on stderr" "got [$err]" ;; esac
+done
+if PATH="$nojq" command -v jq >/dev/null 2>&1; then bad "the jq-less PATH really has no jq" "jq found"; else ok "the jq-less PATH really has no jq"; fi
+clean "jq absent: backend leaves the project clean" "$P"
+
+# -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
 
 # expect <mode> <remote> <prds> <slices> <stamp>
