@@ -223,9 +223,23 @@ current_keys() {
 # and the unreadable file is only named, as a warning (chrislacey89/skills#530: one corrupt
 # sidecar.json used to refuse every lookup in every repo). A caller must check
 # the status; `$(owners_of …)` inside a pipeline discards it.
+#
+# The scan walks directories, not "$SIDECAR_ROOT"/*/sidecar.json: a glob never
+# matches a path under a directory it cannot search, so a sidecar directory at
+# mode 000 or 444 used to drop out of the scan and read as a miss, which
+# `backend` answers with `github` (chrislacey89/skills#542). A directory that
+# cannot be entered is unread, like a corrupt file, and a directory with no
+# sidecar.json is skipped.
 owners_of() {
-    local key="$1" f rc hits="" unread=""
-    for f in "$SIDECAR_ROOT"/*/sidecar.json; do
+    local key="$1" d f rc hits="" unread=""
+    for d in "$SIDECAR_ROOT"/*/; do
+        [ -d "$d" ] || continue
+        d="${d%/}"
+        f="$d/sidecar.json"
+        if [ ! -x "$d" ]; then
+            unread="${unread:+$unread$'\n'}$d (cannot enter the directory)"
+            continue
+        fi
         [ -f "$f" ] || continue
         rc=0
         jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1 || rc=$?

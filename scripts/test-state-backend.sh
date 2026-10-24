@@ -37,7 +37,8 @@ DOC="$repo_root/docs/state-backend.md"
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
-trap 'rm -rf "$tmp"' EXIT
+# chmod first: an arm that dies mid-way leaves a mode-000 fixture rm cannot enter.
+trap 'chmod -R u+rwx "$tmp" 2>/dev/null; rm -rf "$tmp"' EXIT
 
 export GIT_CONFIG_NOSYSTEM=1
 export GIT_CONFIG_GLOBAL="$tmp/gitconfig"
@@ -221,6 +222,50 @@ SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$unclaimed" init --name unclaimed --m
 check "unclaimed repo beside a corrupt sidecar: init refuses rather than risk a second owner" 1 "$rc"
 clean "scope arms leave the claimed project clean" "$claimed"
 clean "scope arms leave the unclaimed project clean" "$unclaimed"
+
+# -----------------------------------------------------------------------------
+section "backend: a sidecar directory the scan cannot enter is a refusal, never the github default"
+
+# #542. The scan used to glob "$SIDECAR_ROOT"/*/sidecar.json, and a glob never
+# matches a path under a directory it cannot search: a guest sidecar at mode
+# 000, or 444 (readable, not searchable), vanished from the scan, the lookup
+# read as SIDECAR MISS, and backend answered github on the guest repo. Same
+# precedence as #530: refused only when no readable sidecar claims the key.
+# uid 0 searches mode-000 directories, so root skips.
+if [ "$(id -u)" -eq 0 ]; then
+    ok "unenterable sidecar directory: skipped under root, which searches mode-000 directories"
+else
+    dir_root="$tmp/dir-sidecars"
+    mkproj https://github.com/acme/dirguest.git
+    dirguest="$P"
+    SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirguest" init --name g --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+    [ "$rc" -eq 0 ] || bad "init guest for the unenterable-directory arms" "$err"
+    for m in 000 444; do
+        chmod "$m" "$dir_root/g"
+        for a in prds slices stamp; do
+            SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirguest" backend "$a"
+            check "sidecar dir at mode $m: backend $a exits 1" 1 "$rc"
+            check "sidecar dir at mode $m: backend $a prints nothing on stdout (not github)" "" "$out"
+            case "$err" in *"$dir_root/g"*) ok "sidecar dir at mode $m: backend $a names the directory on stderr" ;; *) bad "sidecar dir at mode $m: backend $a names the directory on stderr" "got [$err]" ;; esac
+        done
+        chmod 755 "$dir_root/g"
+    done
+    SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirguest" backend stamp
+    check "sidecar dir restored: backend stamp answers sidecar again" sidecar "$out"
+
+    # A readable claimant still resolves beside a stray it cannot enter.
+    mkproj https://github.com/acme/dirclaimed.git
+    dirclaimed="$P"
+    SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+    [ "$rc" -eq 0 ] || bad "init the readable claimant" "$err"
+    chmod 000 "$dir_root/g"
+    SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" backend stamp
+    check "claimed repo beside an unenterable sidecar dir: backend stamp answers sidecar" sidecar "$out"
+    case "$err" in *"$dir_root/g"*) ok "claimed repo beside an unenterable sidecar dir: the directory is named on stderr" ;; *) bad "claimed repo beside an unenterable sidecar dir: the directory is named on stderr" "got [$err]" ;; esac
+    chmod 755 "$dir_root/g"
+    clean "unenterable-directory arms leave the guest project clean" "$dirguest"
+    clean "unenterable-directory arms leave the claimed project clean" "$dirclaimed"
+fi
 
 # -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
