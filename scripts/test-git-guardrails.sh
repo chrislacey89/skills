@@ -1045,11 +1045,13 @@ STUB
 
 # run_sc <hook-dir> <project> <command> [VAR=value ...] — the hook from
 # <hook-dir>, run from <project> the way Claude Code runs it from the session's
-# directory. Exit status on stdout; stderr kept in $sc_err.
+# directory. Exit status on stdout; stderr kept in $sc_err. The git variables
+# a pre-push run exports are cleared, as they are for a real PreToolUse hook;
+# a VAR=value argument sets one back on purpose.
 run_sc() {
     local hd="$1" proj="$2" cmd="$3"; shift 3
     (cd "$proj" && jq -nc --arg c "$cmd" '{tool_input: {command: $c}}' \
-        | env PATH="$sc_gh_dir:$PATH" "$@" bash "$hd/block-dangerous-git.sh" >/dev/null 2>"$sc_tmp/stderr")
+        | env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE PATH="$sc_gh_dir:$PATH" "$@" bash "$hd/block-dangerous-git.sh" >/dev/null 2>"$sc_tmp/stderr")
     printf '%s' "$?"
 }
 
