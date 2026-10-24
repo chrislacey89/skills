@@ -107,6 +107,8 @@ pre-push:
       run: bash scripts/test-excavate-entry-contract.sh
     sidecar-resolution-tests:
       run: bash scripts/test-sidecar-resolution.sh
+    state-backend-tests:
+      run: bash scripts/test-state-backend.sh
     # scripts/test-fixture-git-isolation.sh is deliberately absent: it runs in
     # CI only (#442). It still reads its suite list from this file, and fails
     # unless that list is every scripts/test-*.sh but itself.

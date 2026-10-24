@@ -116,14 +116,22 @@ If any precondition fails, stop and report which one — do not merge or remove 
 
 The three checkboxes above ask whether a review happened. None of them asks whether it covered the diff about to merge. In the intended linear flow those are the same question, which is exactly why the gap is invisible; in a real HITL session scope accretes on a branch *after* its review pass, and nothing connects the diff `/pre-merge` read to the diff `/closeout` merges. That is an inflow with no feedback loop (Meadows — the structural fix is to add the loop, not to exhort), and it quietly degrades "the PR was reviewed" into "an early version of the PR was reviewed" at the one moment the degradation matters most. Continuous Delivery states the rule plainly: the artifact you reviewed must be the artifact you ship.
 
-Read the stamp `/pre-merge` Phase 4 left in the PR body and compare it to the current head:
+Read the stamp `/pre-merge` Phase 4 left and compare it to the current head. It lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): in the PR body, or in the sidecar.
 
 ```bash
 git fetch --quiet
-REVIEWED_SHA=$(gh pr view <number> --json body -q .body \
-  | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
-HEAD_SHA=$(gh pr view <number> --json headRefOid -q .headRefOid)
+SC="<this skill's directory>/references/sidecar.sh"
+if [ "$(bash "$SC" backend stamp)" = sidecar ]; then
+  REVIEWED_SHA=$(bash "$SC" stamp read "$(git branch --show-current)")
+  HEAD_SHA=$(git rev-parse '@{u}' 2>/dev/null || git rev-parse HEAD)
+else
+  REVIEWED_SHA=$(gh pr view <number> --json body -q .body \
+    | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
+  HEAD_SHA=$(gh pr view <number> --json headRefOid -q .headRefOid)
+fi
 ```
+
+On the sidecar backend the head is the branch's upstream, which is what the forge will merge: the first precondition above already requires it to match the local head. It falls back to `HEAD` when the branch has no upstream. `stamp read` prints the same full 40-character OID the PR-body marker carries, or nothing, so everything below runs unchanged on either backend.
 
 **Exactly 40 hex characters, compared by string equality.** Both halves of that sentence are load-bearing, because this marker is a contract that spans two skills. `/pre-merge` Phase 4 emits the full 40-character OID, and `headRefOid` is always 40 characters, so `\{40\}` is the only width that can ever compare equal — accepting a shorter one would let a malformed marker (a hand-edited body, a template placeholder substituted into the wrong half) parse successfully and then differ from `$HEAD_SHA` forever. `[[ "$REVIEWED_SHA" == "$HEAD_SHA" ]]` is the comparison: exact string equality on two full OIDs, never a prefix test. A marker the regex rejects yields an empty `$REVIEWED_SHA` and takes the "no stamp found" branch below, which degrades gracefully — far better than the "SHAs differ" branch crying wolf on a PR whose head never moved. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this round trip against both skills so the writer's format and this parser cannot drift apart silently.
 
@@ -168,7 +176,7 @@ Three outcomes, and only one of them interrupts:
 
 This precondition **never hard-blocks**. `/closeout` is HITL and non-blocking by design, and the fix here is making the divergence *visible* — not seizing the merge decision from the user.
 
-The git guardrail hook does hard-block, on the merge command rather than here, so that a merge which never passes through `/closeout` cannot skip this read (`/git-guardrails-claude-code` → "What Gets Blocked Conditionally"). Where it is installed, the **Merge anyway** branch above needs the opt-out named in Step 3.
+See `/git-guardrails-claude-code` → "What Gets Blocked Conditionally" and chrislacey89/skills#522. Where it is installed, the **Merge anyway** branch above needs the opt-out named in Step 3.
 
 ### 3. Merge the PR
 
@@ -181,7 +189,7 @@ gh pr merge <number> --squash --delete-branch --body-file "$BODY_FILE"   # or --
 rm -f "$BODY_FILE"
 ```
 
-If the guardrail hook is installed and Step 2 found a stale stamp that the user chose to accept, this command is refused — the hook reads the same stamp and does not know a human just decided. Carry the decision across explicitly:
+See `/git-guardrails-claude-code` → "What Gets Blocked Conditionally" and chrislacey89/skills#522. Carry the decision across explicitly:
 
 ```bash
 ALLOW_STALE_STAMP_MERGE=1 gh pr merge <number> --squash --delete-branch --body-file "$BODY_FILE"
@@ -208,7 +216,13 @@ the flag would otherwise survive indefinitely:
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 rm -f "$PROJECT_DIR/.claude/.review-stamped"
+SC="<this skill's directory>/references/sidecar.sh"
+if [ "$(bash "$SC" backend stamp)" = sidecar ]; then
+  bash "$SC" stamp clear "$(gh pr view <number> --json headRefName -q .headRefName)"
+fi
 ```
+
+On the sidecar backend the stamp is spent with the review, so it is cleared here too. The branch comes from the merged PR, not from `git branch --show-current`: `gh pr merge --delete-branch` deletes the local branch and, in a plain checkout, switches to the base first, so the current branch is by now the base. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
 
 `.claude/.fix-findings-active` is not removed here — `/fix-findings` removes its
 own flag on every exit path, and a copy still present at merge means that run

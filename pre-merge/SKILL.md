@@ -83,10 +83,15 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
    **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
-4. **Decide the scope — the whole branch, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or a hand fix after a deliberate lock deletion — takes the post-stamp delta as its subject. Read the stamp with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names:
+4. **Decide the scope — the whole branch, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or a hand fix after a deliberate lock deletion — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
    ```bash
-   REVIEWED_SHA=$(gh pr list --head "$(git branch --show-current)" --json body -q '.[0].body // ""' \
-     | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
+   SC="<this skill's directory>/references/sidecar.sh"
+   if [ "$(bash "$SC" backend stamp)" = sidecar ]; then
+     REVIEWED_SHA=$(bash "$SC" stamp read "$(git branch --show-current)")
+   else
+     REVIEWED_SHA=$(gh pr list --head "$(git branch --show-current)" --json body -q '.[0].body // ""' \
+       | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
+   fi
    SCOPE_FROM="$BASE_REF"
    if [ -n "$REVIEWED_SHA" ] \
      && git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
@@ -338,6 +343,27 @@ This phase **presents**; it does not take the choice, and this paragraph does no
 **Stamp the reviewed head SHA into the PR (author-mode and loop-mode).** The review above covers one specific commit. Record which one in the PR body, so a later — possibly fresh-session — `/closeout` can tell whether the diff it is about to merge is still the diff that was reviewed. Prospective memory fails silently (Norman), so the marker goes into durable GitHub state rather than into the operator's head; `/closeout` Step 2's review-currency precondition is its only reader.
 
 Write it only after the findings above have been presented — the stamp asserts "a review completed at this SHA," so writing it earlier would certify a review that had not run.
+
+**Ask where the stamp lives first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md). `github` runs the PR-body block below, unchanged. `sidecar` runs this block instead, and the PR body is not touched: on that backend the pack writes no text into the PR.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+REVIEWED_SHA=$(git rev-parse HEAD)
+
+# The lock flag below is reachable only after the stamp is committed in the
+# sidecar, for the same reason as on the PR-body path: a flag with no stamp
+# locks the branch on the strength of a review nothing recorded.
+if ! bash "$SC" stamp write "$(git branch --show-current)" "$REVIEWED_SHA" --base-ref "${BASE_REF:-}"; then
+  echo "stamp aborted: sidecar stamp write failed" >&2; exit 1
+fi
+
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
+```
+
+Retry a failed write **once**, as on the PR-body path. `stamp write` replaces the branch's one stamp file rather than adding to it, so a retry cannot double-stamp.
+
+**On the `github` backend:**
 
 ```bash
 REVIEWED_SHA=$(git rev-parse HEAD)
@@ -619,7 +645,7 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 ## Handoff
 
 - **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), an existing PR number you want reviewed (reviewer-mode), or an AFK handoff from `/execute` — branch plus the `## Review Notes` it wrote into the PR body (loop-mode)
-- **Produces:** a PR with lineage, stamped with the head SHA the review covered — plus, locally, the transient `.claude/.review-stamped` flag the classification hook reads to route post-review fixes through `/fix-findings` — and an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or that same PR plus a `## Review Disposition Ledger` in which every finding has a row, an owner, and the evidence for or against it (loop-mode)
+- **Produces:** a PR with lineage, stamped with the head SHA the review covered (in the PR body, or in the sidecar when `backend stamp` answers `sidecar`) — plus, locally, the transient `.claude/.review-stamped` flag the classification hook reads to route post-review fixes through `/fix-findings` — and an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or that same PR plus a `## Review Disposition Ledger` in which every finding has a row, an owner, and the evidence for or against it (loop-mode)
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
 - **May invoke:** `/ts-audit` on changed `.ts`/`.tsx` — in loop-mode only; author-mode and reviewer-mode mention it without invoking
 - **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR, then handed back here for a re-run over its commit, so the entry is reviewed and merged with the code it explains rather than merged unreviewed (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`. In loop-mode, the ledger hands back to the operator: settle the `open` rows — fix, file, accept, or drop each one — then either re-invoke `/pre-merge --loop` on the updated diff or continue to `/compound`, the `/pre-merge` re-run it hands back to, and `/closeout` as above

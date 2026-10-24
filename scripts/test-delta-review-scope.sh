@@ -101,15 +101,29 @@ assert_fixture_merged() {
 
 # --- Extract the two blocks from the skills ---------------------------------
 
-# The scope block: from the stamp read to the log line, inside Phase 1 step 4's
-# fence. Anchored on the first and last command rather than on a marker comment,
-# so a rewrite that drops either line fails here instead of shrinking the test.
+# The scope block: from the backend question to the log line, inside Phase 1
+# step 4's fence. Anchored on the first and last command rather than on a marker
+# comment, so a rewrite that drops either line fails here instead of shrinking
+# the test. The block opens by asking `sidecar.sh backend stamp` where the stamp
+# lives (#521), so its bundled-path placeholder is pointed at the canonical
+# script; every arm below then runs the real routing rule, not a stand-in.
+sidecar_sh="$repo_root/init-pipeline/scripts/sidecar.sh"
 scope_block="$(awk '
-    /REVIEWED_SHA=\$\(gh pr list --head/ { on = 1 }
+    /^4\. \*\*Decide the scope/ { step = 1 }
+    step && /^   SC=".*references\/sidecar\.sh"$/ { on = 1 }
     on { sub(/^   /, ""); print }
     on && /git log --oneline "\$SCOPE_FROM\.\.HEAD"/ { exit }
 ' "$premerge_skill")"
 [[ -n "$scope_block" ]] || fatal "no scope block found in $premerge_skill"
+scope_block="${scope_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+[[ "$scope_block" == *"$sidecar_sh"* ]] \
+    || fatal "scope block's sidecar.sh placeholder was not substituted"
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+[[ "$scope_block" == *'REVIEWED_SHA=$(gh pr list --head'* ]] \
+    || fatal "scope block extracted from $premerge_skill no longer reads the PR body on the github backend"
+# shellcheck disable=SC2016
+[[ "$scope_block" == *'stamp read "$(git branch --show-current)"'* ]] \
+    || fatal "scope block extracted from $premerge_skill no longer reads the sidecar stamp on the sidecar backend"
 # A string test rather than piping into a quiet grep: under pipefail a ban on that shape passes
 # precisely when the banned thing is present (test-pipefail-safe-matchers.sh).
 # shellcheck disable=SC2016  # the pattern is the skill's literal text — $REVIEWED_SHA is markdown being matched, not an expansion
@@ -187,6 +201,11 @@ STUB
 chmod +x "$stub_bin/git"
 
 export PATH="$stub_bin:$PATH"
+# The GitHub arm runs with no sidecar anywhere, so `backend stamp` answers
+# github because nothing resolves, the way it does on a project that never ran
+# `sidecar.sh init`. The sidecar arm (section 9) builds its own.
+export SKILL_KIT_SIDECAR_ROOT="$sandbox/sidecars"
+export SKILL_KIT_RESEARCH_ARCHIVE="$sandbox/archive"
 export GH_STUB_ARGV_LOG="$sandbox/gh-argv.log"
 export GH_STUB_ARGV_MISS_LOG="$sandbox/gh-argv-miss.log"
 export GIT_STUB_ARGV_LOG="$sandbox/git-argv.log"
@@ -410,6 +429,127 @@ for site in "$fixfindings_skill" "$repo_root/SYSTEM-OVERVIEW.md"; do
         fail=$((fail + 1))
     fi
 done
+
+# --- 9. The sidecar backend ---------------------------------------------------
+# The same decision, with the stamp in <sidecar>/reviews/ instead of the PR body
+# (#521). A fresh fixture with the shape cases 1-5 used, and a sidecar whose
+# forge.write is [] (owned, no remote: forge none), so `backend stamp` answers
+# sidecar. The gh stub is armed with a PR-body stamp that would pick a
+# DIFFERENT scope, so a block that read the PR body on this backend is caught
+# by the file set, not only by the argv log.
+section "sidecar backend: the stamp is read from the sidecar, never the PR body"
+
+export GIT_CONFIG_GLOBAL="$sandbox/gitconfig"
+git config --file "$GIT_CONFIG_GLOBAL" user.name "Delta Tester"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "delta@example.com"
+
+repo2="$sandbox/repo2"
+mkdir -p "$repo2"
+before_count=0
+(
+    cd "$repo2" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base2\n' > base.txt
+    git add base.txt && git commit -q -m 'base (sidecar fixture)'
+    git switch -q -c feature
+    printf 'one\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'two\n' > two.txt
+    git add two.txt && git commit -q -m 'feature: two'
+)
+assert_fixture_committed "$repo2" "sidecar fixture setup" "$before_count" 3 base.txt one.txt two.txt
+first_sha2="$(git -C "$repo2" rev-parse HEAD~1)"
+stamp_sha2="$(git -C "$repo2" rev-parse HEAD)"
+before_count="$(git -C "$repo2" rev-list --count HEAD)"
+(
+    cd "$repo2" || exit 1
+    printf 'three\n' > three.txt
+    git add three.txt && git commit -q -m 'fix: three (after the stamp)'
+    printf 'four\n' > four.txt
+    git add four.txt && git commit -q -m 'fix: four (after the stamp)'
+)
+assert_fixture_committed "$repo2" "sidecar fixture post-stamp commits" "$before_count" 2 three.txt four.txt
+head_sha2="$(git -C "$repo2" rev-parse HEAD)"
+
+(cd "$repo2" && bash "$sidecar_sh" init --name delta --mode owned --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+    || fatal "sidecar init failed in the sidecar fixture"
+assert_eq "sidecar" "$(cd "$repo2" && bash "$sidecar_sh" backend stamp)" \
+    "fixture precondition: backend stamp answers sidecar"
+
+# sidecar_stamp <sha|clear> — set or clear this fixture's stamp through the verb.
+sidecar_stamp() {
+    if [[ "$1" == clear ]]; then
+        (cd "$repo2" && bash "$sidecar_sh" stamp clear feature) || fatal "stamp clear failed"
+    else
+        (cd "$repo2" && bash "$sidecar_sh" stamp write feature "$1" >/dev/null) || fatal "stamp write $1 failed"
+    fi
+}
+
+# run_scope2 — run_scope against the sidecar fixture. The PR body the gh stub
+# would hand back carries a stamp at $first_sha2, whose delta would add two.txt.
+run_scope2() {
+    local out files scope
+    : > "$GH_STUB_ARGV_LOG"
+    : > "$GIT_STUB_ARGV_LOG"
+    out="$(cd "$repo2" && GH_STUB_BODY="$(stamped_body "$first_sha2")" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    LAST_SCOPE_RAW="$out"
+    scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
+    files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
+    printf '%s|%s' "$scope" "$files"
+}
+
+sidecar_stamp clear
+assert_eq "review scope: whole branch, from main|four.txt one.txt three.txt two.txt" \
+    "$(run_scope2)" \
+    "sidecar, no stamp: scope is the whole branch"
+if grep -q -- 'merge-base' "$GIT_STUB_ARGV_LOG"; then
+    printf '  FAIL sidecar, no stamp: git merge-base --is-ancestor ran with no stamp to check\n'; fail=$((fail + 1))
+else
+    printf '  ok   sidecar, no stamp: git merge-base --is-ancestor never ran\n'; pass=$((pass + 1))
+fi
+
+sidecar_stamp "$stamp_sha2"
+assert_eq "review scope: post-stamp delta, from $stamp_sha2|four.txt three.txt" \
+    "$(run_scope2)" \
+    "sidecar, stamp behind HEAD: the delta is the two post-stamp files, not the PR body's three"
+if [[ -s "$GH_STUB_ARGV_LOG" ]]; then
+    printf '  FAIL sidecar backend: the block called gh (argv: %s)\n' "$(cat "$GH_STUB_ARGV_LOG")"; fail=$((fail + 1))
+else
+    printf '  ok   sidecar backend: the block never called gh\n'; pass=$((pass + 1))
+fi
+
+sidecar_stamp "$head_sha2"
+assert_eq "review scope: whole branch, from main" \
+    "$(run_scope2 | cut -d'|' -f1)" \
+    "sidecar, stamp equals HEAD: whole branch"
+
+sidecar_stamp "$(printf '%040d' 7)"
+assert_eq "review scope: whole branch, from main" \
+    "$(run_scope2 | cut -d'|' -f1)" \
+    "sidecar, stamp not an ancestor: whole branch"
+if [[ "$LAST_SCOPE_RAW" == *'fatal:'* || "$LAST_SCOPE_RAW" == *'error:'* ]]; then
+    printf '  FAIL sidecar, unresolvable stamp: readout leaked stderr noise:\n%s\n' "$LAST_SCOPE_RAW"; fail=$((fail + 1))
+else
+    printf '  ok   sidecar, unresolvable stamp: readout carries no fatal:/error: line\n'; pass=$((pass + 1))
+fi
+
+(
+    cd "$repo2" || exit 1
+    git switch -q main
+    printf 'base grew\n' >> base.txt
+    git add base.txt && git commit -q -m 'base: grew'
+    git switch -q feature
+    git merge -q --no-edit main
+)
+assert_fixture_merged "$repo2" "sidecar fixture merge"
+sidecar_stamp "$stamp_sha2"
+assert_eq "review scope: whole branch, from main" \
+    "$(run_scope2 | cut -d'|' -f1)" \
+    "sidecar, merge after the stamp: whole branch"
+assert_eq "" "$(git -C "$repo2" status --porcelain)" \
+    "sidecar backend: the scope read and every stamp verb left the project tree clean"
 
 # -----------------------------------------------------------------------------
 

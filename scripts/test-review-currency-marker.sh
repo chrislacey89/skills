@@ -257,6 +257,16 @@ substituted="$(grep -lE '<!-- reviewed-at: [0-9a-f]{40} -->' -- */SKILL.md | sor
 assert_eq "" "$substituted" \
     "no SKILL.md carries a substituted 40-character marker"
 
+# The sidecar stamp backend (#521) has its own writer, `sidecar.sh stamp
+# write`, and the same rule holds for it: /pre-merge is the only skill whose
+# body invokes it. Matched as an invocation — the verb after a sidecar.sh path
+# or a quoted variable holding one — so prose that names "the stamp write" in
+# passing does not count, and a second writer does whatever it calls its
+# variable.
+sidecar_writers="$(grep -lE '(sidecar\.sh"?|"\$[A-Za-z_][A-Za-z0-9_]*")[[:space:]]+stamp[[:space:]]+write' -- */SKILL.md | sort || true)"
+assert_eq "pre-merge/SKILL.md" "$sidecar_writers" \
+    "sidecar.sh stamp write is invoked in pre-merge/SKILL.md and no other SKILL.md"
+
 # -----------------------------------------------------------------------------
 
 section "the step that re-stamps names a mode /pre-merge actually defines"
@@ -389,6 +399,147 @@ assert_eq 'SCOPE_FROM="$BASE_REF" SCOPE_FROM="$REVIEWED_SHA"' "$scope_assignment
 # can disagree about which SHA was reviewed.
 assert_eq "$reader_expr" "$premerge_reader_expr" \
     "pre-merge Phase 1 step 4 reads the stamp with closeout's exact sed script (two readers, byte-identical)"
+
+# -----------------------------------------------------------------------------
+
+section "/closeout Step 2 shows the same delta on either stamp backend"
+
+# #521: on the sidecar backend /closeout reads the stamp with `stamp read` and
+# the head from the branch's upstream, then runs the same delta commands and
+# the same prompt. The claim is that nothing below the read can tell the
+# backends apart. So the read block and the delta block are both extracted from
+# closeout/SKILL.md and run twice against one fixture: once with no sidecar and
+# a `gh` stub serving the PR-body marker and headRefOid, once with a sidecar
+# stamp and no `gh` at all. The two delta readouts must be identical, and must
+# name the post-stamp commits.
+
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+sidecar_sh="$repo_root/init-pipeline/scripts/sidecar.sh"
+read_block="$(awk '
+    /^```bash$/ { buf = ""; inblock = 1; next }
+    inblock && /^```$/ { if (buf ~ /stamp read/ && buf ~ /headRefOid/) { printf "%s", buf; exit } inblock = 0; next }
+    inblock { buf = buf $0 "\n" }
+' "$closeout_skill")"
+delta_block="$(awk '
+    /^  ```bash$/ { buf = ""; inblock = 1; next }
+    inblock && /^  ```$/ { if (buf ~ /git diff --stat "\$REVIEWED_SHA"/) { printf "%s", buf; exit } inblock = 0; next }
+    inblock { sub(/^  /, ""); buf = buf $0 "\n" }
+' "$closeout_skill")"
+if [[ -z "$read_block" || -z "$delta_block" ]]; then
+    printf 'FATAL: no stamp read block or no delta block found in %s\n' "$closeout_skill" >&2
+    exit 2
+fi
+read_block="${read_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+read_block="${read_block//<number>/1}"
+
+fx="$(mktemp -d)"
+trap 'rm -rf "$fx"' EXIT
+export GIT_CONFIG_GLOBAL="$fx/gitconfig" GIT_CONFIG_NOSYSTEM=1
+git config --file "$GIT_CONFIG_GLOBAL" user.name "Currency Tester"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "currency@example.com"
+export SKILL_KIT_RESEARCH_ARCHIVE="$fx/archive"
+(
+    set -e
+    git init -q -b main "$fx/origin.git" --bare
+    git init -q -b main "$fx/proj"
+    cd "$fx/proj"
+    git commit -q --allow-empty -m base
+    git switch -q -c feature
+    printf 'reviewed\n' > reviewed.txt && git add reviewed.txt && git commit -q -m 'reviewed work'
+    git rev-parse HEAD > "$fx/stamp_sha"
+    printf 'late\n' > late.txt && git add late.txt && git commit -q -m 'fix-up after the review'
+    git remote add origin "$fx/origin.git"
+    git push -q -u origin feature 2>/dev/null
+)
+# The subshell's status is not checked: `set -e` is suppressed under `||`, so
+# the fixture's RESULT is checked instead — three commits, the stamp two back
+# from the head, and an upstream that names the head.
+stamp_sha="$(cat "$fx/stamp_sha" 2>/dev/null || true)"
+fx_head="$(git -C "$fx/proj" rev-parse HEAD 2>/dev/null || true)"
+if [[ "$(git -C "$fx/proj" rev-list --count HEAD 2>/dev/null)" != 3 \
+      || "$stamp_sha" != "$(git -C "$fx/proj" rev-parse HEAD~1 2>/dev/null)" \
+      || "$fx_head" != "$(git -C "$fx/proj" rev-parse '@{u}' 2>/dev/null)" ]]; then
+    printf 'FATAL: could not build the closeout fixture\n' >&2
+    exit 2
+fi
+
+mkdir -p "$fx/bin"
+cat > "$fx/bin/gh" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$fx/gh.log"
+case "\$*" in
+    "pr view 1 --json body -q .body") printf '## Summary\n\n<!-- reviewed-at: $stamp_sha -->\n' ;;
+    "pr view 1 --json headRefOid -q .headRefOid") printf '%s\n' "$fx_head" ;;
+    *) exit 9 ;;
+esac
+STUB
+chmod +x "$fx/bin/gh"
+
+# closeout_readout <sidecar-root> — run the read block, then the delta block,
+# in the fixture; print the two SHAs and the delta readout.
+closeout_readout() {
+    (cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$1" bash -c "
+        $read_block
+        printf 'reviewed=%s head=%s\n' \"\$REVIEWED_SHA\" \"\$HEAD_SHA\"
+        $delta_block" 2>&1)
+}
+
+: > "$fx/gh.log"
+github_readout="$(closeout_readout "$fx/no-sidecars")"
+(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" init --name currency --mode guest \
+    --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1 \
+    && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp write feature "$stamp_sha" >/dev/null 2>&1) \
+    || { printf 'FATAL: could not stamp the closeout fixture in a sidecar\n' >&2; exit 2; }
+: > "$fx/gh.log"
+sidecar_readout="$(closeout_readout "$fx/sidecars")"
+
+assert_eq "reviewed=$stamp_sha head=$fx_head" "$(head -1 <<<"$github_readout")" \
+    "PR-body backend: the read block yields the stamped SHA and the PR head"
+assert_eq "$github_readout" "$sidecar_readout" \
+    "sidecar backend: the read and delta readout are identical to the PR-body backend's"
+case "$sidecar_readout" in
+    *late.txt*"fix-up after the review"*) assert_eq ok ok "the delta readout names the post-review commit and its file" ;;
+    *) assert_eq "names late.txt and the fix-up commit" "$sidecar_readout" "the delta readout names the post-review commit and its file" ;;
+esac
+assert_eq "" "$(cat "$fx/gh.log")" "sidecar backend: the read never called gh"
+assert_eq "" "$(git -C "$fx/proj" status --porcelain)" "sidecar backend: the project tree is untouched"
+
+section "/closeout Step 3 clears the merged PR's stamp, not the current checkout's"
+
+# `gh pr merge --delete-branch` deletes the local branch and, in a plain
+# checkout, switches to the base first, so `git branch --show-current` names
+# the base by the time the clear runs and the merged branch's stamp survives to
+# be read by a later branch reusing the name. The block is extracted from
+# closeout/SKILL.md and run AFTER the fixture has switched to base and dropped
+# the feature branch, with a `gh` stub that serves the PR's head ref. The
+# stamp written above for `feature` must be there before and gone after.
+clear_block="$(awk '
+    /^```bash$/ { buf = ""; inblock = 1; next }
+    inblock && /^```$/ { if (buf ~ /stamp clear/) { printf "%s", buf; exit } inblock = 0; next }
+    inblock { buf = buf $0 "\n" }
+' "$closeout_skill")"
+if [[ -z "$clear_block" ]]; then
+    printf 'FATAL: no stamp clear block found in %s\n' "$closeout_skill" >&2
+    exit 2
+fi
+clear_block="${clear_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+clear_block="${clear_block//<number>/1}"
+
+cat > "$fx/bin/gh" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+    "pr view 1 --json headRefName -q .headRefName") printf 'feature\n' ;;
+    *) exit 9 ;;
+esac
+STUB
+(cd "$fx/proj" && git switch -q main && git branch -q -D feature) \
+    || { printf 'FATAL: could not switch the closeout fixture to base\n' >&2; exit 2; }
+assert_eq main "$(git -C "$fx/proj" branch --show-current)" "fixture: the checkout is on base, as after gh pr merge --delete-branch"
+assert_eq "$stamp_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
+    "control: the merged branch's stamp exists before the clear block runs"
+(cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" CLAUDE_PROJECT_DIR="$fx/proj" bash -c "$clear_block" >/dev/null 2>&1)
+assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
+    "after the clear block, run on base, the merged branch's stamp is gone"
 
 # -----------------------------------------------------------------------------
 
