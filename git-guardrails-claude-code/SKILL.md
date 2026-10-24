@@ -47,7 +47,7 @@ The refusal prints both SHAs and the size of what landed after the review, then 
 
 `-R` / `--repo` is read and forwarded to the lookup, so `gh pr merge 4821 -R owner/repo` is judged against PR 4821 *in that repo*. Dropping it made the first version of this check refuse on the wrong pull request.
 
-The stamp is read from one of two sources, and `sidecar.sh backend stamp` picks which. On the `github` backend it is the `reviewed-at` marker `/pre-merge` writes into the PR body. On the `sidecar` backend, typically a guest repo whose PR body carries no pack text, the guard resolves the PR's head branch and reads `sidecar.sh stamp read <branch>`. The compare and the refusal are the same either way.
+The stamp is read from one of two sources, and `sidecar.sh backend stamp` picks which. On the `github` backend it is the `reviewed-at` marker `/pre-merge` writes into the PR body. On the `sidecar` backend, typically a guest repo whose PR body carries no pack text, the guard resolves the PR's head branch and reads `sidecar.sh stamp read <branch>`. `/pre-merge` saves that stamp under the local branch name, so the lookup finds it only when the PR's head branch carries the same name; a branch pushed under a different remote name has no stamp to find, the guard lets the merge through, and `/closeout` is the check that still catches it. The compare and the refusal are the same either way.
 
 The sidecar describes the repo of the current directory, so a merge aimed elsewhere by `-R` or a PR URL is judged by that PR's body only. The resolver must be installed beside the hook (Step 2); without it, or when it refuses, the guard reads the PR body as it did before the sidecar existed, and a sidecar-only stamp goes unchecked there.
 
