@@ -260,10 +260,11 @@ assert_eq "" "$substituted" \
 # The sidecar stamp backend (#521) has its own writer, `sidecar.sh stamp
 # write`, and the same rule holds for it: /pre-merge is the only skill whose
 # body invokes it. Matched as an invocation — the verb after a sidecar.sh path
-# or a quoted variable holding one — so prose that names "the stamp write" in
-# passing does not count, and a second writer does whatever it calls its
-# variable.
-sidecar_writers="$(grep -lE '(sidecar\.sh"?|"\$[A-Za-z_][A-Za-z0-9_]*")[[:space:]]+stamp[[:space:]]+write' -- */SKILL.md | sort || true)"
+# or a variable holding one, braced or not, quoted or not (#533: `"${SC}"` and
+# a bare `$SC` slipped past a quoted-only match) — so prose that names "the
+# stamp write" in passing does not count, and a second writer does whatever it
+# calls and spells its variable.
+sidecar_writers="$(grep -lE '(sidecar\.sh"?|"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?)[[:space:]]+stamp[[:space:]]+write' -- */SKILL.md | sort || true)"
 assert_eq "pre-merge/SKILL.md" "$sidecar_writers" \
     "sidecar.sh stamp write is invoked in pre-merge/SKILL.md and no other SKILL.md"
 
