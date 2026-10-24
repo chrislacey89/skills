@@ -65,11 +65,11 @@ esac
 
 Then test the dependency-missing direction in an environment that really lacks it. A `PATH` built from symlinks without `jq` is enough.
 
-At the time of writing these are review findings 1 and 5 on PR #529. They are not yet applied.
+These were review findings 1 and 5 on PR #529. The resolver and verb layers landed there: 3dc734c refuses when `jq` is absent, and d958aa2 makes `owners_of` tell a `jq` error from a key miss. The call sites moved to the `case` above in #530, which also pinned the unreadable-file arm and narrowed the refusal to keys no readable sidecar claims.
 
 ## Prevention
 
-**Code-level:** `scripts/test-state-backend.sh` should get a no-`jq` arm asserting `backend` exits nonzero on a guest sidecar. The PR #529 call sites should move to the three-way `case` above. Until then, the doc's "exits nonzero rather than guessing" claim is true of `cmd_backend`'s own body and false of the system.
+**Code-level:** `scripts/test-state-backend.sh` has a no-`jq` arm (3dc734c), corrupt-file and failing-`jq` arms (d958aa2), and an unreadable-file arm (#530), each asserting `backend` exits nonzero with empty stdout on a guest sidecar. The `/pre-merge` and `/closeout` call sites use the three-way `case` (#530), and `test-delta-review-scope.sh` and `test-review-currency-marker.sh` run each extracted block under a `backend` that really refuses.
 
 **Process-level:** the remaining #407 slices each add a consumer of `backend`: #522 (the guard), #523, #525, and #526. Each slice's boundary map should name the third outcome, and each consumer's contract test should include a "backend failed" arm. When shaping any feature whose invariant reads "absent means today's behavior", `/write-a-prd`'s Rabbit Holes should ask: *which population pays when the lookup itself breaks?* PRD #407 asked this for the guard and not for the stamp writer.
 
@@ -88,7 +88,9 @@ At the time of writing these are review findings 1 and 5 on PR #529. They are no
 
 ## Defect clustering
 
-Nearest existing entries: `validate-the-instrument-not-only-the-subject` (an instrument failing while reporting normally). It is a different pattern: that entry is about a reviewer misreading its own harness, and this one is about shipped routing whose failure output coincides with a legitimate answer. `staleness-gate-intermediate-writers` is about writers between a stamp and its check, not about lookup failure. So this is the first recording, and no mechanism is mandated. The no-`jq` test arm above is still the right one to build.
+Nearest existing entries: `validate-the-instrument-not-only-the-subject` (an instrument failing while reporting normally). It is a different pattern: that entry is about a reviewer misreading its own harness, and this one is about shipped routing whose failure output coincides with a legitimate answer. `staleness-gate-intermediate-writers` is about writers between a stamp and its check, not about lookup failure. So this is the first recording, and no mechanism is mandated.
+
+**Second occurrence, in the same PR.** d958aa2 was itself a fix for this pattern, and it covered one failure path. 3dc734c had closed "could not look" for a missing `jq` only. A corrupt `sidecar.json` or a `jq` that errors still read as a miss, which d958aa2 then closed, and the `/fix-findings` breaker for it showed a third path still open: changing `owners_of`'s guard to `[ -r "$f" ]` would make an unreadable file a miss again, and both suites stayed green. Each fix named one way to fail to look and closed that one. Counting this as a recurrence, the mechanism is the test shape rather than a review habit: every "could not look" arm asserts the refusal (nonzero exit, empty stdout, the cause on stderr) and is checked against a mutation that turns that cause back into a miss.
 
 A separate recurrence surfaced in the same review: `pre-merge/SKILL.md` Phase 4 passes `--base-ref "${BASE_REF:-}"` from a block that runs in its own shell, so the field is always empty (PR #529 finding 6). That is the pattern in `patterns/skill-command-blocks-run-one-shell-per-call-2026-10-13.md`, recurring in the same PR whose Key Decisions note says "because Phase 4 runs in its own shell". It is recorded here so the next compound on that pattern counts it.
 
