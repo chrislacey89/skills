@@ -551,6 +551,33 @@ assert_eq "review scope: whole branch, from main" \
 assert_eq "" "$(git -C "$repo2" status --porcelain)" \
     "sidecar backend: the scope read and every stamp verb left the project tree clean"
 
+# --- 10. A failed backend -----------------------------------------------------
+
+# #530: `backend stamp` that exits nonzero prints nothing. A block written as
+# `if [ "$(backend)" = sidecar ]; then … else <gh> fi` reads that as github and
+# reads the PR body; on a guest repo the github path is the harmful one. The
+# block must abort instead: nonzero exit, no scope line, no gh call. The failure
+# is real, not stubbed: the only sidecar under the root has a corrupt
+# sidecar.json, which no readable sidecar outranks, so `backend` refuses.
+section "failed backend: the scope block aborts rather than taking the gh path"
+broken_root="$sandbox/broken-sidecars"
+mkdir -p "$broken_root/broken"
+printf '{"keys": [' > "$broken_root/broken/sidecar.json"
+(cd "$repo" && SKILL_KIT_SIDECAR_ROOT="$broken_root" bash "$sidecar_sh" backend stamp >/dev/null 2>&1)
+assert_eq 1 "$?" "fixture precondition: backend stamp exits 1 under the broken root"
+: > "$GH_STUB_ARGV_LOG"
+failed_out="$(cd "$repo" && SKILL_KIT_SIDECAR_ROOT="$broken_root" GH_STUB_BODY="<!-- reviewed-at: $stamp_sha -->" \
+    BASE_REF=main bash -c "$scope_block" 2>&1)"
+failed_rc=$?
+assert_eq 1 "$failed_rc" "failed backend: the scope block exits 1"
+assert_eq "" "$(printf '%s\n' "$failed_out" | grep '^review scope:' || true)" \
+    "failed backend: the scope block prints no review scope"
+assert_eq "" "$(cat "$GH_STUB_ARGV_LOG")" "failed backend: the scope block never called gh"
+case "$failed_out" in
+    *"scope aborted"*) assert_eq ok ok "failed backend: the abort is named on stderr" ;;
+    *) assert_eq "scope aborted ..." "$failed_out" "failed backend: the abort is named on stderr" ;;
+esac
+
 # -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

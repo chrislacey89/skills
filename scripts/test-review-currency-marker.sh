@@ -542,6 +542,43 @@ assert_eq "$stamp_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars"
 assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
     "after the clear block, run on base, the merged branch's stamp is gone"
 
+section "/closeout Steps 2 and 3 abort on a failed backend rather than taking the gh path"
+
+# #530: `backend stamp` that exits nonzero prints nothing, and a block written
+# as `if [ "$(backend)" = sidecar ]; then … else <gh> fi` reads that as github.
+# Both blocks run under a sidecar root whose only sidecar.json is corrupt, so
+# `backend` really refuses; each must exit 1 without calling gh at all.
+mkdir -p "$fx/broken/broken"
+printf '{"keys": [' > "$fx/broken/broken/sidecar.json"
+cat > "$fx/bin/gh" <<STUB
+#!/usr/bin/env bash
+printf '%s\n' "\$*" >> "$fx/gh.log"
+case "\$*" in
+    "pr view 1 --json body -q .body") printf '<!-- reviewed-at: $stamp_sha -->\n' ;;
+    "pr view 1 --json headRefOid -q .headRefOid") printf '%s\n' "$fx_head" ;;
+    "pr view 1 --json headRefName -q .headRefName") printf 'feature\n' ;;
+    *) exit 9 ;;
+esac
+STUB
+assert_eq 1 "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/broken" bash "$sidecar_sh" backend stamp >/dev/null 2>&1; echo $?)" \
+    "fixture precondition: backend stamp exits 1 under the broken root"
+# shellcheck disable=SC2016  # the appended line runs inside `bash -c`, where $REVIEWED_SHA is the block's own
+reviewed_probe='printf "reviewed=%s\n" "$REVIEWED_SHA"'
+for blk in read clear; do
+    if [[ "$blk" == read ]]; then body="$read_block"$'\n'"$reviewed_probe"; else body="$clear_block"; fi
+    : > "$fx/gh.log"
+    blk_rc=0
+    blk_out="$(cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/broken" CLAUDE_PROJECT_DIR="$fx/proj" \
+        bash -c "$body" 2>&1)" || blk_rc=$?
+    assert_eq 1 "$blk_rc" "failed backend: the $blk block exits 1"
+    assert_eq "" "$(cat "$fx/gh.log")" "failed backend: the $blk block never called gh"
+    case "$blk_out" in
+        *reviewed=*) assert_eq "no reviewed= line" "$blk_out" "failed backend: the $blk block stopped before its caller's next line" ;;
+        *"backend stamp failed"*) assert_eq ok ok "failed backend: the $blk block names the failure on stderr" ;;
+        *) assert_eq "backend stamp failed ..." "$blk_out" "failed backend: the $blk block names the failure on stderr" ;;
+    esac
+done
+
 # -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

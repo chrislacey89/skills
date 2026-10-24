@@ -86,12 +86,14 @@ If you are running on a branch other than the user's working branch and `--pr` w
 4. **Decide the scope — the whole branch, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or a hand fix after a deliberate lock deletion — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
-   if [ "$(bash "$SC" backend stamp)" = sidecar ]; then
-     REVIEWED_SHA=$(bash "$SC" stamp read "$(git branch --show-current)")
-   else
-     REVIEWED_SHA=$(gh pr list --head "$(git branch --show-current)" --json body -q '.[0].body // ""' \
-       | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
-   fi
+   case "$(bash "$SC" backend stamp)" in
+     sidecar)
+       REVIEWED_SHA=$(bash "$SC" stamp read "$(git branch --show-current)") ;;
+     github)
+       REVIEWED_SHA=$(gh pr list --head "$(git branch --show-current)" --json body -q '.[0].body // ""' \
+         | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1) ;;
+     *) echo "scope aborted: sidecar.sh backend stamp failed; not guessing the github path" >&2; exit 1 ;;
+   esac
    SCOPE_FROM="$BASE_REF"
    if [ -n "$REVIEWED_SHA" ] \
      && git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
@@ -344,7 +346,7 @@ This phase **presents**; it does not take the choice, and this paragraph does no
 
 Write it only after the findings above have been presented — the stamp asserts "a review completed at this SHA," so writing it earlier would certify a review that had not run.
 
-**Ask where the stamp lives first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md). `github` runs the PR-body block below, unchanged. `sidecar` runs this block instead, and the PR body is not touched: on that backend the pack writes no text into the PR.
+**Ask where the stamp lives first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md). `github` runs the PR-body block below, unchanged. `sidecar` runs this block instead, and the PR body is not touched: on that backend the pack writes no text into the PR. Anything else — a nonzero exit, which prints nothing — writes no stamp on either path: stop and relay what `backend` printed on stderr. Taking the PR-body block on a failed answer is the one wrong choice, because on a guest repo it writes pack text into a client's PR.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"

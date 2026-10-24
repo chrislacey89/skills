@@ -162,6 +162,66 @@ done
 runo "$P" resolve
 check "corrupt sidecar.json restored: resolve succeeds again" 0 "$rc"
 
+# A file jq cannot open (mode 000, or owned by another user) must be refused
+# like a corrupt one. `owners_of` guards with `[ -f ]`, so the file reaches jq,
+# which fails; a guard of `[ -r ]` would skip it as "not found", and the miss
+# would answer `github` (#530: a /fix-findings breaker made exactly that edit
+# and both suites stayed green). uid 0 reads mode-000 files, so root skips.
+if [ "$(id -u)" -eq 0 ]; then
+    ok "unreadable sidecar.json: skipped under root, which reads mode-000 files"
+else
+    chmod 000 "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
+    for a in prds slices stamp; do
+        runo "$P" backend "$a"
+        check "unreadable sidecar.json: backend $a exits 1" 1 "$rc"
+        check "unreadable sidecar.json: backend $a prints nothing on stdout (not github)" "" "$out"
+        case "$err" in *corrupt/sidecar.json*) ok "unreadable sidecar.json: backend $a names the file on stderr" ;; *) bad "unreadable sidecar.json: backend $a names the file on stderr" "got [$err]" ;; esac
+    done
+    chmod 644 "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
+    runo "$P" backend stamp
+    check "unreadable sidecar.json restored: backend stamp answers sidecar again" sidecar "$out"
+fi
+
+# -----------------------------------------------------------------------------
+section "backend: a corrupt sidecar refuses only the keys no readable sidecar claims"
+
+# #530's scope decision. A corrupt sidecar.json cannot be ruled out as a key's
+# owner without parsing it, so a repo that no readable sidecar claims is still
+# refused: it might be the corrupt one's, and `github` there could be a guest's
+# PR. A repo a readable sidecar does claim resolves to it, and the corrupt file
+# is named on stderr; before #530 one corrupt file refused every repo.
+# Own root, so the stray cannot leak into the sections below.
+scope_root="$tmp/scope-sidecars"
+mkproj https://github.com/acme/claimed.git
+claimed="$P"
+SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$claimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the scope arms" "$err"
+mkproj https://github.com/acme/unclaimed.git
+unclaimed="$P"
+mkdir -p "$scope_root/stray"
+printf '{"keys": [' > "$scope_root/stray/sidecar.json"
+SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$claimed" backend stamp
+check "claimed repo beside a corrupt sidecar: backend stamp answers sidecar" sidecar "$out"
+check "claimed repo beside a corrupt sidecar: backend stamp exits 0" 0 "$rc"
+case "$err" in *stray/sidecar.json*) ok "claimed repo beside a corrupt sidecar: the corrupt file is named on stderr" ;; *) bad "claimed repo beside a corrupt sidecar: the corrupt file is named on stderr" "got [$err]" ;; esac
+SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$claimed" resolve
+check "claimed repo beside a corrupt sidecar: resolve prints its own sidecar" "$scope_root/claimed" "$out"
+# A new remote is an alias resolve would add; the corrupt file might claim it,
+# so it is skipped, not refused, and the resolve keeps its hit.
+git -C "$claimed" remote add mirror https://github.com/acme/claimed-mirror.git
+SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$claimed" resolve
+check "new alias beside a corrupt sidecar: resolve still exits 0" 0 "$rc"
+check "new alias beside a corrupt sidecar: the alias is not added" "" \
+    "$(jq -r '.keys[] | select(. == "remote:github.com/acme/claimed-mirror")' "$scope_root/claimed/sidecar.json")"
+SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$unclaimed" backend stamp
+check "unclaimed repo beside a corrupt sidecar: backend stamp exits 1" 1 "$rc"
+check "unclaimed repo beside a corrupt sidecar: backend stamp prints nothing (not github)" "" "$out"
+case "$err" in *stray/sidecar.json*) ok "unclaimed repo beside a corrupt sidecar: the corrupt file is named on stderr" ;; *) bad "unclaimed repo beside a corrupt sidecar: the corrupt file is named on stderr" "got [$err]" ;; esac
+SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$unclaimed" init --name unclaimed --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "unclaimed repo beside a corrupt sidecar: init refuses rather than risk a second owner" 1 "$rc"
+clean "scope arms leave the claimed project clean" "$claimed"
+clean "scope arms leave the unclaimed project clean" "$unclaimed"
+
 # -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
 
