@@ -30,7 +30,7 @@ The guard reads the command as tokens and never evaluates it, so a destructive c
 
 ## What Gets Blocked Conditionally
 
-`gh pr merge` is the one command here refused on a *condition* rather than on its shape. `/pre-merge` stamps the commit it reviewed into the PR body; `/closeout` Step 2 reads that stamp back before merging. The guard performs the same read at the merge itself, so a merge typed by hand or issued by an AFK loop cannot skip it (chrislacey89/skills#327). It refuses only when the PR carries a stamp and that stamp names a commit other than the PR's current head — the reviewed diff is not the diff about to land.
+`gh pr merge` is the one command here refused on a *condition* rather than on its shape. `/pre-merge` stamps the commit it reviewed, into the PR body or, on a repo whose state backend routes the stamp to the sidecar, into the project's sidecar; `/closeout` Step 2 reads that stamp back before merging. The guard performs the same read at the merge itself, so a merge typed by hand or issued by an AFK loop cannot skip it (chrislacey89/skills#327). It refuses only when the PR carries a stamp and that stamp names a commit other than the PR's current head — the reviewed diff is not the diff about to land.
 
 ### Refused when the review stamp is stale
 
@@ -46,6 +46,10 @@ The guard reads the command as tokens and never evaluates it, so a destructive c
 The refusal prints both SHAs and the size of what landed after the review, then names its two exits: re-review with `/pre-merge`, which re-stamps at the new head, or re-run the merge with `ALLOW_STALE_STAMP_MERGE=1` in front of it to accept the diff as it stands. That variable is also honored as an exported environment variable, for a repo that wants the check advisory rather than blocking.
 
 `-R` / `--repo` is read and forwarded to the lookup, so `gh pr merge 4821 -R owner/repo` is judged against PR 4821 *in that repo*. Dropping it made the first version of this check refuse on the wrong pull request.
+
+The stamp is read from one of two sources, and `sidecar.sh backend stamp` picks which. On the `github` backend it is the `reviewed-at` marker `/pre-merge` writes into the PR body. On the `sidecar` backend, typically a guest repo whose PR body carries no pack text, the guard resolves the PR's head branch and reads `sidecar.sh stamp read <branch>`. The compare and the refusal are the same either way.
+
+The sidecar describes the repo of the current directory, so a merge aimed elsewhere by `-R` or a PR URL is judged by that PR's body only. The resolver must be installed beside the hook (Step 2); without it, or when it refuses, the guard reads the PR body as it did before the sidecar existed, and a sidecar-only stamp goes unchecked there.
 
 ### Allowed even when the stamp is stale
 
@@ -64,7 +68,7 @@ The first three only *mention* the words. Unlike the git rules above, a `gh` tok
 
 The last five are commands the guard declines to judge, and the rule that decides is deliberately narrower than it could be. Two facts resolve which PR a merge would act on without this repo owning a copy of gh's option list: `gh pr merge` takes at most one positional argument, and a flag's value always follows its flag. So an operand appearing **before any flag** is the PR, and an operand appearing after one might be some flag's value — `gh pr merge --squash 4821` is therefore a miss, not a guess. An earlier draft guessed, on the reasoning that no gh flag takes a number; reading `gh pr merge --help` shows five that take a value, and the guess was resolving `gh pr merge --subject 4821` to PR 4821 while the merge itself would target the current branch's PR. Looking up the wrong pull request is worse than looking up none, because it reaches a confident verdict about a PR nobody asked about.
 
-The check also fails open when `gh` or `jq` is absent, when the API call fails, when the PR carries no stamp, and when the stamp is malformed — every case where it cannot be certain. A gate that refuses wrongly is a gate that gets deleted, and `/closeout` Step 2 still performs this read on the path most merges take.
+The check also fails open when `gh` or `jq` is absent, when the API call fails, when the PR carries no stamp (or the sidecar holds none for its head branch), and when the stamp is malformed — every case where it cannot be certain. A gate that refuses wrongly is a gate that gets deleted, and `/closeout` Step 2 still performs this read on the path most merges take.
 
 It inherits the design limit recorded above for the git rules, and for the same reason: the command is read as tokens and never evaluated, so a merge assembled at run time — `$CMD`, `gh${IFS}pr${IFS}merge`, a subcommand produced by command substitution — is invisible to it. chrislacey89/skills#334 carries that limit for both halves.
 
@@ -128,12 +132,12 @@ Ask the user: install for **this project only** (`.claude/settings.json`) or **a
 
 The bundled script is at: [scripts/block-dangerous-git.sh](scripts/block-dangerous-git.sh)
 
-Copy it to the target location based on scope:
+Copy it, and the bundled sidecar resolver [references/sidecar.sh](references/sidecar.sh), into the same directory based on scope:
 
-- **Project**: `.claude/hooks/block-dangerous-git.sh`
-- **Global**: `~/.claude/hooks/block-dangerous-git.sh`
+- **Project**: `.claude/hooks/block-dangerous-git.sh` and `.claude/hooks/sidecar.sh`
+- **Global**: `~/.claude/hooks/block-dangerous-git.sh` and `~/.claude/hooks/sidecar.sh`
 
-Make it executable with `chmod +x`.
+Make the hook executable with `chmod +x`. The hook finds the resolver beside itself, so it must sit in the same directory; without it the stale-stamp check reads only the PR body.
 
 ### 3. Add hook to settings
 
