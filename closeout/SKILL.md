@@ -121,14 +121,16 @@ Read the stamp `/pre-merge` Phase 4 left and compare it to the current head. It 
 ```bash
 git fetch --quiet
 SC="<this skill's directory>/references/sidecar.sh"
-if [ "$(bash "$SC" backend stamp)" = sidecar ]; then
-  REVIEWED_SHA=$(bash "$SC" stamp read "$(git branch --show-current)")
-  HEAD_SHA=$(git rev-parse '@{u}' 2>/dev/null || git rev-parse HEAD)
-else
-  REVIEWED_SHA=$(gh pr view <number> --json body -q .body \
-    | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
-  HEAD_SHA=$(gh pr view <number> --json headRefOid -q .headRefOid)
-fi
+case "$(bash "$SC" backend stamp)" in
+  sidecar)
+    REVIEWED_SHA=$(bash "$SC" stamp read "$(git branch --show-current)")
+    HEAD_SHA=$(git rev-parse '@{u}' 2>/dev/null || git rev-parse HEAD) ;;
+  github)
+    REVIEWED_SHA=$(gh pr view <number> --json body -q .body \
+      | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
+    HEAD_SHA=$(gh pr view <number> --json headRefOid -q .headRefOid) ;;
+  *) echo "closeout aborted: sidecar.sh backend stamp failed; not guessing the github path" >&2; exit 1 ;;
+esac
 ```
 
 On the sidecar backend the head is the branch's upstream, which is what the forge will merge: the first precondition above already requires it to match the local head. It falls back to `HEAD` when the branch has no upstream. `stamp read` prints the same full 40-character OID the PR-body marker carries, or nothing, so everything below runs unchanged on either backend.
@@ -217,9 +219,11 @@ the flag would otherwise survive indefinitely:
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 rm -f "$PROJECT_DIR/.claude/.review-stamped"
 SC="<this skill's directory>/references/sidecar.sh"
-if [ "$(bash "$SC" backend stamp)" = sidecar ]; then
-  bash "$SC" stamp clear "$(gh pr view <number> --json headRefName -q .headRefName)"
-fi
+case "$(bash "$SC" backend stamp)" in
+  sidecar) bash "$SC" stamp clear "$(gh pr view <number> --json headRefName -q .headRefName)" ;;
+  github) ;;
+  *) echo "stamp NOT cleared: sidecar.sh backend stamp failed; clear it once backend answers" >&2; exit 1 ;;
+esac
 ```
 
 On the sidecar backend the stamp is spent with the review, so it is cleared here too. The branch comes from the merged PR, not from `git branch --show-current`: `gh pr merge --delete-branch` deletes the local branch and, in a plain checkout, switches to the base first, so the current branch is by now the base. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.

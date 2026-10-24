@@ -19,6 +19,8 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 
 **No sidecar means `github`.** That was the behavior before the sidecar existed, so a project that never ran `sidecar.sh init` sees no change. `backend` prints `github` and exits 0 on a `SIDECAR MISS`. Any other failure, such as running outside a repository or a `forge.write` that is not an array, exits nonzero rather than guessing.
 
+**A caller branches on all three outcomes.** A nonzero exit prints nothing, so `if [ "$(backend)" = sidecar ]; then … else <gh> fi` reads a refusal as `github`, and the promise above never reaches the caller. Every call site is a `case` with a `github)` arm, a `sidecar)` arm, and a `*)` arm that aborts. `scripts/test-delta-review-scope.sh` and `scripts/test-review-currency-marker.sh` run each extracted block with a `backend` that refuses.
+
 ## What the write lists mean
 
 `forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `Closes #` lines, `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar.
