@@ -344,7 +344,7 @@ This phase **presents**; it does not take the choice, and this paragraph does no
 
 Write it only after the findings above have been presented — the stamp asserts "a review completed at this SHA," so writing it earlier would certify a review that had not run.
 
-**Ask where the stamp lives first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md). `github` runs the PR-body block below, unchanged. `sidecar` runs this block instead, and the PR body is not touched.
+**Ask where the stamp lives first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md). `github` runs the PR-body block below, unchanged. `sidecar` runs this block instead, and the PR body is not touched: on that backend the pack writes no text into the PR.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
