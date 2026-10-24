@@ -187,8 +187,7 @@ skeleton, the thinnest path that runs end to end through every layer the demo
 touches. The slice cap applies. File every slice past the cap as a gap issue (step
 5) before building starts. Do not create per-slice issues.
 
-**Reader:** `/pre-merge --loop` Phase 1 takes this issue's number as its PRD, and
-the PR body's `Closes #N` closes it.
+**Reader:** `/pre-merge --loop` Phase 1 takes this issue's number as its PRD.
 
 #### 4. Scaffold (AFK)
 
@@ -302,6 +301,12 @@ promote, or discard. It carries, in this order:
 3. **Stop tally**, with each stop by class. A stop outside the stop classes is a defect in the run, so list it anyway.
 4. **Proof**, with each screenshot or transcript path and the command that produced it.
 5. On the feature path, `Closes #<PRD-lite>`.
+
+The PR body becomes the squash commit's message, and GitHub reads closing
+keywords in commit messages too, quoted or negated
+([GitHub docs](https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue)).
+In every section, refer to an issue that must stay open without one, e.g.
+"leaves #N open".
 
 ## Common Rationalizations
 

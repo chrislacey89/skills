@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.33.0 — /pre-merge reads the closing set from GitHub, and /lfg's Recap says its body becomes a commit message (#554)
+
+`/closeout` squash-merges with the PR body as the commit message (#360), and GitHub reads closing keywords in commit messages as well as on the PR page. PR #536's `/lfg` recap explained in its decision log why #533 should stay open, quoting the keyword it avoided inside backticks. The PR page ignored the quoted keyword and listed only #534, so the operator merged. The commit message did not ignore it, and #533 ended up closed by the merge with an acceptance criterion still unmet. #452 carried the same pattern harmlessly. Two sentences in the pack paraphrased GitHub's closing behavior as "the PR body's `Closes #N` lines", which is the half of the parsing that let `/pre-merge`'s reconciliation miss it.
+
+### Changes
+
+- **`/pre-merge`'s closing-issue reconciliation reads `closingIssuesReferences` (#554)** — the set comes from `gh pr view --json closingIssuesReferences`, GitHub's own answer, instead of from the body text. `SYSTEM-OVERVIEW.md`'s description of the backstop says the same.
+- **`/lfg` drops its parsing claim and adds one Recap sentence (#554)** — the PRD-lite **Reader** line no longer says the body's keyword closes the issue. The Recap now states that the body becomes the squash commit's message, where a keyword closes the issue even when quoted or negated, links GitHub's docs, and asks for "leaves #N open" wording for an issue that must stay open.
+- **Deferred, with a named trigger (#554)** — a report-only detector comparing keyword-plus-`#N` in the body against `closingIssuesReferences`, in `/pre-merge` Phase 4's reconciliation, is built on the next case like #536 from any writer, or the first case from a writer other than `/lfg`. Both measured cases in the last 40 merged PRs came from `/lfg`; the broader every-`#N` design was rejected at 36 of 40 false alarms. `/closeout` Step 3 and #360's `--body-file` are unchanged.
+
 ## v1.32.0 — /excavate measures duplicated history instead of leaving each run to improvise a caveat (#514)
 
 On a repo that ships through release branches, one change lands in the window two or three times: as the original commit, a cherry-pick, and a release or sync roll-up. `/excavate`'s first two field runs both found this inflating their revision and fix-labeled counts and each wrote a different caveat by hand, because the skill never mentioned it. The Coverage block exists so the skill never degrades silently, and this was a known, measurable distortion it did not report.
