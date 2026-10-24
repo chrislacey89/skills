@@ -50,6 +50,8 @@ docs/mutation-at-consumption.md  fix-findings
 docs/next-step-menu.md          fix-findings
 docs/trivial-task-rule.md  execute
 docs/trivial-task-rule.md  lfg
+docs/state-backend.md      pre-merge
+docs/state-backend.md      closeout
 init-pipeline/scripts/sidecar.sh  compound
 init-pipeline/scripts/sidecar.sh  excavate
 init-pipeline/scripts/sidecar.sh  help
@@ -62,3 +64,4 @@ init-pipeline/scripts/sidecar.sh  fix-findings
 init-pipeline/scripts/sidecar.sh  correct-course
 init-pipeline/scripts/sidecar.sh  handoff
 init-pipeline/scripts/sidecar.sh  prd-to-issues
+init-pipeline/scripts/sidecar.sh  closeout

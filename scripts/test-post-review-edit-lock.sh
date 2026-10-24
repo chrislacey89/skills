@@ -203,8 +203,12 @@ hook_body="$(fenced_bash_block init-pipeline/SKILL.md 'IMPL_PATTERNS' || true)"
 # The stamp flag's writer (/pre-merge Phase 4) and remover (/closeout Step 3).
 # Both sit at the tail of a larger fenced block, so the slice is anchored on the
 # PROJECT_DIR assignment that opens them rather than on their content.
-stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'review-stamped' || true)"
+# Phase 4 has two writers since #521, one per stamp backend; this is the PR-body
+# one, picked by its `gh pr edit`. The sidecar one is section 7b's.
+stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'gh pr edit.*review-stamped' || true)"
 [ -n "$stamp_block" ] || fatal "no stamp block found in pre-merge/SKILL.md"
+sidecar_stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'stamp write.*review-stamped' || true)"
+[ -n "$sidecar_stamp_block" ] || fatal "no sidecar stamp block found in pre-merge/SKILL.md"
 
 stamp_write="$(sed -n '/^PROJECT_DIR=/,$p' <<<"$stamp_block")"
 [ -n "$stamp_write" ] || fatal "no PROJECT_DIR-anchored stamp-flag write found in pre-merge/SKILL.md"
@@ -828,6 +832,58 @@ if [ -f "$stamprepo/$stamp_rel" ]; then
 else
     assert_eq "flag written" "no flag" "…and the flag is written on that path, which is what makes the abort above a measurement"
 fi
+
+# -----------------------------------------------------------------------------
+
+section "7b. on the sidecar backend, the flag is written only if the stamp commit succeeded"
+
+# The same property as section 7, for the writer that commits the stamp to
+# <sidecar>/reviews/ instead of the PR body (#521). The block is run verbatim
+# with its bundled sidecar.sh pointed at the canonical script: once with no
+# sidecar resolving, where `stamp write` refuses, and once with one, where it
+# commits. The second run is the control that makes the first a measurement,
+# and it also checks the stamp it left reads back as the head.
+
+sidecar_sh="$repo_root/init-pipeline/scripts/sidecar.sh"
+sc_root="$scratch/sidecars"
+sc_gitconfig="$scratch/sidecar-gitconfig"
+git config --file "$sc_gitconfig" user.name "Lock Tester"
+git config --file "$sc_gitconfig" user.email "lock@example.invalid"
+
+sidecar_block_status=0
+run_sidecar_stamp_block() {
+    rm -f "$stamprepo/$stamp_rel"
+    sidecar_block_status=0
+    ( cd "$stamprepo" \
+        && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" \
+           SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" CLAUDE_PROJECT_DIR="$stamprepo" \
+           bash -c "${sidecar_stamp_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}" ) \
+        >/dev/null 2>&1 || sidecar_block_status=$?
+}
+
+run_sidecar_stamp_block
+assert_eq 1 "$sidecar_block_status" "with no sidecar to commit to, the sidecar stamp block aborts"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "no flag" "flag written" "…and leaves no $stamp_rel behind"
+else
+    assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
+fi
+
+if ! ( cd "$stamprepo" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" \
+        SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" \
+        bash "$sidecar_sh" init --name lock --mode guest --write sidecar --in-tree-path none --no-migrate-archive ) >/dev/null 2>&1; then
+    fatal "could not init a sidecar for the stamp scratch repo"
+fi
+run_sidecar_stamp_block
+assert_eq 0 "$sidecar_block_status" "with a sidecar, the sidecar stamp block runs through to the flag"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "flag written" "flag written" "…and the flag is written on that path, which makes the abort above a measurement"
+else
+    assert_eq "flag written" "no flag" "…and the flag is written on that path, which makes the abort above a measurement"
+fi
+sidecar_read="$(cd "$stamprepo" && SKILL_KIT_SIDECAR_ROOT="$sc_root" bash "$sidecar_sh" stamp read "$(git -C "$stamprepo" branch --show-current)" 2>/dev/null)"
+assert_eq "$(git -C "$stamprepo" rev-parse HEAD)" "$sidecar_read" "…and the stamp it committed reads back as the head it reviewed"
+rm -f "$stamprepo/$stamp_rel"
 
 # -----------------------------------------------------------------------------
 
