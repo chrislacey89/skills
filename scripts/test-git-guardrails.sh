@@ -975,5 +975,173 @@ rm -rf "$jq_stub_dir"
 
 # -----------------------------------------------------------------------------
 
+section "on the sidecar backend the stamp is read from the sidecar (#522)"
+
+# A guest repo's PR body carries no pack text, so /pre-merge records the stamp
+# in the project's sidecar instead, and before #522 the guard never looked
+# there: a stale-review merge on a guest repo went through unrefused. These
+# run the hook as it is installed — copied beside the bundled sidecar.sh — from
+# inside a scratch project whose real sidecar holds a real stamp. Only `gh` is
+# stubbed.
+#
+# Every fixture git call clears the hook-exported git variables, so a pre-push
+# run cannot write the fixture into this repository (#429).
+sc_tmp="$(mktemp -d)"
+sc_tmp="$(cd "$sc_tmp" && pwd -P)"
+bundled_sidecar="$repo_root/git-guardrails-claude-code/references/sidecar.sh"
+[[ -f "$bundled_sidecar" ]] || fatal "no bundled resolver at $bundled_sidecar; run scripts/sync-skill-references.sh"
+
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL="$sc_tmp/gitconfig"
+export SKILL_KIT_SIDECAR_ROOT="$sc_tmp/sidecars"
+export SKILL_KIT_RESEARCH_ARCHIVE="$sc_tmp/archive"
+fgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git "$@"; }
+fgit config --file "$GIT_CONFIG_GLOBAL" user.name "Guard Tester"
+fgit config --file "$GIT_CONFIG_GLOBAL" user.email "guard@example.com"
+
+# mk_sidecar_project <dir> <mode> — a project with two adjacent commits and a
+# GitHub remote, claimed by a sidecar in <mode>. guest routes the stamp to the
+# sidecar; owned on GitHub routes it to the PR body.
+mk_sidecar_project() {
+    fgit init -q "$1"
+    fgit -C "$1" commit -q --allow-empty -m reviewed
+    fgit -C "$1" commit -q --allow-empty -m "landed after review"
+    fgit -C "$1" remote add origin "https://github.com/client/$(basename "$1").git"
+    (cd "$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE bash "$bundled_sidecar" init \
+        --name "$(basename "$1")" --mode "$2" --write sidecar --in-tree-path none --no-migrate-archive) \
+        >/dev/null 2>&1 || fatal "sidecar init failed for $1"
+}
+
+guest="$sc_tmp/guest"
+mk_sidecar_project "$guest" guest
+sc_reviewed="$(fgit -C "$guest" rev-parse HEAD~1)"
+sc_head="$(fgit -C "$guest" rev-parse HEAD)"
+(cd "$guest" && env -u GIT_DIR bash "$bundled_sidecar" stamp write feature/x "$sc_reviewed") >/dev/null 2>&1 \
+    || fatal "stamp write failed in $guest"
+(cd "$guest" && env -u GIT_DIR bash "$bundled_sidecar" backend stamp 2>/dev/null) | grep -qx sidecar \
+    || fatal "the guest fixture does not route the stamp to the sidecar"
+
+hook_dir="$sc_tmp/hooks"
+mkdir -p "$hook_dir"
+cp "$script" "$hook_dir/block-dangerous-git.sh"
+cp "$bundled_sidecar" "$hook_dir/sidecar.sh"
+bare_hook_dir="$sc_tmp/bare-hooks"
+mkdir -p "$bare_hook_dir"
+cp "$script" "$bare_hook_dir/block-dangerous-git.sh"
+
+sc_gh_dir="$sc_tmp/gh"
+mkdir -p "$sc_gh_dir"
+# write_sc_gh <headRefName> <headRefOid> [body] — one canned PR, argv logged.
+write_sc_gh() {
+    jq -nc --arg r "$1" --arg o "$2" --arg b "${3:-}" '{headRefName: $r, headRefOid: $o, body: $b}' > "$sc_gh_dir/pr.json"
+    : > "$sc_gh_dir/calls"
+    cat > "$sc_gh_dir/gh" <<STUB
+#!/bin/sh
+printf '%s\n' "\$*" >> "$sc_gh_dir/calls"
+exec cat "$sc_gh_dir/pr.json"
+STUB
+    chmod +x "$sc_gh_dir/gh"
+}
+
+# run_sc <hook-dir> <project> <command> [VAR=value ...] — the hook from
+# <hook-dir>, run from <project> the way Claude Code runs it from the session's
+# directory. Exit status on stdout; stderr kept in $sc_err.
+run_sc() {
+    local hd="$1" proj="$2" cmd="$3"; shift 3
+    (cd "$proj" && jq -nc --arg c "$cmd" '{tool_input: {command: $c}}' \
+        | env PATH="$sc_gh_dir:$PATH" "$@" bash "$hd/block-dangerous-git.sh" >/dev/null 2>"$sc_tmp/stderr")
+    printf '%s' "$?"
+}
+
+write_sc_gh feature/x "$sc_head"
+assert_eq 2 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821')" \
+    'a sidecar stamp behind the PR head refuses the merge'
+sc_err="$(cat "$sc_tmp/stderr")"
+if [[ "$sc_err" == *"reviewed-at: $sc_reviewed"* \
+   && "$sc_err" == *"PR head:     $sc_head"* \
+   && "$sc_err" == *"delta:       1 commit(s) past the stamp;"* ]]; then
+    printf '  ok   the sidecar refusal names the stamped SHA, the head, and a measured delta\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the sidecar refusal lost a SHA or its delta\n       got: %q\n' "$sc_err"
+    fail=$((fail + 1))
+fi
+assert_eq 'pr view 4821 --json headRefName,headRefOid' "$(cat "$sc_gh_dir/calls")" \
+    'the sidecar arm asks gh for the head branch, not the body'
+assert_eq 2 "$(run_sc "$hook_dir" "$guest" 'gh pr merge')" \
+    'the current-branch form is refused on the sidecar backend too'
+
+# A PR body stamp is not consulted on the sidecar backend, so one that agrees
+# with the head cannot mask a stale sidecar stamp.
+write_sc_gh feature/x "$sc_head" "<!-- reviewed-at: $sc_head -->"
+assert_eq 2 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821')" \
+    'a matching PR-body marker does not override the sidecar stamp'
+
+# PreToolUse hooks can inherit GIT_DIR. sidecar.sh clears it before every git
+# call, so it still resolves the project's sidecar from the working directory.
+other_repo="$sc_tmp/other"
+fgit init -q "$other_repo"
+write_sc_gh feature/x "$sc_head"
+assert_eq 2 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821' GIT_DIR="$other_repo/.git")" \
+    'the sidecar stamp is still found when the hook inherits a foreign GIT_DIR'
+
+write_sc_gh feature/x "$sc_reviewed"
+assert_eq 0 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821')" \
+    'a sidecar stamp that matches the head allows the merge'
+
+write_sc_gh feature/unstamped "$sc_head"
+assert_eq 0 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821')" \
+    'no sidecar stamp for the head branch allows the merge'
+
+write_sc_gh "" "$sc_head"
+assert_eq 0 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821')" \
+    'a PR whose head branch does not come back allows the merge'
+
+write_sc_gh feature/x "$sc_head"
+assert_eq 0 "$(run_sc "$hook_dir" "$guest" "$opt_out_name=1 gh pr merge 4821")" \
+    "the inline $opt_out_name=1 allows a stale sidecar-stamp merge"
+assert_eq 0 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821' ALLOW_STALE_STAMP_MERGE=1)" \
+    "an exported ALLOW_STALE_STAMP_MERGE=1 allows a stale sidecar-stamp merge"
+
+# Without the resolver beside it the hook keeps the PR-body read, which is the
+# behavior before #522. The body here carries no marker, so the merge goes through.
+write_sc_gh feature/x "$sc_head"
+assert_eq 0 "$(run_sc "$bare_hook_dir" "$guest" 'gh pr merge 4821')" \
+    'with no resolver beside the hook the merge is allowed'
+assert_eq 'pr view 4821 --json body,headRefOid' "$(cat "$sc_gh_dir/calls")" \
+    'with no resolver beside the hook it falls through to the PR-body read'
+
+# The sidecar describes the repo of the current directory, so a merge aimed at
+# another repo is judged by that PR's body, never by this project's stamps.
+write_sc_gh feature/x "$sc_head"
+assert_eq 0 "$(run_sc "$hook_dir" "$guest" 'gh pr merge 4821 -R other/repo')" \
+    'a -R merge does not read this project'"'"'s sidecar stamp'
+assert_eq 'pr view 4821 --repo other/repo --json body,headRefOid' "$(cat "$sc_gh_dir/calls")" \
+    'a -R merge keeps the PR-body read'
+assert_eq 0 "$(run_sc "$hook_dir" "$guest" 'gh pr merge https://github.com/o/r/pull/9')" \
+    'a URL merge does not read this project'"'"'s sidecar stamp'
+
+# The github backend, with the resolver installed: the PR-body read still refuses.
+owned="$sc_tmp/owned"
+mk_sidecar_project "$owned" owned
+(cd "$owned" && env -u GIT_DIR bash "$bundled_sidecar" backend stamp 2>/dev/null) | grep -qx github \
+    || fatal "the owned fixture does not route the stamp to github"
+write_sc_gh feature/x "$sc_head" "<!-- reviewed-at: $sc_reviewed -->"
+assert_eq 2 "$(run_sc "$hook_dir" "$owned" 'gh pr merge 4821')" \
+    'on the github backend a stale PR-body stamp is still refused'
+
+# A resolver that refuses (here: the hook run outside any repository) is not a
+# `sidecar` answer, so the hook keeps the PR-body read and allows an unstamped body.
+write_sc_gh feature/x "$sc_head"
+assert_eq 0 "$(run_sc "$hook_dir" "$sc_tmp" 'gh pr merge 4821')" \
+    'a refusing resolver allows the merge'
+assert_eq 'pr view 4821 --json body,headRefOid' "$(cat "$sc_gh_dir/calls")" \
+    'a refusing resolver falls through to the PR-body read'
+
+unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL SKILL_KIT_SIDECAR_ROOT SKILL_KIT_RESEARCH_ARCHIVE
+rm -rf "$sc_tmp"
+
+# -----------------------------------------------------------------------------
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1

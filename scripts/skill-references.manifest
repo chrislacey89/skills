@@ -65,3 +65,4 @@ init-pipeline/scripts/sidecar.sh  correct-course
 init-pipeline/scripts/sidecar.sh  handoff
 init-pipeline/scripts/sidecar.sh  prd-to-issues
 init-pipeline/scripts/sidecar.sh  closeout
+init-pipeline/scripts/sidecar.sh  git-guardrails-claude-code
