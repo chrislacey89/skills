@@ -162,6 +162,26 @@ done
 runo "$P" resolve
 check "corrupt sidecar.json restored: resolve succeeds again" 0 "$rc"
 
+# A file jq cannot open (mode 000, or owned by another user) must be refused
+# like a corrupt one. `owners_of` guards with `[ -f ]`, so the file reaches jq,
+# which fails; a guard of `[ -r ]` would skip it as "not found", and the miss
+# would answer `github` (#530: a /fix-findings breaker made exactly that edit
+# and both suites stayed green). uid 0 reads mode-000 files, so root skips.
+if [ "$(id -u)" -eq 0 ]; then
+    ok "unreadable sidecar.json: skipped under root, which reads mode-000 files"
+else
+    chmod 000 "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
+    for a in prds slices stamp; do
+        runo "$P" backend "$a"
+        check "unreadable sidecar.json: backend $a exits 1" 1 "$rc"
+        check "unreadable sidecar.json: backend $a prints nothing on stdout (not github)" "" "$out"
+        case "$err" in *corrupt/sidecar.json*) ok "unreadable sidecar.json: backend $a names the file on stderr" ;; *) bad "unreadable sidecar.json: backend $a names the file on stderr" "got [$err]" ;; esac
+    done
+    chmod 644 "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
+    runo "$P" backend stamp
+    check "unreadable sidecar.json restored: backend stamp answers sidecar again" sidecar "$out"
+fi
+
 # -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
 
