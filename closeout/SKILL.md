@@ -178,7 +178,7 @@ Three outcomes, and only one of them interrupts:
 
 This precondition **never hard-blocks**. `/closeout` is HITL and non-blocking by design, and the fix here is making the divergence *visible* — not seizing the merge decision from the user.
 
-The git guardrail makes the same comparison at the merge itself. Where `/git-guardrails-claude-code` is installed, it refuses a `gh pr merge` whose review stamp names a commit other than the PR head, reading the stamp from the PR body or the sidecar as the state backend routes it (its "What Gets Blocked Conditionally" section). So the **Merge anyway** branch above needs the opt-out named in Step 3.
+The git guardrail makes the same comparison at the merge itself; its refusal condition, where it reads the stamp, and the limits on that read are stated once, in `/git-guardrails-claude-code` ("What Gets Blocked Conditionally"). So the **Merge anyway** branch above needs the opt-out named in Step 3.
 
 ### 3. Merge the PR
 
