@@ -220,7 +220,7 @@ current_keys() {
 # file is corrupt or unreadable, which is not a miss. Such a file cannot be
 # ruled out as the key's owner without parsing it, so when no readable sidecar
 # claims the key this returns 2 and names it; when one does, the key is owned
-# and the unreadable file is only named, as a warning (#530: one corrupt
+# and the unreadable file is only named, as a warning (chrislacey89/skills#530: one corrupt
 # sidecar.json used to refuse every lookup in every repo). A caller must check
 # the status; `$(owners_of …)` inside a pipeline discards it.
 owners_of() {

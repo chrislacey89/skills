@@ -213,7 +213,10 @@ sidecar_stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'stamp write.*review
 stamp_write="$(sed -n '/^PROJECT_DIR=/,$p' <<<"$stamp_block")"
 [ -n "$stamp_write" ] || fatal "no PROJECT_DIR-anchored stamp-flag write found in pre-merge/SKILL.md"
 
-stamp_remove="$(fenced_bash_block closeout/SKILL.md 'review-stamped' | sed -n '/^PROJECT_DIR=/,$p' || true)"
+# Through the flag's rm only: the sidecar stamp clear after it asks `backend`,
+# which aborts outside a fixture that builds a sidecar root, and is run by
+# test-review-currency-marker.sh instead.
+stamp_remove="$(fenced_bash_block closeout/SKILL.md 'review-stamped' | sed -n '/^PROJECT_DIR=/,/^rm -f .*review-stamped"$/p' || true)"
 [ -n "$stamp_remove" ] || fatal "no PROJECT_DIR-anchored stamp-flag removal found in closeout/SKILL.md"
 
 # The fixer flag's writer is /fix-findings' harness line — `!`…`` at the top of
