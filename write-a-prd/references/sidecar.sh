@@ -223,10 +223,38 @@ current_keys() {
 # and the unreadable file is only named, as a warning (chrislacey89/skills#530: one corrupt
 # sidecar.json used to refuse every lookup in every repo). A caller must check
 # the status; `$(owners_of …)` inside a pipeline discards it.
+#
+# The scan walks directories, not "$SIDECAR_ROOT"/*/sidecar.json: a glob never
+# matches a path under a directory it cannot search, so a sidecar directory at
+# mode 000 or 444 used to drop out of the scan and read as a miss, which
+# `backend` answers with `github` (chrislacey89/skills#542). A directory that
+# cannot be entered is unread, like a corrupt file, and so is a sidecar.json
+# that is present but not a regular file; a directory with no sidecar.json is
+# skipped.
 owners_of() {
-    local key="$1" f rc hits="" unread=""
-    for f in "$SIDECAR_ROOT"/*/sidecar.json; do
-        [ -f "$f" ] || continue
+    local key="$1" d f rc hits="" unread=""
+    # A root that exists but cannot be listed and entered hides every sidecar
+    # in it; only a root that does not exist at all is a miss.
+    if [ -e "$SIDECAR_ROOT" ] && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
+        printf 'sidecar.sh: cannot list %s; refusing to treat it as a miss\n' "$SIDECAR_ROOT" >&2
+        return 2
+    fi
+    for d in "$SIDECAR_ROOT"/*/; do
+        [ -d "$d" ] || continue
+        d="${d%/}"
+        f="$d/sidecar.json"
+        if [ ! -x "$d" ]; then
+            unread="${unread:+$unread$'\n'}$d (cannot enter the directory)"
+            continue
+        fi
+        if [ ! -f "$f" ]; then
+            # Present but not a regular file, such as a symlink whose target
+            # is gone: as unparseable as a corrupt one, so not a miss.
+            if [ -L "$f" ] || [ -e "$f" ]; then
+                unread="${unread:+$unread$'\n'}$f (not a readable regular file)"
+            fi
+            continue
+        fi
         rc=0
         jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1 || rc=$?
         case "$rc" in
