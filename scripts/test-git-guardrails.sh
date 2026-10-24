@@ -1001,10 +1001,11 @@ fgit config --file "$GIT_CONFIG_GLOBAL" user.email "guard@example.com"
 
 # mk_sidecar_project <dir> <mode> — a project with two adjacent commits and a
 # GitHub remote, claimed by a sidecar in <mode>. guest routes the stamp to the
-# sidecar; owned on GitHub routes it to the PR body.
+# sidecar; owned on GitHub routes it to the PR body. The root commit carries the
+# path, so two fixtures built in one second do not share a root SHA.
 mk_sidecar_project() {
     fgit init -q "$1"
-    fgit -C "$1" commit -q --allow-empty -m reviewed
+    fgit -C "$1" commit -q --allow-empty -m "reviewed $1"
     fgit -C "$1" commit -q --allow-empty -m "landed after review"
     fgit -C "$1" remote add origin "https://github.com/client/$(basename "$1").git"
     (cd "$1" && env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE bash "$bundled_sidecar" init \
