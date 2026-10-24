@@ -228,8 +228,9 @@ current_keys() {
 # matches a path under a directory it cannot search, so a sidecar directory at
 # mode 000 or 444 used to drop out of the scan and read as a miss, which
 # `backend` answers with `github` (chrislacey89/skills#542). A directory that
-# cannot be entered is unread, like a corrupt file, and a directory with no
-# sidecar.json is skipped.
+# cannot be entered is unread, like a corrupt file, and so is a sidecar.json
+# that is present but not a regular file; a directory with no sidecar.json is
+# skipped.
 owners_of() {
     local key="$1" d f rc hits="" unread=""
     # A root that exists but cannot be listed and entered hides every sidecar
@@ -246,7 +247,14 @@ owners_of() {
             unread="${unread:+$unread$'\n'}$d (cannot enter the directory)"
             continue
         fi
-        [ -f "$f" ] || continue
+        if [ ! -f "$f" ]; then
+            # Present but not a regular file, such as a symlink whose target
+            # is gone: as unparseable as a corrupt one, so not a miss.
+            if [ -L "$f" ] || [ -e "$f" ]; then
+                unread="${unread:+$unread$'\n'}$f (not a readable regular file)"
+            fi
+            continue
+        fi
         rc=0
         jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1 || rc=$?
         case "$rc" in

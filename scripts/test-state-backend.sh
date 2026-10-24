@@ -286,6 +286,27 @@ else
     check "absent sidecar root: backend stamp is still the github miss" "0:github" "$rc:$out"
 fi
 
+# A sidecar.json symlink whose target is gone fails `[ -f ]`, so the scan used
+# to skip it as "no sidecar here". It is the same class as an unreadable file:
+# present, and unparseable. No chmod, so this arm runs under root too.
+link_root="$tmp/link-sidecars"
+mkproj https://github.com/acme/linkguest.git
+linkguest="$P"
+SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" init --name g --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the dangling-symlink arms" "$err"
+mv "$link_root/g/sidecar.json" "$tmp/link-good.json"
+ln -s "$tmp/link-gone.json" "$link_root/g/sidecar.json"
+for a in prds slices stamp; do
+    SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" backend "$a"
+    check "dangling sidecar.json symlink: backend $a exits 1" 1 "$rc"
+    check "dangling sidecar.json symlink: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"$link_root/g/sidecar.json"*) ok "dangling sidecar.json symlink: backend $a names the file on stderr" ;; *) bad "dangling sidecar.json symlink: backend $a names the file on stderr" "got [$err]" ;; esac
+done
+rm "$link_root/g/sidecar.json"
+mv "$tmp/link-good.json" "$link_root/g/sidecar.json"
+SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" backend stamp
+check "dangling symlink replaced: backend stamp answers sidecar again" sidecar "$out"
+
 # -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
 
