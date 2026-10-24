@@ -20,6 +20,24 @@
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
 #   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
+#   sidecar.sh backend <prds|slices|stamp>   (prints github or sidecar; github when no sidecar resolves)
+#   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
+#   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
+#   sidecar.sh stamp clear <branch>
+#
+# backend. The routing rule is docs/state-backend.md's: prds and slices go to
+# GitHub when forge.write contains "issues", the stamp when it contains "prs",
+# and only when forge.kind is github, because every consumer of the github
+# answer runs `gh`. Anything else is sidecar. No sidecar is github, which is
+# the behavior before the sidecar existed.
+#
+# stamp. <sidecar>/reviews/<slug>.json holds the review stamp on the sidecar
+# backend. The slug keeps [a-z0-9._-] and writes every other byte as %XX
+# (uppercase hex), so it is reversible and two branches differing only in case
+# cannot share a file on a case-insensitive filesystem. read matches on the
+# JSON branch field, and prints nothing for a stamp it cannot parse or whose
+# reviewed_sha is not 40 lowercase hex. /pre-merge is the only skill that
+# writes one (scripts/test-review-currency-marker.sh).
 #
 # require resolution order. The first candidate that exists wins; each step runs
 # only when the one before found nothing.
@@ -646,6 +664,102 @@ cmd_require() {
     printf '%s/%s\n' "$(cd "$(dirname "$probe")" && pwd -P)" "$(basename "$probe")"
 }
 
+cmd_backend() {
+    local sc errf item kind
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh backend <prds|slices|stamp>"
+    case "$1" in
+        prds|slices) item="issues" ;;
+        stamp)       item="prs" ;;
+        *) die_usage "backend: expected prds, slices, or stamp, got: $1" ;;
+    esac
+    errf="$(mktemp)" || refuse "backend: cannot create a temp file"
+    if ! sc="$(do_resolve 2>"$errf")"; then
+        if grep -q 'SIDECAR MISS:' "$errf"; then
+            rm -f "$errf"; printf 'github\n'; return 0
+        fi
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    cat "$errf" >&2; rm -f "$errf"
+    kind="$(jq -r '.forge.kind // "none"' "$sc/sidecar.json")" || refuse "backend: cannot read $sc/sidecar.json"
+    if ! jq -e '(.forge.write // []) | type == "array"' "$sc/sidecar.json" >/dev/null 2>&1; then
+        refuse "backend: forge.write in $sc/sidecar.json is not an array"
+    fi
+    if [ "$kind" = "github" ] \
+        && jq -e --arg i "$item" '(.forge.write // []) | index($i) != null' "$sc/sidecar.json" >/dev/null; then
+        printf 'github\n'
+    else
+        printf 'sidecar\n'
+    fi
+}
+
+# branch_slug <branch>: the reversible file name for a branch; the rule is in the header.
+branch_slug() {
+    local h out=""
+    for h in $(printf '%s' "$1" | od -An -v -tx1 | tr ' ' '\n'); do
+        [ -n "$h" ] || continue
+        case "$h" in
+            2d|2e|3[0-9]|5f|6[1-9a-f]|7[0-9a]) out="$out$(printf '%b' "\\x$h")" ;;
+            *) out="$out%$(printf '%s' "$h" | tr 'a-f' 'A-F')" ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+cmd_stamp() {
+    local sub="${1:-}" branch sha base="" sc f tmp
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        write)
+            [ $# -ge 2 ] || die_usage "usage: sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]"
+            branch="$1"; sha="$2"; shift 2
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --base-ref) [ $# -ge 2 ] || die_usage "stamp write: --base-ref needs a value"; base="$2"; shift 2 ;;
+                    *) die_usage "stamp write: unknown argument: $1" ;;
+                esac
+            done
+            ;;
+        read|clear)
+            [ $# -eq 1 ] || die_usage "usage: sidecar.sh stamp $sub <branch>"
+            branch="$1"
+            ;;
+        *) die_usage "usage: sidecar.sh stamp <write|read|clear> <branch> ..." ;;
+    esac
+    case "$branch" in ''|*$'\n'*) die_usage "stamp $sub: the branch must be one non-empty line" ;; esac
+    if [ "$sub" = write ] && ! printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}'; then
+        refuse "stamp write refused: the SHA must be 40 lowercase hex characters (git rev-parse HEAD): $sha"
+    fi
+    sc="$(do_resolve)" || exit 1
+    f="reviews/$(branch_slug "$branch").json"
+    case "$sub" in
+        write)
+            mkdir -p "$sc/reviews" || refuse "stamp write: cannot create $sc/reviews"
+            tmp="$(mktemp "$sc/reviews/.stamp.XXXXXX")" || refuse "stamp write: cannot write in $sc/reviews"
+            if jq -n --arg b "$branch" --arg s "$sha" --arg r "$base" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{schema: 1, branch: $b, reviewed_sha: $s, base_ref: $r, at: $at}' > "$tmp"; then
+                mv "$tmp" "$sc/$f"
+            else
+                rm -f "$tmp"; refuse "stamp write: could not write $sc/$f"
+            fi
+            commit_paths "$sc" "sidecar: stamp $branch at ${sha:0:7}" "$f" || exit 1
+            ;;
+        read)
+            [ -f "$sc/$f" ] || return 0
+            sha="$(jq -r --arg b "$branch" 'select(.branch == $b) | .reviewed_sha // empty' "$sc/$f" 2>/dev/null)" || {
+                printf 'sidecar.sh: stamp read: %s does not parse; treating it as no stamp\n' "$sc/$f" >&2; return 0; }
+            printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$sha"
+            return 0
+            ;;
+        clear)
+            [ -f "$sc/$f" ] || return 0
+            rm -f "$sc/$f"
+            if sgit "$sc" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+                commit_paths "$sc" "sidecar: clear stamp $branch" "$f" || exit 1
+            fi
+            ;;
+    esac
+}
+
 verb="${1:-}"
 [ $# -gt 0 ] && shift
 case "$verb" in
@@ -658,5 +772,7 @@ case "$verb" in
     archive-dir) cmd_archive_dir "$@" ;;
     commit)  cmd_commit "$@" ;;
     require) cmd_require "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|solutions-dirs|migrate-archive|archive-dir|commit|require> ..." ;;
+    backend) cmd_backend "$@" ;;
+    stamp)   cmd_stamp "$@" ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp> ..." ;;
 esac
