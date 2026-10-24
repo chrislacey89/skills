@@ -214,6 +214,22 @@ fi
 
 `GATE_TERMS` is the whole of that claim, and `scripts/test-lfg-marker.sh` section 7 pins it against the hook's clause 1, so a marker added to the hook and not to this list fails the suite in the commit that adds it. That replaces the rule this paragraph used to state in prose — *give the boundary its own term, in the commit that introduces it* — which chrislacey89/skills#370 read and did not follow, shipping `.claude/.lfg-active` with no distribution term and leaving it inert in every project installed before it (chrislacey89/skills#385). A distribution boundary that is not a new path still has no mechanism, and still owns its own distribution.
 
+**Guard resolver check.** `/git-guardrails-claude-code` installs `block-dangerous-git.sh` with a copy of `sidecar.sh` beside it, and the guard reads a sidecar review stamp through that copy. The copy updates only when someone re-runs that skill, so a guard installed before the resolver existed has none, and one whose copy has fallen behind the stamp format finds no stamp. Both fail open: the merge goes through unchecked, on exactly the guest repos whose PR body never carries a stamp. This check compares the project's copy with this skill's bundled one.
+
+```bash
+GUARD_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks"
+BUNDLED="<this skill's directory>/references/sidecar.sh"
+if [ ! -f "$GUARD_DIR/block-dangerous-git.sh" ]; then
+  echo "guard-absent"
+elif cmp -s "$BUNDLED" "$GUARD_DIR/sidecar.sh"; then
+  echo "guard-sidecar-current"
+else
+  echo "guard-sidecar-stale"
+fi
+```
+
+`guard-sidecar-stale` means tell the user and offer to re-run `/git-guardrails-claude-code` at project scope, which copies the pair afresh; in an AFK iteration, record it in the Step 6 review notes instead. It does not hold Step 1. `guard-absent` and `guard-sidecar-current` proceed. A guard installed at global scope is not inspected here. `scripts/test-git-guardrails.sh` runs this block against all three cases.
+
 **TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` automatically creates `.claude/.tdd-active` via harness preprocessing when loaded (not LLM-dependent); visual frontend creates `.claude/.tdd-skipped`; `/lfg` creates `.claude/.lfg-active`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes every one of them after commit.
 
 **Trivial-task exception.** A single-commit cleanup unrelated to active feature work may skip classification by creating `.claude/.tdd-skipped` directly. The four conditions that all have to hold, and what to do when one does not, are stated once in [references/trivial-task-rule.md](references/trivial-task-rule.md).

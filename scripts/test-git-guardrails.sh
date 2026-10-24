@@ -1141,6 +1141,24 @@ assert_eq 0 "$(run_sc "$hook_dir" "$sc_tmp" 'gh pr merge 4821')" \
 assert_eq 'pr view 4821 --json body,headRefOid' "$(cat "$sc_gh_dir/calls")" \
     'a refusing resolver falls through to the PR-body read'
 
+# /execute Step 0's guard resolver check: an installed guard whose sidecar.sh is
+# missing or differs from the bundled one fails open on a sidecar-only stamp, so
+# the documented block is run, not restated. The block is extracted from the skill
+# and its install-path placeholder pointed at the bundled copy the suite uses.
+chk_block="$(awk '/^```bash$/ {b=1; buf=""; next} /^```$/ {if (b && buf ~ /guard-sidecar-stale/) printf "%s", buf; b=0; next} b {buf = buf $0 "\n"}' "$repo_root/execute/SKILL.md")"
+[[ -n "$chk_block" ]] || fatal "no guard resolver check block found in execute/SKILL.md Step 0"
+chk_block="${chk_block//<this skill\'s directory>\/references\/sidecar.sh/$bundled_sidecar}"
+run_chk() { CLAUDE_PROJECT_DIR="$1" bash -c "$chk_block"; }
+chk_proj="$sc_tmp/chk"
+mkdir -p "$chk_proj/.claude/hooks"
+assert_eq guard-absent "$(run_chk "$chk_proj")" 'no guard installed: the resolver check reports guard-absent'
+cp "$script" "$chk_proj/.claude/hooks/block-dangerous-git.sh"
+assert_eq guard-sidecar-stale "$(run_chk "$chk_proj")" 'a guard with no sidecar.sh beside it is reported stale'
+cp "$bundled_sidecar" "$chk_proj/.claude/hooks/sidecar.sh"
+assert_eq guard-sidecar-current "$(run_chk "$chk_proj")" 'a guard whose sidecar.sh matches the bundled copy is current'
+echo '# drift' >> "$chk_proj/.claude/hooks/sidecar.sh"
+assert_eq guard-sidecar-stale "$(run_chk "$chk_proj")" 'a guard whose sidecar.sh differs from the bundled copy is reported stale'
+
 unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL SKILL_KIT_SIDECAR_ROOT SKILL_KIT_RESEARCH_ARCHIVE
 rm -rf "$sc_tmp"
 
