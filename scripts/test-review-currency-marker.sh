@@ -504,6 +504,43 @@ esac
 assert_eq "" "$(cat "$fx/gh.log")" "sidecar backend: the read never called gh"
 assert_eq "" "$(git -C "$fx/proj" status --porcelain)" "sidecar backend: the project tree is untouched"
 
+section "/closeout Step 3 clears the merged PR's stamp, not the current checkout's"
+
+# `gh pr merge --delete-branch` deletes the local branch and, in a plain
+# checkout, switches to the base first, so `git branch --show-current` names
+# the base by the time the clear runs and the merged branch's stamp survives to
+# be read by a later branch reusing the name. The block is extracted from
+# closeout/SKILL.md and run AFTER the fixture has switched to base and dropped
+# the feature branch, with a `gh` stub that serves the PR's head ref. The
+# stamp written above for `feature` must be there before and gone after.
+clear_block="$(awk '
+    /^```bash$/ { buf = ""; inblock = 1; next }
+    inblock && /^```$/ { if (buf ~ /stamp clear/) { printf "%s", buf; exit } inblock = 0; next }
+    inblock { buf = buf $0 "\n" }
+' "$closeout_skill")"
+if [[ -z "$clear_block" ]]; then
+    printf 'FATAL: no stamp clear block found in %s\n' "$closeout_skill" >&2
+    exit 2
+fi
+clear_block="${clear_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+clear_block="${clear_block//<number>/1}"
+
+cat > "$fx/bin/gh" <<STUB
+#!/usr/bin/env bash
+case "\$*" in
+    "pr view 1 --json headRefName -q .headRefName") printf 'feature\n' ;;
+    *) exit 9 ;;
+esac
+STUB
+(cd "$fx/proj" && git switch -q main && git branch -q -D feature) \
+    || { printf 'FATAL: could not switch the closeout fixture to base\n' >&2; exit 2; }
+assert_eq main "$(git -C "$fx/proj" branch --show-current)" "fixture: the checkout is on base, as after gh pr merge --delete-branch"
+assert_eq "$stamp_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
+    "control: the merged branch's stamp exists before the clear block runs"
+(cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" CLAUDE_PROJECT_DIR="$fx/proj" bash -c "$clear_block" >/dev/null 2>&1)
+assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
+    "after the clear block, run on base, the merged branch's stamp is gone"
+
 # -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

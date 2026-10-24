@@ -218,11 +218,11 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 rm -f "$PROJECT_DIR/.claude/.review-stamped"
 SC="<this skill's directory>/references/sidecar.sh"
 if [ "$(bash "$SC" backend stamp)" = sidecar ]; then
-  bash "$SC" stamp clear "$(git branch --show-current)"
+  bash "$SC" stamp clear "$(gh pr view <number> --json headRefName -q .headRefName)"
 fi
 ```
 
-On the sidecar backend the stamp is spent with the review, so it is cleared here too. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
+On the sidecar backend the stamp is spent with the review, so it is cleared here too. The branch comes from the merged PR, not from `git branch --show-current`: `gh pr merge --delete-branch` deletes the local branch and, in a plain checkout, switches to the base first, so the current branch is by now the base. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
 
 `.claude/.fix-findings-active` is not removed here — `/fix-findings` removes its
 own flag on every exit path, and a copy still present at merge means that run
