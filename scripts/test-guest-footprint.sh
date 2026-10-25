@@ -146,7 +146,7 @@ mkguest() {
     n=$((n + 1))
     P="$tmp/proj$n"; export GH_STUB="$tmp/gh$n"; mkdir -p "$GH_STUB"
     git init -q "$P"
-    git -C "$P" commit -q --allow-empty -m root
+    git -C "$P" commit -q --allow-empty -m "root $P"
     git -C "$P" remote add origin "https://github.com/acme/guest$n.git"
     git -C "$P" checkout -q -b feat
     [ "$2" = noinit ] && return 0
@@ -244,7 +244,8 @@ lin_block="$(block "$PM" 'lineage aborted: cannot read $W')"
 [ -n "$lin_block" ] || bad "pre-merge/SKILL.md Phase 1 carries the sidecar lineage block" "not found"
 case "$lin_block" in *'gh '*) bad "the lineage block calls no gh" "found gh" ;; *) ok "the lineage block calls no gh" ;; esac
 mkguest "lineage" noinit
-(cd "$P" && bash "$SC" init --name "guest$n" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1)
+(cd "$P" && bash "$SC" init --name "guest$n" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+    || bad "lineage: init the guest sidecar" "init failed"
 printf '## Problem\n\nx\n' > "$tmp/lprd.md"
 printf '## Boundary Map\n\n### Produces\n\n- the %s thing\n' one > "$tmp/ls1.md"
 printf '## Boundary Map\n\n### Produces\n\n- the %s thing\n' two > "$tmp/ls2.md"
