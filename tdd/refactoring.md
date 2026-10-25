@@ -23,6 +23,7 @@ After TDD cycle, look for:
 
 - **Duplication** → Extract function/class
 - **Long methods** → Break into private helpers (keep tests on public interface)
+- **Clever conditional** → if/else, guard clauses, an explaining variable, or a lookup table. The tell is a ternary whose branches are not both simple values (a nested ternary is the common case), or a condition added inside an existing `if` without re-reading the function it landed in. Applies to code this cycle wrote; idiomatic `map`/`filter`/`reduce` pipelines are not the target
 - **Shallow modules** → Combine or deepen
 - **Feature envy** → Move logic to where data lives
 - **Primitive obsession** → Introduce value objects — and when the primitive carries a precondition a downstream function depends on, make it unconstructable rather than merely validated ([interface-design.md](interface-design.md) § *Make an illegal input unconstructable, not merely detectable*)
