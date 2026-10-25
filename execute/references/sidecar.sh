@@ -1125,7 +1125,7 @@ work_close() {
 }
 
 work_list() {
-    local kind="" parent="" unblocked=0 state=open f all
+    local kind="" parent="" unblocked=0 state=open f all one
     while [ $# -gt 0 ]; do
         case "$1" in
             --kind)   [ $# -ge 2 ] || die_usage "work list: --kind needs a value"; kind="$2"; shift 2 ;;
@@ -1139,11 +1139,14 @@ work_list() {
     case "$state" in open|closed|all) ;; *) die_usage "work list: --state must be open, closed, or all" ;; esac
     [ -z "$parent" ] || is_work_id "$parent" || die_usage "work list: --parent must be an id like W-3: $parent"
     [ -d "$WORK_DIR" ] || return 0
-    all="$(for f in "$WORK_DIR"/W-*.md; do
+    # A parse failure is the assignment's exit status, never a word in the
+    # output: an item's own frontmatter (a milestone, a pr URL) can say anything.
+    all=""
+    for f in "$WORK_DIR"/W-*.md; do
         [ -f "$f" ] || continue
-        work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f" || { printf 'sidecar.sh: work list: %s does not parse\n' "$f" >&2; echo FAIL; }
-    done)"
-    case "$all" in *FAIL*) exit 1 ;; esac
+        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f")" || { printf 'sidecar.sh: work list: %s does not parse\n' "$f" >&2; exit 1; }
+        all="$all$one"$'\n'
+    done
     # An --unblocked item is open and every blocked_by id is closed; an id
     # missing from the store counts as open, so a typo never unblocks.
     printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg s "$state" --argjson u "$unblocked" '

@@ -617,6 +617,24 @@ $s1
 $s2
 $prd2" "$out"
 
+# The word FAIL inside an item's own frontmatter is data, not a parse failure;
+# a file that genuinely does not parse still fails the list and names itself.
+runo "$P" work create --kind prd --milestone 'FAIL-safe rollout' --body-file "$tmp/prd.md"; failid="$out"
+runo "$P" work set "$failid" pr "https://github.com/acme/FAIL/pull/9"
+runo "$P" work list --state all
+check "list still lists when a milestone and pr contain FAIL" "$prd
+$s1
+$s2
+$prd2
+$failid" "$out"
+check "list exits 0 when a milestone and pr contain FAIL" 0 "$rc"
+printf 'not frontmatter at all\n' > "$W/W-98.md"
+runo "$P" work list --state all
+check "list exits nonzero on a work file that does not parse" 1 "$rc"
+case "$err" in *"work list: $W/W-98.md does not parse"*) named=1 ;; *) named=0 ;; esac
+check "list names the unparseable file on stderr" 1 "$named"
+rm -f "$W/W-98.md"
+
 check "work verbs leave the sidecar clean" "" "$(git -C "$S" status --porcelain)"
 clean "work verbs leave the project clean" "$P"
 
