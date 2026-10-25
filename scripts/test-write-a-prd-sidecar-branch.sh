@@ -77,7 +77,7 @@ printf '#!/bin/sh\necho "$*" >> "$GH_LOG"\nexit 1\n' > "$stub/gh"; chmod +x "$st
 n=0
 mkproj() {
     n=$((n + 1)); P="$tmp/proj$n"
-    git init -q "$P"; git -C "$P" commit -q --allow-empty -m "root"
+    git init -q "$P"; git -C "$P" commit -q --allow-empty -m "root $P"
     git -C "$P" remote add origin "$1"
 }
 # runb <dir> <script> — run one block in its own fresh shell, stub gh first on PATH.
