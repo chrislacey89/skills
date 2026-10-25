@@ -51,7 +51,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 **Author-mode:**
 
-1. **Ask for the PRD issue number.** Accept "none" if this change didn't go through the full pipeline. **In loop-mode entered from an AFK `/execute` handoff, do not ask** — take the issue number from the handoff (`/execute` Step 6 passes it) and treat its absence as "none". There is nobody to answer, so an unconditional question here would hang the run at its first step.
+1. **Ask for the PRD issue number.** Accept "none" if this change didn't go through the full pipeline. **In loop-mode entered from an AFK `/execute` handoff, do not ask** — take the issue number from the handoff (`/execute` Step 6 passes it) and treat its absence as "none". There is nobody to answer, so an unconditional question here would hang the run at its first step. On the sidecar backend the answer is a `W-<n>` work item id (step 2); "none" there means Phase 2 opens the PR and records it on nothing.
 
 2. **If a PRD was given:**
    ```bash
@@ -59,6 +59,29 @@ If you are running on a branch other than the user's working branch and `--pr` w
    gh issue list --search "in:body #<prd-number>" --state all --json number,title,state,body --limit 100
    ```
    Parse boundary maps (Produces/Consumes sections) from each slice issue body.
+
+   **On the sidecar backend** (`bash "$SC" backend slices` answers `sidecar`, per [references/state-backend.md](references/state-backend.md)), the PRD and its slices are work items, and the number asked for in step 1 is a `W-<n>` id: the slice this branch implements, which `/execute` passes, or its PRD. No `gh issue` command runs; the lineage and the boundary maps come from the work items:
+   ```bash
+   SC="<this skill's directory>/references/sidecar.sh"
+   W="W-<n>"
+   J="$(bash "$SC" work view "$W" --json)" || { echo "lineage aborted: cannot read $W" >&2; exit 1; }
+   case "$(jq -r '.kind // empty' <<<"$J")" in
+     slice) PRD="$(jq -r '.parent // empty' <<<"$J")" ;;
+     prd)   PRD="$W" ;;
+     *) echo "lineage aborted: $W has no kind" >&2; exit 1 ;;
+   esac
+   SLICES="$W"
+   if [ -n "$PRD" ]; then
+     bash "$SC" work view "$PRD" --json | jq -r '"# \(.id) (prd, \(.state))\n\(.body)"'
+     SLICES="$(bash "$SC" work list --kind slice --parent "$PRD" --state all)" \
+       || { echo "lineage aborted: cannot list the slices of $PRD" >&2; exit 1; }
+   fi
+   while IFS= read -r S; do
+     [ -n "$S" ] || continue
+     bash "$SC" work view "$S" --json | jq -r '"# \(.id) (slice, \(.state))\n\(.body)"'
+   done <<<"$SLICES"
+   ```
+   Parse the boundary maps from those bodies exactly as from issue bodies. Keep `$W`: Phase 2 records the PR on it.
 
 3. **Detect the base branch and assess the diff:**
    ```bash
@@ -137,6 +160,31 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (override `--base` for stacked-PR slices to the sibling slice's branch) or `gh pr edit`.
 
+**Ask where the pack's text goes first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md). `github` uses the two templates below. `sidecar` means the repo's `forge.write` lacks `prs`: the PR still opens, but it is an ordinary PR, and everything the templates carry for the pack lives on the work item instead. Anything else is a refusal: stop and relay what `backend` printed on stderr, because the templates on a failed answer write pack text into a client's PR.
+
+**On the `sidecar` backend**, the title and description are plain human text: what changed and why, written to `references/writing-for-humans.md` as the Summary walkthrough is. They carry no heading from the templates below, no `Closes #`, no `#N` or `W-<n>` reference, and no `## Review Notes`. An existing PR's body is left as it is — the client may have edited it — and only the URL is recorded:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"            # the work item Phase 1 step 2 read
+TITLE="<plain title>"
+DESC_FILE=$(mktemp)
+# Write the plain description into "$DESC_FILE". Nothing below adds to it.
+BRANCH=$(git branch --show-current)
+PR_URL=$(gh pr list --head "$BRANCH" --json url -q '.[0].url // ""') \
+  || { echo "PR lookup failed" >&2; rm -f "$DESC_FILE"; exit 1; }
+if [ -z "$PR_URL" ]; then
+  OUT=$(gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$TITLE" --body-file "$DESC_FILE") \
+    || { echo "PR create failed" >&2; rm -f "$DESC_FILE"; exit 1; }
+  PR_URL=$(printf '%s\n' "$OUT" | tail -1)
+fi
+rm -f "$DESC_FILE"
+bash "$SC" work set "$W" pr "$PR_URL" || { echo "PR opened, but $PR_URL is not recorded on $W" >&2; exit 1; }
+echo "$PR_URL"
+```
+
+The lineage the templates would have written is already on the work item: its `parent`, its `blocked_by`, and now its `pr`. `/execute`'s `## Review Notes` block goes to the work item as a comment, `bash "$SC" work comment "$W" --body-file <notes>`, and Phase 3 hands that comment to its reviewers where it would otherwise hand over the PR body's block. `scripts/test-guest-footprint.sh` runs this block and `/closeout` Step 3's merge against a stubbed `gh` and fails on any pack marker in what they pass.
+
 **PR body template (when PRD exists):**
 
 ```markdown
@@ -170,7 +218,7 @@ Closes #<prd-issue-number>
 For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain setup, what changed and why each piece was the right move, and why it matters. See `references/writing-for-humans.md`.]
 ```
 
-3. **Write the `## Review Notes` block, when `/execute` handed one over.** Both the author-mode and loop-mode handoffs pass a block of re-runnable verification claims — which commands ran and their exit status, which tiers were skipped and why, scope absorbed under the Consumes gate, assumptions that shifted, known-weak spots. Emit it verbatim after `## Summary`; do not summarize or re-word it. Its whole value is that the reviewer can re-run the claims, and every summarization hop is a lossy transformation authored by the agent under review. See `/execute` Step 6 for the block's shape.
+3. **Write the `## Review Notes` block, when `/execute` handed one over.** Both the author-mode and loop-mode handoffs pass a block of re-runnable verification claims — which commands ran and their exit status, which tiers were skipped and why, scope absorbed under the Consumes gate, assumptions that shifted, known-weak spots. Emit it verbatim after `## Summary`; do not summarize or re-word it. Its whole value is that the reviewer can re-run the claims, and every summarization hop is a lossy transformation authored by the agent under review. See `/execute` Step 6 for the block's shape. On the `sidecar` backend it goes to the work item, not the PR, as the block above says.
 
 4. Print the PR URL.
 
@@ -201,7 +249,7 @@ Either way the controller-owned dimensions are outside this choice entirely — 
 
 **The context contract is about provenance, not permission.** It has three parts, and the closed list is only the first of them.
 
-**Handed over — the same in all three modes.** The diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the PR body's `## Review Notes` block. Nothing else is *given* to a sub-agent, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no `## Review Notes` block, because `/execute` never ran on it; that is an absent input, not a missing step.
+**Handed over — the same in all three modes.** The diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the PR body's `## Review Notes` block, or on the `sidecar` backend the work item's comment that carries it. Nothing else is *given* to a sub-agent, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no `## Review Notes` block, because `/execute` never ran on it; that is an absent input, not a missing step.
 
 **Reached for itself — durable state, read at the source.** A dimension's own procedure may send its sub-agent past that list: to the merged tree, the branch's commit history — `git log`, the commit messages, the per-commit diffs — `git show` on a deleted path, the slice or PRD issue body, the package registry, the research archive, an installed `.d.ts`, `docs/solutions/`, a scratch `tsc --noEmit`. The commit history is on that list because two dimensions cannot execute without it: Vertical Slice Integrity is defined entirely over commit structure, and Surgical Scope names the commit messages and branch name as its stated-task source of last resort. It is a separate artifact, not a summary of the diff, so reading it does not touch the rule below. **In reviewer-mode, `gh pr view <n> --json commits` reaches the commit messages and SHAs** without a local checkout; it returns no per-commit diffs, so a pattern that needs them cannot be checked there. That is not an exception to the contract; it is the contract working. Reading a durable artifact yourself is what *preserves* independence — what destroys it is receiving that artifact pre-digested by the session under review. One rule governs it: **read it at its source and cite it, never accept the controller's account of it.** The reviewer reading the diff rather than a summary of the diff is the same rule, applied to the one input that is always present.
 
@@ -328,6 +376,8 @@ gh issue view <closing-issue-number> --comments
 ```
 
 Report as a factual note any comment naming a concrete capability the body's acceptance criteria do not cover **and whose consumer you can name** (an issue, slice, PRD, or shipped code that would use it). Apply the same discriminator `/execute` Step 1 uses: an exploratory comment with no identified consumer does not qualify. Merging is what closes the issue, so this is the last moment the thread is still attached to open work. Report it; do not edit the issue and do not file the follow-up yourself — `/execute` remains the single writer, and this backstops the case where `/execute` never ran on the issue at all (hand-authored PRs, external contributions).
+
+On the `sidecar` backend the PR closes nothing, so there is no closing set to take from GitHub. The work item Phase 1 step 2 read stands in for it: compare its `comments` from `work view --json` against its body under the same rule. The acceptance-criteria reconciliation above reads the boxes from the same bodies.
 
 If the review reveals that the main lesson is about Skill Kit itself — for example unclear stage boundaries, missing handoff guidance, or a review checklist gap in `chrislacey89/skills` rather than a problem in the downstream codebase — note: "Consider running `/improve-pipeline` if that skill is present." Do not invoke it.
 
@@ -537,6 +587,8 @@ The **Checks not run this pass** line is where a suppressed check is recorded. A
 **States in the `State` column.** Loop-mode writes only `open`. The operator writes the rest — `fixed` (with the commit), `filed` (with the issue number), `accepted` (won't fix, with the reason), or `dropped` (with why the finding was wrong). `/pre-merge` never overwrites an operator's state on a later pass; it appends new findings and leaves settled rows alone.
 
 Write the block with the same `mktemp` → **check the fetch's exit status** → read body → **record its byte count** → edit the block → **refuse the write if the result is shorter** → `gh pr edit --body-file` shape Phase 4's stamp uses. The two guards are named here rather than left to "same shape," because they are the half of that shape a reader reconstructing it from the four visible steps would omit — and the ledger is the block this skill rewrites most often. `gh pr edit` creates no commits, so ledger and review-notes writes do not move the head and are **benign** writers in the review-currency interval — stated explicitly because "writes to the PR" reads as invalidating when left unclassified, and an unclassified writer is how a gate acquires its first false positive on the happy path.
+
+**On the `sidecar` backend the ledger lives on the work item, never in the PR.** Each pass writes the whole block, prior rows carried forward as above, as one `bash "$SC" work comment "$W" --body-file <ledger>`, and the newest comment whose first line is `## Review Disposition Ledger` is the ledger. The operator settles a row the same way: by commenting a copy with the state changed, which the next pass starts from. A comment cannot shrink an earlier one, so the never-shorter guard has nothing to protect here, and `work comment` creates no commit in the project, so these writes are benign in the review-currency interval too.
 
 **What passes forward to the next pass, and what is withheld.** Independence and efficiency pull opposite ways here, and the split resolves them:
 

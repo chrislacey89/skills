@@ -297,6 +297,12 @@ jobs:
       - name: Run state backend contract suite
         run: bash scripts/test-state-backend.sh
 
+      # /pre-merge Phase 2's sidecar PR block and /closeout Step 3's merge,
+      # extracted and run against a stubbed gh on a guest repo: neither may pass
+      # the forge a pack marker (#526).
+      - name: Run guest footprint contract suite
+        run: bash scripts/test-guest-footprint.sh
+
       # /write-a-prd Step 8's fenced blocks, extracted and run (one shell each)
       # on the github, sidecar, and refusing-backend arms (#523).
       - name: Run write-a-prd sidecar branch contract suite

@@ -23,7 +23,7 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 
 ## What the write lists mean
 
-`forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `Closes #` lines, `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar.
+`forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `Closes #` lines, `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar: the lineage, the PR's URL, the review notes, and the loop-mode ledger go on the work item, and the stamp in `reviews/`. `scripts/test-guest-footprint.sh` runs `/pre-merge`'s PR creation and `/closeout`'s merge on a guest repo and fails on any pack marker they hand the forge.
 
 `sidecar.sh init` derives `forge.write` from `mode` and the forge: owned on a known forge gets `["issues","labels","milestones","prs"]`, and everything else gets `[]`. `sidecar.sh config set mode` re-derives it. `tracker.write` is not read by `backend`.
 
