@@ -732,6 +732,33 @@ git -C "$repo4" config blame.markUnblamableLines true
 assert_eq "" "$(run_target 1 1)" "blame.blankBoundary/markUnblamableLines set: a base line still yields no target"
 assert_eq "$change_b_sha" "$(run_target 2 2)" "blame display config set: a single-commit line is still the target"
 
+# --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
+# A plain `git push origin <branch>` publishes the branch with no upstream, so
+# the `@{u}` check alone would keep deferring review of a branch others can read.
+# The remote-side command is extracted from the skill's own prose and run.
+section "unshared test: a branch pushed without -u is shared"
+lsremote_cmd="$(grep -o "git ls-remote --heads origin [^\`]*" "$premerge_skill" | head -1 || true)"
+[[ -n "$lsremote_cmd" ]] || fatal "no ls-remote command found in pre-merge/SKILL.md"
+bare5="$sandbox/bare5.git"
+repo5="$sandbox/repo5"
+git init -q --bare "$bare5"
+git init -q -b main "$repo5"
+(
+    cd "$repo5" || exit 1
+    git config user.email t@example.com
+    git config user.name t
+    git remote add origin "$bare5"
+    printf 'a\n' > f.txt
+    git add f.txt && git commit -q -m 'base'
+    git switch -q -c feature
+)
+unshared_remote() { (cd "$repo5" && bash -c "$lsremote_cmd" 2>/dev/null); }
+assert_eq "" "$(unshared_remote)" "unpushed branch: remote check prints nothing (unshared)"
+git -C "$repo5" push -q origin feature 2>/dev/null
+assert_eq "" "$(git -C "$repo5" rev-parse -q --verify '@{u}' 2>/dev/null)" "plain push: still no upstream"
+[[ -n "$(unshared_remote)" ]] && r=shared || r=unshared
+assert_eq "shared" "$r" "plain push without -u: remote check sees the branch (shared)"
+
 # -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
