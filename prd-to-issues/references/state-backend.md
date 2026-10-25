@@ -78,4 +78,4 @@ A branch name is not a safe file name: `feat/x` has a separator, and a branch ca
 
 The slug is reversible, so two branches never share a file. Uppercase is encoded too, so `Feat/X` and `feat/x` stay apart on a case-insensitive filesystem. Readers still match on the JSON `branch` field, never on the filename.
 
-`scripts/test-state-backend.sh` runs the routing truth table, the slug round trips, and the `work` verbs against the real script, and reads the id regex out of this file.
+`scripts/test-state-backend.sh` runs the routing truth table, the slug round trips, the `work` verbs, and `/execute`'s work-item gate and writeback against the real script, and reads the id regex out of this file.
