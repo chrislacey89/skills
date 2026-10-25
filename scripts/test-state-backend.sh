@@ -462,6 +462,213 @@ check "write with no sidecar exits nonzero" 1 "$rc"
 clean "a refused write leaves the project clean" "$P"
 
 # -----------------------------------------------------------------------------
+section "work: the id regex is the doc's"
+
+# The regex is a single line in a fenced block of its own under "## Work
+# items". It is extracted, never restated, so a doc edit and a script edit
+# cannot disagree about what an id looks like.
+ID_RE="$(awk '/^## Work items/{w=1} w && /^```$/{if (f) exit; f=1; next} w && f' "$DOC")"
+check "the doc carries one id-regex line in a fenced block under ## Work items" 1 "$(printf '%s\n' "$ID_RE" | grep -c .)"
+check "the script's WORK_ID_RE is the doc's regex" "WORK_ID_RE='$ID_RE'" "$(grep -E "^WORK_ID_RE=" "$SC")"
+is_id() { grep -qxE "$ID_RE" <<<"$1"; }
+
+# -----------------------------------------------------------------------------
+section "work: create, view, edit, set, comment, close, list"
+
+mkproj https://github.com/acme/guestwork.git
+runo "$P" init --name work --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+S="$out"
+W="$S/work"
+printf '## Problem\n\nA contractor ships.\n\n## Acceptance Criteria\n\n- [ ] one\n- [ ] two\n' > "$tmp/prd.md"
+
+runo "$P" work create --kind prd --milestone 'Sidecar: guest-mode Skill Kit' --body-file "$tmp/prd.md"
+check "create exits 0" 0 "$rc"
+prd="$out"
+if is_id "$prd"; then ok "create prints an id matching the doc's regex [$prd]"; else bad "create prints an id matching the doc's regex" "got [$prd]"; fi
+check "create commits exactly one file under work/" "work/$prd.md" "$(git -C "$S" show --name-only --format= HEAD)"
+check "create leaves the sidecar clean" "" "$(git -C "$S" status --porcelain)"
+clean "create leaves the project clean" "$P"
+
+runo "$P" work view "$prd" --json
+check "view --json: id" "$prd" "$(printf '%s' "$out" | jq -r .id)"
+check "view --json: kind" prd "$(printf '%s' "$out" | jq -r .kind)"
+check "view --json: state starts open" open "$(printf '%s' "$out" | jq -r .state)"
+check "view --json: a prd's maturity defaults to prd" prd "$(printf '%s' "$out" | jq -r .maturity)"
+check "view --json: milestone is a free string" "Sidecar: guest-mode Skill Kit" "$(printf '%s' "$out" | jq -r .milestone)"
+check "view --json: body is the body file, trailing newline trimmed" "$(cat "$tmp/prd.md")" "$(printf '%s' "$out" | jq -r .body)"
+check "view --json: comments starts empty" 0 "$(printf '%s' "$out" | jq '.comments | length')"
+check "view --json: created is a date" 1 "$(printf '%s' "$out" | jq -r .created | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')"
+runo "$P" work view "$prd"
+check "view prints the file as stored" "$(cat "$W/$prd.md")" "$out"
+check "the file opens with a frontmatter fence" "---" "$(head -n 1 "$W/$prd.md")"
+
+# Slices and their edges.
+runo "$P" work create --kind slice --parent "$prd" --body-file "$tmp/prd.md"; s1="$out"
+runo "$P" work create --kind slice --parent "$prd" --blocked-by "$s1" --body-file "$tmp/prd.md"; s2="$out"
+runo "$P" work view "$s2" --json
+check "a slice records its parent" "$prd" "$(printf '%s' "$out" | jq -r .parent)"
+check "a slice records blocked_by as a list" "[\"$s1\"]" "$(printf '%s' "$out" | jq -c .blocked_by)"
+check "a slice carries no maturity" null "$(printf '%s' "$out" | jq -r .maturity)"
+runo "$P" work create --kind slice --parent W-999 --body-file "$tmp/prd.md"
+check "create refuses a parent that does not exist" 1 "$rc"
+runo "$P" work create --kind slice --blocked-by "#12" --body-file "$tmp/prd.md"
+check "create refuses a bare #N blocker" 2 "$rc"
+runo "$P" work create --kind prd --body-file "$tmp/no-such-file"
+check "create refuses a missing body file" 1 "$rc"
+: > "$tmp/empty.md"
+runo "$P" work create --kind prd --body-file "$tmp/empty.md"
+check "create refuses an empty body" 1 "$rc"
+printf 'x\n## Comment 2026-01-01T00:00:00Z\n' > "$tmp/forged.md"
+runo "$P" work create --kind prd --body-file "$tmp/forged.md"
+check "create refuses a body carrying a comment heading" 1 "$rc"
+check "refused creates leave no file behind" 3 "$(find "$W" -name 'W-*.md' | wc -l | tr -d ' ')"
+check "refused creates leave no temp file behind" "" "$(find "$W" -name '.work.*')"
+
+# edit: a ticked box keeps the length; a dropped line is refused.
+sed 's/- \[ \] one/- [x] one/' "$tmp/prd.md" > "$tmp/ticked.md"
+runo "$P" work edit "$prd" --body-file "$tmp/ticked.md"
+check "edit accepts a same-length body" 0 "$rc"
+runo "$P" work view "$prd" --json
+check "edit replaced the body" "$(cat "$tmp/ticked.md")" "$(printf '%s' "$out" | jq -r .body)"
+before="$(cat "$W/$prd.md")"
+head_before="$(git -C "$S" rev-parse HEAD)"
+grep -v 'two' "$tmp/ticked.md" > "$tmp/shorter.md"
+runo "$P" work edit "$prd" --body-file "$tmp/shorter.md"
+check "edit refuses a body shorter than the one it read" 1 "$rc"
+check "a refused edit leaves the file unchanged" "$before" "$(cat "$W/$prd.md")"
+check "a refused edit makes no sidecar commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
+
+# comment: appended as dated sections, survive later edits and sets.
+printf 'first note\n' > "$tmp/c1.md"
+printf 'second note\nwith two lines\n' > "$tmp/c2.md"
+runo "$P" work comment "$prd" --body-file "$tmp/c1.md"
+runo "$P" work comment "$prd" --body-file "$tmp/c2.md"
+runo "$P" work view "$prd" --json
+check "two comments read back" 2 "$(printf '%s' "$out" | jq '.comments | length')"
+check "comments keep their order and text" "first note|second note
+with two lines" "$(printf '%s' "$out" | jq -r '.comments | map(.body) | join("|")')"
+check "a comment's at is ISO-8601 UTC" 1 "$(printf '%s' "$out" | jq -r '.comments[0].at' | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$')"
+check "comments do not leak into the body" "$(cat "$tmp/ticked.md")" "$(printf '%s' "$out" | jq -r .body)"
+check "each comment is a '## Comment <ISO-8601>' section" 2 "$(grep -cE '^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$W/$prd.md")"
+comments_before="$(printf '%s' "$out" | jq -c .comments)"
+cp "$tmp/ticked.md" "$tmp/longer.md"; printf -- '- [ ] three\n' >> "$tmp/longer.md"
+runo "$P" work edit "$prd" --body-file "$tmp/longer.md"
+runo "$P" work view "$prd" --json
+check "edit keeps the comments" "$comments_before" "$(printf '%s' "$out" | jq -c .comments)"
+
+# set: decomposed_into is replaced, never appended to.
+runo "$P" work set "$prd" decomposed_into "$s1,$s2"
+runo "$P" work view "$prd" --json
+check "set decomposed_into records the list" "[\"$s1\",\"$s2\"]" "$(printf '%s' "$out" | jq -c .decomposed_into)"
+runo "$P" work set "$prd" decomposed_into "$s2"
+runo "$P" work view "$prd" --json
+check "a second set decomposed_into replaces the first" "[\"$s2\"]" "$(printf '%s' "$out" | jq -c .decomposed_into)"
+check "the file holds one decomposed_into line" 1 "$(grep -c '^decomposed_into:' "$W/$prd.md")"
+check "set keeps the comments" "$comments_before" "$(printf '%s' "$out" | jq -c .comments)"
+runo "$P" work set "$s1" decomposed_into "$s2"
+check "decomposed_into is refused on a slice" 1 "$rc"
+runo "$P" work set "$prd" maturity research-ready
+runo "$P" work view "$prd" --json
+check "set maturity" research-ready "$(printf '%s' "$out" | jq -r .maturity)"
+runo "$P" work set "$prd" maturity "roadmap bet"
+runo "$P" work view "$prd" --json
+check "a maturity with a space round-trips" "roadmap bet" "$(printf '%s' "$out" | jq -r .maturity)"
+runo "$P" work set "$prd" pr "https://github.com/acme/guestwork/pull/7"
+runo "$P" work view "$prd" --json
+check "set pr" "https://github.com/acme/guestwork/pull/7" "$(printf '%s' "$out" | jq -r .pr)"
+runo "$P" work set "$prd" reviewed_sha "$sha_a"
+runo "$P" work view "$prd" --json
+check "set reviewed_sha" "$sha_a" "$(printf '%s' "$out" | jq -r .reviewed_sha)"
+runo "$P" work set "$prd" reviewed_sha abc1234
+check "set refuses a reviewed_sha that is not 40 hex" 1 "$rc"
+runo "$P" work set "$prd" state finished
+check "set refuses an unknown state" 2 "$rc"
+runo "$P" work set "$prd" milestone other
+check "set refuses a field outside its list" 2 "$rc"
+runo "$P" work view "#1"
+check "a bare #N is not an id" 2 "$rc"
+
+# list and close.
+runo "$P" work list
+check "list prints open items in id order" "$prd
+$s1
+$s2" "$out"
+runo "$P" work list --kind slice --parent "$prd"
+check "list --kind slice --parent" "$s1
+$s2" "$out"
+runo "$P" work list --unblocked --kind slice
+check "list --unblocked holds back a slice with an open blocker" "$s1" "$out"
+runo "$P" work close "$s1"
+check "close exits 0" 0 "$rc"
+runo "$P" work list --unblocked --kind slice
+check "closing the blocker unblocks the slice" "$s2" "$out"
+runo "$P" work list --state closed
+check "list --state closed" "$s1" "$out"
+runo "$P" work create --kind prd --body-file "$tmp/prd.md"; prd2="$out"
+runo "$P" work close "$prd" --superseded-by "$prd2"
+runo "$P" work view "$prd" --json
+check "close --superseded-by records state" closed "$(printf '%s' "$out" | jq -r .state)"
+check "close --superseded-by records the successor" "$prd2" "$(printf '%s' "$out" | jq -r .superseded_by)"
+runo "$P" work close "$prd2" --superseded-by W-999
+check "close refuses a successor that does not exist" 1 "$rc"
+runo "$P" work list --state all
+check "list --state all" "$prd
+$s1
+$s2
+$prd2" "$out"
+
+# The word FAIL inside an item's own frontmatter is data, not a parse failure;
+# a file that genuinely does not parse still fails the list and names itself.
+runo "$P" work create --kind prd --milestone 'FAIL-safe rollout' --body-file "$tmp/prd.md"; failid="$out"
+runo "$P" work set "$failid" pr "https://github.com/acme/FAIL/pull/9"
+runo "$P" work list --state all
+check "list still lists when a milestone and pr contain FAIL" "$prd
+$s1
+$s2
+$prd2
+$failid" "$out"
+check "list exits 0 when a milestone and pr contain FAIL" 0 "$rc"
+printf 'not frontmatter at all\n' > "$W/W-98.md"
+runo "$P" work list --state all
+check "list exits nonzero on a work file that does not parse" 1 "$rc"
+case "$err" in *"work list: $W/W-98.md does not parse"*) named=1 ;; *) named=0 ;; esac
+check "list names the unparseable file on stderr" 1 "$named"
+rm -f "$W/W-98.md"
+
+check "work verbs leave the sidecar clean" "" "$(git -C "$S" status --porcelain)"
+clean "work verbs leave the project clean" "$P"
+
+# -----------------------------------------------------------------------------
+section "work: concurrent creates claim distinct ids"
+
+mkproj none
+runo "$P" init --name race --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+S="$out"
+for i in 1 2 3 4 5 6; do
+    (cd "$P" && bash "$SC" work create --kind slice --body-file "$tmp/prd.md" > "$tmp/race.$i" 2>"$tmp/race.$i.err"; echo $? > "$tmp/race.$i.rc") &
+done
+wait
+ids="$(cat "$tmp"/race.[0-9] | LC_ALL=C sort)"
+check "every racing create exits 0" "000000" "$(cat "$tmp"/race.[0-9].rc | tr -d '\n')"
+check "six racing creates print six ids" 6 "$(printf '%s\n' "$ids" | grep -c .)"
+check "six racing creates print six distinct ids" 6 "$(printf '%s\n' "$ids" | sort -u | grep -c .)"
+check "six racing creates leave six files" 6 "$(find "$S/work" -name 'W-*.md' | wc -l | tr -d ' ')"
+check "every raced file is committed" "" "$(git -C "$S" status --porcelain)"
+check "every raced file's id field matches its name" "" \
+    "$(for f in "$S"/work/W-*.md; do [ "$(sed -n 's/^id: //p' "$f")" = "$(basename "$f" .md)" ] || echo "$f"; done)"
+clean "racing creates leave the project clean" "$P"
+
+# -----------------------------------------------------------------------------
+section "work: no sidecar"
+
+mkproj none
+runo "$P" work list
+check "work with no sidecar exits nonzero (a caller asks backend first)" 1 "$rc"
+runo "$P" work create --kind prd --body-file "$tmp/prd.md"
+check "work create with no sidecar exits nonzero" 1 "$rc"
+clean "a refused work create leaves the project clean" "$P"
+
+# -----------------------------------------------------------------------------
 section "docs/state-backend.md states the rule the script runs"
 
 # shellcheck disable=SC2016  # the backticks are the doc's literal markdown

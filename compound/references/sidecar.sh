@@ -24,6 +24,14 @@
 #   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
 #   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
 #   sidecar.sh stamp clear <branch>
+#   sidecar.sh work create --kind <prd|slice> [--parent W-n] [--blocked-by W-n,...] [--milestone <str>]
+#                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
+#   sidecar.sh work view <W-n> [--json]
+#   sidecar.sh work edit <W-n> --body-file <f>   (refuses a body shorter than the one it replaces)
+#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha> <value>
+#   sidecar.sh work comment <W-n> --body-file <f>
+#   sidecar.sh work close <W-n> [--superseded-by W-m]
+#   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--unblocked] [--state <open|closed|all>]
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
 # GitHub when forge.write contains "issues", the stamp when it contains "prs",
@@ -38,6 +46,19 @@
 # JSON branch field, and prints nothing for a stamp it cannot parse or whose
 # reviewed_sha is not 40 lowercase hex. /pre-merge is the only skill that
 # writes one (scripts/test-review-currency-marker.sh).
+#
+# work. <sidecar>/work/W-<n>.md is a PRD or slice on the sidecar backend: YAML
+# frontmatter between --- lines, the body, then "## Comment <ISO-8601>"
+# sections, which `work comment` alone appends. Frontmatter is written one
+# "key: value" per line in a fixed order: ids, enums, and dates plain, lists
+# as [W-1, W-2], free strings (milestone, pr) as JSON strings, so the reader
+# below can parse what the writer writes without a YAML library. A new id is
+# max(existing)+1, claimed by hard-linking a finished temp file to W-<n>.md,
+# which fails if another writer got there first; the loser takes the next
+# number. decomposed_into is replaced on every set, never appended to. edit
+# compares byte counts against the body it read and refuses a shorter one. A
+# body may not contain a comment heading, because the reader splits on it.
+# The id regex is WORK_ID_RE, the one docs/state-backend.md states.
 #
 # require resolution order. The first candidate that exists wins; each step runs
 # only when the one before found nothing.
@@ -820,6 +841,326 @@ cmd_stamp() {
     esac
 }
 
+WORK_ID_RE='W-[0-9]+'
+WORK_COMMENT_RE='^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","reviewed_sha","superseded_by","created"]'
+
+# jq definitions shared by every work verb. parse_work reads a whole work file
+# (jq -Rs) into {fm, body, tail}: tail is the comment sections, kept as raw
+# text so a rewrite never re-renders a comment. render_work is its inverse.
+# Lines are split on "\n" rather than located with index(), which jq 1.6
+# counts in bytes while slicing counts codepoints.
+# shellcheck disable=SC2016  # $cre and $order are jq variables
+WORK_JQ='
+def trim_end: sub("\n+$"; "");
+def fm_value:
+  if . == "" then null
+  elif startswith("\"") then fromjson
+  elif startswith("[") then ltrimstr("[") | rtrimstr("]") | split(",") | map(gsub("^ +| +$"; "")) | map(select(length > 0))
+  else . end;
+def parse_work:
+  split("\n") as $l
+  | if $l[0] != "---" then error("no frontmatter") else . end
+  | ([range(1; $l | length) | select($l[.] == "---")] | .[0]) as $close
+  | if $close == null then error("unterminated frontmatter") else . end
+  | ($l[$close + 1:]) as $rest
+  | ([range(0; $rest | length) | select($rest[.] | test($cre))] | .[0] // ($rest | length)) as $c
+  | { fm: ($l[1:$close] | map(select(length > 0)
+          | (capture("^(?<k>[a-z_]+): ?(?<v>.*)$") // error("bad frontmatter line: \(.)"))
+          | {key: .k, value: (.v | fm_value)}) | from_entries),
+      body: ($rest[:$c] | join("\n") | trim_end),
+      tail: ($rest[$c:] | join("\n") | trim_end) };
+def comments:
+  .tail | split("\n")
+  | reduce .[] as $x ([];
+      if ($x | test($cre)) then . + [{at: ($x | ltrimstr("## Comment ")), lines: []}]
+      elif length == 0 then .
+      else .[-1].lines += [$x] end)
+  | map({at, body: (.lines | join("\n") | sub("^\n+"; "") | trim_end)});
+def fm_line($k; $v):
+  "\($k): " + ($v | if type == "array" then "[" + join(", ") + "]"
+                   elif ($k == "milestone" or $k == "pr" or type != "string") then tojson
+                   else . end);
+def render_work:
+  . as $w
+  | ($w.fm | to_entries | map(select(.value != null))) as $e
+  | ([$order[] as $k | $e[] | select(.key == $k)] + [$e[] | select(.key as $k | $order | index($k) | not)]) as $sorted
+  | "---\n" + ($sorted | map(fm_line(.key; .value) + "\n") | join(""))
+    + "---\n" + $w.body + "\n"
+    + (if $w.tail == "" then "" else "\n" + $w.tail + "\n" end);
+'
+
+# work_jq <args...>: jq with the work definitions and their two constants bound.
+work_jq() { jq --arg cre "$WORK_COMMENT_RE" --argjson order "$WORK_FIELDS" "$@"; }
+
+is_work_id() { [[ "$1" =~ ^${WORK_ID_RE}$ ]]; }
+
+# work_ids_csv <label> <csv>: validate a comma list of ids that must exist in
+# $WORK_DIR; prints the normalized list (comma-separated, no spaces).
+work_ids_csv() {
+    local label="$1" csv="$2" id out=""
+    for id in $(printf '%s' "$csv" | tr ',' '\n'); do
+        id="$(printf '%s' "$id" | tr -d ' ')"
+        [ -n "$id" ] || continue
+        is_work_id "$id" || die_usage "work: $label must be ids like W-3: $id"
+        [ -f "$WORK_DIR/$id.md" ] || refuse "work: $label names $id, which does not exist"
+        out="${out:+$out,}$id"
+    done
+    printf '%s' "$out"
+}
+
+# work_body <file>: the body file's content, trailing newlines trimmed, or refuse.
+work_body() {
+    local f="$1" b
+    [ -f "$f" ] || refuse "work: no such body file: $f"
+    b="$(cat "$f")" || refuse "work: cannot read $f"
+    [ -n "$b" ] || refuse "work: the body in $f is empty"
+    if printf '%s\n' "$b" | grep -qE "$WORK_COMMENT_RE"; then
+        refuse "work: the body in $f contains a '## Comment <timestamp>' line, which only work comment writes"
+    fi
+    printf '%s' "$b"
+}
+
+# work_rewrite <id> <msg> <jq filter> [jq args...]: parse the item, apply the
+# filter to the parsed {fm, body, tail}, write it back atomically, and commit.
+work_rewrite() {
+    local id="$1" msg="$2" filter="$3" f tmp
+    shift 3
+    f="$WORK_DIR/$id.md"
+    tmp="$(mktemp "$WORK_DIR/.work.XXXXXX")" || refuse "work: cannot write in $WORK_DIR"
+    if ! work_jq -Rsj "$@" "$WORK_JQ parse_work | $filter | render_work" "$f" > "$tmp"; then
+        rm -f "$tmp"; refuse "work: could not update $f"
+    fi
+    mv "$tmp" "$f" || { rm -f "$tmp"; refuse "work: could not replace $f"; }
+    commit_paths "$WORK_SC" "$msg" "work/$id.md" || exit 1
+}
+
+# work_existing <id>: refuse unless the id is well-formed and its file exists.
+work_existing() {
+    is_work_id "$1" || die_usage "work: expected an id like W-3, got: $1"
+    [ -f "$WORK_DIR/$1.md" ] || refuse "work: no such work item: $1"
+}
+
+cmd_work() {
+    local sub="${1:-}"
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        create|view|edit|set|comment|close|list) ;;
+        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list> ..." ;;
+    esac
+    WORK_SC="$(do_resolve)" || exit 1
+    WORK_DIR="$WORK_SC/work"
+    "work_$sub" "$@"
+}
+
+work_create() {
+    local kind="" parent="" blocked="" milestone="" maturity="" bf="" body max b n tmp target fm i
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --kind)       [ $# -ge 2 ] || die_usage "work create: --kind needs a value"; kind="$2"; shift 2 ;;
+            --parent)     [ $# -ge 2 ] || die_usage "work create: --parent needs a value"; parent="$2"; shift 2 ;;
+            --blocked-by) [ $# -ge 2 ] || die_usage "work create: --blocked-by needs a value"; blocked="$2"; shift 2 ;;
+            --milestone)  [ $# -ge 2 ] || die_usage "work create: --milestone needs a value"; milestone="$2"; shift 2 ;;
+            --maturity)   [ $# -ge 2 ] || die_usage "work create: --maturity needs a value"; maturity="$2"; shift 2 ;;
+            --body-file)  [ $# -ge 2 ] || die_usage "work create: --body-file needs a value"; bf="$2"; shift 2 ;;
+            *) die_usage "work create: unknown argument: $1" ;;
+        esac
+    done
+    case "$kind" in prd|slice) ;; *) die_usage "work create: --kind must be prd or slice" ;; esac
+    [ -n "$bf" ] || die_usage "work create: --body-file is required"
+    case "$milestone" in *$'\n'*) die_usage "work create: --milestone must be one line" ;; esac
+    if [ "$kind" = prd ]; then
+        [ -z "$parent" ] || die_usage "work create: --parent is for slices"
+        maturity="${maturity:-prd}"
+        case "$maturity" in "roadmap bet"|research-ready|prd) ;; *) die_usage "work create: --maturity must be roadmap bet, research-ready, or prd" ;; esac
+    else
+        [ -z "$maturity" ] || die_usage "work create: --maturity is for prds"
+    fi
+    mkdir -p "$WORK_DIR" || refuse "work create: cannot create $WORK_DIR"
+    if [ -n "$parent" ]; then
+        is_work_id "$parent" || die_usage "work create: --parent must be an id like W-3: $parent"
+        [ -f "$WORK_DIR/$parent.md" ] || refuse "work create: --parent names $parent, which does not exist"
+    fi
+    blocked="$(work_ids_csv --blocked-by "$blocked")" || exit $?
+    body="$(work_body "$bf")" || exit 1
+    i=0
+    while [ "$i" -lt 50 ]; do
+        i=$((i + 1))
+        max=0
+        for b in "$WORK_DIR"/W-*.md; do
+            b="${b##*/W-}"; b="${b%.md}"
+            [[ "$b" =~ ^[0-9]+$ ]] || continue
+            [ "$((10#$b))" -le "$max" ] || max="$((10#$b))"
+        done
+        n="W-$((max + 1))"
+        fm="$(jq -n --arg id "$n" --arg kind "$kind" --arg m "$maturity" --arg p "$parent" \
+                --arg bl "$blocked" --arg ms "$milestone" --arg c "$(date +%Y-%m-%d)" \
+            '{id: $id, kind: $kind, state: "open",
+              maturity: (if $m == "" then null else $m end),
+              parent: (if $p == "" then null else $p end),
+              blocked_by: ($bl | split(",") | map(select(length > 0))),
+              milestone: (if $ms == "" then null else $ms end),
+              created: $c}')" || refuse "work create: could not build the frontmatter"
+        tmp="$(mktemp "$WORK_DIR/.work.XXXXXX")" || refuse "work create: cannot write in $WORK_DIR"
+        if ! work_jq -nj --argjson fm "$fm" --arg body "$body" "$WORK_JQ {fm: \$fm, body: \$body, tail: \"\"} | render_work" > "$tmp"; then
+            rm -f "$tmp"; refuse "work create: could not render $n"
+        fi
+        target="$WORK_DIR/$n.md"
+        # ln fails when the target exists, so of two racing writers exactly one
+        # claims a number; the other recomputes max and takes the next.
+        if ln "$tmp" "$target" 2>/dev/null; then
+            rm -f "$tmp"
+            if ! commit_paths "$WORK_SC" "sidecar: work create $n ($kind)" "work/$n.md"; then
+                rm -f "$target"; exit 1
+            fi
+            printf '%s\n' "$n"
+            return 0
+        fi
+        rm -f "$tmp"
+    done
+    refuse "work create: could not claim an id after 50 attempts"
+}
+
+work_view() {
+    local id="${1:-}" json=0
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work view <W-n> [--json]"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in --json) json=1; shift ;; *) die_usage "work view: unknown argument: $1" ;; esac
+    done
+    work_existing "$id"
+    if [ "$json" -eq 0 ]; then cat "$WORK_DIR/$id.md"; return 0; fi
+    work_jq -Rs "$WORK_JQ parse_work | .fm + {body, comments: comments}" "$WORK_DIR/$id.md" \
+        || refuse "work view: $WORK_DIR/$id.md does not parse"
+}
+
+work_edit() {
+    local id="${1:-}" bf="" cur new
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work edit <W-n> --body-file <f>"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --body-file) [ $# -ge 2 ] || die_usage "work edit: --body-file needs a value"; bf="$2"; shift 2 ;;
+            *) die_usage "work edit: unknown argument: $1" ;;
+        esac
+    done
+    [ -n "$bf" ] || die_usage "work edit: --body-file is required"
+    work_existing "$id"
+    new="$(work_body "$bf")" || exit 1
+    cur="$(work_jq -Rsr "$WORK_JQ parse_work | .body" "$WORK_DIR/$id.md")" || refuse "work edit: $WORK_DIR/$id.md does not parse"
+    # Ticking a checkbox keeps the length; a shorter body means content was dropped.
+    if [ "$(printf '%s' "$new" | wc -c)" -lt "$(printf '%s' "$cur" | wc -c)" ]; then
+        refuse "work edit refused: the new body is shorter than the one in $id; $id is unchanged"
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work edit $id" '.body = $body' --arg body "$new"
+}
+
+work_set() {
+    local id="${1:-}" field="${2:-}" value="${3-}" kind
+    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha> <value>"
+    work_existing "$id"
+    case "$value" in *$'\n'*) die_usage "work set: the value must be one line" ;; esac
+    kind="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.kind" "$WORK_DIR/$id.md")" || refuse "work set: $WORK_DIR/$id.md does not parse"
+    case "$field" in
+        state) case "$value" in open|closed) ;; *) die_usage "work set: state must be open or closed" ;; esac ;;
+        maturity)
+            [ "$kind" = prd ] || refuse "work set: maturity is for prds; $id is a $kind"
+            case "$value" in "roadmap bet"|research-ready|prd) ;; *) die_usage "work set: maturity must be roadmap bet, research-ready, or prd" ;; esac ;;
+        decomposed_into)
+            [ "$kind" = prd ] || refuse "work set: decomposed_into is for prds; $id is a $kind"
+            value="$(work_ids_csv decomposed_into "$value")" || exit $? ;;
+        pr) [ -n "$value" ] || die_usage "work set: pr needs a value" ;;
+        reviewed_sha)
+            printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: reviewed_sha must be 40 lowercase hex characters: $value" ;;
+        *) die_usage "work set: field must be state, maturity, decomposed_into, pr, or reviewed_sha" ;;
+    esac
+    if [ "$field" = decomposed_into ]; then
+        # Replaced, never appended to: the reader always sees the latest decomposition.
+        # shellcheck disable=SC2016  # $-names are jq variables
+        work_rewrite "$id" "sidecar: work set $id $field" '.fm.decomposed_into = ($v | split(",") | map(select(length > 0)))' --arg v "$value"
+    else
+        # shellcheck disable=SC2016  # $-names are jq variables
+        work_rewrite "$id" "sidecar: work set $id $field" '.fm[$k] = $v' --arg k "$field" --arg v "$value"
+    fi
+}
+
+work_comment() {
+    local id="${1:-}" bf="" body
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work comment <W-n> --body-file <f>"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --body-file) [ $# -ge 2 ] || die_usage "work comment: --body-file needs a value"; bf="$2"; shift 2 ;;
+            *) die_usage "work comment: unknown argument: $1" ;;
+        esac
+    done
+    [ -n "$bf" ] || die_usage "work comment: --body-file is required"
+    work_existing "$id"
+    body="$(work_body "$bf")" || exit 1
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work comment $id" \
+        '.tail = ((if .tail == "" then "" else .tail + "\n\n" end) + "## Comment \($at)\n\n\($c)")' \
+        --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg c "$body"
+}
+
+work_close() {
+    local id="${1:-}" sup=""
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh work close <W-n> [--superseded-by W-m]"
+    shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --superseded-by) [ $# -ge 2 ] || die_usage "work close: --superseded-by needs a value"; sup="$2"; shift 2 ;;
+            *) die_usage "work close: unknown argument: $1" ;;
+        esac
+    done
+    work_existing "$id"
+    if [ -n "$sup" ]; then
+        work_existing "$sup"
+        [ "$sup" != "$id" ] || die_usage "work close: an item cannot supersede itself"
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work close $id" \
+        '.fm.state = "closed" | if $s == "" then . else .fm.superseded_by = $s end' --arg s "$sup"
+}
+
+work_list() {
+    local kind="" parent="" unblocked=0 state=open f all one
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --kind)   [ $# -ge 2 ] || die_usage "work list: --kind needs a value"; kind="$2"; shift 2 ;;
+            --parent) [ $# -ge 2 ] || die_usage "work list: --parent needs a value"; parent="$2"; shift 2 ;;
+            --state)  [ $# -ge 2 ] || die_usage "work list: --state needs a value"; state="$2"; shift 2 ;;
+            --unblocked) unblocked=1; shift ;;
+            *) die_usage "work list: unknown argument: $1" ;;
+        esac
+    done
+    case "$kind" in ''|prd|slice) ;; *) die_usage "work list: --kind must be prd or slice" ;; esac
+    case "$state" in open|closed|all) ;; *) die_usage "work list: --state must be open, closed, or all" ;; esac
+    [ -z "$parent" ] || is_work_id "$parent" || die_usage "work list: --parent must be an id like W-3: $parent"
+    [ -d "$WORK_DIR" ] || return 0
+    # A parse failure is the assignment's exit status, never a word in the
+    # output: an item's own frontmatter (a milestone, a pr URL) can say anything.
+    all=""
+    for f in "$WORK_DIR"/W-*.md; do
+        [ -f "$f" ] || continue
+        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f")" || { printf 'sidecar.sh: work list: %s does not parse\n' "$f" >&2; exit 1; }
+        all="$all$one"$'\n'
+    done
+    # An --unblocked item is open and every blocked_by id is closed; an id
+    # missing from the store counts as open, so a typo never unblocks.
+    printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg s "$state" --argjson u "$unblocked" '
+        map(select(. != null)) as $items
+        | ($items | map({key: .id, value: .state}) | from_entries) as $st
+        | $items
+        | map(select(($k == "" or .kind == $k)
+                 and ($p == "" or .parent == $p)
+                 and (if $u == 1 then .state == "open" and ((.blocked_by // []) | all(. as $b | $st[$b] == "closed"))
+                      elif $s == "all" then true else .state == $s end)))
+        | sort_by(.id | ltrimstr("W-") | tonumber)
+        | .[].id'
+}
+
 verb="${1:-}"
 [ $# -gt 0 ] && shift
 case "$verb" in
@@ -834,5 +1175,6 @@ case "$verb" in
     require) cmd_require "$@" ;;
     backend) cmd_backend "$@" ;;
     stamp)   cmd_stamp "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp> ..." ;;
+    work)    cmd_work "$@" ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
 esac

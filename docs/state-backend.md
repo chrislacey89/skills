@@ -41,10 +41,41 @@ The file's shape is locked in the parent PRD, chrislacey89/skills#407, § Implem
 
 Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`.
 
+## Work items
+
+On the `sidecar` backend for `prds` or `slices`, a PRD or slice is a work item: a markdown file at `<sidecar>/work/W-<n>.md`, reached only through `sidecar.sh work`. Its frontmatter fields and body are locked in chrislacey89/skills#407, § Implementation Decisions, "Work item". They are not restated here. A work item's id matches this regex, and no skill writes its own:
+
+```
+W-[0-9]+
+```
+
+An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest repo that is the client's. Print and cite work items as `W-<n>`, for example `/prd-to-issues W-12`.
+
+| Operation | `github` backend | `sidecar` backend |
+|---|---|---|
+| Create a PRD or slice | `gh issue create --body-file f` | `work create --kind prd\|slice --body-file f` (prints the id) |
+| Attach a milestone | `--milestone "<name>"` on a milestone object | `--milestone "<name>"` on `work create`; a plain string, and no milestone object is created |
+| Parent and blockers | sub-issue and `blockedBy` edges | `--parent W-n` and `--blocked-by W-n,...` on `work create` |
+| Read | `gh issue view <n> --json …` | `work view W-n --json`: the frontmatter fields, plus `body` and `comments: [{at, body}]` |
+| Replace the body | `gh issue edit <n> --body-file f` | `work edit W-n --body-file f` |
+| Comment | `gh issue comment <n> --body-file f` | `work comment W-n --body-file f` |
+| Record a decomposition | a `Decomposed into: #…` comment | `work set W-n decomposed_into W-2,W-3` |
+| Maturity, state, PR, reviewed SHA | labels, `gh issue close`, the PR body | `work set W-n <maturity\|state\|pr\|reviewed_sha> <value>` |
+| Close | `gh issue close <n>` | `work close W-n [--superseded-by W-m]` |
+| List | `gh issue list …` | `work list [--kind] [--parent W-n] [--unblocked] [--state open\|closed\|all]` (ids, one per line; open by default) |
+
+Three rules differ from the GitHub side:
+
+- `work edit` refuses a body shorter than the one it read and leaves the file unchanged. Ticking a checkbox keeps the length the same, so a shorter body means something was dropped. That is the same guard the pipeline's PR-body and issue-body edits run by hand.
+- `decomposed_into` is replaced on every `set`, never appended to, so a reader always sees the latest decomposition.
+- `work comment` is the only writer of a `## Comment <ISO-8601>` section. A body that contains such a line is refused.
+
+`work list --unblocked` prints items that are open and whose `blocked_by` ids are all closed. An id that does not exist counts as open.
+
 ## Branch slugs
 
 A branch name is not a safe file name: `feat/x` has a separator, and a branch can carry any UTF-8. The slug keeps `a`–`z`, `0`–`9`, `.`, `_`, and `-`, and writes every other byte as `%XX` in uppercase hex. `feat/x` becomes `feat%2Fx`, and `Feat` becomes `%46eat`.
 
 The slug is reversible, so two branches never share a file. Uppercase is encoded too, so `Feat/X` and `feat/x` stay apart on a case-insensitive filesystem. Readers still match on the JSON `branch` field, never on the filename.
 
-`scripts/test-state-backend.sh` runs both the routing truth table and the slug round trips against the real script.
+`scripts/test-state-backend.sh` runs the routing truth table, the slug round trips, and the `work` verbs against the real script, and reads the id regex out of this file.
