@@ -23,7 +23,20 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 
 ## What the write lists mean
 
-`forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `Closes #` lines, `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar: the lineage, the PR's URL, the review notes, and the loop-mode ledger go on the work item, and the stamp in `reviews/`. `scripts/test-guest-footprint.sh` runs `/pre-merge`'s PR creation and `/closeout`'s merge on a guest repo and fails on any pack marker they hand the forge.
+`forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `#N` references (a `Closes #N` or `Fixes #N` among them, which close the client's issue at merge), `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar, as the table below says. `scripts/test-guest-footprint.sh` runs `/pre-merge`'s PR creation and `/closeout`'s merge on a guest repo and fails on any pack marker they hand the forge.
+
+## Where the review's records live
+
+`backend stamp` decides all four rows. A skill that reads or writes one of them looks it up here rather than assuming the PR.
+
+| Record | `github` backend | `sidecar` backend |
+|---|---|---|
+| Review stamp | the PR body's `## Review Currency` block | `<sidecar>/reviews/<branch-slug>.json`, through `stamp` |
+| PR lineage | the PR body's `## PRD` and `## Slices` sections | the work item's `parent`, `blocked_by`, and `pr` fields |
+| `/execute`'s `## Review Notes` | a block in the PR body | the newest comment on the work item whose first line is `## Review Notes` |
+| Loop-mode `## Review Disposition Ledger` | a block in the PR body | the newest comment on the work item whose first line is `## Review Disposition Ledger` |
+
+On the `sidecar` backend with no work item (the operator answered "none"), the last three rows have no home. Notes and a ledger are printed to the terminal and named as not persisted, and are never written into the PR instead.
 
 `sidecar.sh init` derives `forge.write` from `mode` and the forge: owned on a known forge gets `["issues","labels","milestones","prs"]`, and everything else gets `[]`. `sidecar.sh config set mode` re-derives it. `tracker.write` is not read by `backend`.
 

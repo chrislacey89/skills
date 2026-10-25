@@ -76,8 +76,9 @@ human to dispose of findings, so there is no valid input.
   given in answer to `/pre-merge`'s follow-up question after the menu choice.
 - **The findings themselves.** In author-mode they are terminal output from the
   `/pre-merge` run still in this session. If that session is gone, read the
-  `## Review Disposition Ledger` on the PR, which loop-mode wrote for exactly
-  this case. If neither is available, stop and say so — do not reconstruct a
+  `## Review Disposition Ledger` loop-mode wrote for exactly this case, where
+  [references/state-backend.md](references/state-backend.md) § Where the
+  review's records live says it is. If neither is available, stop and say so — do not reconstruct a
   finding from memory and fix your reconstruction.
 - **A branch with a `/pre-merge` review behind it.** Working tree clean.
 
@@ -117,7 +118,9 @@ contract is about provenance, not permission*) rather than from a paraphrase
 here; the same three parts apply:
 
 - **Handed over** — the finding's text verbatim, the branch diff, this project's
-  test command, and the PR body's `## Review Notes` block when one exists.
+  test command, and `/execute`'s `## Review Notes` when one exists, read where
+  [references/state-backend.md](references/state-backend.md) § Where the
+  review's records live says it is.
 - **Reached for itself** — durable state, read at its source: the merged tree,
   `git log` and `git show`, the slice or PRD issue, `docs/solutions/`, the
   research artifact, installed types.
@@ -502,7 +505,7 @@ stop.
 ## Handoff
 
 - **Expected input:** the finding numbers a human chose from a `/pre-merge`
-  review, plus the findings themselves (terminal output or the PR's ledger), on a
+  review, plus the findings themselves (terminal output or the ledger), on a
   clean branch that has been reviewed.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it

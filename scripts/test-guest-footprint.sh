@@ -17,6 +17,11 @@
 # /pre-merge's own github-backend templates rather than listed here, so a
 # heading added there is checked here.
 #
+# Both blocks are run on a work item and on "none" (no work item to record the
+# PR on), and the Phase 2 and Phase 1 lineage blocks are run against a backend
+# that answers github and one that refuses: a refusal must stop them before any
+# gh call, never fall through to the github templates.
+#
 # The detector is itself mutation-tested below: the same blocks run with a
 # marker planted in the description must turn the check red.
 #
@@ -50,12 +55,13 @@ bad() { printf '  FAIL %s\n' "$1"; printf '       %s\n' "$2"; fail=$((fail + 1))
 section() { printf '\n=== %s ===\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi; }
 
-# block <file> <literal> — the first fenced bash block containing <literal>.
+# block <file> <literal> — the first fenced bash block containing <literal>,
+# with the fence's own indent (a block inside a list item) stripped.
 block() {
     awk -v want="$2" '
-        /^```bash$/ { buf = ""; on = 1; next }
-        on && /^```$/ { on = 0; if (index(buf, want)) { printf "%s", buf; exit } next }
-        on { buf = buf $0 "\n" }
+        /^ *```bash$/ { buf = ""; on = 1; ind = index($0, "`") - 1; next }
+        on && /^ *```$/ { on = 0; if (index(buf, want)) { printf "%s", buf; exit } next }
+        on { buf = buf substr($0, ind + 1) "\n" }
     ' "$1"
 }
 
@@ -82,7 +88,9 @@ done
 
 # footprint <file> — print each pack marker the file carries, one per line.
 footprint() {
-    grep -oE 'reviewed-at|Closes #|W-[0-9]+|loop-pass|loop-judge|review-notes:' "$1"
+    # `#[0-9]+` covers every closing keyword (Closes, Fixes, Resolves) and a bare
+    # reference, any of which points at the client's tracker.
+    grep -oE 'reviewed-at|#[0-9]+|W-[0-9]+|loop-pass|loop-judge|review-notes:' "$1"
     while IFS= read -r h; do
         [ -n "$h" ] && grep -xF -- "$h" "$1"
     done <<<"$headings"
@@ -93,6 +101,10 @@ printf 'Plain words.\n\nCloses #12\n\n## Review Currency\n' > "$tmp/planted"
 check "the detector fires on a planted body (Closes # and a pack heading)" 2 "$(footprint "$tmp/planted" | grep -c .)"
 printf 'Fix the totals.\n\nThe report summed refunds twice.\n' > "$tmp/plain"
 check "the detector is silent on a plain body" "" "$(footprint "$tmp/plain")"
+for k in 'Fixes #12' 'resolves #3' 'see #4'; do
+    printf 'Plain words. %s\n' "$k" > "$tmp/planted"
+    check "the detector fires on [$k]" 1 "$(footprint "$tmp/planted" | grep -c .)"
+done
 
 # -----------------------------------------------------------------------------
 section "the stubbed gh"
@@ -127,30 +139,42 @@ co_block="$(block "$CO" 'gh pr merge <number> --squash --delete-branch --body-fi
 check "the Phase 2 block carries exactly one description placeholder" 1 \
     "$(grep -c 'Nothing below adds to it\.' <<<"$pm_block")"
 
-# run_chain <label> <extra description line or empty> — a fresh guest project,
-# its work item, then Phase 2's block and Step 3's merge with the stubbed gh.
+# mkguest <label> <init|noinit> — a fresh project on its own github remote in
+# $P, with a guest sidecar and one slice work item (W-1) unless noinit.
 n=0
-run_chain() {
+mkguest() {
     n=$((n + 1))
     P="$tmp/proj$n"; export GH_STUB="$tmp/gh$n"; mkdir -p "$GH_STUB"
     git init -q "$P"
     git -C "$P" commit -q --allow-empty -m root
     git -C "$P" remote add origin "https://github.com/acme/guest$n.git"
     git -C "$P" checkout -q -b feat
+    [ "$2" = noinit ] && return 0
     (cd "$P" && bash "$SC" init --name "guest$n" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
         || bad "$1: init the guest sidecar" "init failed"
     printf '## Parent PRD\n\nnone\n' > "$tmp/slice.md"
     (cd "$P" && bash "$SC" work create --kind slice --body-file "$tmp/slice.md" >/dev/null 2>&1) \
         || bad "$1: create the work item" "work create failed"
     check "$1: backend stamp answers sidecar on a guest repo" sidecar "$(cd "$P" && bash "$SC" backend stamp)"
+}
 
+# run_pm <W value> <sidecar.sh path> <extra description line or empty> — Phase
+# 2's block in $P with the stubbed gh; stdout in $pm_out, exit in $pm_rc.
+run_pm() {
     printf 'Fix the totals.\n\nThe report summed refunds twice.\n' > "$tmp/desc"
-    [ -z "$2" ] || printf '%s\n' "$2" >> "$tmp/desc"
-    local b="${pm_block//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
-    b="${b//W=\"W-<n>\"/W=\"W-1\"}"
+    [ -z "$3" ] || printf '%s\n' "$3" >> "$tmp/desc"
+    local b="${pm_block//<this skill\'s directory>\/references\/sidecar.sh/$2}"
+    b="${b//W=\"W-<n>\"/W=\"$1\"}"
     b="${b//TITLE=\"<plain title>\"/TITLE=\"Fix the report totals\"}"
     b="$(awk 'index($0, "Nothing below adds to it.") { print "cat \"$DESC_SRC\" > \"$DESC_FILE\""; next } 1' <<<"$b")"
     pm_out="$(cd "$P" && DESC_SRC="$tmp/desc" PATH="$tmp/bin:$PATH" BASE_BRANCH=main bash -c "$b" 2>"$tmp/stderr")"; pm_rc=$?
+}
+
+# run_chain <label> <W value> <extra description line or empty> — a fresh guest
+# project, then Phase 2's block and Step 3's merge with the stubbed gh.
+run_chain() {
+    mkguest "$1" init
+    run_pm "$2" "$SC" "$3"
     local c="${co_block//<number>/7}"
     (cd "$P" && PATH="$tmp/bin:$PATH" bash -c "$c" >/dev/null 2>>"$tmp/stderr"); co_rc=$?
 }
@@ -158,7 +182,7 @@ run_chain() {
 # -----------------------------------------------------------------------------
 section "a guest PR, opened and merged, carries no pack text"
 
-run_chain "plain" ""
+run_chain "plain" W-1 ""
 check "Phase 2's block exits 0" 0 "$pm_rc"
 check "Phase 2's block prints the PR URL" "https://github.com/acme/guest/pull/7" "$pm_out"
 check "Step 3's merge block exits 0" 0 "$co_rc"
@@ -181,10 +205,75 @@ check "a re-run creates no second PR" 1 "$(grep -c '^pr create' "$GH_STUB/calls"
 check "a re-run leaves the existing PR body as it was" "$(cat "$tmp/before")" "$(cat "$GH_STUB/pr-body")"
 
 # -----------------------------------------------------------------------------
+section "no work item: the PR opens, is recorded nowhere, and carries no pack text"
+
+run_chain "none" "" ""
+check "with no work item, Phase 2's block exits 0" 0 "$pm_rc"
+check "with no work item, it says the PR is recorded nowhere" 1 "$(grep -c 'recorded nowhere' "$tmp/stderr")"
+check "with no work item, W-1's pr field stays empty" "" "$(cd "$P" && bash "$SC" work view W-1 --json | jq -r '.pr // empty')"
+check "with no work item, the PR body carries no pack marker" "" "$(footprint "$GH_STUB/pr-body")"
+check "with no work item, the squash body carries no pack marker" "" "$(footprint "$GH_STUB/merge-body")"
+
+# -----------------------------------------------------------------------------
+section "the backend decides: github skips the block, a refusal stops it"
+
+mkguest "github" noinit
+check "with no sidecar, backend stamp answers github" github "$(cd "$P" && bash "$SC" backend stamp)"
+run_pm W-1 "$SC" ""
+check "on github, Phase 2's sidecar block exits 0" 0 "$pm_rc"
+check "on github, it calls no gh at all" 0 "$(cat "$GH_STUB/calls" 2>/dev/null | grep -c .)"
+
+# A sidecar.sh whose backend verb refuses (nonzero, nothing printed), the way a
+# corrupt sidecar.json makes the real one refuse.
+cat > "$tmp/refusing-sc.sh" <<REFUSE
+#!/usr/bin/env bash
+[ "\$1" = backend ] && { echo "backend refused" >&2; exit 1; }
+exec bash "$SC" "\$@"
+REFUSE
+mkguest "refusing" init
+run_pm W-1 "$tmp/refusing-sc.sh" ""
+check "on a refused backend, Phase 2's block exits nonzero" 1 "$pm_rc"
+check "on a refused backend, it calls no gh at all" 0 "$(cat "$GH_STUB/calls" 2>/dev/null | grep -c .)"
+check "on a refused backend, it says it is not guessing" 1 "$(grep -c 'not guessing' "$tmp/stderr")"
+
+# -----------------------------------------------------------------------------
+section "Phase 1's lineage block reads the boundary maps from the work items"
+
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+lin_block="$(block "$PM" 'lineage aborted: cannot read $W')"
+[ -n "$lin_block" ] || bad "pre-merge/SKILL.md Phase 1 carries the sidecar lineage block" "not found"
+case "$lin_block" in *'gh '*) bad "the lineage block calls no gh" "found gh" ;; *) ok "the lineage block calls no gh" ;; esac
+mkguest "lineage" noinit
+(cd "$P" && bash "$SC" init --name "guest$n" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1)
+printf '## Problem\n\nx\n' > "$tmp/lprd.md"
+printf '## Boundary Map\n\n### Produces\n\n- the %s thing\n' one > "$tmp/ls1.md"
+printf '## Boundary Map\n\n### Produces\n\n- the %s thing\n' two > "$tmp/ls2.md"
+(cd "$P" && bash "$SC" work create --kind prd --body-file "$tmp/lprd.md" >/dev/null)                    # W-1
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/ls1.md" >/dev/null)     # W-2
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/ls2.md" >/dev/null)     # W-3
+lin_shells="bash"
+command -v zsh >/dev/null 2>&1 && lin_shells="bash zsh"
+for sh in $lin_shells; do
+    for w in W-2 W-1; do
+        b="${lin_block//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+        b="${b//W=\"W-<n>\"/W=\"$w\"}"
+        out="$(cd "$P" && "$sh" -c "$b" 2>/dev/null)"; rc=$?
+        check "lineage from $w ($sh) exits 0" 0 "$rc"
+        check "lineage from $w ($sh) prints the PRD and both slices" "W-1 W-2 W-3" \
+            "$(printf '%s\n' "$out" | sed -n 's/^# \(W-[0-9]*\) .*/\1/p' | tr '\n' ' ' | sed 's/ $//')"
+        check "lineage from $w ($sh) prints both boundary maps" 2 "$(grep -c '^- the .* thing$' <<<"$out")"
+    done
+done
+b="${lin_block//<this skill\'s directory>\/references\/sidecar.sh/$tmp\/refusing-sc.sh}"
+b="${b//W=\"W-<n>\"/W=\"W-2\"}"
+(cd "$P" && bash -c "$b" >/dev/null 2>&1); rc=$?
+check "lineage on a refused backend exits nonzero" 1 "$rc"
+
+# -----------------------------------------------------------------------------
 section "mutation: a marker planted in the description turns the check red"
 
-for m in 'Closes #12' 'Implements W-1' '<!-- reviewed-at: 0123456789abcdef0123456789abcdef01234567 -->' '## Review Notes'; do
-    run_chain "planted [$m]" "$m"
+for m in 'Closes #12' 'Fixes #12' 'see #4' 'Implements W-1' '<!-- reviewed-at: 0123456789abcdef0123456789abcdef01234567 -->' '## Review Notes'; do
+    run_chain "planted [$m]" W-1 "$m"
     check "planted [$m]: the PR body's footprint is non-empty" 1 "$(footprint "$GH_STUB/pr-body" | grep -c . | awk '{print ($1 > 0)}')"
     check "planted [$m]: the squash body's footprint is non-empty" 1 "$(footprint "$GH_STUB/merge-body" | grep -c . | awk '{print ($1 > 0)}')"
 done
