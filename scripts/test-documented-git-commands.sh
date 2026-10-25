@@ -1342,7 +1342,13 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # section exists to prevent. The value class carries `%` for the same reason:
 # #347's `--format=%H` and `--format=%B` were the first valued flags with one,
 # and without it both lines dropped out and the reconciliation caught it again.
-range_pattern='git (diff|log)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+)?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# `blame` joined the verbs with #566's fixup-target block, whose range is two-dot
+# for the same reason a log's is: the commits on this branch, not the base's.
+# Its `-L "$START,$END"` is the first flag with a separate, quoted value, so the
+# flag arm also takes one quoted variable after a space.
+# The fixup-target block also pins blame's display config with leading
+# `-c key=value` pairs before the verb, so the pattern allows those.
+range_pattern='git( +-c +[A-Za-z.]+=[a-z]+)* +(diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies
@@ -1385,7 +1391,7 @@ bad_endpoint=0
 bad_operator=0
 while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
-    verb="$(printf '%s' "$hit" | awk '{print $2}')"
+    verb="$(printf '%s' "$hit" | sed -E 's/^git( +-c +[A-Za-z.]+=[a-z]+)* +/git /' | awk '{print $2}')"
     # The endpoint char class excludes '.' so the greedy prefix cannot eat the
     # first dot of a three-dot range and leave it in the captured name.
     endpoint="$(printf '%s' "$hit" | sed -E 's/.*[ "]([^ ".]*)\.\.\.?HEAD$/\1/')"
@@ -1393,9 +1399,9 @@ while IFS= read -r hit; do
 
     # #347 adds two endpoints. $REVIEWED_SHA is the stamped 40-hex OID, read by
     # the sed script test-review-currency-marker.sh pins (a name cannot come out
-    # of `[0-9a-f]\{40\}`). $SCOPE_FROM is assigned only from $BASE_REF or
-    # $REVIEWED_SHA, and the same suite pins that assignment set. Both are refs
-    # by construction, never names.
+    # of `[0-9a-f]\{40\}`). $SCOPE_FROM is assigned only from $BASE_REF,
+    # $REVIEWED_SHA, or HEAD (#566), and the same suite pins that assignment set.
+    # All are refs by construction, never names.
     case "$endpoint" in
         "${d}BASE_REF"|"${d}SCOPE_FROM"|"${d}REVIEWED_SHA") ;;
         *) printf '  FAIL %s uses %q as a range endpoint; only %sBASE_REF, %sSCOPE_FROM and %sREVIEWED_SHA are refs — a name is frozen at checkout time\n' \
@@ -1407,7 +1413,7 @@ while IFS= read -r hit; do
     # two-dot is the commits on this branch, three-dot is the symmetric
     # difference and pulls in the base's own commits.
     case "$verb:$dots" in
-        diff:...HEAD|log:..HEAD) ;;
+        diff:...HEAD|log:..HEAD|blame:..HEAD) ;;
         *) printf '  FAIL %s uses %q; diff must be three-dot and log must be two-dot\n' "$verb" "$dots"
            bad_operator=$((bad_operator + 1)) ;;
     esac

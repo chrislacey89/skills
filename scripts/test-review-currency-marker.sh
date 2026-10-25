@@ -388,12 +388,15 @@ assert_eq '- **Author-mode** — the local `git diff "$SCOPE_FROM...HEAD"`' "$au
     "author-mode reads \$SCOPE_FROM...HEAD — the stamp decides the scope, so the re-run needs no range handed to it"
 
 # The variable the bullet names has to be the one Phase 1 step 4 assigns, and it
-# may take exactly two values: the base ref (whole branch) and the stamped SHA
-# (delta). Any third assignment is a scope nobody specified.
-scope_assignments="$(grep -oE '^ *SCOPE_FROM="[^"]*"' "$premerge_skill" | sed 's/^ *//' | sort -u | tr '\n' ' ' | sed 's/ $//')"
+# may take exactly three values: the base ref (whole branch), the stamped SHA
+# (delta), and HEAD (a history-only rewrite of the reviewed tree, nothing to
+# review — #566). Any fourth assignment is a scope nobody specified. The match
+# takes unquoted values too: #566's first draft wrote `SCOPE_FROM=HEAD`, which a
+# quotes-only pattern could not see.
+scope_assignments="$(grep -oE '^ *SCOPE_FROM=("[^"]*"|[^ ;]+)' "$premerge_skill" | sed 's/^ *//' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')"
 # shellcheck disable=SC2016
-assert_eq 'SCOPE_FROM="$BASE_REF" SCOPE_FROM="$REVIEWED_SHA"' "$scope_assignments" \
-    "SCOPE_FROM is assigned from exactly the base ref and the stamped SHA"
+assert_eq 'SCOPE_FROM="$BASE_REF" SCOPE_FROM="$REVIEWED_SHA" SCOPE_FROM="HEAD"' "$scope_assignments" \
+    "SCOPE_FROM is assigned from exactly the base ref, the stamped SHA, and HEAD"
 
 # Two readers, one marker. /pre-merge's Phase 1 reader and /closeout's Step 2
 # reader must be the same sed script, or the scope decision and the merge gate

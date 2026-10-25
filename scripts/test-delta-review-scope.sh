@@ -135,6 +135,25 @@ scope_block="${scope_block//<this skill\'s directory>\/references\/sidecar.sh/$s
 rounds_line="$(grep -m1 '^ROUNDS=\$(git log' "$fixfindings_skill" || true)"
 [[ -n "$rounds_line" ]] || fatal "no ROUNDS= line found in $fixfindings_skill"
 
+# The fold block from Phase 4's handoff (#566): from its BASE_REF guard to the
+# `fi` that closes the abort arm. Run in section 11 rather than restated, so a
+# rewrite that rebases onto the base's tip instead of the fork point fails there.
+fold_block="$(awk '
+    /^: "\$\{BASE_REF:\?derive it with the Phase 1 step 3 block/ { on = 1 }
+    on { print }
+    on && /^fi$/ { exit }
+' "$premerge_skill")"
+[[ "$fold_block" == *'git rebase -q -i --autosquash'* ]] || fatal "no fold block found in $premerge_skill"
+
+# The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
+# out of its list item. Section 12 runs it.
+fixup_target_block="$(awk '
+    /^   FIXUP_TARGET=\$\(git (-c [A-Za-z.]+=[a-z]+ )*blame/ { on = 1 }
+    on { sub(/^   /, ""); print }
+    on && /\|\| FIXUP_TARGET=$/ { exit }
+' "$fixfindings_skill")"
+[[ "$fixup_target_block" == *'|| FIXUP_TARGET='* ]] || fatal "no FIXUP_TARGET block found in $fixfindings_skill"
+
 printf 'scope block (%s lines) and rounds line extracted\n' "$(printf '%s\n' "$scope_block" | grep -c .)"
 
 # --- Fixture ------------------------------------------------------------------
@@ -577,6 +596,168 @@ case "$failed_out" in
     *"scope aborted"*) assert_eq ok ok "failed backend: the abort is named on stderr" ;;
     *) assert_eq "scope aborted ..." "$failed_out" "failed backend: the abort is named on stderr" ;;
 esac
+
+# --- 11. A history-only rewrite of the reviewed tree (#566) ------------------
+# The fold: review fixes are committed as `fixup!` commits, the re-run reviews
+# them and stamps the fixup head, and an autosquash folds each fix into the
+# commit it corrects. Every SHA changes and the tree does not, so the stamp is
+# no longer an ancestor of HEAD while HEAD still carries exactly the reviewed
+# content. Case 4's force-push fallback must not fire on that: re-reviewing an
+# unchanged tree is the Shape-Shifting Review the fold would otherwise cost.
+# The control is the same rewrite with one byte of content changed, which must
+# still take the whole-branch fallback.
+section "history-only rewrite: the reviewed tree survives an autosquash, and nothing is re-reviewed"
+repo3="$sandbox/repo3"
+mkdir -p "$repo3"
+before_count=0
+(
+    cd "$repo3" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base (fold fixture)'
+    git switch -q -c feature
+    printf 'one\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'two\n' > two.txt
+    git add two.txt && git commit -q -m 'feature: two'
+    printf 'one, fixed\n' > one.txt
+    git add one.txt && git commit -q --fixup=HEAD~1 -m 'Fix-Findings-Run: 20261025T000000Z'
+    git switch -q main
+    printf 'base moved\n' > moved.txt
+    git add moved.txt && git commit -q -m 'base: moved after the branch forked'
+    git switch -q feature
+)
+assert_fixture_committed "$repo3" "fold fixture setup" "$before_count" 4 base.txt one.txt two.txt
+reviewed_sha3="$(git -C "$repo3" rev-parse HEAD)"   # the re-run stamped the fixup head
+# The base moved after the fork, so a fold onto main's tip would change the tree.
+fold_out="$(cd "$repo3" && BASE_REF=main bash -c "$fold_block" 2>&1)"
+case "$fold_out" in
+    folded:*) assert_eq ok ok "the documented fold block reports the fold" ;;
+    *) assert_eq "folded: ..." "$fold_out" "the documented fold block reports the fold" ;;
+esac
+assert_eq "2" "$(git -C "$repo3" rev-list --count main..HEAD)" \
+    "fold fixture precondition: the autosquash folded three commits into two"
+assert_eq "$(git -C "$repo3" rev-parse "$reviewed_sha3^{tree}")" "$(git -C "$repo3" rev-parse 'HEAD^{tree}')" \
+    "fold fixture precondition: the fold left the reviewed tree unchanged"
+
+run_scope3() {
+    local out files scope
+    : > "$GH_STUB_ARGV_LOG"
+    out="$(cd "$repo3" && GH_STUB_BODY="$(stamped_body "$1")" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    LAST_SCOPE_RAW="$out"
+    scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
+    files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
+    printf '%s|%s' "$scope" "$files"
+}
+
+assert_eq "review scope: none, history-only rewrite — HEAD carries the tree reviewed at $reviewed_sha3|" \
+    "$(run_scope3 "$reviewed_sha3")" \
+    "a stamp rewritten away with its tree intact: no review scope, and the diff names no file"
+if [[ "$LAST_SCOPE_RAW" == *'fatal:'* || "$LAST_SCOPE_RAW" == *'error:'* ]]; then
+    printf '  FAIL history-only rewrite: readout leaked stderr noise:\n%s\n' "$LAST_SCOPE_RAW"; fail=$((fail + 1))
+else
+    printf '  ok   history-only rewrite: readout carries no fatal:/error: line\n'; pass=$((pass + 1))
+fi
+
+(
+    cd "$repo3" || exit 1
+    printf 'two, changed in the rewrite\n' > two.txt
+    git add two.txt && git commit -q --amend --no-edit
+)
+assert_eq "review scope: whole branch, from main" \
+    "$(run_scope3 "$reviewed_sha3" | cut -d'|' -f1)" \
+    "control: a rewrite that also changed content still falls back to the whole branch"
+
+# A fixup made against a later commit's version of a line conflicts when the
+# autosquash moves it next to its target. The block must abort and leave the
+# branch exactly where it was, not stop mid-rebase.
+branch_commits3="$(git -C "$repo3" rev-list --reverse main..HEAD || true)"
+first_commit3="${branch_commits3%%$'\n'*}"
+[[ -n "$first_commit3" ]] || fatal "conflict fixture: no branch commit to make a fixup of"
+(
+    cd "$repo3" || exit 1
+    printf 'one, rewritten by a later commit\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: rewrite one'
+    printf 'one, fixed again\n' > one.txt
+    git add one.txt && git commit -q --fixup="$first_commit3"
+)
+conflict_head="$(git -C "$repo3" rev-parse HEAD)"
+conflict_out="$(cd "$repo3" && BASE_REF=main bash -c "$fold_block" 2>&1)"
+case "$conflict_out" in
+    *"fold aborted"*) assert_eq ok ok "a conflicting fixup: the fold block names the abort" ;;
+    *) assert_eq "fold aborted ..." "$conflict_out" "a conflicting fixup: the fold block names the abort" ;;
+esac
+assert_eq "$conflict_head" "$(git -C "$repo3" rev-parse HEAD)" \
+    "a conflicting fixup: HEAD is where it was before the fold"
+assert_eq "" "$(git -C "$repo3" status --porcelain)" \
+    "a conflicting fixup: no rebase is left in progress and the tree is clean"
+
+# --- 12. Which commit a fix is a fixup of (#566) ------------------------------
+# /fix-findings makes a fix a `fixup!` of a branch commit only when that one
+# commit wrote every line the finding anchors on. Lines from the base, or from
+# two branch commits, must yield no target, so the fixer makes an ordinary commit.
+section "fixup target: one branch commit wrote every anchored line, or there is no target"
+repo4="$sandbox/repo4"
+mkdir -p "$repo4"
+(
+    cd "$repo4" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'a\nb\nc\n' > f.txt
+    git add f.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'a\nB\nc\n' > f.txt
+    git commit -q -am 'feature: change b'
+    printf 'a\nB\nc\nd\n' > f.txt
+    git commit -q -am 'feature: add d'
+)
+assert_fixture_committed "$repo4" "fixup-target fixture" 0 3 f.txt
+change_b_sha="$(git -C "$repo4" rev-parse HEAD~1)"
+run_target() {
+    (cd "$repo4" && BASE_REF=main FILE=f.txt START="$1" END="$2" \
+        bash -c "$fixup_target_block"'; printf "%s" "$FIXUP_TARGET"')
+}
+assert_eq "$change_b_sha" "$(run_target 2 2)" "a line one branch commit wrote: that commit is the target"
+assert_eq "" "$(run_target 2 4)" "lines from two branch commits: no target"
+assert_eq "" "$(run_target 1 1)" "a line from the base: no target"
+assert_eq "" "$(run_target 1 2)" "a base line next to one branch commit's line: no target (every anchored line, not every non-base line)"
+# A user's blame display config must not change the answer: blame.blankBoundary
+# blanks the SHA column on a base line, and blame.markUnblamableLines prefixes
+# `*`. Either would otherwise leak a non-SHA token into FIXUP_TARGET.
+git -C "$repo4" config blame.blankBoundary true
+git -C "$repo4" config blame.markUnblamableLines true
+assert_eq "" "$(run_target 1 1)" "blame.blankBoundary/markUnblamableLines set: a base line still yields no target"
+assert_eq "$change_b_sha" "$(run_target 2 2)" "blame display config set: a single-commit line is still the target"
+
+# --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
+# A plain `git push origin <branch>` publishes the branch with no upstream, so
+# the `@{u}` check alone would keep deferring review of a branch others can read.
+# The remote-side command is extracted from the skill's own prose and run.
+section "unshared test: a branch pushed without -u is shared"
+lsremote_cmd="$(grep -o "git ls-remote --heads origin [^\`]*" "$premerge_skill" | head -1 || true)"
+[[ -n "$lsremote_cmd" ]] || fatal "no ls-remote command found in pre-merge/SKILL.md"
+bare5="$sandbox/bare5.git"
+repo5="$sandbox/repo5"
+git init -q --bare "$bare5"
+git init -q -b main "$repo5"
+(
+    cd "$repo5" || exit 1
+    git config user.email t@example.com
+    git config user.name t
+    git remote add origin "$bare5"
+    printf 'a\n' > f.txt
+    git add f.txt && git commit -q -m 'base'
+    git switch -q -c feature
+)
+unshared_remote() { (cd "$repo5" && bash -c "$lsremote_cmd" 2>/dev/null); }
+assert_eq "" "$(unshared_remote)" "unpushed branch: remote check prints nothing (unshared)"
+git -C "$repo5" push -q origin feature 2>/dev/null
+assert_eq "" "$(git -C "$repo5" rev-parse -q --verify '@{u}' 2>/dev/null)" "plain push: still no upstream"
+[[ -n "$(unshared_remote)" ]] && r=shared || r=unshared
+assert_eq "shared" "$r" "plain push without -u: remote check sees the branch (shared)"
 
 # -----------------------------------------------------------------------------
 
