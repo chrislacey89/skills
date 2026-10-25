@@ -315,7 +315,10 @@ f="$(mktemp)"
 cat > "$f" <<'SLICE'
 <the slice body, from the issue template below>
 SLICE
-bash "$SC" work create --kind slice --parent "$PRD" ${BLOCKED_BY:+--blocked-by "$BLOCKED_BY"} ${MILESTONE:+--milestone "$MILESTONE"} --body-file "$f"
+set -- --kind slice --parent "$PRD"
+if [ -n "$BLOCKED_BY" ]; then set -- "$@" --blocked-by "$BLOCKED_BY"; fi
+if [ -n "$MILESTONE" ]; then set -- "$@" --milestone "$MILESTONE"; fi
+bash "$SC" work create "$@" --body-file "$f"
 ```
 
 The §3 QA slice goes last, with every other slice's id in `BLOCKED_BY`. Count them against the slice list.
@@ -488,9 +491,9 @@ SLICES="$(jq -r '(.decomposed_into // []) | join(",")' <<<"$J")"
 [ -n "$SLICES" ] || { echo "$PRD has no decomposed_into: run §8 first" >&2; exit 1; }
 UNBLOCKED="$(bash "$SC" work list --parent "$PRD" --unblocked)" || exit 1
 FIRST=""
-for id in $UNBLOCKED; do
+while IFS= read -r id; do
   case ",$SLICES," in *",$id,"*) FIRST="$id"; break ;; esac
-done
+done <<<"$UNBLOCKED"
 if [ -n "$FIRST" ]; then
   echo "**Next session:** /execute $FIRST"
 else

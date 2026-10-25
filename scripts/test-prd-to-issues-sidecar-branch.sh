@@ -11,10 +11,27 @@
 # picks the lowest-numbered unblocked slice of THIS decomposition or reports a
 # cycle. `gh` on PATH is a stub that logs its argv; no arm may call it.
 #
+# SHELLS. Agents run these blocks in zsh as often as bash, and the two split
+# unquoted expansions differently (`${X:+--flag "$X"}` stays one word, `for id in
+# $LIST` runs once over a newline-joined list in zsh). The suite therefore re-runs
+# itself once per shell, each arm on fresh fixtures, and prints a visible SKIP
+# line when zsh is not installed.
+#
 # Blocks are selected by content (the ones that set SC from the bundled path),
 # not by position, because §§7 and 9 also carry the GitHub path's bash blocks.
 
 set -u
+if [ -z "${PTI_SHELL:-}" ]; then
+    arms_rc=0
+    PTI_SHELL=bash bash "$0" || arms_rc=1
+    if command -v zsh >/dev/null 2>&1; then
+        PTI_SHELL=zsh bash "$0" || arms_rc=1
+    else
+        printf '\nSKIP zsh arm: zsh is not on PATH, so the blocks were not run under zsh\n'
+    fi
+    exit "$arms_rc"
+fi
+printf '\n##### blocks run under: %s #####\n' "$PTI_SHELL"
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 SKILL="$repo_root/prd-to-issues/SKILL.md"
@@ -52,7 +69,8 @@ next_block="$(block 6 | subst)"
 {
 case "$backend_block"   in *'backend slices'*) ;; *) fatal "block 1 is not the backend slices question" ;; esac
 case "$view_block"      in *'work view "$PRD" --json'*) ;; *) fatal "block 2 is not the PRD read" ;; esac
-case "$create_block"    in *'work create --kind slice --parent "$PRD"'*) ;; *) fatal "block 3 is not the slice create" ;; esac
+case "$create_block"    in *'work create "$@"'*) ;; *) fatal "block 3 is not the slice create" ;; esac
+case "$create_block"    in *'set -- --kind slice --parent "$PRD"'*) ;; *) fatal "block 3 is not the slice create" ;; esac
 case "$reconcile_block" in *'MISMATCH'*) ;; *) fatal "block 4 is not the blocked_by reconcile" ;; esac
 case "$set_block"       in *'decomposed_into "$SLICES"'*) ;; *) fatal "block 5 is not the decomposed_into set" ;; esac
 case "$next_block"      in *'--unblocked'*'/execute'*) ;; *) fatal "block 6 is not the next-slice pick" ;; esac
@@ -83,7 +101,7 @@ mkproj() {
     git init -q "$P"; git -C "$P" commit -q --allow-empty -m "root $P"
     git -C "$P" remote add origin "$1"
 }
-runb() { out="$(cd "$1" && PATH="$stub:$PATH" bash -c "$2" 2>"$tmp/err")"; rc=$?; err="$(cat "$tmp/err")"; }
+runb() { out="$(cd "$1" && PATH="$stub:$PATH" "$PTI_SHELL" -c "$2" 2>"$tmp/err")"; rc=$?; err="$(cat "$tmp/err")"; }
 field() { (cd "$P" && bash "$SC_REAL" work view "$1" --json) | jq -r "$2"; }
 
 # slice <prd> <blocked_by csv> <milestone> <prose blocker ids>: run the §7 create
