@@ -36,7 +36,7 @@ The skill's blocks are executable prose: a downstream agent copies each fenced b
 
 - **Applies when:** a skill documents more than one fenced command block and a later block reads a variable, function, trap, or working directory an earlier block set.
 - **Inverts or does not apply when:** every block is self-contained, or the skill explicitly instructs the agent to run a named setup block at the top of each shell and that block is idempotent and cheap. Even then, a user override made after the setup block is lost on re-run unless persisted.
-- **Sibling docs:** `by-construction-claims-need-a-mechanism-2026-08-11.md`; `mechanism-generality-lags-the-pattern-2026-08-23.md` (the mechanism below covers one skill).
+- **Sibling docs:** `by-construction-claims-need-a-mechanism-2026-08-11.md`; `mechanism-generality-lags-the-pattern-2026-08-23.md` (the mechanism below covers one skill); `skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md` (the same pattern along the interpreter axis: the suite runs bash, agents run zsh).
 
 ## Solution
 
