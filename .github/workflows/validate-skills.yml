@@ -284,16 +284,16 @@ jobs:
       - name: Run sidecar resolution contract suite
         run: bash scripts/test-sidecar-resolution.sh
 
-      # `sidecar.sh backend` is the routing rule docs/state-backend.md states, and
-      # the `stamp` verbs are the sidecar twin of the PR-body review stamp. This
-      # runs the truth table across owned/guest x forge kinds x no sidecar, and the
-      # stamp round trips, against scratch repos.
-      # ubuntu-latest ships without zsh. This suite and the prd-to-issues one
-      # below run extracted skill blocks under zsh and fail under CI rather than
+      # ubuntu-latest ships without zsh. The state backend and prd-to-issues
+      # suites below run extracted skill blocks under zsh and fail under CI rather than
       # skipping that arm, so the shell is installed before either runs.
       - name: Install zsh
         run: sudo apt-get update && sudo apt-get install -y zsh
 
+      # `sidecar.sh backend` is the routing rule docs/state-backend.md states, and
+      # the `stamp` verbs are the sidecar twin of the PR-body review stamp. This
+      # runs the truth table across owned/guest x forge kinds x no sidecar, and the
+      # stamp round trips, against scratch repos.
       - name: Run state backend contract suite
         run: bash scripts/test-state-backend.sh
 
