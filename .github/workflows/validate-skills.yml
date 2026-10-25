@@ -296,6 +296,12 @@ jobs:
       - name: Run write-a-prd sidecar branch contract suite
         run: bash scripts/test-write-a-prd-sidecar-branch.sh
 
+      # /prd-to-issues' sidecar blocks (§§1, 7, 8, 9), extracted and run one
+      # shell each: slice creation, the blocked_by read-back, decomposed_into
+      # replacement, and the scoped next-slice pick or cycle report (#524).
+      - name: Run prd-to-issues sidecar branch contract suite
+        run: bash scripts/test-prd-to-issues-sidecar-branch.sh
+
       # A git hook exports GIT_DIR, and a suite that runs `git init` or
       # `git config` in a fixture without clearing it writes into the real repo
       # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every

@@ -29,11 +29,37 @@ Do not use it as a substitute for shaping. If the PRD is still changing at the l
 
 ### 1. Locate the PRD
 
-Ask the user for the PRD GitHub issue number (or URL).
+Ask the user for the PRD: a GitHub issue number (or URL), or a `W-<n>` sidecar work item id.
 
-If the PRD is not already in your context window, fetch it with `gh issue view <number>` (with comments).
+**Ask where slices live first.** `backend slices` answers it, per [references/state-backend.md](references/state-backend.md). The answer holds for §§1, 7, 8, and 9:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+BACKEND="$(bash "$SC" backend slices)" || BACKEND=
+case "$BACKEND" in
+  github)  echo "slices backend: github" ;;
+  sidecar) echo "slices backend: sidecar" ;;
+  *)       echo "slices backend: refused; stop and relay the stderr above" >&2; exit 1 ;;
+esac
+```
+
+- **`github`**: follow the GitHub steps in each section.
+- **`sidecar`**: follow each section's sidecar branch. No `gh` command runs anywhere in the decomposition: on a guest repo the tracker is the client's.
+- **Anything else** (a nonzero exit, which prints nothing): stop, and relay what `backend` printed on stderr. Do not fall back to `gh`.
+
+On `github`, if the PRD is not already in your context window, fetch it with `gh issue view <number>` (with comments).
 
 **Check for milestone.** After fetching the PRD, check whether it belongs to a GitHub milestone: `gh issue view <number> --json milestone`. If a milestone exists, note the milestone title for use in Step 6 — all slice issues should be attached to the same milestone.
+
+On `sidecar`, read the PRD work item instead. Its `milestone` field is a plain string with no milestone object behind it; note it, and §7 copies it onto every slice.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+PRD="W-<n>"
+bash "$SC" work view "$PRD" --json
+```
+
+Confirm `kind` is `prd`. The output carries `body`, `comments`, `milestone`, and any earlier `decomposed_into`.
 
 ### 2. Explore the Codebase (optional)
 
@@ -233,7 +259,7 @@ Iterate until the user approves the breakdown.
 
 ### 7. Create the GitHub Issues
 
-For each approved slice, create a GitHub issue using `gh issue create`. Use the issue body template below.
+For each approved slice, create a GitHub issue using `gh issue create`. Use the issue body template below. On the sidecar backend, skip to *On the sidecar backend* at the end of this section.
 
 **Milestone propagation.** If the parent PRD belongs to a GitHub milestone (detected in Step 1), add `--milestone "<Milestone Name>"` to each `gh issue create` command so all slice issues are attached to the same milestone.
 
@@ -275,6 +301,39 @@ Three properties of this API are worth stating plainly, because each is a sharp 
 - **If you do drop to raw REST, two traps apply.** `GET /repos/{owner}/{repo}/issues` returns pull requests alongside issues, so it needs `select(has("pull_request") | not)` or a PR can surface as a takeable slice. And the summary objects (`issue_dependencies_summary`, `sub_issues_summary`) are served only by that *list* endpoint — they are **absent** from the single-issue `GET`, which yields null regardless of the real state and reads as "no dependencies" rather than as an error. `gh issue list` / `gh issue view` avoid both: the former excludes PRs by definition, and neither depends on the summary objects.
 
 **Prefer the `gh` CLI over hand-rolled REST for this graph.** `gh` ≥ 2.94.0 exposes the whole relationship surface as flags and `--json` fields (see `README.md` § Installation for the version floor). `--json blockedBy,blocking,parent,subIssues` all work — the field that errors with `Unknown JSON field` is `isBlocked`, which does not exist and is easily mistaken for evidence that the whole family is unavailable.
+
+**On the sidecar backend.** Each slice is a work item, created with `work create` per [references/state-backend.md](references/state-backend.md). The body is the issue template below, unchanged except that every `#<n>` naming the PRD or a slice is written `W-<n>`: `## Parent PRD` holds `W-<prd>`, `Consumes` says `From W-<n>:`, and `## Blocked by` lists `Blocked by W-<n>`. Never write a bare `#N` for a work item; on a guest repo `#N` is the client's issue or PR.
+
+There is no second wiring pass. `work create` takes the parent and blockers as fields and refuses a blocker id that does not exist yet, so creating in dependency order is required rather than convenient. Run one block per slice, blockers first. Each block is self-contained, because every tool call is a fresh shell. Set `PRD`, `BLOCKED_BY` to the comma list of ids already created that gate this slice (empty for none), and `MILESTONE` to the string §1 noted (empty for none), and replace the placeholder line with the slice body. The block prints the new id.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+PRD="W-<prd>"
+BLOCKED_BY=""
+MILESTONE=""
+f="$(mktemp)"
+cat > "$f" <<'SLICE'
+<the slice body, from the issue template below>
+SLICE
+bash "$SC" work create --kind slice --parent "$PRD" ${BLOCKED_BY:+--blocked-by "$BLOCKED_BY"} ${MILESTONE:+--milestone "$MILESTONE"} --body-file "$f"
+```
+
+The §3 QA slice goes last, with every other slice's id in `BLOCKED_BY`. Count them against the slice list.
+
+**Reconcile, by reading back.** The `blocked_by` field and the prose `## Blocked by` section encode the same fact, so the reconciliation above applies here too. Run this once per slice, with `ID` set to its id. It prints `match` or `MISMATCH`; on a mismatch it exits 1. Fix whichever side is wrong before §8 runs. A body can be fixed with `work edit`; a wrong field means the slice is closed with `work close` and created again, since no verb rewrites `blocked_by`.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+ID="W-<slice>"
+J="$(bash "$SC" work view "$ID" --json)" || exit 1
+FIELD="$(jq -r '(.blocked_by // [])[]' <<<"$J" | sort -u | paste -sd, -)"
+PROSE="$(jq -r '.body' <<<"$J" | awk '/^## /{on = ($0 ~ /^## Blocked by[[:space:]]*$/); next} on' | grep -oE 'W-[0-9]+' | sort -u | paste -sd, -)"
+if [ "$FIELD" = "$PROSE" ]; then
+  echo "match $ID: [$FIELD]"
+else
+  echo "MISMATCH $ID: blocked_by=[$FIELD] prose=[$PROSE]" >&2; exit 1
+fi
+```
 
 <issue-template>
 ## Parent PRD
@@ -372,6 +431,17 @@ This comment is the signal downstream skills read to know the PRD has been decom
 
 If a PRD is re-decomposed later (e.g., after `/correct-course`), post a new `Decomposed into:` comment; readers consume the most recent one. Keeping only one authoritative comment is this skill's responsibility.
 
+On the sidecar backend, the signal is the PRD's `decomposed_into` field instead of a comment. Set `SLICES` to every id §7 created, in creation order:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+PRD="W-<prd>"
+SLICES="W-<a>,W-<b>"
+bash "$SC" work set "$PRD" decomposed_into "$SLICES"
+```
+
+`work set` replaces the field rather than appending to it, so after a re-decomposition it holds only the new ids, and no older value has to be retired. The superseded slices are still open work items: close each one with `work close W-<old> --superseded-by W-<new>` so `/execute` never takes one.
+
 ### 9. Summary
 
 After all issues are created, present a summary showing:
@@ -408,9 +478,31 @@ Because this reads the edges themselves rather than a summary count, it is not s
 
 If the query returns `null` — every slice reports a nonzero `blocked_by` — surface the dependency cycle to the user before printing. Do not pick arbitrarily.
 
+On the sidecar backend, compute the first slice with `work list --unblocked`, which treats a closed blocker as non-gating and lists ids in numeric order. The block scopes the list to the ids §8 just recorded in `decomposed_into`, for the same reason the GitHub query is scoped. It prints the handoff line, or exits 1 when no slice is unblocked; report that as the dependency cycle, with the same rule as above.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+PRD="W-<prd>"
+J="$(bash "$SC" work view "$PRD" --json)" || exit 1
+SLICES="$(jq -r '(.decomposed_into // []) | join(",")' <<<"$J")"
+[ -n "$SLICES" ] || { echo "$PRD has no decomposed_into: run §8 first" >&2; exit 1; }
+UNBLOCKED="$(bash "$SC" work list --parent "$PRD" --unblocked)" || exit 1
+FIRST=""
+for id in $UNBLOCKED; do
+  case ",$SLICES," in *",$id,"*) FIRST="$id"; break ;; esac
+done
+if [ -n "$FIRST" ]; then
+  echo "**Next session:** /execute $FIRST"
+else
+  echo "no unblocked slice among [$SLICES]: report the dependency cycle" >&2; exit 1
+fi
+```
+
+The **Input** line reads `the slice work item body`.
+
 ## Handoff
 
 - **Expected input:** a shaped PRD issue with clear user stories, rabbit holes, and no-gos
-- **Produces:** implementation-ready GitHub issues with dependency order, boundary maps, and milestone attachment when the parent PRD belongs to a milestone
+- **Produces:** implementation-ready GitHub issues with dependency order, boundary maps, and milestone attachment when the parent PRD belongs to a milestone. On the sidecar backend, it produces `W-<n>` slice work items with `parent`, `blocked_by`, and the PRD's milestone string, and sets `decomposed_into` on the PRD.
 - **Comes next by default:** `/execute` for implementation, with Ralph optionally running the AFK execution loop for unblocked slices
 - **Feeds downstream:** `/pre-merge` uses the slice lineage and boundary maps to review plan-vs-actual code

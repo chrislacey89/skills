@@ -111,6 +111,8 @@ pre-push:
       run: bash scripts/test-state-backend.sh
     write-a-prd-sidecar-branch-tests:
       run: bash scripts/test-write-a-prd-sidecar-branch.sh
+    prd-to-issues-sidecar-branch-tests:
+      run: bash scripts/test-prd-to-issues-sidecar-branch.sh
     # scripts/test-fixture-git-isolation.sh is deliberately absent: it runs in
     # CI only (#442). It still reads its suite list from this file, and fails
     # unless that list is every scripts/test-*.sh but itself.
