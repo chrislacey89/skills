@@ -173,7 +173,47 @@ It prints exactly one verdict, and each one names its action:
 
 Note `state` here is the GraphQL enum — uppercase `OPEN`, not the REST endpoint's lowercase `open`.
 
-Skip this gate for one-off tasks not tied to a GitHub issue.
+**On a sidecar work item.** A task named `W-<n>` is a work item in the project's sidecar, not a GitHub issue ([references/state-backend.md](references/state-backend.md)). No `gh` command runs for it, here or in any later step: on a guest repo the tracker is the client's. This block reads it with `work view --json`, reads each `blocked_by` id the same way, and prints the same verdicts as the GraphQL gate:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+SIDECAR_VERDICT_JQ='
+[inputs][0] as $i
+| if ($i | type) != "object" or $i.id != $w
+     or ($i.body | type) != "string"
+     or ($i.comments | type) != "array"
+     or ($i.blocked_by | type) != "array"
+  then "unknown"
+  else
+    ((($i.decomposed_into // []) | length) > 0) as $decomposed
+    | ($i.kind == "prd") as $prd
+    | [$i.blocked_by[] | select($st[.] != "closed") | {id: ., state: $st[.]}] as $open_blockers
+    | if $prd and ($decomposed | not) then "undecomposed-prd"
+      elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
+      elif ($i.pr // "") != "" then "in-flight \([{pr: $i.pr}] | tojson)"
+      else "takeable ever_wired=\($i.blocked_by | length) comments=\($i.comments | length)"
+      end
+  end'
+J="$(bash "$SC" work view "$W" --json)" || J=null
+ST='{}'
+while IFS= read -r b; do
+  [ -n "$b" ] || continue
+  s="$(bash "$SC" work view "$b" --json | jq -r '.state // empty')"
+  ST="$(jq -c --arg b "$b" --arg s "${s:-unreadable}" '. + {($b): $s}' <<<"$ST")"
+done <<<"$(jq -r '(.blocked_by // [])[]?' <<<"$J")"
+jq -rn --arg w "$W" --argjson st "$ST" "$SIDECAR_VERDICT_JQ" <<<"$J" || echo unknown
+```
+
+Each verdict takes the action listed above, with these differences:
+
+- **`unknown`** — `work view` failed, or the item's `id`, `body`, `comments`, or `blocked_by` did not come back. Same rule: re-run once, never proceed on it.
+- **`undecomposed-prd`** — the item's `kind` is `prd` and `decomposed_into` is empty. The kind field decides, not the body's headings: a PRD whose body lacks the shaped-pitch headings is still undecomposed, and a slice never is (`work set` refuses `decomposed_into` on one). `/prd-to-issues` §8 writes that field, and `work set` replaces it on every write, so there is no "most recent comment" to pick.
+- **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist.
+- **`in-flight [...]`** — the item's `pr` field is set. A sidecar has no `closedByPullRequestsReferences`, so the field is the only signal, and it carries no branch to compare with the current one. When the PR it names is the one this branch opened, continue; otherwise the GraphQL rule applies.
+- **`takeable ever_wired=<k> comments=<m>`** — `ever_wired` counts every `blocked_by` id. Unlike on GitHub, `0` is a real empty list: `/prd-to-issues` writes `blocked_by` with the slice, so there is no pre-wiring repo for it to be confused with.
+
+Skip this gate for one-off tasks not tied to a GitHub issue or a work item.
 
 **Ralph auto-detection gate.** Evaluate all three conditions:
 
@@ -272,6 +312,20 @@ This gate is scoped to intra-repo symbols (paths, exports, shapes). The mirror c
 Read any referenced plan, PRD, or GitHub issue. Explore the codebase to understand the relevant files, patterns, and conventions. If the task is ambiguous, ask the user to clarify scope before proceeding.
 
 **Read the issue comment thread (issue-based work only).** When the task is a GitHub issue, read its comment thread before implementing — do not stop at the body. Step 0's issue-shape and blocker gate read the thread to decide its verdict but printed only the verdict, so fetch it now with `gh issue view <n> --json comments --jq '.comments[].body'`. The gate's `takeable` line carries `comments=<m>`; if this read returns fewer than `<m>` comments, it came back thin — re-run it, and never read a short or empty result as an empty thread. The comments are where the pipeline's continuation state lives: prior-iteration handoff notes (what was done, what remains, the exact error output a previous context window hit), plateau-stop notes naming what did *not* advance, post-hoc correction comments filed against this issue when an upstream boundary map drifted, and explicit human scope changes added after the issue was authored. In AFK Ralph loops this is load-bearing — iteration N+1 is designed to continue from what iteration N wrote into the thread, so skipping it re-derives or repeats work the previous iteration already explained.
+
+**On a sidecar work item**, the body, the comment thread, and the parent PRD come from `work view --json` ([references/state-backend.md](references/state-backend.md)). The `### Context` block below is in the body, and the parent PRD is the `parent` field, not a `#N`:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+J="$(bash "$SC" work view "$W" --json)" || exit 1
+jq -r '.body' <<<"$J"
+jq -r '.comments[] | "## Comment \(.at)\n\(.body)"' <<<"$J"
+P="$(jq -r '.parent // empty' <<<"$J")"
+[ -z "$P" ] || bash "$SC" work view "$P" --json | jq -r '.body'
+```
+
+The `comments=<m>` check above applies unchanged, and so do the precedence and disposal rules below. A comment that qualifies for its own item is filed with `work create --kind slice --parent <prd>`, and the item it blocks gets no edge, because no verb rewrites `blocked_by`: name the new id in a `work comment` on the blocked item instead.
 
 **Precedence rule.** The issue body remains the durable contract. Comments augment it; they do not silently override it. A comment is an authoritative addition only when it is (a) a pipeline-authored continuation or correction comment, or (b) an explicit human scope change. Freeform discussion is context, never an override. If a comment appears to contradict the body on scope, and it is not a clear pipeline-authored correction or human scope change, flag the conflict to the user rather than acting on the comment.
 
@@ -599,6 +653,24 @@ rm -f "$BODY_FILE"
 
 Do not flip a box you did not actually verify, and do not touch lines outside the criteria you confirmed — a careless edit can corrupt issue content. `/execute` is the single writer for these boxes; `/pre-merge` reads them but never writes, so there is no second editor to contradict this one.
 
+**On a sidecar work item**, the read is `work view --json` and the write is `work edit` ([references/state-backend.md](references/state-backend.md)). `work edit` runs the shorter-body guard itself, refusing the write and leaving the file unchanged, and commits the new body in the sidecar. The fetch guard is still this block's:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+BODY_FILE=$(mktemp)
+if ! bash "$SC" work view "$W" --json | jq -er '.body' > "$BODY_FILE"; then
+  echo "writeback aborted: work item read failed" >&2; rm -f "$BODY_FILE"; exit 1
+fi
+[ -s "$BODY_FILE" ] || { echo "writeback aborted: work item body came back empty" >&2; rm -f "$BODY_FILE"; exit 1; }
+
+# In "$BODY_FILE", change ONLY the verified criterion lines under
+# "## Acceptance Criteria" from "- [ ]" to "- [x]". Leave every other line untouched.
+
+bash "$SC" work edit "$W" --body-file "$BODY_FILE" || echo "writeback refused: boxes left unflipped" >&2
+rm -f "$BODY_FILE"
+```
+
 **The guards are not optional, and the AFK writeback in Step 6 reuses them.** This is a read-modify-write against an API that returns 5xx under load, and `gh issue edit --body*` replaces the entire body — so a failed fetch here does not lose a stamp, it loses the acceptance criteria `/prd-to-issues` authored and `/pre-merge` Phase 4 reconciles against. `/pre-merge`'s stamp carries the same two guards for the same reason. Retry the fetch **once**; if the second attempt also aborts, leave the boxes unflipped and say so rather than writing.
 
 #### Ready for PR Review
@@ -621,7 +693,7 @@ Remove the classification markers:
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" "$CLAUDE_PROJECT_DIR/.claude/.lfg-active"
 ```
 
-**AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 — including both of its guards: check the fetch's exit status and refuse the write if the edited body came out shorter than what was read. AFK is the mode with nobody watching the write, so it is the one that most needs them. AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
+**AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 (on a work item, Step 5's `work edit` block) — including both of its guards: check the fetch's exit status and refuse the write if the edited body came out shorter than what was read. AFK is the mode with nobody watching the write, so it is the one that most needs them. AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
 
 **Write review notes into the PR body.** `/execute` finishes holding things no artifact records: which verification tiers ran versus were skipped and why, which scope was absorbed under Step 0's Consumes gate, which assumptions shifted, where the implementation is thinnest. Author preparation is the strongest empirical correlate with low defect density (Cohen) and a structured reading plan measurably raises detection (Dunsmore) — but only if the reviewer receives it. Left in the Step 5 checklist alone, that knowledge reaches a user and stops there — and on an AFK run no checklist is ever presented, so it reaches nobody.
 
@@ -684,6 +756,8 @@ If you cannot complete the task in this context window, leave a comment on the G
 - If the failure was caused by an error (build failure, test failure, unexpected API behavior), include the exact error output — the next iteration benefits from the real error, not a summary
 
 If the error suggests the approach from the research artifact or the PRD is wrong, say so in the comment — this is a signal to backtrack, not to keep retrying the same approach.
+
+On a sidecar work item, this comment and the plateau comment below are written with `work comment W-<n> --body-file <file>` ([references/state-backend.md](references/state-backend.md)), never `gh issue comment`. `work comment` adds the `## Comment <ISO-8601>` heading itself and refuses a body that already carries one, so the file holds the note alone. Step 1's `work view --json` read is how the next iteration sees it.
 
 **AFK progress and plateau detection.** When running under Ralph, progress is *epistemic state advancement*, not activity. An iteration counts as progress only if at least one of these transitions from unresolved to resolved:
 

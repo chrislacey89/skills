@@ -54,6 +54,7 @@ docs/state-backend.md      pre-merge
 docs/state-backend.md      closeout
 docs/state-backend.md      write-a-prd
 docs/state-backend.md      prd-to-issues
+docs/state-backend.md      execute
 init-pipeline/scripts/sidecar.sh  compound
 init-pipeline/scripts/sidecar.sh  excavate
 init-pipeline/scripts/sidecar.sh  help
