@@ -135,6 +135,15 @@ scope_block="${scope_block//<this skill\'s directory>\/references\/sidecar.sh/$s
 rounds_line="$(grep -m1 '^ROUNDS=\$(git log' "$fixfindings_skill" || true)"
 [[ -n "$rounds_line" ]] || fatal "no ROUNDS= line found in $fixfindings_skill"
 
+# The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
+# out of its list item. Section 12 runs it.
+fixup_target_block="$(awk '
+    /^   FIXUP_TARGET=\$\(git blame/ { on = 1 }
+    on { sub(/^   /, ""); print }
+    on && /\|\| FIXUP_TARGET=$/ { exit }
+' "$fixfindings_skill")"
+[[ "$fixup_target_block" == *'|| FIXUP_TARGET='* ]] || fatal "no FIXUP_TARGET block found in $fixfindings_skill"
+
 printf 'scope block (%s lines) and rounds line extracted\n' "$(printf '%s\n' "$scope_block" | grep -c .)"
 
 # --- Fixture ------------------------------------------------------------------
@@ -577,6 +586,36 @@ case "$failed_out" in
     *"scope aborted"*) assert_eq ok ok "failed backend: the abort is named on stderr" ;;
     *) assert_eq "scope aborted ..." "$failed_out" "failed backend: the abort is named on stderr" ;;
 esac
+
+# --- 12. Which commit a fix is a fixup of (#566) ------------------------------
+# /fix-findings makes a fix a `fixup!` of a branch commit only when that one
+# commit wrote every line the finding anchors on. Lines from the base, or from
+# two branch commits, must yield no target, so the fixer makes an ordinary commit.
+section "fixup target: one branch commit wrote every anchored line, or there is no target"
+repo4="$sandbox/repo4"
+mkdir -p "$repo4"
+(
+    cd "$repo4" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'a\nb\nc\n' > f.txt
+    git add f.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'a\nB\nc\n' > f.txt
+    git commit -q -am 'feature: change b'
+    printf 'a\nB\nc\nd\n' > f.txt
+    git commit -q -am 'feature: add d'
+)
+assert_fixture_committed "$repo4" "fixup-target fixture" 0 3 f.txt
+change_b_sha="$(git -C "$repo4" rev-parse HEAD~1)"
+run_target() {
+    (cd "$repo4" && BASE_REF=main FILE=f.txt START="$1" END="$2" \
+        bash -c "$fixup_target_block"'; printf "%s" "$FIXUP_TARGET"')
+}
+assert_eq "$change_b_sha" "$(run_target 2 2)" "a line one branch commit wrote: that commit is the target"
+assert_eq "" "$(run_target 2 4)" "lines from two branch commits: no target"
+assert_eq "" "$(run_target 1 1)" "a line from the base: no target"
 
 # -----------------------------------------------------------------------------
 

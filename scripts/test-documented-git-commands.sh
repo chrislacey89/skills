@@ -1342,7 +1342,11 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # section exists to prevent. The value class carries `%` for the same reason:
 # #347's `--format=%H` and `--format=%B` were the first valued flags with one,
 # and without it both lines dropped out and the reconciliation caught it again.
-range_pattern='git (diff|log)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+)?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# `blame` joined the verbs with #566's fixup-target block, whose range is two-dot
+# for the same reason a log's is: the commits on this branch, not the base's.
+# Its `-L "$START,$END"` is the first flag with a separate, quoted value, so the
+# flag arm also takes one quoted variable after a space.
+range_pattern='git (diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies
@@ -1407,7 +1411,7 @@ while IFS= read -r hit; do
     # two-dot is the commits on this branch, three-dot is the symmetric
     # difference and pulls in the base's own commits.
     case "$verb:$dots" in
-        diff:...HEAD|log:..HEAD) ;;
+        diff:...HEAD|log:..HEAD|blame:..HEAD) ;;
         *) printf '  FAIL %s uses %q; diff must be three-dot and log must be two-dot\n' "$verb" "$dots"
            bad_operator=$((bad_operator + 1)) ;;
     esac
