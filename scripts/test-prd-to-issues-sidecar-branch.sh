@@ -63,8 +63,9 @@ view_block="$(block 2 | subst)"
 create_block="$(block 3 | subst)"
 reconcile_block="$(block 4 | subst)"
 set_block="$(block 5 | subst)"
-next_block="$(block 6 | subst)"
-[ -z "$(block 7)" ] || fatal "more than six sidecar blocks; update this suite's block map"
+dependents_block="$(block 6 | subst)"
+next_block="$(block 7 | subst)"
+[ -z "$(block 8)" ] || fatal "more than seven sidecar blocks; update this suite's block map"
 # shellcheck disable=SC2016  # the patterns are the skill's literal text
 {
 case "$backend_block"   in *'backend slices'*) ;; *) fatal "block 1 is not the backend slices question" ;; esac
@@ -73,9 +74,10 @@ case "$create_block"    in *'work create "$@"'*) ;; *) fatal "block 3 is not the
 case "$create_block"    in *'set -- --kind slice --parent "$PRD"'*) ;; *) fatal "block 3 is not the slice create" ;; esac
 case "$reconcile_block" in *'MISMATCH'*) ;; *) fatal "block 4 is not the blocked_by reconcile" ;; esac
 case "$set_block"       in *'decomposed_into "$SLICES"'*) ;; *) fatal "block 5 is not the decomposed_into set" ;; esac
-case "$next_block"      in *'--unblocked'*'/execute'*) ;; *) fatal "block 6 is not the next-slice pick" ;; esac
+case "$dependents_block" in *'OLD="W-<closed>"'*) ;; *) fatal "block 6 is not the dependents check" ;; esac
+case "$next_block"      in *'--unblocked'*'/execute'*) ;; *) fatal "block 7 is not the next-slice pick" ;; esac
 }
-for b in "$backend_block" "$view_block" "$create_block" "$reconcile_block" "$set_block" "$next_block"; do
+for b in "$backend_block" "$view_block" "$create_block" "$reconcile_block" "$set_block" "$dependents_block" "$next_block"; do
     case "$b" in *gh\ *) fatal "a sidecar block calls gh" ;; esac
 done
 
@@ -185,17 +187,38 @@ check "§9: lowest-numbered unblocked slice" "**Next session:** /execute W-2" "$
 s9 W-1
 check "§9: a closed blocker does not gate" "**Next session:** /execute W-3" "$out"
 
-# Re-decompose W-1: W-8 replaces W-3; the superseded W-3 stays open and unblocked
-# under the same parent, so only scoping to decomposed_into keeps §9 off it.
+# Re-decompose W-1: W-8 replaces W-3. The superseded W-3 is closed, which un-gates
+# W-4 (the QA slice) unless the dependents check finds it and it is re-created.
 slice W-1 "" "Big batch" ""
 check "re-decompose: new slice W-8" W-8 "$out"
-s8 W-1 W-8,W-4
-check "re-decompose: decomposed_into holds only the new ids" "W-8,W-4" "$(field W-1 '.decomposed_into | join(",")')"
+(cd "$P" && bash "$SC_REAL" work close W-3 --superseded-by W-8 >/dev/null 2>&1) || fatal "could not close W-3"
+case "$(cd "$P" && bash "$SC_REAL" work list --parent W-1 --unblocked)" in
+    *W-4*) ok "re-decompose: closing W-3 alone leaves the QA slice W-4 unblocked (the hazard)" ;;
+    *) bad "re-decompose: the hazard fixture" "W-4 was not unblocked after closing W-3" ;;
+esac
+deps_of() { local b="${dependents_block//PRD=\"W-<prd>\"/PRD=\"W-1\"}"; runb "$P" "${b//OLD=\"W-<closed>\"/OLD=\"$1\"}"; }
+deps_of W-3
+check "§8: the dependents check names the QA slice" "W-4" "$out"
+slice W-1 W-2,W-8 "Big batch" W-2,W-8
+check "re-decompose: re-created QA slice is W-9" W-9 "$out"
+(cd "$P" && bash "$SC_REAL" work close W-4 --superseded-by W-9 >/dev/null 2>&1) || fatal "could not close W-4"
+deps_of W-4
+check "§8: nothing depends on the closed QA slice, so the check ends" "" "$out"
+deps_of W-3
+check "§8: nothing open names W-3 after the re-create" "" "$out"
+s8 W-1 W-8,W-9
+check "re-decompose: decomposed_into holds only the new ids" "W-8,W-9" "$(field W-1 '.decomposed_into | join(",")')"
+case "$(cd "$P" && bash "$SC_REAL" work list --parent W-1 --unblocked)" in
+    *W-9*) bad "§9: the re-created QA slice waits for W-8" "W-9 was listed unblocked" ;;
+    *) ok "§9: the re-created QA slice waits for W-8" ;;
+esac
 s9 W-1
 check "§9: scoped to decomposed_into, not the parent's older slices" "**Next session:** /execute W-8" "$out"
 
 # A decomposition whose only slice waits on an open slice outside it.
-s8 W-5 W-6
+slice W-5 W-7 "" W-7
+check "cycle fixture: slice waiting on an open W-7" W-10 "$out"
+s8 W-5 W-10
 s9 W-5
 check "§9: none unblocked exits 1" 1 "$rc"
 check "§9: prints no handoff line" "" "$out"

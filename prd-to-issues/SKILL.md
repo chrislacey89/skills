@@ -323,7 +323,7 @@ bash "$SC" work create "$@" --body-file "$f"
 
 The §3 QA slice goes last, with every other slice's id in `BLOCKED_BY`. Count them against the slice list.
 
-**Reconcile, by reading back.** The `blocked_by` field and the prose `## Blocked by` section encode the same fact, so the reconciliation above applies here too. Run this once per slice, with `ID` set to its id. It prints `match` or `MISMATCH`; on a mismatch it exits 1. Fix whichever side is wrong before §8 runs. A body can be fixed with `work edit`; a wrong field means the slice is closed with `work close` and created again, since no verb rewrites `blocked_by`.
+**Reconcile, by reading back.** The `blocked_by` field and the prose `## Blocked by` section encode the same fact, so the reconciliation above applies here too. Run this once per slice, with `ID` set to its id. It prints `match` or `MISMATCH`; on a mismatch it exits 1. Fix whichever side is wrong before §8 runs. A body can be fixed with `work edit`; a wrong field means the slice is closed with `work close` and created again, since no verb rewrites `blocked_by`. Closing a slice is not free: a closed blocker no longer gates, so every open slice that named the closed one must be re-created too, which §8's dependents check finds.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -444,6 +444,21 @@ bash "$SC" work set "$PRD" decomposed_into "$SLICES"
 ```
 
 `work set` replaces the field rather than appending to it, so after a re-decomposition it holds only the new ids, and no older value has to be retired. The superseded slices are still open work items: close each one with `work close W-<old> --superseded-by W-<new>` so `/execute` never takes one.
+
+**Closing a slice un-gates its dependents.** `work list --unblocked` treats a closed blocker as non-gating, and no verb rewrites `blocked_by`, so an open slice that named the closed one (the QA slice, usually) would be handed to `/execute` before its replacement is built. This applies to every close this skill makes: a superseded slice here, or a wrong `blocked_by` fixed in §7. After each close, list the open slices under the PRD that still name the closed id:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+PRD="W-<prd>"
+OLD="W-<closed>"
+IDS="$(bash "$SC" work list --parent "$PRD")" || exit 1
+while IFS= read -r id; do
+  [ -n "$id" ] || continue
+  bash "$SC" work view "$id" --json | jq -r --arg o "$OLD" --arg i "$id" 'select((.blocked_by // []) | index($o)) | $i'
+done <<<"$IDS"
+```
+
+For each id it prints, create a replacement through §7 with the same body and a `BLOCKED_BY` that swaps the closed id for its replacement, then close the dependent with `work close W-<dependent> --superseded-by W-<replacement>`, and run the check again with `OLD` set to that dependent, because its own dependents now lose a gate too. Repeat until it prints nothing, and only then run the `work set` above with the final ids.
 
 ### 9. Summary
 
