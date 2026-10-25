@@ -717,12 +717,6 @@ decomp_block="$(skill_block "$PTI" 'decomposed_into "$SLICES"')"
 [ -n "$decomp_block" ] || { bad "prd-to-issues/SKILL.md §8 carries the decomposed_into block" "not found"; }
 case "$gate_block$writeback_block" in *'gh '*) bad "no execute sidecar block calls gh" "found gh" ;; *) ok "no execute sidecar block calls gh" ;; esac
 
-# The shaped-pitch marker list is the GraphQL gate's; the sidecar gate must not
-# drift from it (a heading added there is added here in the same change).
-gh_markers="$(awk '/^VERDICT_JQ=\x27$/{c=1} c && /Appetite\|/{print; exit}' "$EXEC" | grep -o '(Appetite|[^)]*)')"
-sc_markers="$(grep -o '(Appetite|[^)]*)' <<<"$gate_block" | head -1)"
-check "the sidecar gate's PRD markers are the GraphQL gate's" "$gh_markers" "$sc_markers"
-
 # The writer↔reader pair: the field §8 sets is the field Step 0 reads, and both
 # skills state the replace semantics the gate relies on.
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
@@ -776,6 +770,14 @@ printf 'handoff note\n' > "$tmp/xnote.md"
 gate "the takeable line counts the comment thread" W-3 "takeable ever_wired=1 comments=1"
 (cd "$P" && bash "$SC" work set W-3 pr "https://github.com/acme/exec-guest/pull/9" >/dev/null)
 gate "a slice with a recorded pr is in-flight" W-3 'in-flight [{"pr":"https://github.com/acme/exec-guest/pull/9"}]'
+# The kind field decides, not the body: a prd without the shaped-pitch headings
+# is still undecomposed, and a slice that carries one is never a PRD.
+printf '## Problem\n\nx\n' > "$tmp/xplain.md"
+printf '## Parent PRD\n\nW-1\n\n## Implementation Decisions\n\nx\n' > "$tmp/xheadslice.md"
+(cd "$P" && bash "$SC" work create --kind prd --body-file "$tmp/xplain.md" >/dev/null)                              # W-4
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xheadslice.md" >/dev/null)          # W-5
+gate "a prd without the shaped-pitch headings is undecomposed-prd" W-4 "undecomposed-prd"
+gate "a slice whose body has a shaped-pitch heading is takeable" W-5 "takeable ever_wired=0 comments=0"
 clean "the gate leaves the project clean" "$P"
 
 # -----------------------------------------------------------------------------

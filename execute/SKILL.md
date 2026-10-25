@@ -179,7 +179,6 @@ Note `state` here is the GraphQL enum — uppercase `OPEN`, not the REST endpoin
 SC="<this skill's directory>/references/sidecar.sh"
 W="W-<n>"
 SIDECAR_VERDICT_JQ='
-def lines: split("\n")[];
 [inputs][0] as $i
 | if ($i | type) != "object" or $i.id != $w
      or ($i.body | type) != "string"
@@ -188,7 +187,7 @@ def lines: split("\n")[];
   then "unknown"
   else
     ((($i.decomposed_into // []) | length) > 0) as $decomposed
-    | ([$i.body | lines | select(test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\s*$"; "i"))] | length > 0) as $prd
+    | ($i.kind == "prd") as $prd
     | [$i.blocked_by[] | select($st[.] != "closed") | {id: ., state: $st[.]}] as $open_blockers
     | if $prd and ($decomposed | not) then "undecomposed-prd"
       elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
@@ -209,7 +208,7 @@ jq -rn --arg w "$W" --argjson st "$ST" "$SIDECAR_VERDICT_JQ" <<<"$J" || echo unk
 Each verdict takes the action listed above, with these differences:
 
 - **`unknown`** — `work view` failed, or the item's `id`, `body`, `comments`, or `blocked_by` did not come back. Same rule: re-run once, never proceed on it.
-- **`undecomposed-prd`** — the body carries a shaped-pitch heading (the same list as the GraphQL gate's) and `decomposed_into` is empty. `/prd-to-issues` §8 writes that field, and `work set` replaces it on every write, so there is no "most recent comment" to pick.
+- **`undecomposed-prd`** — the item's `kind` is `prd` and `decomposed_into` is empty. The kind field decides, not the body's headings: a PRD whose body lacks the shaped-pitch headings is still undecomposed, and a slice never is (`work set` refuses `decomposed_into` on one). `/prd-to-issues` §8 writes that field, and `work set` replaces it on every write, so there is no "most recent comment" to pick.
 - **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist.
 - **`in-flight [...]`** — the item's `pr` field is set. A sidecar has no `closedByPullRequestsReferences`, so the field is the only signal, and it carries no branch to compare with the current one. When the PR it names is the one this branch opened, continue; otherwise the GraphQL rule applies.
 - **`takeable ever_wired=<k> comments=<m>`** — `ever_wired` counts every `blocked_by` id. Unlike on GitHub, `0` is a real empty list: `/prd-to-issues` writes `blocked_by` with the slice, so there is no pre-wiring repo for it to be confused with.
