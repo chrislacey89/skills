@@ -162,7 +162,7 @@ The fixer's instructions, in order:
 
    ```bash
    # $BASE_REF as /pre-merge Phase 1 step 3 derives it; FILE, START, END from the finding's anchor.
-   FIXUP_TARGET=$(git blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
+   FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $1 }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
    ```

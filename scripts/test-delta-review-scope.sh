@@ -148,7 +148,7 @@ fold_block="$(awk '
 # The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
 # out of its list item. Section 12 runs it.
 fixup_target_block="$(awk '
-    /^   FIXUP_TARGET=\$\(git blame/ { on = 1 }
+    /^   FIXUP_TARGET=\$\(git (-c [A-Za-z.]+=[a-z]+ )*blame/ { on = 1 }
     on { sub(/^   /, ""); print }
     on && /\|\| FIXUP_TARGET=$/ { exit }
 ' "$fixfindings_skill")"
@@ -724,6 +724,13 @@ assert_eq "$change_b_sha" "$(run_target 2 2)" "a line one branch commit wrote: t
 assert_eq "" "$(run_target 2 4)" "lines from two branch commits: no target"
 assert_eq "" "$(run_target 1 1)" "a line from the base: no target"
 assert_eq "" "$(run_target 1 2)" "a base line next to one branch commit's line: no target (every anchored line, not every non-base line)"
+# A user's blame display config must not change the answer: blame.blankBoundary
+# blanks the SHA column on a base line, and blame.markUnblamableLines prefixes
+# `*`. Either would otherwise leak a non-SHA token into FIXUP_TARGET.
+git -C "$repo4" config blame.blankBoundary true
+git -C "$repo4" config blame.markUnblamableLines true
+assert_eq "" "$(run_target 1 1)" "blame.blankBoundary/markUnblamableLines set: a base line still yields no target"
+assert_eq "$change_b_sha" "$(run_target 2 2)" "blame display config set: a single-commit line is still the target"
 
 # -----------------------------------------------------------------------------
 

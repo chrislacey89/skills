@@ -1346,7 +1346,9 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # for the same reason a log's is: the commits on this branch, not the base's.
 # Its `-L "$START,$END"` is the first flag with a separate, quoted value, so the
 # flag arm also takes one quoted variable after a space.
-range_pattern='git (diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# The fixup-target block also pins blame's display config with leading
+# `-c key=value` pairs before the verb, so the pattern allows those.
+range_pattern='git( +-c +[A-Za-z.]+=[a-z]+)* +(diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies
@@ -1389,7 +1391,7 @@ bad_endpoint=0
 bad_operator=0
 while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
-    verb="$(printf '%s' "$hit" | awk '{print $2}')"
+    verb="$(printf '%s' "$hit" | sed -E 's/^git( +-c +[A-Za-z.]+=[a-z]+)* +/git /' | awk '{print $2}')"
     # The endpoint char class excludes '.' so the greedy prefix cannot eat the
     # first dot of a three-dot range and leave it in the captured name.
     endpoint="$(printf '%s' "$hit" | sed -E 's/.*[ "]([^ ".]*)\.\.\.?HEAD$/\1/')"
