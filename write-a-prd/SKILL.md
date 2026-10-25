@@ -61,6 +61,8 @@ Before creating a new milestone, check for an existing one: `gh api repos/{owner
 
 If the user confirms, note the milestone name for use in Step 8. If the user declines, proceed without a milestone — it is organizational convenience, not a structural requirement. Small-batch work (1-2 weeks) does not need a milestone.
 
+When Step 8's backend check answers `sidecar`, a milestone is only a name. Skip the `gh api` lookup and create nothing on GitHub. Note the name, and Step 8 records it as a field on the work item.
+
 ### 3. Explore the codebase
 
 Explore the repo to verify the user's assertions and understand the current state of the code.
@@ -208,9 +210,25 @@ Check with the user that these modules match their expectations. Check with the 
 
 ### 8. Write the pitch
 
-Once you have a complete, shaped understanding of the problem and solution, write the pitch using the template below. The pitch should be submitted as a GitHub issue.
+Once you have a complete, shaped understanding of the problem and solution, write the pitch using the template below. Where it is saved depends on the project.
 
-**If a container milestone was requested in Step 2**, create it before the PRD issue so the issue can be attached:
+**Ask where the PRD lives first.** `backend prds` answers it, per [references/state-backend.md](references/state-backend.md):
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+BACKEND="$(bash "$SC" backend prds)" || BACKEND=
+case "$BACKEND" in
+  github)  echo "prds backend: github" ;;
+  sidecar) echo "prds backend: sidecar" ;;
+  *)       echo "prds backend: refused; stop and relay the stderr above" >&2 ;;
+esac
+```
+
+- **`github`**: submit the pitch as a GitHub issue, following the steps below.
+- **`sidecar`**: save the pitch as a sidecar work item, not a GitHub issue. Write the template's body to a temp file and run `bash "$SC" work create --kind prd --body-file "$f"`. Add `--milestone "<name>"` if Step 2 noted one. It prints the new id, `W-<n>`. If the input was a `research-ready` work item, expand that item instead of creating a second one: run `work edit W-<n> --body-file "$f"`, then `work set W-<n> maturity prd`. Create no GitHub issue and no milestone. The template's closing **Next session** lines are not saved in the body, since the id does not exist until `work create` prints it. Print them to the user as `/prd-to-issues W-<n>`, never `#<n>`.
+- **Anything else** (a nonzero exit, which prints nothing): stop, and relay what `backend` printed on stderr. Do not fall back to `gh issue create`. On a guest repo that would put the pitch in the client's tracker.
+
+**If a container milestone was requested in Step 2** and the backend is `github`, create it before the PRD issue so the issue can be attached:
 
 1. Create the milestone: `gh api repos/{owner}/{repo}/milestones -f title="<Milestone Name>" -f description="<1-2 sentences from the problem story>"`
 2. Create the PRD issue with `--milestone "<Milestone Name>"` to attach it
@@ -362,6 +380,6 @@ Do not invoke `/execute` directly on this issue — it is a shaped pitch, not a 
 ## Handoff
 
 - **Expected input:** clarified user problem, validated technical context from `/research`, and any past-solution guidance relevant to the feature
-- **Produces:** a shaped PRD issue (optionally attached to a container milestone for big-batch work) with appetite, solution, rabbit holes, no-gos, and contract sketching when relevant
+- **Produces:** a shaped PRD issue (optionally attached to a container milestone for big-batch work) with appetite, solution, rabbit holes, no-gos, and contract sketching when relevant. On the sidecar backend, it produces a `W-<n>` sidecar work item instead, with the milestone recorded as a field.
 - **May invoke:** `/design-an-interface` when a module interface is still unresolved, or `/api-design-review` when API contract uncertainty remains
 - **Comes next by default:** `/prd-to-issues`
