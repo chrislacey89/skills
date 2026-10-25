@@ -291,6 +291,11 @@ jobs:
       - name: Run state backend contract suite
         run: bash scripts/test-state-backend.sh
 
+      # /write-a-prd Step 8's fenced blocks, extracted and run (one shell each)
+      # on the github, sidecar, and refusing-backend arms (#523).
+      - name: Run write-a-prd sidecar branch contract suite
+        run: bash scripts/test-write-a-prd-sidecar-branch.sh
+
       # A git hook exports GIT_DIR, and a suite that runs `git init` or
       # `git config` in a fixture without clearing it writes into the real repo
       # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every

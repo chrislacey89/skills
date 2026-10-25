@@ -220,13 +220,37 @@ BACKEND="$(bash "$SC" backend prds)" || BACKEND=
 case "$BACKEND" in
   github)  echo "prds backend: github" ;;
   sidecar) echo "prds backend: sidecar" ;;
-  *)       echo "prds backend: refused; stop and relay the stderr above" >&2 ;;
+  *)       echo "prds backend: refused; stop and relay the stderr above" >&2; exit 1 ;;
 esac
 ```
 
 - **`github`**: submit the pitch as a GitHub issue, following the steps below.
-- **`sidecar`**: save the pitch as a sidecar work item, not a GitHub issue. Write the template's body to a temp file and run `bash "$SC" work create --kind prd --body-file "$f"`. Add `--milestone "<name>"` if Step 2 noted one. It prints the new id, `W-<n>`. If the input was a `research-ready` work item, expand that item instead of creating a second one: run `work edit W-<n> --body-file "$f"`, then `work set W-<n> maturity prd`. Create no GitHub issue and no milestone. The template's closing **Next session** lines are not saved in the body, since the id does not exist until `work create` prints it. Print them to the user as `/prd-to-issues W-<n>`, never `#<n>`.
+- **`sidecar`**: save the pitch as a sidecar work item, not a GitHub issue. Run the block under *Saving on the sidecar* below, with the template's body in place of the placeholder line. Create no GitHub issue and no milestone. The template's closing **Next session** lines are not saved in the body, since the id does not exist until `work create` prints it. Print them to the user as `/prd-to-issues W-<n>`, never `#<n>`.
 - **Anything else** (a nonzero exit, which prints nothing): stop, and relay what `backend` printed on stderr. Do not fall back to `gh issue create`. On a guest repo that would put the pitch in the client's tracker.
+
+**Saving on the sidecar.** Each block below is self-contained, because every tool call is a fresh shell: it sets `SC` and the body file itself, and nothing carries over from the `backend` block above. Replace the placeholder line with the template's body, and set `MILESTONE` to the name Step 2 noted, or leave it empty. The block prints the new id, `W-<n>`.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+MILESTONE=""
+f="$(mktemp)"
+cat > "$f" <<'PITCH'
+<the pitch body, from the template below>
+PITCH
+bash "$SC" work create --kind prd --body-file "$f" ${MILESTONE:+--milestone "$MILESTONE"}
+```
+
+If the input was a `research-ready` work item, expand that item in place instead of creating a second one. Put the id in `ID`:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+ID="W-<n>"
+f="$(mktemp)"
+cat > "$f" <<'PITCH'
+<the pitch body, from the template below>
+PITCH
+bash "$SC" work edit "$ID" --body-file "$f" && bash "$SC" work set "$ID" maturity prd
+```
 
 **If a container milestone was requested in Step 2** and the backend is `github`, create it before the PRD issue so the issue can be attached:
 
