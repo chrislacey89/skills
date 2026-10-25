@@ -127,7 +127,7 @@ After all tests pass, look for [refactor candidates](refactoring.md):
 
 - [ ] Extract duplication
 - [ ] Deepen modules (move complexity behind simple interfaces)
-- [ ] Apply SOLID principles where natural
+- [ ] Apply the `Clever conditional` candidate ([refactoring.md](refactoring.md) § Candidates)
 - [ ] Consider what new code reveals about existing code
 - [ ] Run tests after each refactor step
 - [ ] **Comment the code, not the incident.** Reread the comments this cycle added and move any sentence that explains history rather than the code in front of you. `/execute` Step 3 carries the rule and names where that content lands.

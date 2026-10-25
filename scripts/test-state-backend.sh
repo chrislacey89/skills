@@ -682,5 +682,155 @@ check "the doc routes the stamp on 'prs'" 1 \
 check "the doc points at PRD #407 for the stamp shape rather than restating it" 1 \
     "$(grep -c 'chrislacey89/skills#407' "$DOC" | awk '{print ($1 > 0)}')"
 
+# -----------------------------------------------------------------------------
+section "/execute on a work item: the Step 0 gate's verdicts (#525)"
+
+# /execute W-<n> must refuse the same work on the sidecar that it refuses on
+# GitHub: an undecomposed PRD, a slice with an open blocker. The gate is a
+# fenced block a downstream agent runs unsupervised, so it is extracted from
+# execute/SKILL.md and RUN here, in bash and in zsh (agents use both), never
+# restated. The decomposed-PRD fixture is written by /prd-to-issues §8's own
+# sidecar block, so the writer and the reader of `decomposed_into` meet in a run.
+EXEC="$repo_root/execute/SKILL.md"
+PTI="$repo_root/prd-to-issues/SKILL.md"
+# skill_block <file> <literal> — the fenced bash block that sets SC from the
+# bundled resolver and contains <literal>, with the real script substituted.
+skill_block() {
+    awk -v want="$2" '
+        /^```bash$/ { buf = ""; on = 1; next }
+        on && /^```$/ {
+            on = 0
+            if (buf ~ /<this skill.s directory>\/references\/sidecar\.sh/ && index(buf, want)) { printf "%s", buf; exit }
+            next
+        }
+        on { buf = buf $0 "\n" }
+    ' "$1" | sed "s|<this skill's directory>/references/sidecar.sh|$SC|g"
+}
+# shellcheck disable=SC2016  # the needles are the skills' literal text
+{
+gate_block="$(skill_block "$EXEC" 'SIDECAR_VERDICT_JQ=')"
+writeback_block="$(skill_block "$EXEC" 'work edit "$W"')"
+decomp_block="$(skill_block "$PTI" 'decomposed_into "$SLICES"')"
+}
+[ -n "$gate_block" ] || { bad "execute/SKILL.md carries the sidecar gate block" "not found"; }
+[ -n "$writeback_block" ] || { bad "execute/SKILL.md carries the sidecar writeback block" "not found"; }
+[ -n "$decomp_block" ] || { bad "prd-to-issues/SKILL.md §8 carries the decomposed_into block" "not found"; }
+case "$gate_block$writeback_block" in *'gh '*) bad "no execute sidecar block calls gh" "found gh" ;; *) ok "no execute sidecar block calls gh" ;; esac
+
+# The writer↔reader pair: the field §8 sets is the field Step 0 reads, and both
+# skills state the replace semantics the gate relies on.
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+w_field="$(sed -n 's/.*work set "\$PRD" \([a-z_]*\) "\$SLICES".*/\1/p' <<<"$decomp_block")"
+# shellcheck disable=SC2016
+r_field="$(grep -o '(\$i\.[a-z_]* // \[\])' <<<"$gate_block" | sed 's/(\$i\.\([a-z_]*\) .*/\1/')"
+check "/prd-to-issues §8 writes decomposed_into" decomposed_into "$w_field"
+check "/execute Step 0 reads the field /prd-to-issues §8 writes" "$w_field" "$r_field"
+check "/prd-to-issues states work set replaces decomposed_into" 1 \
+    "$(grep -c 'replaces the field rather than appending' "$PTI" | awk '{print ($1 > 0)}')"
+# shellcheck disable=SC2016
+check "/execute states work set replaces decomposed_into" 1 \
+    "$(grep -c '`work set` replaces it on every write' "$EXEC" | awk '{print ($1 > 0)}')"
+
+gate_shells="bash"
+if command -v zsh >/dev/null 2>&1; then gate_shells="bash zsh"
+elif [ -n "${CI:-}" ]; then bad "zsh is on PATH for the gate's zsh arm" "zsh missing and CI is set"
+else printf '  SKIP zsh arm: zsh is not on PATH\n'; fi
+
+mkproj https://github.com/acme/exec-guest.git
+(cd "$P" && bash "$SC" init --name exec-guest --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+    || bad "init the /execute gate fixture" "init failed"
+printf '## Problem\n\nx\n\n## Appetite\n\n2 weeks\n' > "$tmp/xprd.md"
+printf '## Parent PRD\n\nW-1\n\n## Acceptance Criteria\n\n- [ ] one\n- [ ] two\n' > "$tmp/xslice.md"
+(cd "$P" && bash "$SC" work create --kind prd --body-file "$tmp/xprd.md" >/dev/null)                           # W-1
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md" >/dev/null)          # W-2
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --blocked-by W-2 --body-file "$tmp/xslice.md" >/dev/null) # W-3
+
+# gate <label> <W-id> <expected> — run the extracted gate in every shell.
+gate() {
+    local sh b="${gate_block//W=\"W-<n>\"/W=\"$2\"}"
+    for sh in $gate_shells; do
+        out="$(cd "$P" && "$sh" -c "$b" 2>"$tmp/stderr")"
+        check "$1 ($sh)" "$3" "$out"
+    done
+}
+gate "an undecomposed sidecar PRD is undecomposed-prd" W-1 "undecomposed-prd"
+gate "a slice with an open blocker is blocked, naming it" W-3 'blocked [{"id":"W-2","state":"open"}]'
+gate "a slice with no blockers is takeable" W-2 "takeable ever_wired=0 comments=0"
+gate "a work item that does not exist is unknown" W-99 "unknown"
+
+d="${decomp_block//PRD=\"W-<prd>\"/PRD=\"W-1\"}"
+d="${d//SLICES=\"W-<a>,W-<b>\"/SLICES=\"W-2,W-3\"}"
+(cd "$P" && bash -c "$d" >/dev/null 2>&1) || bad "/prd-to-issues §8's block runs" "exit nonzero"
+gate "a PRD /prd-to-issues §8 decomposed falls through to takeable" W-1 "takeable ever_wired=0 comments=0"
+
+(cd "$P" && bash "$SC" work close W-2 >/dev/null)
+gate "a slice whose blockers are all closed is takeable" W-3 "takeable ever_wired=1 comments=0"
+printf 'handoff note\n' > "$tmp/xnote.md"
+(cd "$P" && bash "$SC" work comment W-3 --body-file "$tmp/xnote.md" >/dev/null)
+gate "the takeable line counts the comment thread" W-3 "takeable ever_wired=1 comments=1"
+(cd "$P" && bash "$SC" work set W-3 pr "https://github.com/acme/exec-guest/pull/9" >/dev/null)
+gate "a slice with a recorded pr is in-flight" W-3 'in-flight [{"pr":"https://github.com/acme/exec-guest/pull/9"}]'
+# The kind field decides, not the body: a prd without the shaped-pitch headings
+# is still undecomposed, and a slice that carries one is never a PRD.
+printf '## Problem\n\nx\n' > "$tmp/xplain.md"
+printf '## Parent PRD\n\nW-1\n\n## Implementation Decisions\n\nx\n' > "$tmp/xheadslice.md"
+(cd "$P" && bash "$SC" work create --kind prd --body-file "$tmp/xplain.md" >/dev/null)                              # W-4
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xheadslice.md" >/dev/null)          # W-5
+gate "a prd without the shaped-pitch headings is undecomposed-prd" W-4 "undecomposed-prd"
+gate "a slice whose body has a shaped-pitch heading is takeable" W-5 "takeable ever_wired=0 comments=0"
+# An unreadable blocker counts as open, and a blocker outranks a recorded pr.
+# `work create --blocked-by` refuses an id that does not exist, so the dangling
+# id is written into the item's frontmatter by hand (and committed, so the
+# sidecar stays clean) the way a deleted or mistyped blocker would arrive.
+xs="$SKILL_KIT_SIDECAR_ROOT/exec-guest"
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md" >/dev/null)          # W-6
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md" >/dev/null)          # W-7
+sed 's/^blocked_by:.*/blocked_by: [W-99]/' "$xs/work/W-6.md" > "$tmp/w6.md" && cp "$tmp/w6.md" "$xs/work/W-6.md"
+sed 's/^blocked_by:.*/blocked_by: [W-2, W-99]/' "$xs/work/W-7.md" > "$tmp/w7.md" && cp "$tmp/w7.md" "$xs/work/W-7.md"
+git -C "$xs" add work/W-6.md work/W-7.md
+git -C "$xs" commit -q -m "test: hand-written dangling blockers" || bad "commit the dangling-blocker fixtures" "commit failed"
+(cd "$P" && bash "$SC" work set W-7 pr "https://github.com/acme/exec-guest/pull/10" >/dev/null)
+gate "a blocker id that does not exist is blocked as unreadable" W-6 'blocked [{"id":"W-99","state":"unreadable"}]'
+gate "a blocked item with a recorded pr is blocked, not in-flight" W-7 'blocked [{"id":"W-99","state":"unreadable"}]'
+clean "the gate leaves the project clean" "$P"
+
+# -----------------------------------------------------------------------------
+section "/execute on a work item: acceptance-criteria writeback (#525)"
+
+S="$SKILL_KIT_SIDECAR_ROOT/exec-guest"
+# shellcheck disable=SC2016  # the injected edit is literal sh for the block
+flip='awk '\''!d && /^- \[ \]/{sub(/- \[ \]/,"- [x]"); d=1} 1'\'' "$BODY_FILE" > "$BODY_FILE.n" && mv "$BODY_FILE.n" "$BODY_FILE"'
+# wb <W-id> <edit> — run the writeback block with <edit> in place of the
+# "Leave every other line untouched." comment line.
+wb() {
+    local b="${writeback_block//W=\"W-<n>\"/W=\"$1\"}"
+    # A literal match: in a ${b//pat/} pattern, the comment's "[ ]" is a bracket expression.
+    b="$(E="$2" awk 'index($0, "Leave every other line untouched.") { print ENVIRON["E"]; n++; next } 1; END { exit n != 1 }' <<<"$b")" \
+        || bad "the writeback block carries exactly one edit placeholder" "awk found none or several"
+    out="$(cd "$P" && bash -c "$b" 2>"$tmp/stderr")"; rc=$?; err="$(cat "$tmp/stderr")"
+}
+before_body="$(cd "$P" && bash "$SC" work view W-2 --json | jq -r .body)"
+commits_before="$(git -C "$S" rev-list --count HEAD)"
+wb W-2 "$flip"
+check "writeback exits 0" 0 "$rc"
+after_body="$(cd "$P" && bash "$SC" work view W-2 --json | jq -r .body)"
+check "writeback ticks exactly the verified box" "$(awk '!d && /^- \[ \]/{sub(/- \[ \]/,"- [x]"); d=1} 1' <<<"$before_body")" "$after_body"
+check "writeback leaves the second box alone" 1 "$(grep -c '^- \[ \] two$' <<<"$after_body")"
+check "writeback commits once in the sidecar" "$((commits_before + 1))" "$(git -C "$S" rev-list --count HEAD)"
+check "writeback leaves the sidecar clean" "" "$(git -C "$S" status --porcelain)"
+wb W-2 "$flip"
+check "a second tick does not grow the body by a newline" 0 \
+    "$(( $(cd "$P" && bash "$SC" work view W-2 --json | jq -r .body | wc -c) - $(printf '%s\n' "$after_body" | wc -c) ))"
+
+commits_before="$(git -C "$S" rev-list --count HEAD)"
+wb W-99 "$flip"
+check "a failed read aborts the writeback" 1 "$rc"
+check "a failed read commits nothing" "$commits_before" "$(git -C "$S" rev-list --count HEAD)"
+# shellcheck disable=SC2016
+wb W-2 'sed -i.bak "/two/d" "$BODY_FILE"'
+check "a shorter body is refused and named" 1 "$(grep -c 'writeback refused' <<<"$err")"
+check "a refused writeback commits nothing" "$commits_before" "$(git -C "$S" rev-list --count HEAD)"
+clean "the writeback leaves the project clean" "$P"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
