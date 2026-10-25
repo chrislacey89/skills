@@ -221,7 +221,7 @@ mkguest "github" noinit
 check "with no sidecar, backend stamp answers github" github "$(cd "$P" && bash "$SC" backend stamp)"
 run_pm W-1 "$SC" ""
 check "on github, Phase 2's sidecar block exits 0" 0 "$pm_rc"
-check "on github, it calls no gh at all" 0 "$(cat "$GH_STUB/calls" 2>/dev/null | grep -c .)"
+check "on github, it calls no gh at all" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
 
 # A sidecar.sh whose backend verb refuses (nonzero, nothing printed), the way a
 # corrupt sidecar.json makes the real one refuse.
@@ -233,7 +233,7 @@ REFUSE
 mkguest "refusing" init
 run_pm W-1 "$tmp/refusing-sc.sh" ""
 check "on a refused backend, Phase 2's block exits nonzero" 1 "$pm_rc"
-check "on a refused backend, it calls no gh at all" 0 "$(cat "$GH_STUB/calls" 2>/dev/null | grep -c .)"
+check "on a refused backend, it calls no gh at all" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
 check "on a refused backend, it says it is not guessing" 1 "$(grep -c 'not guessing' "$tmp/stderr")"
 
 # -----------------------------------------------------------------------------
