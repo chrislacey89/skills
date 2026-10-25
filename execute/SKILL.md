@@ -326,7 +326,7 @@ P="$(jq -r '.parent // empty' <<<"$J")"
 [ -z "$P" ] || bash "$SC" work view "$P" --json | jq -r '.body'
 ```
 
-The `comments=<m>` check above applies unchanged, and so do the precedence and disposal rules below. A comment that qualifies for its own item is filed with `work create --kind slice --parent <prd>`. How to record the new blocker on the item it blocks is in [references/state-backend.md](references/state-backend.md) § Work items.
+The `comments=<m>` check above applies unchanged, and so do the precedence and disposal rules below. A comment that qualifies for its own item is filed with `work create --kind slice --parent <prd>`, and the item it blocks gets no edge, because no verb rewrites `blocked_by`: name the new id in a `work comment` on the blocked item instead.
 
 **Precedence rule.** The issue body remains the durable contract. Comments augment it; they do not silently override it. A comment is an authoritative addition only when it is (a) a pipeline-authored continuation or correction comment, or (b) an explicit human scope change. Freeform discussion is context, never an override. If a comment appears to contradict the body on scope, and it is not a clear pipeline-authored correction or human scope change, flag the conflict to the user rather than acting on the comment.
 
@@ -758,7 +758,7 @@ If you cannot complete the task in this context window, leave a comment on the G
 
 If the error suggests the approach from the research artifact or the PRD is wrong, say so in the comment — this is a signal to backtrack, not to keep retrying the same approach.
 
-On a sidecar work item, this comment and the plateau comment below are written with `work comment W-<n> --body-file <file>` ([references/state-backend.md](references/state-backend.md)), never `gh issue comment`. Step 1's `work view --json` read is how the next iteration sees it.
+On a sidecar work item, this comment and the plateau comment below are written with `work comment W-<n> --body-file <file>` ([references/state-backend.md](references/state-backend.md)), never `gh issue comment`. `work comment` adds the `## Comment <ISO-8601>` heading itself and refuses a body that already carries one, so the file holds the note alone. Step 1's `work view --json` read is how the next iteration sees it.
 
 **AFK progress and plateau detection.** When running under Ralph, progress is *epistemic state advancement*, not activity. An iteration counts as progress only if at least one of these transitions from unresolved to resolved:
 
