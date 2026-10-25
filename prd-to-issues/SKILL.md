@@ -458,7 +458,7 @@ while IFS= read -r id; do
 done <<<"$IDS"
 ```
 
-For each id it prints, create a replacement through §7 with the same body and a `BLOCKED_BY` that swaps the closed id for its replacement, then close the dependent with `work close W-<dependent> --superseded-by W-<replacement>`, and run the check again with `OLD` set to that dependent, because its own dependents now lose a gate too. Repeat until it prints nothing, and only then run the `work set` above with the final ids.
+For each id it prints, create a replacement through §7 with its body read from `work view "$id" --json` and a `BLOCKED_BY` that swaps the closed id for its replacement, swapping that whole id for the replacement's in the body as well (`## Blocked by`, `Consumes: From W-<n>`, and anywhere else the body names it), run the §7 read-back on the replacement and fix any `MISMATCH` before going on, then close the dependent with `work close W-<dependent> --superseded-by W-<replacement>`, and run the check again with `OLD` set to that dependent, because its own dependents now lose a gate too. Repeat until it prints nothing, and only then run the `work set` above with the final ids.
 
 ### 9. Summary
 

@@ -112,11 +112,14 @@ field() { (cd "$P" && bash "$SC_REAL" work view "$1" --json) | jq -r "$2"; }
 
 # slice <prd> <blocked_by csv> <milestone> <prose blocker ids>: run the §7 create
 # block with its placeholders filled; the body's ## Blocked by names the prose ids.
+# An optional fifth argument is the body itself (a replacement's, read from the
+# dependent it supersedes), used instead of the generated one.
 slice() {
     local b="$create_block" body prose
     # shellcheck disable=SC2086  # split on purpose: one line per id
     if [ -n "$4" ]; then prose="$(printf -- '- Blocked by %s\n' ${4//,/ })"; else prose="None — can start immediately"; fi
-    body="$(printf '## Parent PRD\n\n%s\n\n## What to Build\n\nA slice.\n\n## Blocked by\n\n%s\n\n## User Stories Addressed\n\n- User story 2' "$1" "$prose")"
+    body="$(printf '## Parent PRD\n\n%s\n\n## What to Build\n\nA slice.\n\n## Blocked by\n\n%s\n\n## Consumes\n\n- From %s: the shared module\n\n## User Stories Addressed\n\n- User story 2' "$1" "$prose" "${4##*,}")"
+    [ -z "${5:-}" ] || body="$5"
     b="${b//PRD=\"W-<prd>\"/PRD=\"$1\"}"
     b="${b//BLOCKED_BY=\"\"/BLOCKED_BY=\"$2\"}"
     b="${b//MILESTONE=\"\"/MILESTONE=\"$3\"}"
@@ -203,8 +206,16 @@ esac
 deps_of() { local b="${dependents_block//PRD=\"W-<prd>\"/PRD=\"W-1\"}"; runb "$P" "${b//OLD=\"W-<closed>\"/OLD=\"$1\"}"; }
 deps_of W-3
 check "§8: the dependents check names the QA slice" "W-4" "$out"
-slice W-1 W-2,W-8 "Big batch" W-2,W-8
+# Follow §8 literally: the replacement's body is the dependent's own body with the
+# closed id swapped for its replacement, and the §7 read-back runs on it.
+swapped="$(field W-4 .body | perl -pe 's/\bW-3\b/W-8/g')"
+case "$swapped" in *W-3*) fatal "the id swap left W-3 in the body" ;; esac
+slice W-1 W-2,W-8 "Big batch" W-2,W-8 "$swapped"
 check "re-decompose: re-created QA slice is W-9" W-9 "$out"
+runb "$P" "${reconcile_block//W-<slice>/W-9}"
+check "§8: the §7 read-back matches on the replacement" "match W-9: [W-2,W-8]" "$out"
+check "§8: the replacement body no longer names the closed slice" 0 "$(field W-9 .body | grep -c 'W-3')"
+check "§8: the replacement body's Consumes names the new id" 1 "$(field W-9 .body | grep -c 'From W-8:')"
 (cd "$P" && bash "$SC_REAL" work close W-4 --superseded-by W-9 >/dev/null 2>&1) || fatal "could not close W-4"
 deps_of W-4
 check "§8: nothing depends on the closed QA slice, so the check ends" "" "$out"
