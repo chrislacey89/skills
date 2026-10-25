@@ -299,6 +299,11 @@ jobs:
       # /prd-to-issues' sidecar blocks (§§1, 7, 8, 9), extracted and run one
       # shell each: slice creation, the blocked_by read-back, decomposed_into
       # replacement, and the scoped next-slice pick or cycle report (#524).
+      # ubuntu-latest ships without zsh; the suite fails under CI rather than
+      # skipping its zsh arm, so the shell is installed here.
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
       - name: Run prd-to-issues sidecar branch contract suite
         run: bash scripts/test-prd-to-issues-sidecar-branch.sh
 

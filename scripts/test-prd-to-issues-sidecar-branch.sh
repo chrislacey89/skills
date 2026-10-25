@@ -14,8 +14,9 @@
 # SHELLS. Agents run these blocks in zsh as often as bash, and the two split
 # unquoted expansions differently (`${X:+--flag "$X"}` stays one word, `for id in
 # $LIST` runs once over a newline-joined list in zsh). The suite therefore re-runs
-# itself once per shell, each arm on fresh fixtures, and prints a visible SKIP
-# line when zsh is not installed.
+# itself once per shell, each arm on fresh fixtures. A missing zsh prints a
+# visible SKIP line locally, and fails the suite when CI is set, so a runner
+# without zsh cannot turn the zsh arm into a silent pass.
 #
 # Blocks are selected by content (the ones that set SC from the bundled path),
 # not by position, because §§7 and 9 also carry the GitHub path's bash blocks.
@@ -26,6 +27,9 @@ if [ -z "${PTI_SHELL:-}" ]; then
     PTI_SHELL=bash bash "$0" || arms_rc=1
     if command -v zsh >/dev/null 2>&1; then
         PTI_SHELL=zsh bash "$0" || arms_rc=1
+    elif [ -n "${CI:-}" ]; then
+        printf '\nFAIL zsh arm: zsh is not on PATH and CI is set, so the blocks were not run under zsh\n'
+        arms_rc=1
     else
         printf '\nSKIP zsh arm: zsh is not on PATH, so the blocks were not run under zsh\n'
     fi
