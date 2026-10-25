@@ -307,6 +307,12 @@ jobs:
       - name: Run prd-to-issues sidecar branch contract suite
         run: bash scripts/test-prd-to-issues-sidecar-branch.sh
 
+      # Fenced bash/sh blocks in skill prose must not rely on bash word
+      # splitting: agents run them in zsh. Known sites are listed with the
+      # issue that owns them, and the list only shrinks.
+      - name: Run skill-blocks zsh-safe scan
+        run: bash scripts/test-skill-blocks-zsh-safe.sh
+
       # A git hook exports GIT_DIR, and a suite that runs `git init` or
       # `git config` in a fixture without clearing it writes into the real repo
       # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every
