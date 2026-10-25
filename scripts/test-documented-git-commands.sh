@@ -1397,9 +1397,9 @@ while IFS= read -r hit; do
 
     # #347 adds two endpoints. $REVIEWED_SHA is the stamped 40-hex OID, read by
     # the sed script test-review-currency-marker.sh pins (a name cannot come out
-    # of `[0-9a-f]\{40\}`). $SCOPE_FROM is assigned only from $BASE_REF or
-    # $REVIEWED_SHA, and the same suite pins that assignment set. Both are refs
-    # by construction, never names.
+    # of `[0-9a-f]\{40\}`). $SCOPE_FROM is assigned only from $BASE_REF,
+    # $REVIEWED_SHA, or HEAD (#566), and the same suite pins that assignment set.
+    # All are refs by construction, never names.
     case "$endpoint" in
         "${d}BASE_REF"|"${d}SCOPE_FROM"|"${d}REVIEWED_SHA") ;;
         *) printf '  FAIL %s uses %q as a range endpoint; only %sBASE_REF, %sSCOPE_FROM and %sREVIEWED_SHA are refs — a name is frozen at checkout time\n' \

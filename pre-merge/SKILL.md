@@ -100,8 +100,14 @@ If you are running on a branch other than the user's working branch and `--pr` w
      && [ "$REVIEWED_SHA" != "$(git rev-parse HEAD)" ] \
      && [ -z "$(git log --merges --format=%H "$REVIEWED_SHA..HEAD")" ]; then
      SCOPE_FROM="$REVIEWED_SHA"
+   elif [ -n "$REVIEWED_SHA" ] \
+     && ! git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
+     && [ "$(git rev-parse -q --verify "$REVIEWED_SHA^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ]; then
+     SCOPE_FROM="HEAD"
    fi
-   if [ "$SCOPE_FROM" = "$BASE_REF" ]; then
+   if [ "$SCOPE_FROM" = HEAD ]; then
+     echo "review scope: none, history-only rewrite — HEAD carries the tree reviewed at $REVIEWED_SHA"
+   elif [ "$SCOPE_FROM" = "$BASE_REF" ]; then
      echo "review scope: whole branch, from $BASE_REF"
    else
      echo "review scope: post-stamp delta, from $SCOPE_FROM"
@@ -109,7 +115,9 @@ If you are running on a branch other than the user's working branch and `--pr` w
    git diff "$SCOPE_FROM...HEAD" --stat
    git log --oneline "$SCOPE_FROM..HEAD"
    ```
-   Four states fall back to the whole branch, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` (the branch was force-pushed and the reviewed commit rewritten away — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge commit after the stamp (the post-stamp diff would carry the base branch's own changes, which nobody on this branch wrote). The decision is printed so the terminal readout and the PR say the same thing about what was read.
+   Four states fall back to the whole branch, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` and whose tree `HEAD` no longer carries (the branch was rewritten and the content changed with it, or the reviewed commit is gone — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge commit after the stamp (the post-stamp diff would carry the base branch's own changes, which nobody on this branch wrote). The decision is printed so the terminal readout and the PR say the same thing about what was read.
+
+   **A rewrite that kept the reviewed tree is not a divergence.** When the stamped commit is not an ancestor of `HEAD` but still exists locally and carries the same tree as `HEAD`, history changed and content did not: the fold Phase 4's handoff offers (`git rebase -i --autosquash`) produces exactly this. The block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`. Skip Phase 3 and everything in Phase 4 except the stamp, which re-stamps at `HEAD`, and the handoff menu. The stamp certifies reviewed content, and a tree hash is that content exactly. If the stamped commit is not available locally, the tree cannot be compared, and the rewrite takes the whole-branch fallback above.
 
    **On a delta re-run, the delta is the subject and the tree is still readable.** Brief each Phase 3 reviewer with the findings the post-stamp commits claim to close — the earlier readout in this session, the PR's ledger if loop-mode wrote one, or the commit messages themselves — and with the `/fix-findings` breaker verdicts when there are any. The first question per commit is whether the fix closes its finding at every site the finding named, which is the Fix Completeness dimension; the second is what the new text contradicts nearby, which is the census in `references/restated-claims.md`. Both need the surrounding tree, and the checklist's context contract already grants it; the scope narrows what the review is *about*, never what the reviewer may open.
 
@@ -129,6 +137,8 @@ If you are running on a branch other than the user's working branch and `--pr` w
 ### Phase 2: Create the PR
 
 **Skip this phase entirely in reviewer-mode** — the PR already exists, you did not author it, and rewriting someone else's PR body is out of scope. Proceed to Phase 3.
+
+**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and `git rev-parse -q --verify '@{u}'` prints nothing, nobody else has seen this branch yet. Skip to Phase 3 and review the local branch. The stamp lives in the sidecar, so it does not need a PR. This phase runs when the human picks **Open the PR** from the handoff menu. Until then, re-runs keep deferring it, so review fixes can be folded into the commits they correct before anyone else reads the history. That is *Pro Git*'s rule (Chacon, Ch. 3): rebase local changes you haven't shared yet, and never rebase anything you've pushed. The closing-issue thread reconciliation in Phase 4 needs a PR, so on a deferred run it waits for this phase too. On the `github` backend the PR body holds the stamp, so the PR is opened here, before the review.
 
 1. **Check for an existing PR:**
    ```bash
@@ -654,3 +664,26 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 - **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR, then handed back here for a re-run over its commit, so the entry is reviewed and merged with the code it explains rather than merged unreviewed (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`. In loop-mode, the ledger hands back to the operator: settle the `open` rows — fix, file, accept, or drop each one — then either re-invoke `/pre-merge --loop` on the updated diff or continue to `/compound`, the `/pre-merge` re-run it hands back to, and `/closeout` as above
 
 **Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). It does not apply on AFK loop-mode runs — there is no user to ask, so print the exit readout and the handoff line instead. Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended — capture the lesson)**, **`/closeout` (merge and clean up — no lesson worth capturing)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then capture the lesson**. When no lesson emerged, lead with **→ `/closeout` (recommended — merge and clean up)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then merge**. Route those findings to `/qa` or `/request-refactor-plan` after the choice, rather than naming two skills in one label. When the human picks **Fix a finding on this branch first**, ask one follow-up question — which finding numbers to fix — and invoke `/fix-findings` with exactly the numbers they name, in the order they name them; never fill the numbers in yourself, because choosing them is the human's disposition, not this skill's. Both menus carry the finding-disposition pair because it is a separate axis from the lesson: whether a finding can wait does not depend on whether a lesson emerged, and a reviewer holding both has to be able to say so. **On the re-run `/compound` handed back — the delta test above says the post-stamp delta is only `docs/solutions/` paths — take the no-lesson menu even though a lesson plainly emerged from the branch: it is already captured, in the commit this run just reviewed, so `/compound` is not an option to re-offer and `/closeout` leads.** Within that pair the discriminator is *now vs. later*, not severity — so each label leads with the act that distinguishes it (*fix* vs. *hand off*) and closes with the step it returns to, rather than leading with the step both options share. In reviewer-mode the options differ — **Post the draft comments**, **Talk it through offline first (MMG Exchange)**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
+
+**While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Once Phase 2 has run, offer the menu above.
+
+**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings` commits a fix as `fixup! <subject>` when it corrects one branch commit. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in `git log --format=%s "$BASE_REF..HEAD"` starts with `fixup! `, and `git rev-parse -q --verify '@{u}'` prints nothing, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. On a pick, run:
+
+```bash
+: "${BASE_REF:?derive it with the Phase 1 step 3 block before running this}"
+# Rebase onto the branch's own fork point, not the base's tip: a base that moved
+# since the branch forked would change the tree, and the re-run would then read
+# the fold as new content.
+FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
+TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
+if ! GIT_SEQUENCE_EDITOR=: git rebase -q -i --autosquash "$FORK_POINT"; then
+  git rebase --abort
+  echo "fold aborted: a fixup conflicted with a later commit; the branch is as it was" >&2
+elif [ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ]; then
+  echo "folded: tree unchanged"
+else
+  echo "folded, but the tree changed: the re-run will review the whole branch" >&2
+fi
+```
+
+Then re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.
