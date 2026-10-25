@@ -778,6 +778,20 @@ printf '## Parent PRD\n\nW-1\n\n## Implementation Decisions\n\nx\n' > "$tmp/xhea
 (cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xheadslice.md" >/dev/null)          # W-5
 gate "a prd without the shaped-pitch headings is undecomposed-prd" W-4 "undecomposed-prd"
 gate "a slice whose body has a shaped-pitch heading is takeable" W-5 "takeable ever_wired=0 comments=0"
+# An unreadable blocker counts as open, and a blocker outranks a recorded pr.
+# `work create --blocked-by` refuses an id that does not exist, so the dangling
+# id is written into the item's frontmatter by hand (and committed, so the
+# sidecar stays clean) the way a deleted or mistyped blocker would arrive.
+xs="$SKILL_KIT_SIDECAR_ROOT/exec-guest"
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md" >/dev/null)          # W-6
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md" >/dev/null)          # W-7
+sed 's/^blocked_by:.*/blocked_by: [W-99]/' "$xs/work/W-6.md" > "$tmp/w6.md" && cp "$tmp/w6.md" "$xs/work/W-6.md"
+sed 's/^blocked_by:.*/blocked_by: [W-2, W-99]/' "$xs/work/W-7.md" > "$tmp/w7.md" && cp "$tmp/w7.md" "$xs/work/W-7.md"
+git -C "$xs" add work/W-6.md work/W-7.md
+git -C "$xs" commit -q -m "test: hand-written dangling blockers" || bad "commit the dangling-blocker fixtures" "commit failed"
+(cd "$P" && bash "$SC" work set W-7 pr "https://github.com/acme/exec-guest/pull/10" >/dev/null)
+gate "a blocker id that does not exist is blocked as unreadable" W-6 'blocked [{"id":"W-99","state":"unreadable"}]'
+gate "a blocked item with a recorded pr is blocked, not in-flight" W-7 'blocked [{"id":"W-99","state":"unreadable"}]'
 clean "the gate leaves the project clean" "$P"
 
 # -----------------------------------------------------------------------------
