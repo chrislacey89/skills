@@ -723,6 +723,7 @@ run_target() {
 assert_eq "$change_b_sha" "$(run_target 2 2)" "a line one branch commit wrote: that commit is the target"
 assert_eq "" "$(run_target 2 4)" "lines from two branch commits: no target"
 assert_eq "" "$(run_target 1 1)" "a line from the base: no target"
+assert_eq "" "$(run_target 1 2)" "a base line next to one branch commit's line: no target (every anchored line, not every non-base line)"
 
 # -----------------------------------------------------------------------------
 

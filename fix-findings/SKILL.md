@@ -163,8 +163,8 @@ The fixer's instructions, in order:
    ```bash
    # $BASE_REF as /pre-merge Phase 1 step 3 derives it; FILE, START, END from the finding's anchor.
    FIXUP_TARGET=$(git blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
-     | awk '$1 !~ /^\^/ { print $1 }' | sort -u)
-   [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] || FIXUP_TARGET=
+     | awk '{ print $1 }' | sort -u)
+   [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
    ```
 
    A non-empty `FIXUP_TARGET` means one branch commit wrote every anchored
