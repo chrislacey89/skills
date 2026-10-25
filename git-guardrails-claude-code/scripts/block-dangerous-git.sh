@@ -479,7 +479,7 @@ gh_merge_target() {
 # already printed by the caller's contract: it fills GH_BLOCK_MSG instead of
 # writing, so the caller owns the one exit path.
 check_gh_merge() {
-    local i=$GH_INDEX json head_oid reviewed_sha ahead shortstat delta
+    local i=$GH_INDEX json head_oid reviewed_sha ahead shortstat delta sidecar backend head_ref
     local -a view_args
 
     # `gh pr merge` exactly — gh's own global options are only --help and
@@ -522,13 +522,40 @@ check_gh_merge() {
     view_args=(pr view)
     [ -z "$GH_SELECTOR" ] || view_args+=("$GH_SELECTOR")
     [ -z "$GH_REPO" ]     || view_args+=(--repo "$GH_REPO")
-    view_args+=(--json "body,headRefOid")
+
+    # Where the stamp lives. On the sidecar backend (a guest repo whose PR body
+    # carries no pack text) /pre-merge records it in the project's sidecar,
+    # keyed by branch; otherwise it is the PR-body marker. The resolver is
+    # installed beside this hook. The sidecar describes the repo of the current
+    # directory, so a merge aimed elsewhere by `-R` or a URL keeps the PR-body
+    # read. Any answer but a clean `sidecar` — resolver absent, refusal, no
+    # repo — also keeps it, which is the behavior before the sidecar existed.
+    sidecar="$(dirname "$0")/sidecar.sh"
+    backend=github
+    if [ -f "$sidecar" ] && [ -z "$GH_REPO" ]; then
+        case "$GH_SELECTOR" in
+            *://*) ;;
+            *) backend=$(bash "$sidecar" backend stamp 2>/dev/null) || backend=github ;;
+        esac
+    fi
+
+    if [ "$backend" = sidecar ]; then
+        view_args+=(--json "headRefName,headRefOid")
+    else
+        view_args+=(--json "body,headRefOid")
+    fi
 
     json=$(gh "${view_args[@]}" 2>/dev/null) || return 0
     [ -n "$json" ] || return 0
 
     head_oid=$(printf '%s' "$json" | jq -r '.headRefOid // empty' 2>/dev/null)
-    reviewed_sha=$(printf '%s' "$json" | jq -r '.body // empty' 2>/dev/null | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
+    if [ "$backend" = sidecar ]; then
+        head_ref=$(printf '%s' "$json" | jq -r '.headRefName // empty' 2>/dev/null)
+        [ -n "$head_ref" ] || return 0
+        reviewed_sha=$(bash "$sidecar" stamp read "$head_ref" 2>/dev/null) || return 0
+    else
+        reviewed_sha=$(printf '%s' "$json" | jq -r '.body // empty' 2>/dev/null | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)
+    fi
 
     # An absent stamp is not evidence of an unreviewed diff — a hand-authored
     # PR, an external contribution, a PR that predates the stamp, and a

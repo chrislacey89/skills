@@ -414,6 +414,7 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] `.claude/hooks/enforce-classification.sh` exists and is executable
 - [ ] Hook's `IMPL_PATTERNS` array matches the project's implementation surface: on § 2's Path A or B, the default list or the customized answer confirmed during this install; on Path C or Path D, byte-identical to the array in the hook that was already there
 - [ ] `.claude/hooks/block-dangerous-git.sh` exists and is executable
+- [ ] `.claude/hooks/sidecar.sh` exists beside it, so the guard can read a sidecar review stamp
 - [ ] `.claude/settings.json` has both PreToolUse hooks configured
 - [ ] Path D that ran § 5: the line above `IMPL_PATTERNS` is the one § 5 says to rewrite it to, whichever answer the user gave
 - [ ] If quality gate accepted: `.claude/hooks/quality-gate.sh` exists, is executable, and PostToolUse hook is in settings

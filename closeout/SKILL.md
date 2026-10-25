@@ -178,7 +178,7 @@ Three outcomes, and only one of them interrupts:
 
 This precondition **never hard-blocks**. `/closeout` is HITL and non-blocking by design, and the fix here is making the divergence *visible* — not seizing the merge decision from the user.
 
-See `/git-guardrails-claude-code` → "What Gets Blocked Conditionally" and chrislacey89/skills#522. Where it is installed, the **Merge anyway** branch above needs the opt-out named in Step 3.
+The git guardrail makes the same comparison at the merge itself; its refusal condition, where it reads the stamp, and the limits on that read are stated once, in `/git-guardrails-claude-code` ("What Gets Blocked Conditionally"). So the **Merge anyway** branch above needs the opt-out named in Step 3.
 
 ### 3. Merge the PR
 
@@ -191,7 +191,7 @@ gh pr merge <number> --squash --delete-branch --body-file "$BODY_FILE"   # or --
 rm -f "$BODY_FILE"
 ```
 
-See `/git-guardrails-claude-code` → "What Gets Blocked Conditionally" and chrislacey89/skills#522. Carry the decision across explicitly:
+On a diverged stamp the guardrail refuses that merge, for the reason given at the end of Step 2. Carry a **Merge anyway** decision across explicitly:
 
 ```bash
 ALLOW_STALE_STAMP_MERGE=1 gh pr merge <number> --squash --delete-branch --body-file "$BODY_FILE"
