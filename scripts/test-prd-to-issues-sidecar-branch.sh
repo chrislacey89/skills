@@ -244,6 +244,58 @@ s9 "$W9"
 check "§9: an undecomposed PRD exits 1" 1 "$rc"
 case "$err" in *"run §8 first"*) ok "§9: names §8 for an empty decomposed_into" ;; *) bad "§9: names §8 for an empty decomposed_into" "got [$err]" ;; esac
 
+# Finding 7: the QA slice names every slice, so it is in more than one dependents
+# list. Slices A, B (blocked by A) and QA (blocked by A, B); R replaces A. Follow
+# §8 literally: one id at a time, the check re-run from the top after each
+# re-create, and every closed blocker that has a replacement swapped, not only OLD.
+printf 'fourth pitch\n' > "$tmp/pitch4"
+PQ="$(cd "$P" && bash "$SC_REAL" work create --kind prd --body-file "$tmp/pitch4" 2>/dev/null)"
+slice "$PQ" "" "" ""; SA="$out"
+slice "$PQ" "$SA" "" "$SA"; SB="$out"
+slice "$PQ" "$SA,$SB" "" "$SA,$SB"; SQ="$out"
+slice "$PQ" "" "" ""; SR="$out"
+(cd "$P" && bash "$SC_REAL" work close "$SA" --superseded-by "$SR" >/dev/null 2>&1) || fatal "could not close $SA"
+deps_q() { local b="${dependents_block//PRD=\"W-<prd>\"/PRD=\"$PQ\"}"; runb "$P" "${b//OLD=\"W-<closed>\"/OLD=\"$1\"}"; }
+deps_q "$SA"
+check "finding 7: the first list names both the slice and the QA slice" "$SB
+$SQ" "$out"
+recreate() {
+    local x="$1" bl="" body id rep
+    body="$(field "$x" .body)"
+    for id in $(field "$x" '.blocked_by | join(" ")'); do
+        rep="$(field "$id" '.superseded_by // empty')"
+        if [ "$(field "$id" .state)" = closed ] && [ -n "$rep" ]; then
+            body="$(printf '%s' "$body" | perl -pe "s/\\b$id\\b/$rep/g")"; id="$rep"
+        fi
+        bl="${bl:+$bl,}$id"
+    done
+    slice "$PQ" "$bl" "" "${bl}" "$body"; NEW="$out"
+    runb "$P" "${reconcile_block//W-<slice>/$NEW}"
+    check "finding 7: the read-back matches on $NEW" "match $NEW: [$bl]" "$out"
+    (cd "$P" && bash "$SC_REAL" work close "$x" --superseded-by "$NEW" >/dev/null 2>&1) || fatal "could not close $x"
+}
+queue="$SA"; recreated=0
+while [ -n "$queue" ] && [ "$recreated" -lt 10 ]; do
+    old="${queue%% *}"; queue="${queue#"$old"}"; queue="${queue# }"
+    deps_q "$old"
+    first="${out%%$'\n'*}"
+    [ -n "$first" ] || continue
+    recreate "$first"; recreated=$((recreated + 1))
+    queue="$old $first${queue:+ $queue}"
+done
+check "finding 7: exactly two replacements (slice and QA), no duplicate QA" 2 "$recreated"
+open_q="$(cd "$P" && bash "$SC_REAL" work list --parent "$PQ")"
+check "finding 7: three open slices under the PRD (R, B and QA replacements)" 3 "$(printf '%s\n' "$open_q" | grep -c .)"
+bad_blockers=0
+for id in $open_q; do
+    for b in $(field "$id" '.blocked_by // [] | join(" ")'); do
+        [ "$(field "$b" .state)" = open ] || bad_blockers=$((bad_blockers + 1))
+    done
+done
+check "finding 7: every open slice names only open blockers" 0 "$bad_blockers"
+unb="$(cd "$P" && bash "$SC_REAL" work list --parent "$PQ" --unblocked)"
+check "finding 7: only the replacement for the first slice is unblocked (QA not handed out early)" "$SR" "$unb"
+
 check "sidecar: no gh call at all" "" "$(cat "$GH_LOG")"
 check "sidecar: the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
 
