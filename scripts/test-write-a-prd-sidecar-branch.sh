@@ -45,8 +45,9 @@ subst() { sed "s|<this skill's directory>/references/sidecar.sh|$SC_REAL|g"; }
 backend_block="$(block 1 | subst)"
 create_block="$(block 2 | subst)"
 expand_block="$(block 3 | subst)"
-[ -n "$backend_block" ] && [ -n "$create_block" ] && [ -n "$expand_block" ] \
-    || fatal "Step 8 no longer has three fenced bash blocks (backend, create, expand)"
+if [ -z "$backend_block" ] || [ -z "$create_block" ] || [ -z "$expand_block" ]; then
+    fatal "Step 8 no longer has three fenced bash blocks (backend, create, expand)"
+fi
 for b in "$backend_block" "$create_block" "$expand_block"; do
     case "$b" in *"$SC_REAL"*) ;; *) fatal "a Step 8 block does not set SC from the bundled path" ;; esac
 done
