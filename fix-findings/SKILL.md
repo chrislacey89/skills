@@ -1,6 +1,6 @@
 ---
 name: fix-findings
-description: "Invoked helper skill for fixing the /pre-merge findings a human has already chosen, with a fresh sub-agent writing each fix and a second fresh sub-agent trying to break it. Enter from the /pre-merge next-step menu option "Fix a finding on this branch first" or by typing /fix-findings <numbers>; never self-trigger without finding numbers the human picked. Not for choosing which findings to act on, not for stamping review currency, and not for merging."
+description: "Invoked helper skill for fixing the /pre-merge findings a human has already chosen, with a fresh sub-agent writing each fix and a second fresh sub-agent trying to break it. Enter from the /pre-merge next-step menu option \"Fix a finding on this branch first\" or by typing /fix-findings <numbers>; never self-trigger without finding numbers the human picked. Not for choosing which findings to act on, not for stamping review currency, and not for merging."
 sources:
   primary:
     - "Engineering a Safer World — Nancy Leveson"

@@ -1256,35 +1256,50 @@ gate_proj="$scratch/gate-project"
 mkdir -p "$gate_proj/$(dirname "$hook_rel")"
 git init -q "$gate_proj" >/dev/null 2>&1 || fatal "could not init a scratch git repo for the gate's fallback row"
 
-run_gate() {  # $1 = CLAUDE_PROJECT_DIR, or "" to exercise the git-toplevel fallback
-    if [ -n "$1" ]; then
-        ( cd "$gate_proj" && CLAUDE_PROJECT_DIR="$1" bash -c "$hooks_gate" )
+# Agents run this block in the harness shell, which on macOS is zsh, and zsh
+# does not word-split an unquoted expansion (#393: a `for term in $GATE_TERMS`
+# loop ran once there and reported every hook stale). So every row runs under
+# each shell. A missing zsh skips that arm locally and fails when CI is set.
+run_gate() {  # $1 = shell, $2 = CLAUDE_PROJECT_DIR, or "" to exercise the git-toplevel fallback
+    if [ -n "$2" ]; then
+        ( cd "$gate_proj" && CLAUDE_PROJECT_DIR="$2" "$1" -c "$hooks_gate" )
     else
-        ( cd "$gate_proj" && env -u CLAUDE_PROJECT_DIR bash -c "$hooks_gate" )
+        ( cd "$gate_proj" && env -u CLAUDE_PROJECT_DIR "$1" -c "$hooks_gate" )
     fi
 }
 
-rm -f "$gate_proj/$hook_rel"
-assert_eq "hooks-absent" "$(run_gate "$gate_proj")" \
-    "no hook installed: the gate reports it, and /init-pipeline scaffolds"
+gate_rows() {  # $1 = shell
+    rm -f "$gate_proj/$hook_rel"
+    assert_eq "hooks-absent" "$(run_gate "$1" "$gate_proj")" \
+        "[$1] no hook installed: the gate reports it, and /init-pipeline scaffolds"
 
-cp "$prelock" "$gate_proj/$hook_rel"
-assert_eq "hooks-stale" "$(run_gate "$gate_proj")" \
-    "the pre-lock hook installed: the gate fires, and /init-pipeline re-scaffolds"
+    cp "$prelock" "$gate_proj/$hook_rel"
+    assert_eq "hooks-stale" "$(run_gate "$1" "$gate_proj")" \
+        "[$1] the pre-lock hook installed: the gate fires, and /init-pipeline re-scaffolds"
 
-cp "$hook_file" "$gate_proj/$hook_rel"
-assert_eq "hooks-lock-present" "$(run_gate "$gate_proj")" \
-    "the shipped hook installed: the gate stays silent"
+    cp "$hook_file" "$gate_proj/$hook_rel"
+    assert_eq "hooks-lock-present" "$(run_gate "$1" "$gate_proj")" \
+        "[$1] the shipped hook installed: the gate stays silent"
 
-# Same three-way separation with the variable the harness may not set, since the
-# gate wrote the same ${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}
-# fallback section 6 measures for /pre-merge and /fix-findings.
-assert_eq "hooks-lock-present" "$(run_gate "")" \
-    "…and with \$CLAUDE_PROJECT_DIR unset, the gate resolves the project by git toplevel"
+    # Same three-way separation with the variable the harness may not set, since the
+    # gate wrote the same ${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}
+    # fallback section 6 measures for /pre-merge and /fix-findings.
+    assert_eq "hooks-lock-present" "$(run_gate "$1" "")" \
+        "[$1] …and with \$CLAUDE_PROJECT_DIR unset, the gate resolves the project by git toplevel"
 
-cp "$prelock" "$gate_proj/$hook_rel"
-assert_eq "hooks-stale" "$(run_gate "")" \
-    "…and still fires on the pre-lock hook through that same fallback"
+    cp "$prelock" "$gate_proj/$hook_rel"
+    assert_eq "hooks-stale" "$(run_gate "$1" "")" \
+        "[$1] …and still fires on the pre-lock hook through that same fallback"
+}
+
+gate_rows bash
+if command -v zsh >/dev/null 2>&1; then
+    gate_rows zsh
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the hooks gate rows ran under zsh (CI is set, so a missing zsh fails)"
+else
+    printf '  SKIP zsh is not on PATH, so the hooks gate rows ran under bash only\n'
+fi
 
 # --- Every verdict the gate emits is a verdict Step 0's prose defines --------
 #

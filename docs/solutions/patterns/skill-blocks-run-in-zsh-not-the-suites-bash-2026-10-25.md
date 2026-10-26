@@ -61,7 +61,7 @@ while IFS= read -r id; do …; done <<<"$UNBLOCKED"
 
 ## Prevention
 
-**Code-level:** `scripts/test-skill-blocks-zsh-safe.sh` scans every fenced bash/sh block in `*/SKILL.md`, `SYSTEM-OVERVIEW.md`, and `docs/*.md` for the two textual shapes above. The two pre-existing sites (`/execute`'s `for term in $GATE_TERMS`, `/write-a-prd` Step 8's `${MILESTONE:+…}`) are listed with #393 as their owner, and an entry that stops matching fails, so the list only shrinks. It cannot see a bare `$FLAGS` meant to split, unmatched globs, or array differences. A suite that runs a skill's blocks under zsh is the stronger check, and only `/prd-to-issues`' suite does that today.
+**Code-level:** `scripts/test-skill-blocks-zsh-safe.sh` scans every fenced bash/sh block in `*/SKILL.md`, `SYSTEM-OVERVIEW.md`, and `docs/*.md` for the two textual shapes above. Pre-existing sites are listed with the issue that owns each, and an entry that stops matching fails, so the list only shrinks. The two it shipped with (`/execute`'s `for term in $GATE_TERMS`, `/write-a-prd` Step 8's `${MILESTONE:+…}`) were fixed in #393, so it is empty. It cannot see a bare `$FLAGS` meant to split, unmatched globs, or array differences. A suite that runs a skill's blocks under zsh is the stronger check; `/prd-to-issues`' suite does, and `scripts/test-post-review-edit-lock.sh` runs `/execute`'s hooks gate under both shells.
 
 **Process-level:** when a suite extracts and runs skill blocks, run them under every shell agents use (bash and zsh), and make CI provide that shell instead of skipping. A lesson that lives only in an open issue is invisible to `/execute`'s and `/research`'s `docs/solutions/` grep, so the first recording of a pattern belongs here as well as in the issue.
 
