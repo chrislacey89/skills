@@ -191,6 +191,22 @@ esac
 DESC_FILE=$(mktemp)
 # Write the plain description into "$DESC_FILE". Nothing below adds to it.
 BRANCH=$(git branch --show-current)
+KIND=$(bash "$SC" config get forge.kind) \
+  || { echo "PR aborted: sidecar.sh config get forge.kind failed" >&2; rm -f "$DESC_FILE"; exit 1; }
+if [ "$KIND" != github ]; then
+  SIDECAR=$(bash "$SC" resolve) \
+    || { echo "PR aborted: sidecar.sh resolve failed" >&2; rm -f "$DESC_FILE"; exit 1; }
+  mkdir -p "$SIDECAR/prs"
+  PASTE="$SIDECAR/prs/$(printf '%s' "$BRANCH" | tr -c 'A-Za-z0-9._-' '_').md"
+  { printf '%s\n\n' "$TITLE"; cat "$DESC_FILE"; } > "$PASTE"
+  rm -f "$DESC_FILE"
+  bash "$SC" commit -- "$PASTE" -m "pre-merge: PR text for $BRANCH" >/dev/null \
+    || echo "the PR text is at $PASTE but is not committed to the sidecar" >&2
+  echo "forge.kind is ${KIND:-unset}, which gh cannot reach. Open the PR on the host with this title and description (saved at $PASTE):"
+  echo
+  cat "$PASTE"
+  exit 0
+fi
 PR_URL=$(gh pr list --head "$BRANCH" --json url -q '.[0].url // ""') \
   || { echo "PR lookup failed" >&2; rm -f "$DESC_FILE"; exit 1; }
 if [ -z "$PR_URL" ]; then
@@ -207,7 +223,27 @@ fi
 echo "$PR_URL"
 ```
 
-The lineage the templates would have written is already on the work item: its `parent`, its `blocked_by`, and now its `pr`. `/execute`'s `## Review Notes` goes to the work item too (step 3 below), and Phase 3 hands it to its reviewers from there. `scripts/test-guest-footprint.sh` runs this block and `/closeout` Step 3's merge against a stubbed `gh`, on a work item and on "none", and fails on any pack marker in what they pass.
+**On a forge `gh` cannot reach**, the block stops before any `gh` call. A `forge.kind` other than `github` puts even an owned repo on the sidecar backend ([references/state-backend.md](references/state-backend.md)), so this is the arm a GitLab, Bitbucket, or unrecognized host takes. Steps 1 and 2 above do not run there either. The block prints the plain title and description, the one artifact a human has to carry to the host by hand, and saves the same text under the sidecar's `prs/`. Then ask the human, once, for the PR's URL after they have opened it, and record it with this block:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"            # the same work item as above; empty when step 1's answer was "none"
+PR_URL="<the URL the human gave>"
+case "$PR_URL" in
+  https://*|http://*) ;;
+  *) echo "not recorded: '$PR_URL' is not a URL" >&2; exit 1 ;;
+esac
+if [ -n "$W" ]; then
+  bash "$SC" work set "$W" pr "$PR_URL" || { echo "$PR_URL is not recorded on $W" >&2; exit 1; }
+else
+  echo "no work item: $PR_URL is recorded nowhere in the sidecar" >&2
+fi
+echo "$PR_URL"
+```
+
+If they have not opened it yet, record nothing and go on: a later `/pre-merge` run prints the text again and asks again. Opening the PR on the operator's behalf, through any forge's own API or CLI, is out of scope here.
+
+The lineage the templates would have written is already on the work item: its `parent`, its `blocked_by`, and now its `pr`. `/execute`'s `## Review Notes` goes to the work item too (step 3 below), and Phase 3 hands it to its reviewers from there. `scripts/test-guest-footprint.sh` runs this block and `/closeout` Step 3's merge against a stubbed `gh`, on a work item and on "none", and fails on any pack marker in what they pass. It runs the paste arm and the URL block on a GitLab remote too, holding the printed and saved text to the same marker scan.
 
 **PR body template (when PRD exists):**
 

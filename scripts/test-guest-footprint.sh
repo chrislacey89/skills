@@ -22,6 +22,12 @@
 # that answers github and one that refuses: a refusal must stop them before any
 # gh call, never fall through to the github templates.
 #
+# On a forge gh cannot reach (forge.kind not github, #582), Phase 2's block
+# prints the plain title and description and saves them in the sidecar instead
+# of calling gh, and a second block records the URL the human gives. Both run
+# on a GitLab remote, guest and owned, and the printed and saved text go
+# through the same marker scan.
+#
 # The detector is itself mutation-tested below: the same blocks run with a
 # marker planted in the description must turn the check red.
 #
@@ -139,23 +145,24 @@ co_block="$(block "$CO" 'gh pr merge <number> --squash --delete-branch --body-fi
 check "the Phase 2 block carries exactly one description placeholder" 1 \
     "$(grep -c 'Nothing below adds to it\.' <<<"$pm_block")"
 
-# mkguest <label> <init|noinit> — a fresh project on its own github remote in
-# $P, with a guest sidecar and one slice work item (W-1) unless noinit.
+# mkguest <label> <init|noinit> [host] [mode] — a fresh project on its own
+# remote in $P (github.com unless host is given), with a sidecar (guest unless
+# mode is given) and one slice work item (W-1) unless noinit.
 n=0
 mkguest() {
     n=$((n + 1))
     P="$tmp/proj$n"; export GH_STUB="$tmp/gh$n"; mkdir -p "$GH_STUB"
     git init -q "$P"
     git -C "$P" commit -q --allow-empty -m "root $P"
-    git -C "$P" remote add origin "https://github.com/acme/guest$n.git"
+    git -C "$P" remote add origin "https://${3:-github.com}/acme/guest$n.git"
     git -C "$P" checkout -q -b feat
     [ "$2" = noinit ] && return 0
-    (cd "$P" && bash "$SC" init --name "guest$n" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+    (cd "$P" && bash "$SC" init --name "guest$n" --mode "${4:-guest}" --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
         || bad "$1: init the guest sidecar" "init failed"
     printf '## Parent PRD\n\nnone\n' > "$tmp/slice.md"
     (cd "$P" && bash "$SC" work create --kind slice --body-file "$tmp/slice.md" >/dev/null 2>&1) \
         || bad "$1: create the work item" "work create failed"
-    check "$1: backend stamp answers sidecar on a guest repo" sidecar "$(cd "$P" && bash "$SC" backend stamp)"
+    check "$1: backend stamp answers sidecar on a ${4:-guest} repo" sidecar "$(cd "$P" && bash "$SC" backend stamp)"
 }
 
 # run_pm <W value> <sidecar.sh path> <extra description line or empty> — Phase
@@ -235,6 +242,55 @@ run_pm W-1 "$tmp/refusing-sc.sh" ""
 check "on a refused backend, Phase 2's block exits nonzero" 1 "$pm_rc"
 check "on a refused backend, it calls no gh at all" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
 check "on a refused backend, it says it is not guessing" 1 "$(grep -c 'not guessing' "$tmp/stderr")"
+
+# -----------------------------------------------------------------------------
+section "a forge gh cannot reach: the PR text is printed and saved, never sent (#582)"
+
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+url_block="$(block "$PM" 'PR_URL="<the URL the human gave>"')"
+[ -n "$url_block" ] || bad "pre-merge/SKILL.md Phase 2 carries the URL-recording block" "not found"
+run_url() {  # <W value> <URL> — the URL block in $P; exit in $url_rc
+    local b="${url_block//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+    b="${b//W=\"W-<n>\"/W=\"$1\"}"
+    b="${b//PR_URL=\"<the URL the human gave>\"/PR_URL=\"$2\"}"
+    (cd "$P" && PATH="$tmp/bin:$PATH" bash -c "$b" >/dev/null 2>"$tmp/stderr"); url_rc=$?
+}
+paste_file() { find "$(cd "$P" && bash "$SC" resolve)/prs" -name '*.md' 2>/dev/null | head -n 1; }
+
+for mode in guest owned; do
+    mkguest "gitlab $mode" init gitlab.com "$mode"
+    check "gitlab $mode: forge.kind reads gitlab" gitlab "$(cd "$P" && bash "$SC" config get forge.kind)"
+    run_pm W-1 "$SC" ""
+    check "gitlab $mode: Phase 2's block exits 0" 0 "$pm_rc"
+    check "gitlab $mode: it calls no gh at all" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
+    check "gitlab $mode: it prints the title" 1 "$(grep -cxF 'Fix the report totals' <<<"$pm_out")"
+    check "gitlab $mode: it prints the description" 1 "$(grep -cxF 'The report summed refunds twice.' <<<"$pm_out")"
+    pf="$(paste_file)"
+    check "gitlab $mode: the text is saved under the sidecar's prs/" 1 "$([ -f "$pf" ] && echo 1 || echo 0)"
+    case "$pf" in */prs/feat.md) ok "gitlab $mode: the saved file is named for the branch" ;; *) bad "gitlab $mode: the saved file is named for the branch" "got [$pf]" ;; esac
+    check "gitlab $mode: the saved text is committed to the sidecar" "" "$(git -C "$(dirname "$(dirname "$pf")")" status --porcelain 2>&1)"
+    check "gitlab $mode: the printed text carries no pack marker" "" "$(printf '%s\n' "$pm_out" | sed 1d > "$tmp/printed"; footprint "$tmp/printed")"
+    check "gitlab $mode: the saved text carries no pack marker" "" "$(footprint "$pf")"
+    check "gitlab $mode: the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
+    run_url W-1 "https://gitlab.com/acme/guest$n/-/merge_requests/3"
+    check "gitlab $mode: the URL block exits 0" 0 "$url_rc"
+    check "gitlab $mode: the work item's pr field holds the URL" "https://gitlab.com/acme/guest$n/-/merge_requests/3" \
+        "$(cd "$P" && bash "$SC" work view W-1 --json | jq -r .pr)"
+done
+run_url "" "https://gitlab.com/acme/x/-/merge_requests/4"
+check "with no work item, the URL block exits 0" 0 "$url_rc"
+check "with no work item, it says the URL is recorded nowhere" 1 "$(grep -c 'recorded nowhere' "$tmp/stderr")"
+run_url W-1 "not yet"
+check "an answer that is not a URL is refused" 1 "$url_rc"
+check "…and leaves the recorded URL as it was" "https://gitlab.com/acme/guest$n/-/merge_requests/3" \
+    "$(cd "$P" && bash "$SC" work view W-1 --json | jq -r .pr)"
+check "the URL block calls no gh at all" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
+
+for m in 'Closes #12' 'Implements W-1' '## Review Notes'; do
+    mkguest "gitlab planted [$m]" init gitlab.com
+    run_pm W-1 "$SC" "$m"
+    check "gitlab planted [$m]: the saved text's footprint is non-empty" 1 "$(footprint "$(paste_file)" | grep -c . | awk '{print ($1 > 0)}')"
+done
 
 # -----------------------------------------------------------------------------
 section "Phase 1's lineage block reads the boundary maps from the work items"
