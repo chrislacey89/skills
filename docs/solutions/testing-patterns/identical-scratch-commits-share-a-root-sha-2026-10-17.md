@@ -2,7 +2,7 @@
 date: 2026-10-17
 category: testing-patterns
 problem_type: content-addressed fixtures built from identical inputs collide, so a test keyed on git object identity sees two fixtures as one
-components: [scripts/test-sidecar-resolution.sh, init-pipeline/scripts/sidecar.sh, scratch-repo fixtures]
+components: [scripts/test-sidecar-resolution.sh, scripts/test-guest-footprint.sh, scripts/test-fixture-root-collision.sh, init-pipeline/scripts/sidecar.sh, scratch-repo fixtures]
 technologies: [git, bash, GitHub Actions]
 severity: medium
 volatility: evergreen
@@ -72,9 +72,18 @@ Then make the failure-path assertions state their reason, so a collision cannot 
 
 **Process-level:** When a test is intermittent locally and steady in CI, suspect a timing-dependent input before suspecting the code under test. Rerunning the test until it passes throws the evidence away.
 
+**Mechanism (added on the recurrence below):** `scripts/test-fixture-root-collision.sh` runs every `scripts/test-*.sh` that calls `sidecar.sh init --name` with both commit dates pinned, and fails on any suite that goes red. It finds the suites by grep, so a new one is covered without being registered there. Before trusting a green run, it plants `-m root` in a copy of `test-guest-footprint.sh` and requires that copy to fail. It runs in CI only, beside `test-fixture-git-isolation.sh`, because it re-runs other suites.
+
+## Recurrence (2026-10-25)
+
+Eight days after this entry, `scripts/test-guest-footprint.sh` (#526, PR #570) built its fixtures with `git commit -q --allow-empty -m root` and a fixed identity. CI ended 61 passed, 14 failed. Every local run the author made read 70 passed, and the PR's Review Notes asserted that figure. An independent review sub-agent found it by pinning the dates, the step this entry's Prevention section names.
+
+The entry was right and was not read. `/execute` Step 1 greps `docs/solutions/` for the feature's keywords, and a suite about guest-repo PR footprints shares no keyword with "root SHA". A lesson about *how to build a fixture* is needed at the moment someone writes a fixture, and nothing routes a reader to it then. This is the second recording, so the mechanism above ships with it, per `/compound` Phase 4's clustering check: a third prose-only recording of this pattern is not a valid outcome.
+
 ## Related
 
 - #410, PR #417: the slice that introduced root-commit identity and this suite.
+- #526, PR #570: the recurrence, and the slice that added `scripts/test-fixture-root-collision.sh`.
 - `scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md`
 
 ## Shelf Life

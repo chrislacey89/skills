@@ -193,6 +193,8 @@ gh pr merge <number> --squash --delete-branch --body-file "$BODY_FILE"   # or --
 rm -f "$BODY_FILE"
 ```
 
+**On the `sidecar` stamp backend the same block runs, and the body it passes is the PR's own description.** `/pre-merge` Phase 2 writes that description as plain text on this backend, so the squash commit carries no pack text. The review notes, the lineage, and the ledger stay on the work item: never paste them into `$BODY_FILE` or pass a body built from them, and record the **Merge anyway** acknowledgement in the terminal, not in the body. `scripts/test-guest-footprint.sh` runs this block after `/pre-merge`'s and fails on any pack marker in the body it passes.
+
 On a diverged stamp the guardrail refuses that merge, for the reason given at the end of Step 2. Carry a **Merge anyway** decision across explicitly:
 
 ```bash
