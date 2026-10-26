@@ -472,6 +472,9 @@ fi
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
+# A stamped branch carries no classification marker. /execute Step 6 removes
+# them, but a session that reached this review some other way may still hold one.
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
 ```
 
 Retry a failed write **once**, as on the PR-body path. `stamp write` replaces the branch's one stamp file rather than adding to it, so a retry cannot double-stamp.
@@ -529,6 +532,9 @@ rm -f "$BODY_FILE"
 # lock disengaged while everything above reports success.
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
+# A stamped branch carries no classification marker. /execute Step 6 removes
+# them, but a session that reached this review some other way may still hold one.
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
 ```
 
 - **All three guards refuse rather than repair, and an abort is not a failed review.** Retry the fetch **once**, and a failed write **once** — the write sets the body from a file rather than appending, so a retry cannot double-stamp; if the second attempt also aborts, report it and hand back with the findings you already presented standing. The bound matters — an unbudgeted retry loop against a flaking API was an untimed contributor to the incident this guard came from. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of.

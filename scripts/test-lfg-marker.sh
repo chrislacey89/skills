@@ -680,5 +680,57 @@ else
         "expected .claude/.beta alone; got: ${fixture_leaked:-nothing}"
 fi
 
+# -----------------------------------------------------------------------------
+
+section "9. load-time markers are hook terms, and every review exit clears the set (#579)"
+
+# Two skills create a marker from a `!` line the harness runs when the skill
+# loads: /tdd's classification marker and /fix-findings' lock-opening flag. A
+# path in one of those lines that the hook never tests is a marker nothing
+# reads, and the gate it was meant to open stays shut (or, for the lock, never
+# opens). And only /execute Step 6 used to clear the classification set, so a
+# session that reached /pre-merge or /fix-findings by a side-route carried a
+# marker past the review. Both review exits now clear the whole set, and each
+# clear is held to M exactly, the same equality section 3 holds Step 6 to.
+
+# shellcheck disable=SC2016  # the backticks are the markdown being matched, not a command substitution
+load_line() { sed -n 's/^!`\(.*\)`$/\1/p' "$1"; }
+clause_two="$(grep '^if \[ -f' <<<"$hook_block" || true)"
+[ -n "$clause_two" ] || fatal "no lock clause (\`if [ -f\`) found in the hook body"
+lock_paths="$(path_set <<<"$clause_two")"
+
+tdd_load="$(path_set <<<"$(grep -o 'touch [^&]*' <<<"$(load_line tdd/SKILL.md)" || true)")"
+if [ -n "$tdd_load" ] && [ -z "$(set_minus "$tdd_load" "$markers")" ]; then
+    ok "/tdd's load-time line creates a marker the hook's clause 1 accepts ($tdd_load)"
+else
+    bad "/tdd's load-time line creates no marker the hook accepts" "created: ${tdd_load:-nothing}; markers: $(tr '\n' ' ' <<<"$markers")"
+fi
+
+ff_load="$(path_set <<<"$(grep -o 'touch [^&]*' <<<"$(load_line fix-findings/SKILL.md)" || true)")"
+if [ -n "$ff_load" ] && [ -z "$(set_minus "$ff_load" "$lock_paths")" ] && [ -z "$(set_intersect "$ff_load" "$markers")" ]; then
+    ok "/fix-findings' load-time line creates the flag the lock clause tests ($ff_load)"
+else
+    bad "/fix-findings' load-time line does not create a lock-clause flag" "created: ${ff_load:-nothing}; lock clause tests: $(tr '\n' ' ' <<<"$lock_paths")"
+fi
+
+# clears <label> <text> — each `rm -f` line in <text> that names a marker must
+# name exactly M, and there must be at least <n> of them.
+clears() {  # $1 = label, $2 = expected count, $3 = text
+    local line got n=0 wrong=""
+    while IFS= read -r line; do
+        got="$(path_set <<<"$line")"
+        [ -n "$(set_intersect "$got" "$markers")" ] || continue
+        n=$((n + 1))
+        set_equal "$got" "$markers" || wrong="${wrong}[$(tr '\n' ' ' <<<"$got")] "
+    done < <(grep '^[[:space:]]*rm -f ' <<<"$3" || true)
+    if [ "$n" -eq "$2" ] && [ -z "$wrong" ]; then
+        ok "$1 clears exactly the marker set ($n site(s))"
+    else
+        bad "$1 does not clear exactly the marker set" "sites found: $n (expected $2); wrong sets: ${wrong:-none}"
+    fi
+}
+clears "/pre-merge Phase 4 (both stamp blocks)" 2 "$(fenced_blocks pre-merge/SKILL.md bash 'touch.*review-stamped')"
+clears "/fix-findings' report step" 1 "$(fenced_blocks fix-findings/SKILL.md bash 'rm -f.*tdd-active')"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
