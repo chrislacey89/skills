@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.34.0 — review fixes fold into the commits they correct, before anything is shared (#566)
+
+A `/fix-findings` round leaves each fix as its own commit at the end of the branch, so a reader stepping through the history meets a mistake in one commit and its correction several commits later. Folding the fix in (`fixup!` plus an autosquash) is the standard repair. Until now the fold changed every SHA and left the content alone, and every review-currency check read that as divergence. On guest repos the fold also had to be force-pushed, because `/pre-merge` opened the PR before the review ran.
+
+### Changes
+
+- **`/fix-findings` writes `fixup!` commits (#566)** — when one branch commit wrote every line a finding anchors on (a documented `git blame` block finds it), the fixer commits with `--fixup=<that commit>`. It is still one commit per fix, reviewed on its own.
+- **`/pre-merge` recognizes a history-only rewrite (#566)** — a stamp that is no longer an ancestor of `HEAD` but carries `HEAD`'s tree gets `review scope: none`, and the run re-stamps without reviewing again. A rewrite that changed content still takes the whole-branch fallback. `/closeout` Step 2 names the state.
+- **On the sidecar backend, an unpushed branch is reviewed before its PR opens (#566)** — Phase 2 waits for the handoff menu's **Open the PR**, so the fold happens before anyone else reads the history (*Pro Git*, Ch. 3). The `github` backend is unchanged, because its stamp lives in the PR body.
+- **The handoff offers the fold (#566)** — only while the branch has no upstream and its fixups have been reviewed. The fold block rebases onto the fork point, aborts cleanly on a conflict, and reports whether the tree survived. Once commits are shared, review is answered with new commits (*Pro Git*, Ch. 6). No force-push is suggested anywhere.
+- **Pinned by `scripts/test-delta-review-scope.sh` §§ 11–12 (#566)** — the fold block and the fixup-target block are extracted from the skills and run against fixtures: a base that moved after the fork, a conflicting fixup, and a content-changing control. `test-review-currency-marker.sh` now pins three `SCOPE_FROM` values, and it matches unquoted assignments too. The census in `test-documented-git-commands.sh` covers `git blame` ranges.
+
 ## v1.33.0 — /pre-merge reads the closing set from GitHub, and /lfg's Recap says its body becomes a commit message (#554)
 
 `/closeout` squash-merges with the PR body as the commit message (#360), and GitHub reads closing keywords in commit messages as well as on the PR page. PR #536's `/lfg` recap explained in its decision log why #533 should stay open, quoting the keyword it avoided inside backticks. The PR page ignored the quoted keyword and listed only #534, so the operator merged. The commit message did not ignore it, and #533 ended up closed by the merge with an acceptance criterion still unmet. #452 carried the same pattern harmlessly. Two sentences in the pack paraphrased GitHub's closing behavior as "the PR body's `Closes #N` lines", which is the half of the parsing that let `/pre-merge`'s reconciliation miss it.

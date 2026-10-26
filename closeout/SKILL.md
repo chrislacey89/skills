@@ -150,6 +150,8 @@ Three outcomes, and only one of them interrupts:
 
   If `$REVIEWED_SHA` is not present locally — the branch was force-pushed and the reviewed commit was rewritten away — say so. The reviewed diff is unrecoverable, which is a *stronger* divergence signal than a measurable delta, not a weaker one.
 
+  If it is present and `git rev-parse "$REVIEWED_SHA^{tree}"` equals `git rev-parse "$HEAD_SHA^{tree}"`, the rewrite changed history but not content, usually a fold of review fixups. Say so in one line. The re-review option below costs almost nothing here: `/pre-merge` Phase 1 step 4 reads this state as a history-only rewrite and re-stamps without reviewing again. A re-stamp is still needed, because the git guardrail compares the stamp to the PR head at merge.
+
   **Name a `docs: compound` commit for what it contains, not for its subject line.** One post-stamp commit has a standing explanation available — the `docs/solutions/` entry `/compound`'s in-PR path commits onto the branch — and that explanation is the one most likely to get the menu below clicked through. It is only ever *half* available: `/compound` Phase 5 stages Phase 4's mechanism in the same commit, so a `docs: compound` subject covers both a docs-only entry and a commit that ships code. In the measurement behind chrislacey89/skills#336, four of ten past-stamp merges on one repo were compound commits and two of the four shipped code — a contract test rewritten to derive its coverage from the schema, and a new test file. Read the paths rather than the subject:
 
   ```bash

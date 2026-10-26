@@ -23,7 +23,7 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 
 ## What the write lists mean
 
-`forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `#N` references (a `Closes #N` or `Fixes #N` among them, which close the client's issue at merge), `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar, as the table below says. `scripts/test-guest-footprint.sh` runs `/pre-merge`'s PR creation and `/closeout`'s merge on a guest repo and fails on any pack marker they hand the forge.
+`forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `#N` references (a `Closes #N` or `Fixes #N` among them, which close the client's issue at merge), `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar, as the table below says. Because the stamp needs no PR, `/pre-merge` opens the PR for an unpushed branch after the review instead of before it (its Phase 2). Review fixes can then be folded into the commits they correct before anyone else reads the history. `scripts/test-guest-footprint.sh` runs `/pre-merge`'s PR creation and `/closeout`'s merge on a guest repo and fails on any pack marker they hand the forge.
 
 ## Where the review's records live
 

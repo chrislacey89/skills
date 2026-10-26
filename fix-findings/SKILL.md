@@ -159,6 +159,30 @@ The fixer's instructions, in order:
    what the fix does, and whose last line is `Fix-Findings-Run: <run id>` — the
    id Step 0 fixed, passed in the brief verbatim. One commit per fix — a fix
    squashed together with another is a fix nobody can read separately.
+   **When the lines the finding anchors on came from one commit on this
+   branch, make it a fixup of that commit.** Find it from the finding's file
+   and line range:
+
+   ```bash
+   # $BASE_REF as /pre-merge Phase 1 step 3 derives it; FILE, START, END from the finding's anchor.
+   FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
+     | awk '{ print $1 }' | sort -u)
+   [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
+   ```
+
+   A non-empty `FIXUP_TARGET` means one branch commit wrote every anchored
+   line. Commit with `git commit --fixup="$FIXUP_TARGET"`, and give `-m` the message
+   and trailer above. Otherwise (lines from the base, or from several
+   commits), make an ordinary commit. It is still one commit per fix, and it is
+   reviewed on its own. The `fixup!` subject only lets `/pre-merge`'s handoff
+   offer to fold the fix into its target later. Git's docs on what that fold
+   does to this message: *"The -m option may be used to supplement the log
+   message of the created commit, but the additional commentary will be thrown
+   away once the "fixup!" commit is squashed into <commit> by git rebase
+   --autosquash"* ([git-commit](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt---fixupamendrewordltcommitgt)).
+   So a fold removes the `Fix-Findings-Run:` lines, and § Handoff's round
+   count starts again from zero after it. That is accepted: the fold is offered
+   only after a re-run has reviewed every fixup on the branch.
 
 The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
