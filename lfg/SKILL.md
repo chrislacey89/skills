@@ -90,7 +90,43 @@ A stop ends the turn, so it is an exit path (see **Exit paths**). Remove the mar
 before you ask. When the user answers, run the marker-creation block again and
 resume where the run stopped. Count every stop by class for the recap's tally.
 
+One stop comes before the run and asks nothing: **Before anything: the
+backend** in **Process** stops both paths when `backend slices` or
+`backend stamp` answers `sidecar`, or when either refuses. It is not a stop
+class, because no run has started to resume and there is no tally to count it in.
+
 ## Process
+
+### Before anything: the backend
+
+This skill writes to GitHub on both paths. The feature path files the PRD-lite,
+the gap issues, and a roll-up comment. Both paths open the PR with the recap as
+its body. On a repo whose backend is the sidecar, those writes would put pack
+text on a host that does not allow it
+([references/state-backend.md](references/state-backend.md) § What the write
+lists mean), and this skill has no sidecar arm for any of them. So ask first,
+before Step 0 sizes the ask and before anything is written, through the bundled
+resolver [references/sidecar.sh](references/sidecar.sh) at its absolute
+installed path:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+slices="$(bash "$SC" backend slices)" || slices=
+stamp="$(bash "$SC" backend stamp)" || stamp=
+case "$slices $stamp" in
+  "github github") echo "backend: github" ;;
+  *" "|" "*) echo "lfg aborted: sidecar.sh backend failed; not guessing the github path" >&2; exit 1 ;;
+  *sidecar*) echo "lfg stopped: this repo's backend is the sidecar (slices: $slices, stamp: $stamp), and /lfg writes only to GitHub. Use /execute, or /write-a-prd → /prd-to-issues → /execute, which route their writes through the backend." >&2; exit 1 ;;
+  *) echo "lfg aborted: sidecar.sh backend answered [$slices $stamp]; not guessing" >&2; exit 1 ;;
+esac
+```
+
+With no sidecar, `backend` answers `github`, so the tiny path needs no sidecar
+for this check. **`github` on both** proceeds to Step 0. **`sidecar` on either**
+stops the run: print the block's message and do not start shape-lite or the
+tiny path. **Anything else** is a refusal: stop and relay what `backend` printed
+on stderr. Nothing has been written yet, and no marker exists, so this stop has
+no exit-path cleanup.
 
 ### 0. Auto-size
 
@@ -330,7 +366,7 @@ In every section, refer to an issue that must stay open without one, e.g.
 
 ## Handoff
 
-- **Expected input:** an ask typed as `/lfg <ask>`, plus a user present for shape-lite on the feature path.
+- **Expected input:** an ask typed as `/lfg <ask>`, plus a user present for shape-lite on the feature path. GitHub backend only for now: on a repo where `backend slices` or `backend stamp` answers `sidecar`, the skill stops before writing anything and sends the user to `/execute`.
 - **Produces:** a stamped PR whose body is the recap (banner, decisions, gap issues, stop tally, proof paths); a PRD-lite issue on the feature path; gap issues carrying the gap label; `open` ledger rows moved to `filed`.
 - **May invoke:** `/init-pipeline` (Path B, or Path C on a stale hook), `/pre-merge --loop`.
 - **Returns control to:** the user, who demos the branch and then decides whether to promote or discard it.
