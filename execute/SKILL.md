@@ -232,6 +232,10 @@ HOOK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/enfo
 # forever. scripts/test-lfg-marker.sh section 7 pins this list against that
 # clause; add a path here in the commit that adds it there, or the suite fails.
 GATE_TERMS=".claude/.review-stamped .claude/.tdd-active .claude/.tdd-skipped .claude/.lfg-active"
+# Every `# gate: <name>` sentinel in the hook body, one name per line: a clause
+# that adds no path above, so GATE_TERMS cannot see it. scripts/test-lfg-marker.sh
+# section 10 pins this list against those sentinel lines.
+GATE_SENTINELS="project-scope"
 if [ ! -f "$HOOK" ]; then
   echo "hooks-absent"
 else
@@ -239,6 +243,12 @@ else
   for term in $GATE_TERMS; do
     grep -qF -- "$term" "$HOOK" || missing="$missing $term"
   done
+  while IFS= read -r s; do
+    [ -n "$s" ] || continue
+    grep -qxF -- "# gate: $s" "$HOOK" || missing="$missing gate:$s"
+  done <<EOF
+$GATE_SENTINELS
+EOF
   if [ -n "$missing" ]; then
     echo "hooks-stale"
     echo "missing:$missing" >&2
@@ -250,9 +260,9 @@ fi
 
 `hooks-absent` and `hooks-stale` both mean **invoke `/init-pipeline` now**, and do not proceed to Step 1 until it reports. The first scaffolds enforcement hooks into a project that has none. The second re-scaffolds § 2's hook body over an existing install and re-runs § 6's `.gitignore` append, which that install never ran for the lock's two flags — without it both land as untracked files that can be committed, holding the lock shut or open across every future branch in that repo. `/init-pipeline` § 2 carries an existing `IMPL_PATTERNS` line through a re-scaffold rather than re-asking, so an upgrade does not reset a trigger surface the project customized. The sidecar is `/init-pipeline` § 8's concern, and its gate there decides whether it is created. `hooks-lock-present` proceeds.
 
-**What this gate cannot see, since its third verdict would otherwise read as a claim it does not make.** It greps for every path the hook's own clause 1 tests, so it recognizes one version boundary per path and reports which side of each an install is on. That is sound in one direction only. A hook missing any of those terms provably predates it, so `hooks-stale` is right whenever it fires; but once a project has been upgraded the terms are there forever, so a *later* change to `/init-pipeline` § 2's hook body that adds no new path — a reordering, a rewritten refusal message, a fix to a clause's logic — still reports `hooks-lock-present` and is never distributed by this gate. The third verdict is therefore named for the terms it found rather than for currency, which the check cannot establish.
+**What this gate cannot see, since its third verdict would otherwise read as a claim it does not make.** It greps for every path the hook's own clause 1 tests, so it recognizes one version boundary per path and reports which side of each an install is on. That is sound in one direction only. A hook missing any of those terms provably predates it, so `hooks-stale` is right whenever it fires; but once a project has been upgraded the terms are there forever, so a *later* change to `/init-pipeline` § 2's hook body that adds no new path — a reordering, a rewritten refusal message, a fix to a clause's logic — still reports `hooks-lock-present` and is never distributed by this gate. The third verdict is therefore named for the terms it found rather than for currency, which the check cannot establish. A change that adds a capability rather than a path, like the clause that keeps the hook from gating writes outside `$CLAUDE_PROJECT_DIR`, gets its own boundary by carrying a `# gate: <name>` sentinel line in the hook body and its name in `GATE_SENTINELS`; an install without the line reports `hooks-stale` and names `gate:<name>` on the `missing:` line.
 
-`GATE_TERMS` is the whole of that claim, and `scripts/test-lfg-marker.sh` section 7 pins it against the hook's clause 1, so a marker added to the hook and not to this list fails the suite in the commit that adds it. That replaces the rule this paragraph used to state in prose — *give the boundary its own term, in the commit that introduces it* — which chrislacey89/skills#370 read and did not follow, shipping `.claude/.lfg-active` with no distribution term and leaving it inert in every project installed before it (chrislacey89/skills#385). A distribution boundary that is not a new path still has no mechanism, and still owns its own distribution.
+`GATE_TERMS` and `GATE_SENTINELS` are the whole of that claim. `scripts/test-lfg-marker.sh` section 7 pins `GATE_TERMS` against the hook's clause 1 and section 10 pins `GATE_SENTINELS` against the hook's sentinel lines, so a marker or a sentinel added to the hook and not to its list (or the reverse, for a sentinel) fails the suite in the commit that adds it. That replaces the rule this paragraph used to state in prose — *give the boundary its own term, in the commit that introduces it* — which chrislacey89/skills#370 read and did not follow, shipping `.claude/.lfg-active` with no distribution term and leaving it inert in every project installed before it (chrislacey89/skills#385). A distribution boundary that is neither a new path nor a new sentinel still has no mechanism: a change that should reach existing installs and adds neither is invisible to this gate, as the paragraph above says.
 
 **Guard resolver check.** `/git-guardrails-claude-code` installs `block-dangerous-git.sh` with a copy of `sidecar.sh` beside it, and the guard reads a sidecar review stamp through that copy. The copy updates only when someone re-runs that skill, so a guard installed before the resolver existed has none, and one whose copy has fallen behind the stamp format finds no stamp. Both fail open: the merge goes through unchecked, on exactly the guest repos whose PR body never carries a stamp. This check compares the project's copy with this skill's bundled one.
 

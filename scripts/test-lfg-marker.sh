@@ -732,5 +732,99 @@ clears() {  # $1 = label, $2 = expected count, $3 = text
 clears "/pre-merge Phase 4 (both stamp blocks)" 2 "$(fenced_blocks pre-merge/SKILL.md bash 'touch.*review-stamped')"
 clears "/fix-findings' report step" 1 "$(fenced_blocks fix-findings/SKILL.md bash 'rm -f.*tdd-active')"
 
+# -----------------------------------------------------------------------------
+
+section "10. the gate names every hook sentinel, and Path C's span carries them (#592)"
+
+# Section 7 sees a boundary only when it is a new path in clause 1. The clause
+# that keeps the hook off files outside $CLAUDE_PROJECT_DIR (#578) added no path,
+# so every hook installed before it held every GATE_TERMS term, reported
+# `hooks-lock-present`, and kept refusing out-of-project writes. A clause like
+# that carries a `# gate: <name>` sentinel line in the hook body, and the gate
+# greps for each name in GATE_SENTINELS. Equality both ways: a sentinel the gate
+# does not list is a boundary it cannot see, and a listed name the hook does not
+# carry makes every install, the current one included, report stale forever.
+# GATE_TERMS stays clause 1's paths alone, so section 7 is untouched.
+
+hook_sentinels="$(sed -n 's/^# gate: \(.*\)$/\1/p' <<<"$hook_block" | sort -u)"
+gate_sentinels="$(awk '
+    /^GATE_SENTINELS="/ { on = 1; sub(/^GATE_SENTINELS="/, "") }
+    on { done = sub(/".*$/, ""); n = split($0, w, /[[:space:]]+/); for (i = 1; i <= n; i++) if (w[i] != "") print w[i]; if (done) exit }
+' <<<"$gate_block" | sort -u)"
+if [ -n "$hook_sentinels" ] && set_equal "$hook_sentinels" "$gate_sentinels"; then
+    ok "/execute Step 0's GATE_SENTINELS names exactly the hook's sentinels ($(tr '\n' ' ' <<<"$hook_sentinels"))"
+else
+    bad "/execute Step 0's GATE_SENTINELS and the hook's sentinel lines differ" \
+        "hook: $(tr '\n' ' ' <<<"${hook_sentinels:-none}"); gate: $(tr '\n' ' ' <<<"${gate_sentinels:-none}")"
+fi
+if [ -z "$(path_set <<<"$(grep '^GATE_SENTINELS=' <<<"$gate_block")")" ]; then
+    ok "GATE_SENTINELS names no .claude/ path, so clause 1's paths stay in GATE_TERMS alone"
+else
+    bad "GATE_SENTINELS names a .claude/ path" "a path belongs in GATE_TERMS, where section 7 pins it"
+fi
+
+# Path C replaces the span from `# Check for classification markers` through
+# the final `exit 0`. A sentinel outside it would not be installed by a
+# `hooks-stale` re-scaffold, and the gate would fire on every run after it.
+span="$(awk '/^# Check for classification markers/ { on = 1 } on { buf = buf $0 "\n"; if ($0 == "exit 0") last = buf } END { printf "%s", last }' <<<"$hook_block")"
+[ -n "$span" ] || bad "Path C's replacement span is findable in the hook body" "no '# Check for classification markers' … 'exit 0' span"
+outside=""
+while IFS= read -r sname; do
+    [ -n "$sname" ] || continue
+    grep -qxF -- "# gate: $sname" <<<"$span" || outside="$outside $sname"
+done <<<"$hook_sentinels"
+if [ -n "$span" ] && [ -z "$outside" ]; then
+    ok "every sentinel sits inside Path C's replacement span"
+else
+    bad "a sentinel sits outside Path C's replacement span" "outside:${outside:- (no span)}"
+fi
+# shellcheck disable=SC2016  # the needles are the hook's literal text
+if [ "$(grep -A1 -xF '# gate: project-scope' <<<"$span" | sed -n 2p)" = 'if [ -n "$CLAUDE_PROJECT_DIR" ]; then' ] \
+    && grep -qF 'cd -P "$CLAUDE_PROJECT_DIR"' <<<"$span"; then
+    ok "the span carries the project-scope clause, opening on the line after its sentinel"
+else
+    bad "the project-scope sentinel is not beside the scope clause inside the span" \
+        "expected '# gate: project-scope' directly above 'if [ -n \"\$CLAUDE_PROJECT_DIR\" ]; then'"
+fi
+
+# The row the issue asks for: today's hook with the scope clause cut out holds
+# every GATE_TERMS term, and must still report stale, naming the sentinel.
+sproj="$scratch/sentinel-project"
+mkdir -p "$sproj/.claude/hooks"
+git init -q "$sproj" >/dev/null 2>&1 || fatal "could not init the sentinel fixture repo"
+run_sgate() {  # $1 = gate block; verdict on stdout, stderr in $scratch/sgate.err
+    ( cd "$sproj" && CLAUDE_PROJECT_DIR="$sproj" bash -c "$1" 2>"$scratch/sgate.err" )
+}
+printf '%s' "$hook_block" > "$sproj/.claude/hooks/enforce-classification.sh"
+v="$(run_sgate "$gate_block")"
+if [ "$v" = "hooks-lock-present" ]; then
+    ok "the shipped hook body reports hooks-lock-present"
+else
+    bad "the shipped hook body does not report hooks-lock-present" "got [$v]; stderr: $(cat "$scratch/sgate.err")"
+fi
+awk '$0 == "# gate: project-scope" { skip = 1 } skip { if ($0 == "fi") skip = 0; next } { print }' \
+    <<<"$hook_block" > "$sproj/.claude/hooks/enforce-classification.sh"
+noscope="$sproj/.claude/hooks/enforce-classification.sh"
+# shellcheck disable=SC2016  # the needle is the hook's literal text
+if ! grep -qF 'cd -P "$CLAUDE_PROJECT_DIR"' "$noscope" && [ -z "$(set_minus "$clause_paths" "$(path_set < "$noscope")")" ] && bash -n "$noscope"; then
+    ok "the fixture lacks the scope clause, keeps every clause 1 path, and still parses"
+else
+    bad "the no-scope fixture is not the hook the row needs" "scope clause still present, a clause 1 path lost, or it does not parse"
+fi
+v="$(run_sgate "$gate_block")"
+if [ "$v" = "hooks-stale" ] && grep -qF 'gate:project-scope' "$scratch/sgate.err" && [ -z "$(path_set < "$scratch/sgate.err")" ]; then
+    ok "a hook with today's marker terms and no scope clause reports hooks-stale, naming gate:project-scope alone"
+else
+    bad "a hook without the scope clause is not reported stale by its sentinel" "verdict [$v]; stderr: $(cat "$scratch/sgate.err")"
+fi
+# Apparatus: the same row with GATE_SENTINELS emptied must go back to the
+# pre-#592 answer, or the row above is not measuring the list.
+v="$(run_sgate "${gate_block//GATE_SENTINELS=\"project-scope\"/GATE_SENTINELS=\"\"}")"
+if [ "$v" = "hooks-lock-present" ]; then
+    ok "apparatus: with GATE_SENTINELS emptied, the same fixture reads current again"
+else
+    bad "apparatus: emptying GATE_SENTINELS did not change the verdict" "got [$v]"
+fi
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
