@@ -423,6 +423,13 @@ merge. The asymmetry is deliberate and is the fail-safe direction: a leaked
 `.review-stamped` is a closed lock that announces itself the moment someone tries
 to edit.
 
+Then clear the classification markers. A fixer that loaded `/tdd` left one, and the branch goes back to `/pre-merge`, whose stamp lands on a branch that carries none:
+
+```bash
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
+```
+
 ## The two flags
 
 Lock 1 is a writer, a refusing reader, and a lifecycle, on the same pattern as
