@@ -91,6 +91,8 @@ pre-push:
       run: bash scripts/test-decision-card-grounding.sh
     post-review-edit-lock-tests:
       run: bash scripts/test-post-review-edit-lock.sh
+    skill-frontmatter-loads-tests:
+      run: bash scripts/test-skill-frontmatter-loads.sh
     lfg-marker-tests:
       run: bash scripts/test-lfg-marker.sh lfg/SKILL.md
     host-signal-containment-tests:

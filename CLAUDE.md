@@ -201,7 +201,7 @@ Install Lefthook (`brew install lefthook` or see <https://github.com/evilmartian
 - **Pre-commit** — runs `sync-skill-references.sh --check` and `shellcheck` on any staged shell script. Cheap (<1s), catches drift and shell gotchas before CI does.
 - **Pre-push** — runs every `scripts/test-*.sh` suite plus `shellcheck` across all scripts, except `test-fixture-git-isolation.sh`, which re-runs all the others and so runs in CI only (its header says why). The list is not repeated here; `lefthook.yml` and `.github/workflows/validate-skills.yml` are the two places a new suite must be registered.
 
-Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The repo intentionally has no `package.json` — no JS/TS to tend — so Biome and other Node-ecosystem linters are out of scope until that changes.
+Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The repo intentionally has no `package.json` — no JS/TS to tend — so Biome and other Node-ecosystem linters are out of scope until that changes. `scripts/test-skill-frontmatter-loads.sh` also needs the Claude Code CLI (`claude`) at the version in `.claude-code-version`; without it that suite prints a SKIP line locally, and CI installs the pinned version and runs it.
 
 ### Reading a prose diff
 
