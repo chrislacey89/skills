@@ -564,13 +564,57 @@ assert_eq 0 "$hook_status" "…nor a file under a testimonials/ directory"
 run_hook "src/app.config.local.ts"
 assert_eq 0 "$hook_status" "…nor src/app.config.local.ts, which carries '.config.' mid-name"
 
-run_hook "/Users/tester/proj/src/app.ts"
+# A project checked out under a directory named "tester". The hook only gates
+# files inside $CLAUDE_PROJECT_DIR (#578), so the fixture moves the project there
+# rather than handing the hook a path outside it.
+home_proj="$proj"
+proj="$scratch/tester/proj"
+mkdir -p "$proj"
+cp -R "$home_proj/.claude" "$proj/"
+run_hook "$proj/src/app.ts"
 assert_eq 0 "$hook_status" "…nor ANY file in a project checked out under a path containing 'test'"
+proj="$home_proj"
 
 # The control that makes the row above a measurement of the substring rather
-# than of absoluteness: the same absolute shape, one directory name changed.
-run_hook "/Users/dev/proj/src/app.ts"
-assert_eq 2 "$hook_status" "…while the same absolute path under /Users/dev is refused"
+# than of absoluteness: the same absolute shape, without "test" in the path.
+run_hook "$proj/src/app.ts"
+assert_eq 2 "$hook_status" "…while the same absolute path in a project without 'test' in it is refused"
+
+# --- Only files inside $CLAUDE_PROJECT_DIR are gated (#578) -------------------
+#
+# Neither clause is about a scratch file or a sibling checkout, and refusing one
+# sends the agent to delete .review-stamped for a write that never needed the
+# lock. The armed lock is the state these rows run in, so a scope check that
+# stopped working shows as a refusal here. The path is resolved before the
+# comparison: a `..` or a symlink that lands back inside is still gated, and one
+# that leads out is not.
+outside="$scratch/elsewhere"
+mkdir -p "$outside/src" "$proj/src"
+ln -s "$outside" "$proj/linked-out"
+ln -s "$proj" "$scratch/linked-in"
+
+run_hook "$outside/src/scratch.ts"
+assert_eq 0 "$hook_status" "a write outside the project is not gated, even with the lock armed"
+
+run_hook "$outside/new/dir/scratch.ts"
+assert_eq 0 "$hook_status" "…nor one into a directory outside the project that does not exist yet"
+
+run_hook "$proj/../elsewhere/src/scratch.ts"
+assert_eq 0 "$hook_status" "…nor a path that starts in the project and leaves it through .."
+
+run_hook "$proj/linked-out/src/scratch.ts"
+assert_eq 0 "$hook_status" "…nor a path that leaves the project through a symlink"
+
+run_hook "$outside/../project/src/app.ts"
+assert_eq 2 "$hook_status" "a path that starts outside and resolves back inside through .. is gated"
+
+run_hook "$scratch/linked-in/src/app.ts"
+assert_eq 2 "$hook_status" "…and so is one that reaches the project through a symlink"
+
+run_hook "$proj/src/not-yet/app.ts"
+assert_eq 2 "$hook_status" "…and so is a new file in a project directory that does not exist yet"
+
+rm "$proj/linked-out" "$scratch/linked-in"
 
 # --- Routes past the lock, three of which leave no trace ---------------------
 #

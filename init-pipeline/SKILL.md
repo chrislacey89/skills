@@ -78,7 +78,21 @@ fi
 if [[ "$FILE_PATH" == *.config.* ]]; then
   exit 0
 fi
-# Check for classification markers — but stand down on a stamped branch, so the
+# Check for classification markers — on a file inside this project only. A
+# Write to /tmp/scratch.ts or a sibling checkout is no business of either clause
+# below, and refusing it sends the agent to /tdd, or to deleting .review-stamped,
+# for a file the pipeline does not own. Both sides are resolved through `cd -P`
+# first, the file through its nearest existing directory, so neither `..` nor a
+# symlink carries a path across the boundary in either direction. A relative
+# path is read against the project.
+if [ -n "$CLAUDE_PROJECT_DIR" ]; then
+  root=$(cd -P "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)
+  case "$FILE_PATH" in /*) path=$FILE_PATH ;; *) path="${CLAUDE_PROJECT_DIR%/}/$FILE_PATH" ;; esac
+  dir=$(dirname "$path"); rest=$(basename "$path")
+  while [ ! -d "$dir" ]; do rest="$(basename "$dir")/$rest"; dir=$(dirname "$dir"); done
+  case "$(cd -P "$dir" && pwd -P)/$rest" in "${root%/}"/*) ;; *) exit 0 ;; esac
+fi
+# Stand down on a stamped branch, so the
 # post-review clause below is the one that decides there. /execute Step 6 removes
 # EVERY classification marker before it hands off to /pre-merge, so by the time
 # .review-stamped exists there is never a marker left for this test to find.
@@ -109,7 +123,7 @@ It is not the only way out, and the difference matters at install time: the hook
 is registered in § 3 below on `"matcher": "Write|Edit"`, so no `Bash` write is
 ever presented to it — `sed -i`, `tee`, a heredoc, `printf >`, or `rm
 .claude/.review-stamped` itself — and within Write/Edit it refuses only a path
-that matches `IMPL_PATTERNS` and survives the skip logic, which leaves
+that resolves inside `$CLAUDE_PROJECT_DIR`, matches `IMPL_PATTERNS`, and survives the skip logic, which leaves
 `.claude/.fix-findings-active`, this hook script, and `.claude/settings.json`
 all writable while the lock is armed, and leaves the model free to invoke
 `/fix-findings` itself (it is model-invocable and its load-time marker opens the
