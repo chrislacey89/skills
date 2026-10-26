@@ -14,6 +14,8 @@
 #                   [--migrate-archive | --no-migrate-archive] [--archive-alias <dir>]...
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
+#   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
+#   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
 #   sidecar.sh path <research|solutions>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
 #   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
@@ -106,7 +108,19 @@
 # config set. forge.write is derived from mode (owned on a known forge gets
 # write access, guest gets none), so mode is changed through this verb and
 # never by editing sidecar.json. It overwrites forge.write with the derived
-# value.
+# value. base_ref is the base branch's bare name (develop, not origin/develop),
+# checked against the same rule base-ref reads it with before it is written.
+#
+# base-ref. A declared base_ref wins. A sidecar miss, or a sidecar with no
+# base_ref key, falls back to the derivation every skill used to inline:
+# origin/HEAD's branch, else the first of main master prod develop trunk that
+# resolves. The ref form is origin/<name> when that resolves, else the local
+# <name> with a note on stderr that it may be stale; --name prints <name>.
+# Three outcomes, as backend's: a value (declared or fallback) exits 0; could
+# not look (no jq, an unreadable sidecar.json, a base_ref that is not a
+# string) and a declared base_ref that resolves to no ref exit 1 and print
+# nothing, because the fallback answers "nothing declared", never "could not
+# read what was declared". No base branch found at all exits 1 as well.
 #
 # Identity. A sidecar is found by the keys in its sidecar.json, tried in order:
 #   root:<sha>               lexicographically first root commit; skipped in a
@@ -573,7 +587,7 @@ migrate_archive() {
 }
 
 cmd_config() {
-    local sc mode kind fw tmp
+    local sc
     case "${1:-}" in
         get)
             [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
@@ -581,22 +595,107 @@ cmd_config() {
             jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
             ;;
         set)
-            if ! { [ $# -eq 3 ] && [ "$2" = "mode" ]; }; then die_usage "usage: sidecar.sh config set mode <owned|guest>"; fi
-            mode="$3"
-            case "$mode" in owned|guest) ;; *) die_usage "config set: mode must be owned or guest" ;; esac
-            sc="$(do_resolve)" || exit 1
-            kind="$(jq -r '.forge.kind // "none"' "$sc/sidecar.json")"
-            fw="$(derive_forge_write "$mode" "$kind")"
-            tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
-            if jq --arg mode "$mode" --argjson fw "$fw" '.mode = $mode | .forge.write = $fw' < "$sc/sidecar.json" > "$tmp"; then
-                mv "$tmp" "$sc/sidecar.json"
-            else
-                rm -f "$tmp"; refuse "config set: could not update sidecar.json"
-            fi
-            commit_paths "$sc" "sidecar: set mode $mode" sidecar.json || exit 1
+            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>>"
+            case "$2" in
+                mode) config_set_mode "$3" ;;
+                base_ref) config_set_base_ref "$3" ;;
+                *) die_usage "config set: expected mode or base_ref, got: $2" ;;
+            esac
             ;;
-        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set mode <owned|guest>>" ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>>>" ;;
     esac
+}
+
+config_set_mode() {
+    local mode="$1" sc kind fw tmp
+    case "$mode" in owned|guest) ;; *) die_usage "config set: mode must be owned or guest" ;; esac
+    sc="$(do_resolve)" || exit 1
+    kind="$(jq -r '.forge.kind // "none"' "$sc/sidecar.json")"
+    fw="$(derive_forge_write "$mode" "$kind")"
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    if jq --arg mode "$mode" --argjson fw "$fw" '.mode = $mode | .forge.write = $fw' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set mode $mode" sidecar.json || exit 1
+}
+
+config_set_base_ref() {
+    local b="$1" sc tmp
+    [ -n "$b" ] || die_usage "config set: base_ref needs a branch name"
+    case "$b" in origin/*) die_usage "config set: base_ref is the bare branch name (${b#origin/}), not the remote ref $b" ;; esac
+    in_repo || refuse "not inside a git repository"
+    pgit check-ref-format --branch "$b" >/dev/null 2>&1 || die_usage "config set: not a valid branch name: $b"
+    base_ref_of "$b" >/dev/null 2>&1 \
+        || refuse "config set: neither origin/$b nor $b resolves in this checkout; fetch it, or check the name"
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    if jq --arg b "$b" '.base_ref = $b' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set base_ref $b" sidecar.json || exit 1
+}
+
+# base_ref_of <name>: the range-endpoint ref for a base branch name, per the
+# header; returns 1, printing nothing, when neither form resolves.
+base_ref_of() {
+    if pgit rev-parse --verify -q "origin/$1" >/dev/null 2>&1; then
+        printf 'origin/%s\n' "$1"
+    elif pgit rev-parse --verify -q "$1" >/dev/null 2>&1; then
+        printf 'note: origin/%s does not resolve — measuring against the local branch, which may be stale\n' "$1" >&2
+        printf '%s\n' "$1"
+    else
+        return 1
+    fi
+}
+
+# The base branch; the three outcomes are in the header.
+cmd_base_ref() {
+    local want=ref sc errf v name="" candidate ref
+    case "$#:${1:-}" in
+        0:) ;;
+        1:--name) want=name ;;
+        *) die_usage "usage: sidecar.sh base-ref [--name]" ;;
+    esac
+    in_repo || refuse "not inside a git repository"
+    command -v jq >/dev/null 2>&1 || refuse "base-ref: jq is required to read the sidecar and is not on PATH; refusing rather than answering the origin/HEAD default"
+    errf="$(mktemp)" || refuse "base-ref: cannot create a temp file"
+    if sc="$(do_resolve 2>"$errf")"; then
+        cat "$errf" >&2; rm -f "$errf"
+        v="$(jq -r 'if type != "object" then error("not an object")
+                    elif has("base_ref") | not then "absent"
+                    elif (.base_ref | type) != "string" then error("base_ref is not a string")
+                    else "declared:" + .base_ref end' "$sc/sidecar.json" 2>&1)" \
+            || refuse "base-ref: cannot read base_ref from $sc/sidecar.json: $v"
+        if [ "$v" != absent ]; then
+            name="${v#declared:}"
+            [ -n "$name" ] || refuse "base-ref: base_ref in $sc/sidecar.json is empty; set it with: sidecar.sh config set base_ref <branch>"
+            ref="$(base_ref_of "$name")" \
+                || refuse "base-ref: base_ref is $name in $sc/sidecar.json, and neither origin/$name nor $name resolves"
+            if [ "$want" = name ]; then printf '%s\n' "$name"; else printf '%s\n' "$ref"; fi
+            return 0
+        fi
+    elif grep -q 'SIDECAR MISS:' "$errf"; then
+        rm -f "$errf"
+    else
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    name="$(pgit symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')"
+    if [ -z "$name" ]; then
+        for candidate in main master prod develop trunk; do
+            if pgit rev-parse --verify -q "$candidate" >/dev/null 2>&1; then name=$candidate; break; fi
+        done
+    fi
+    [ -n "$name" ] || refuse "base-ref: no base branch found: origin/HEAD is unset and none of main master prod develop trunk resolves; declare one with: sidecar.sh config set base_ref <branch>"
+    if [ "$want" = name ]; then
+        printf '%s\n' "$name"
+    elif ! base_ref_of "$name"; then
+        # origin/HEAD named a branch that no longer resolves either way.
+        refuse "base-ref: origin/HEAD names $name, and neither origin/$name nor $name resolves; run git remote set-head origin --auto"
+    fi
 }
 
 cmd_migrate_archive() {
@@ -1167,6 +1266,7 @@ case "$verb" in
     resolve) [ $# -eq 0 ] || die_usage "usage: sidecar.sh resolve"; do_resolve || exit 1 ;;
     init)    cmd_init "$@" ;;
     config)  cmd_config "$@" ;;
+    base-ref) cmd_base_ref "$@" ;;
     path)    cmd_path "$@" ;;
     solutions-dirs) cmd_solutions_dirs "$@" ;;
     migrate-archive) cmd_migrate_archive "$@" ;;
@@ -1176,5 +1276,5 @@ case "$verb" in
     backend) cmd_backend "$@" ;;
     stamp)   cmd_stamp "$@" ;;
     work)    cmd_work "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
 esac

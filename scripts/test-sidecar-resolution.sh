@@ -591,11 +591,148 @@ check "forge.write matches what init produces for owned, going back" "$OWN_FW" "
 run "$CFG_O" config set mode admin
 check "config set mode rejects an unknown mode" 2 "$rc"
 run "$CFG_O" config set forge.kind none
-check "config set takes only mode" 2 "$rc"
+check "config set refuses a key it does not own" 2 "$rc"
 run "$CFG_O" config set mode
 check "config set mode needs a value" 2 "$rc"
 # The skill points at the verb for mode.
 contains "/init-pipeline section 8 tells the reader to change mode with the verb" 'config set mode' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# -----------------------------------------------------------------------------
+section "base-ref: the fallback, a declared base_ref, and could-not-look (#597)"
+
+# Its own sidecar root: the corrupt-sidecar.json case below would otherwise make
+# every later miss in this suite refuse instead of miss.
+BR="$tmp/br"; mkdir -p "$BR"
+BR_ROOT="$BR/sidecars"
+# brun <dir> <args...> — sidecar.sh under BR_ROOT; stdout in $out, stderr in $err, exit in $rc
+brun() {
+    local d="$1"; shift
+    out="$(cd "$d" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash "$SC" "$@" 2>"$BR/err")"; rc=$?
+    err="$(cat "$BR/err")"
+}
+mkrepo "$BR/up"
+git -C "$BR/up" branch develop
+git clone -q "$BR/up" "$BR/clone"
+check "the clone's origin/HEAD is origin/main (fixture sanity)" origin/main \
+    "$(git -C "$BR/clone" symbolic-ref refs/remotes/origin/HEAD --short)"
+
+brun "$BR/clone" base-ref
+check "a miss falls back to origin/HEAD's ref" "0 origin/main" "$rc $out"
+check "a miss on a resolving origin ref prints nothing on stderr" "" "$err"
+brun "$BR/clone" base-ref --name
+check "a miss with --name prints the bare branch" "0 main" "$rc $out"
+
+mkrepo "$BR/local"; git -C "$BR/local" branch -m prod
+brun "$BR/local" base-ref
+check "no origin: the first resolving candidate, as the local branch" "0 prod" "$rc $out"
+contains "no origin: the note says the local branch may be stale" "may be stale" "$err"
+brun "$BR/local" base-ref --name
+check "no origin, --name: the candidate's name" "0 prod" "$rc $out"
+
+mkrepo "$BR/none"; git -C "$BR/none" branch -m feature
+brun "$BR/none" base-ref
+check "no base branch found exits 1 and prints no ref" "1 " "$rc $out"
+contains "no base branch found points at config set base_ref" "config set base_ref" "$err"
+
+brun "$BR/clone" init --name br --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "init the base-ref sidecar (fixture sanity)" 0 "$rc"
+BSJ="$BR_ROOT/br/sidecar.json"
+brun "$BR/clone" base-ref
+check "a sidecar with no base_ref key falls back like a miss" "0 origin/main" "$rc $out"
+
+brun "$BR/clone" config set base_ref develop
+check "config set base_ref develop succeeds" 0 "$rc"
+check "the key is written" develop "$(jq -r .base_ref "$BSJ")"
+check "the change is committed" "" "$(git -C "$BR_ROOT/br" status --porcelain)"
+check "the commit subject names the key" "sidecar: set base_ref develop" "$(git -C "$BR_ROOT/br" log -1 --format=%s)"
+brun "$BR/clone" config get base_ref
+check "config get base_ref reads it back" develop "$out"
+brun "$BR/clone" base-ref
+check "a declared base_ref prints origin/<base_ref>" "0 origin/develop" "$rc $out"
+brun "$BR/clone" base-ref --name
+check "a declared base_ref with --name prints the bare name" "0 develop" "$rc $out"
+
+brun "$BR/clone" config set base_ref origin/develop
+check "config set refuses the remote ref form" 2 "$rc"
+brun "$BR/clone" config set base_ref 'bad..name'
+check "config set refuses an invalid branch name" 2 "$rc"
+brun "$BR/clone" config set base_ref nosuch
+check "config set refuses a branch that resolves to no ref" 1 "$rc"
+check "a refused set leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
+brun "$BR/clone" config set base_ref
+check "config set base_ref needs a value" 2 "$rc"
+
+# Hand edits: the verb refuses each shape, and never prints the fallback.
+bset() { jq "$1" "$BSJ" > "$BR/sj" && mv "$BR/sj" "$BSJ"; }
+bset '.base_ref = "gone"'
+brun "$BR/clone" base-ref
+check "a declared base_ref that resolves to no ref exits 1 and prints no ref" "1 " "$rc $out"
+contains "the refusal names the key" "base_ref is gone" "$err"
+brun "$BR/clone" base-ref --name
+check "--name refuses the same unresolvable base_ref" "1 " "$rc $out"
+bset '.base_ref = ""'
+brun "$BR/clone" base-ref
+check "a declared-empty base_ref exits 1 rather than falling back" "1 " "$rc $out"
+bset '.base_ref = 42'
+brun "$BR/clone" base-ref
+check "a non-string base_ref exits 1" "1 " "$rc $out"
+bset '.base_ref = "develop"'
+
+cp "$BSJ" "$BR/good.json"
+printf '{ not json\n' > "$BSJ"
+brun "$BR/clone" base-ref
+check "an unreadable sidecar.json exits 1 and prints no ref" "1 " "$rc $out"
+lacks "an unreadable sidecar.json is not reported as a miss" "SIDECAR MISS" "$err"
+cp "$BR/good.json" "$BSJ"
+
+nojq="$BR/nojq-bin"; mkdir -p "$nojq"
+for d in /opt/homebrew/bin /usr/local/bin /usr/bin /bin; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+        b="${f##*/}"; [ "$b" = jq ] && continue
+        [ -e "$nojq/$b" ] || ln -s "$f" "$nojq/$b"
+    done
+done
+out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" PATH="$nojq" bash "$SC" base-ref 2>"$BR/err")"; rc=$?
+check "with jq missing, base-ref exits 1 and prints no ref" "1 " "$rc $out"
+contains "with jq missing, the refusal says why" "jq is required" "$(cat "$BR/err")"
+check "base-ref commits nothing in the project" "" "$(git -C "$BR/clone" status --porcelain)"
+
+# fenced_with <file> <marker> — the first fenced block containing <marker>, dedented.
+fenced_with() {
+    awk -v m="$2" '
+        /^[[:space:]]*```/ { if (inb) { if (f) { for (i = 1; i <= n; i++) print b[i]; exit } inb = 0 } else { inb = 1; n = 0; f = 0 } next }
+        inb { b[++n] = $0; if (index($0, m)) f = 1 }
+    ' "$1" | sed 's/^[[:space:]]*//'
+}
+
+# /init-pipeline section 8's Q4 block, as written: it offers the detected branch
+# when base_ref is unasked, and stands down once the key is answered.
+q4="$(fenced_with "$repo_root/init-pipeline/SKILL.md" 'config get base_ref')"
+[ -n "$q4" ] || bad "/init-pipeline carries the Q4 base_ref block" "no fenced block mentions config get base_ref"
+q4="${q4//<this skill\'s directory>\/scripts\/sidecar.sh/$SC}"
+bset 'del(.base_ref)'
+q4out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$q4" 2>&1)"
+check "Q4 on an unasked key offers the detected origin/HEAD branch" "detected=main" "$q4out"
+brun "$BR/none" init --name brnone --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+q4out="$(cd "$BR/none" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$q4" 2>&1)"
+check "Q4 with nothing detected offers no default" "detected=none" "$q4out"
+bset '.base_ref = "develop"'
+q4out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$q4" 2>&1)"
+check "Q4 on an answered key does not ask" "base_ref=develop (answered; not asking)" "$q4out"
+contains "/init-pipeline writes the answer through config set base_ref" 'config set base_ref <branch>' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# /pre-merge Phase 1 step 3 takes both forms from the verb and derives nothing itself.
+# shellcheck disable=SC2016 # the dollars are the skill's literal text
+pm3="$(fenced_with "$repo_root/pre-merge/SKILL.md" 'git log --oneline "$BASE_REF..HEAD"')"
+lacks "/pre-merge step 3 carries no symbolic-ref derivation" "symbolic-ref" "$pm3"
+# shellcheck disable=SC2016
+contains "/pre-merge step 3 takes BASE_REF from the verb" 'BASE_REF="$(bash "$SC" base-ref)"' "$pm3"
+# shellcheck disable=SC2016
+contains "/pre-merge step 3 takes BASE_BRANCH from the verb" 'BASE_BRANCH="$(bash "$SC" base-ref --name)"' "$pm3"
+pm3="${pm3//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+pm3out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$pm3"' >/dev/null; printf "%s|%s" "$BASE_BRANCH" "$BASE_REF"' 2>/dev/null)"
+check "/pre-merge step 3, run, takes the declared base for both forms" "develop|origin/develop" "$pm3out"
 
 # -----------------------------------------------------------------------------
 section "migrate-archive verb, --archive-alias validation, skipped-folder hint (#420)"

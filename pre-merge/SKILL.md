@@ -90,26 +90,16 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 3. **Detect the base branch and assess the diff:**
    ```bash
-   BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
-   if [ -z "$BASE_BRANCH" ]; then
-     for candidate in main master prod develop trunk; do
-       if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
-     done
-   fi
-   # A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
-   # $BASE_REF points at it, and is the only thing safe as a range endpoint.
-   if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
-     BASE_REF="origin/$BASE_BRANCH"
-   else
-     BASE_REF="$BASE_BRANCH"
-     echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
-   fi
+   SC="<this skill's directory>/references/sidecar.sh"
+   # $BASE_REF is the range endpoint; $BASE_BRANCH is the name `--base` takes.
+   BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+   BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
    git diff "$BASE_REF...HEAD" --stat
    git log --oneline "$BASE_REF..HEAD"
    ```
-   For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target) and re-derive `$BASE_REF` from it. If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
+   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target) and set `$BASE_REF` to `origin/<that branch>`. If no diff from the base, tell the user there's nothing to review and stop.
 
-   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`. When `origin/<base>` does not resolve, `base-ref` measures against the local branch and says so on stderr; if the counts look wrong, `git fetch` and re-run.
 
 4. **Decide the scope — the whole branch, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or a hand fix after a deliberate lock deletion — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
    ```bash
@@ -210,6 +200,8 @@ fi
 PR_URL=$(gh pr list --head "$BRANCH" --json url -q '.[0].url // ""') \
   || { echo "PR lookup failed" >&2; rm -f "$DESC_FILE"; exit 1; }
 if [ -z "$PR_URL" ]; then
+  BASE_BRANCH=$(bash "$SC" base-ref --name) \
+    || { echo "PR aborted: sidecar.sh base-ref failed" >&2; rm -f "$DESC_FILE"; exit 1; }
   OUT=$(gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$TITLE" --body-file "$DESC_FILE") \
     || { echo "PR create failed" >&2; rm -f "$DESC_FILE"; exit 1; }
   PR_URL=$(printf '%s\n' "$OUT" | tail -1)

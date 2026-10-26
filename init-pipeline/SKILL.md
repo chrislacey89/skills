@@ -423,6 +423,26 @@ bash "$SC" init --name <suggested> --mode <Q1> --write <Q3> --in-tree-path <Q2>
 
 `init` refuses rather than guesses: when the project's identity is already claimed by another sidecar, or when no global git identity is set, which it copies as the sidecar's committer. Relay a refusal as printed. Do not set a git identity on the user's behalf. By default `init` also moves this project's old research archive into the sidecar, and reports each move on stderr. Show those lines to the user.
 
+**Then the repo's facts, on a hit or after `init`.** Each key below is asked only when the sidecar has no answer for it yet, so a re-run asks nothing already answered. A detected value is only the default the user confirms; nothing runs it or writes it before they do.
+
+**Q4 — the base branch** (`base_ref`), the branch this repo's PRs merge into. Skills read it through `sidecar.sh base-ref` for every diff range and every `--base`.
+
+```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
+CUR="$(bash "$SC" config get base_ref)" || { echo "base_ref: config get failed; stop and relay it" >&2; exit 1; }
+if [ -n "$CUR" ]; then echo "base_ref=$CUR (answered; not asking)"; exit 0; fi
+DETECTED="$(bash "$SC" base-ref --name 2>/dev/null)" || DETECTED=
+echo "detected=${DETECTED:-none}"
+```
+
+When it prints `answered`, skip Q4. Otherwise ask, offering the detected branch first (it is `origin/HEAD`'s branch, or the first of the usual base names that exists). On `detected=none` there is no default: the user names the branch. Write the answer with:
+
+```bash
+bash "$SC" config set base_ref <branch>
+```
+
+`config set` takes the bare branch name, refuses `origin/<branch>`, and refuses a branch that resolves to no ref in this checkout. Relay a refusal as printed and ask again.
+
 ## Verification
 
 Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all eight. An auto-invoked Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, and Path D produces at most a refreshed marker-check span, § 8's sidecar, § 5's quality gate when the install was Path B, and with it the one-line rewrite § 5 ends with, so on either the pre-commit items below — and the quality-gate item, unless Path D ran § 5 — belong to the install that already ran and are not this run's to satisfy:
@@ -440,6 +460,7 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] `.claude/settings.json` has no `worktree.provisioning` key written by this run (`auto`), whether or not a host env var is set
 - [ ] No existing project settings were overwritten
 - [ ] Path A or Path D: `bash "$SC" resolve` exits 0 and prints the sidecar, and its `sidecar.json` carries the confirmed `mode`, `solutions.write`, and `solutions.in_tree_path`
+- [ ] Path A or Path D: `bash "$SC" config get base_ref` prints the branch the user confirmed, or the one a previous run recorded
 - [ ] `.claude/settings.json` is unchanged by § 8: take `shasum .claude/settings.json` right before § 8 starts and again after § 8, and the two match
 - [ ] Path B or an auto-invoked Path C: no sidecar was created (`bash "$SC" resolve` gives the same answer it gave before the run)
 
