@@ -28,6 +28,10 @@
 # on a GitLab remote, guest and owned, and the printed and saved text go
 # through the same marker scan.
 #
+# /lfg has no sidecar arm for its writes, so its backend gate (#584) is run
+# too: a guest sidecar, an owned GitLab sidecar, and a refusing backend must
+# stop it before any gh call; an owned GitHub sidecar and no sidecar proceed.
+#
 # The detector is itself mutation-tested below: the same blocks run with a
 # marker planted in the description must turn the check red.
 #
@@ -40,7 +44,8 @@ repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 SC="$repo_root/init-pipeline/scripts/sidecar.sh"
 PM="$repo_root/pre-merge/SKILL.md"
 CO="$repo_root/closeout/SKILL.md"
-for f in "$SC" "$PM" "$CO"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
+LFG="$repo_root/lfg/SKILL.md"
+for f in "$SC" "$PM" "$CO" "$LFG"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
@@ -325,6 +330,46 @@ b="${lin_block//<this skill\'s directory>\/references\/sidecar.sh/$tmp\/refusing
 b="${b//W=\"W-<n>\"/W=\"W-2\"}"
 (cd "$P" && bash -c "$b" >/dev/null 2>&1); rc=$?
 check "lineage on a refused backend exits nonzero" 1 "$rc"
+
+# -----------------------------------------------------------------------------
+section "/lfg asks the backend before either path writes (#584)"
+
+# /lfg has no sidecar arm for any write, so its gate at the top of § Process
+# must stop both paths on a sidecar answer or a refusal, before any gh call.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+lfg_block="$(block "$LFG" 'slices="$(bash "$SC" backend slices)"')"
+[ -n "$lfg_block" ] || bad "lfg/SKILL.md § Process carries the backend gate" "not found"
+lfg_gate_line="$(grep -n '^### Before anything: the backend$' "$LFG" | cut -d: -f1)"
+lfg_size_line="$(grep -n '^### 0\. Auto-size$' "$LFG" | cut -d: -f1)"
+check "the backend gate comes before Step 0 auto-sizes" 1 \
+    "$([ -n "$lfg_gate_line" ] && [ -n "$lfg_size_line" ] && [ "$lfg_gate_line" -lt "$lfg_size_line" ] && echo 1 || echo 0)"
+run_lfg() {  # <sidecar.sh path> — the gate in $P; exit in $lfg_rc
+    local b="${lfg_block//<this skill\'s directory>\/references\/sidecar.sh/$1}"
+    (cd "$P" && PATH="$tmp/bin:$PATH" bash -c "$b" >/dev/null 2>"$tmp/stderr"); lfg_rc=$?
+}
+mkguest "lfg guest" init
+run_lfg "$SC"
+check "lfg on a guest sidecar refuses" 1 "$lfg_rc"
+check "lfg on a guest sidecar names the reason" 1 "$(grep -c 'backend is the sidecar' "$tmp/stderr")"
+check "lfg on a guest sidecar sends the user to /execute" 1 "$(grep -c '/execute' "$tmp/stderr")"
+check "lfg on a guest sidecar calls no gh at all" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
+mkguest "lfg owned github" noinit
+(cd "$P" && bash "$SC" init --name "guest$n" --mode owned --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+    || bad "lfg owned github: init the owned sidecar" "init failed"
+run_lfg "$SC"
+check "lfg on an owned GitHub sidecar proceeds" 0 "$lfg_rc"
+mkguest "lfg no sidecar" noinit
+run_lfg "$SC"
+check "lfg with no sidecar proceeds" 0 "$lfg_rc"
+mkguest "lfg refusing" init
+run_lfg "$tmp/refusing-sc.sh"
+check "lfg on a refused backend stops" 1 "$lfg_rc"
+check "lfg on a refused backend says it is not guessing" 1 "$(grep -c 'not guessing' "$tmp/stderr")"
+check "lfg on a refused backend calls no gh at all" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
+mkguest "lfg owned gitlab" init gitlab.com owned
+run_lfg "$SC"
+check "lfg on an owned GitLab sidecar refuses (forge.kind is not github)" 1 "$lfg_rc"
+check "lfg on an owned GitLab sidecar names the reason" 1 "$(grep -c 'backend is the sidecar' "$tmp/stderr")"
 
 # -----------------------------------------------------------------------------
 section "mutation: a marker planted in the description turns the check red"
