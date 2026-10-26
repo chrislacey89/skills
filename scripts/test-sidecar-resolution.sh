@@ -613,14 +613,18 @@ brun() {
 mkrepo "$BR/up"
 git -C "$BR/up" branch develop
 git clone -q "$BR/up" "$BR/clone"
-check "the clone's origin/HEAD is origin/main (fixture sanity)" origin/main \
+# origin/HEAD points at develop, not main: main is first in the fallback list, so
+# a clone whose origin/HEAD were main could not tell "follow origin/HEAD" from
+# "pick the first candidate" (the bug #596 exists to fix).
+git -C "$BR/clone" remote set-head origin develop >/dev/null
+check "the clone's origin/HEAD is origin/develop (fixture sanity)" origin/develop \
     "$(git -C "$BR/clone" symbolic-ref refs/remotes/origin/HEAD --short)"
 
 brun "$BR/clone" base-ref
-check "a miss falls back to origin/HEAD's ref" "0 origin/main" "$rc $out"
+check "a miss falls back to origin/HEAD's ref" "0 origin/develop" "$rc $out"
 check "a miss on a resolving origin ref prints nothing on stderr" "" "$err"
 brun "$BR/clone" base-ref --name
-check "a miss with --name prints the bare branch" "0 main" "$rc $out"
+check "a miss with --name prints the bare branch" "0 develop" "$rc $out"
 
 mkrepo "$BR/local"; git -C "$BR/local" branch -m prod
 brun "$BR/local" base-ref
@@ -638,7 +642,7 @@ brun "$BR/clone" init --name br --mode owned --write sidecar --in-tree-path none
 check "init the base-ref sidecar (fixture sanity)" 0 "$rc"
 BSJ="$BR_ROOT/br/sidecar.json"
 brun "$BR/clone" base-ref
-check "a sidecar with no base_ref key falls back like a miss" "0 origin/main" "$rc $out"
+check "a sidecar with no base_ref key falls back like a miss" "0 origin/develop" "$rc $out"
 
 brun "$BR/clone" config set base_ref develop
 check "config set base_ref develop succeeds" 0 "$rc"
@@ -713,7 +717,7 @@ q4="$(fenced_with "$repo_root/init-pipeline/SKILL.md" 'config get base_ref')"
 q4="${q4//<this skill\'s directory>\/scripts\/sidecar.sh/$SC}"
 bset 'del(.base_ref)'
 q4out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$q4" 2>&1)"
-check "Q4 on an unasked key offers the detected origin/HEAD branch" "detected=main" "$q4out"
+check "Q4 on an unasked key offers the detected origin/HEAD branch" "detected=develop" "$q4out"
 brun "$BR/none" init --name brnone --mode owned --write sidecar --in-tree-path none --no-migrate-archive
 q4out="$(cd "$BR/none" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$q4" 2>&1)"
 check "Q4 with nothing detected offers no default" "detected=none" "$q4out"
