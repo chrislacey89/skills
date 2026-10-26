@@ -425,7 +425,7 @@ bash "$SC" init --name <suggested> --mode <Q1> --write <Q3> --in-tree-path <Q2>
 
 **Then the repo's facts, on a hit or after `init`.** Each key below is asked only when the sidecar has no answer for it yet, so a re-run asks nothing already answered. A detected value is only the default the user confirms; nothing runs it or writes it before they do.
 
-**Q4 — the base branch** (`base_ref`), the branch this repo's PRs merge into. Skills read it through `sidecar.sh base-ref` for every diff range and every `--base`.
+**Q4 — the base branch** (`base_ref`), the branch this repo's PRs merge into.
 
 ```bash
 SC="<this skill's directory>/scripts/sidecar.sh"
