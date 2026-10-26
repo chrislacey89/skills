@@ -200,7 +200,7 @@ fi
 PR_URL=$(gh pr list --head "$BRANCH" --json url -q '.[0].url // ""') \
   || { echo "PR lookup failed" >&2; rm -f "$DESC_FILE"; exit 1; }
 if [ -z "$PR_URL" ]; then
-  BASE_BRANCH=$(bash "$SC" base-ref --name) \
+  [ -n "${BASE_BRANCH:-}" ] || BASE_BRANCH=$(bash "$SC" base-ref --name) \
     || { echo "PR aborted: sidecar.sh base-ref failed" >&2; rm -f "$DESC_FILE"; exit 1; }
   OUT=$(gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$TITLE" --body-file "$DESC_FILE") \
     || { echo "PR create failed" >&2; rm -f "$DESC_FILE"; exit 1; }

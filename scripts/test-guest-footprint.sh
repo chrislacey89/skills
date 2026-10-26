@@ -179,7 +179,7 @@ run_pm() {
     b="${b//W=\"W-<n>\"/W=\"$1\"}"
     b="${b//TITLE=\"<plain title>\"/TITLE=\"Fix the report totals\"}"
     b="$(awk 'index($0, "Nothing below adds to it.") { print "cat \"$DESC_SRC\" > \"$DESC_FILE\""; next } 1' <<<"$b")"
-    pm_out="$(cd "$P" && DESC_SRC="$tmp/desc" PATH="$tmp/bin:$PATH" BASE_BRANCH=main bash -c "$b" 2>"$tmp/stderr")"; pm_rc=$?
+    pm_out="$(cd "$P" && DESC_SRC="$tmp/desc" PATH="$tmp/bin:$PATH" BASE_BRANCH=slice-1-branch bash -c "$b" 2>"$tmp/stderr")"; pm_rc=$?
 }
 
 # run_chain <label> <W value> <extra description line or empty> — a fresh guest
@@ -197,6 +197,7 @@ section "a guest PR, opened and merged, carries no pack text"
 run_chain "plain" W-1 ""
 check "Phase 2's block exits 0" 0 "$pm_rc"
 check "Phase 2's block prints the PR URL" "https://github.com/acme/guest/pull/7" "$pm_out"
+check "Phase 2's block keeps a stacked-PR BASE_BRANCH override as --base" 1 "$(grep -c -- '^pr create --base slice-1-branch ' "$GH_STUB/calls")"
 check "Step 3's merge block exits 0" 0 "$co_rc"
 check "the work item's pr field holds the PR URL" "https://github.com/acme/guest/pull/7" \
     "$(cd "$P" && bash "$SC" work view W-1 --json | jq -r .pr)"
