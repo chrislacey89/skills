@@ -103,7 +103,7 @@ if dest="$(plant incident 's/^(description: "[^"\\ ]+) /$1 "quoted phrase" /m')"
     else
         ok "an unescaped inner quote in a description fails (the #575 incident)"
     fi
-    if sed -n '2,/^---$/p' "$dest/skills/fix-findings/SKILL.md" | grep -q '^description:'; then
+    if grep -q '^description:' < <(sed -n '2,/^---$/p' "$dest/skills/fix-findings/SKILL.md"); then
         ok "…and the old CI grep for ^description: passes that same file"
     else
         bad "the incident fixture no longer has a ^description: line" "it would not show what the grep missed"
