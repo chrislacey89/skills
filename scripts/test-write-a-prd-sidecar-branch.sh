@@ -54,7 +54,7 @@ done
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
 case "$backend_block" in *'backend prds'*) ;; *) fatal "block 1 is not the backend prds question" ;; esac
 # shellcheck disable=SC2016
-case "$create_block" in *'work create --kind prd'*) ;; *) fatal "block 2 is not work create" ;; esac
+case "$create_block" in *'set -- --kind prd'*'work create "$@"'*) ;; *) fatal "block 2 is not work create" ;; esac
 # shellcheck disable=SC2016
 case "$expand_block" in *'work edit'*'maturity prd'*) ;; *) fatal "block 3 is not the expand-in-place edit and set" ;; esac
 
@@ -119,6 +119,23 @@ check "sidecar: expand dropped the seed body" 0 "$(grep -c '^seed pitch$' "$W2")
 check "sidecar: two work items (W-2 expanded in place, not duplicated)" 2 "$(find "$SKILL_KIT_SIDECAR_ROOT/guest/work" -name 'W-*.md' | wc -l | tr -d ' ')"
 check "sidecar: no gh call at all" "" "$(cat "$GH_LOG")"
 check "sidecar: the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
+
+# A noted milestone must reach `work create` as two arguments in every shell an
+# agent runs the block in. #393: the block's `${MILESTONE:+--milestone "$M"}`
+# reached it as one word under zsh, which `work create` refused.
+ms_block="${create_block/MILESTONE=\"\"/MILESTONE=\"Batch 1\"}"
+[ "$ms_block" != "$create_block" ] || fatal "the create block no longer sets MILESTONE=\"\""
+for sh in bash zsh; do
+    if ! command -v "$sh" >/dev/null 2>&1; then
+        if [ -n "${CI:-}" ]; then bad "milestone [$sh]: $sh is not on PATH and CI is set" "the block was not run under $sh"
+        else printf '  SKIP milestone [%s]: %s is not on PATH\n' "$sh" "$sh"; fi
+        continue
+    fi
+    out="$(cd "$P" && PATH="$stub:$PATH" "$sh" -c "$ms_block" 2>"$tmp/err")"; rc=$?
+    check "milestone [$sh]: create block exits 0" 0 "$rc"
+    check "milestone [$sh]: the item records the milestone" "Batch 1" \
+        "$(cd "$P" && bash "$SC_REAL" work view "$out" --json 2>/dev/null | jq -r '.milestone // empty')"
+done
 
 printf '\n=== refusing backend: nonzero, nothing written, no gh ===\n'
 mkproj https://github.com/acme/broken.git

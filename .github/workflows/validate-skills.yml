@@ -226,6 +226,13 @@ jobs:
       - name: Run pipefail-safe matcher suite
         run: bash scripts/test-pipefail-safe-matchers.sh
 
+      # ubuntu-latest ships without zsh. The post-review edit lock, state
+      # backend, and prd-to-issues suites below run extracted skill blocks under
+      # zsh and fail under CI rather than skipping that arm, so the shell is
+      # installed before any of them runs.
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
       # #327's lock is one hook clause plus four runnable blocks in four files,
       # and nothing executed any of it: `rg -l review-stamped scripts/` and
       # `rg -l "enforce-classification|IMPL_PATTERNS" scripts/` were both empty.
@@ -283,12 +290,6 @@ jobs:
       # never reaches the project.
       - name: Run sidecar resolution contract suite
         run: bash scripts/test-sidecar-resolution.sh
-
-      # ubuntu-latest ships without zsh. The state backend and prd-to-issues
-      # suites below run extracted skill blocks under zsh and fail under CI rather than
-      # skipping that arm, so the shell is installed before either runs.
-      - name: Install zsh
-        run: sudo apt-get update && sudo apt-get install -y zsh
 
       # `sidecar.sh backend` is the routing rule docs/state-backend.md states, and
       # the `stamp` verbs are the sidecar twin of the PR-body review stamp. This

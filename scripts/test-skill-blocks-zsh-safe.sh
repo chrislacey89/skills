@@ -7,8 +7,7 @@
 # an unquoted expansion, so
 #   - `for x in $LIST` runs once, with the whole list as one word, and
 #   - `${VAR:+--flag "$VAR"}` reaches the command as ONE argument.
-# The contract suites that execute blocks run them with `bash -c`, and CI's
-# ubuntu runners have no zsh, so neither sees it. #393 found the first case in
+# A contract suite that executes blocks with `bash -c` alone does not see it. #393 found the first case in
 # /execute's hooks gate; PR #561 shipped two more in /prd-to-issues three weeks
 # later, caught only by a reviewer. See
 # docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md.
@@ -31,8 +30,6 @@ ok()  { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf '  FAIL %s\n' "$1"; [ -n "${2:-}" ] && printf '       %s\n' "$2"; fail=$((fail + 1)); }
 
 known="$(cat <<'EOF'
-execute/SKILL.md	  for term in $GATE_TERMS; do	#393
-write-a-prd/SKILL.md	bash "$SC" work create --kind prd --body-file "$f" ${MILESTONE:+--milestone "$MILESTONE"}	#393
 EOF
 )"
 

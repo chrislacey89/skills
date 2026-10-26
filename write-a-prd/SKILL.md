@@ -237,7 +237,9 @@ f="$(mktemp)"
 cat > "$f" <<'PITCH'
 <the pitch body, from the template below>
 PITCH
-bash "$SC" work create --kind prd --body-file "$f" ${MILESTONE:+--milestone "$MILESTONE"}
+set -- --kind prd
+if [ -n "$MILESTONE" ]; then set -- "$@" --milestone "$MILESTONE"; fi
+bash "$SC" work create "$@" --body-file "$f"
 ```
 
 If the input was a `research-ready` work item, expand that item in place instead of creating a second one. Put the id in `ID`:
