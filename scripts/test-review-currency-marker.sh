@@ -584,5 +584,46 @@ done
 
 # -----------------------------------------------------------------------------
 
+section "the human picks the findings: an unweighted multi-select (#580)"
+
+# THE DRIFT THIS CATCHES. The stamp's single writer is half of #190's boundary;
+# the other half is that the human, not the model, picks which findings
+# /fix-findings fixes. Phase 4 used to ask for the numbers as free text straight
+# after the model's own review, which invites "S1 to S3?" from the model and a
+# yes from the human: the letter of the gate met, the choice the model's. The
+# rules that close it are prose an agent obeys, so they are pinned as prose:
+# the follow-up sentence is extracted from Phase 4's next-step menu and must
+# keep every rule, and the menu's own labels must carry no finding number.
+
+menu_para="$(grep -m1 '^\*\*Next-step menu\.\*\*' "$premerge_skill" || true)"
+if [[ -z "$menu_para" ]]; then
+    printf 'FATAL: no "**Next-step menu.**" paragraph found in %s\n' "$premerge_skill" >&2
+    exit 2
+fi
+followup="$(sed -n 's/.*\(When the human picks \*\*Fix a finding on this branch first\*\*.*this skill'"'"'s\.\).*/\1/p' <<<"$menu_para")"
+if [[ -z "$followup" ]]; then
+    printf 'FATAL: no "When the human picks **Fix a finding on this branch first** ... this skill'"'"'s." sentence in the menu paragraph\n' >&2
+    exit 2
+fi
+
+has() { if grep -qF -- "$1" <<<"$followup"; then printf yes; else printf no; fi; }
+assert_eq yes "$(has 'multiSelect')" "the follow-up is asked as a multiSelect"
+assert_eq yes "$(has 'one option per open finding')" "…with one option per open finding"
+assert_eq yes "$(has 'Pre-select nothing')" "…nothing pre-selected"
+assert_eq yes "$(has 'mark no option recommended')" "…no option marked recommended"
+assert_eq yes "$(has 'propose no set')" "…and no set proposed before it"
+# shellcheck disable=SC2016  # the backticks are markdown being matched, not a command substitution
+assert_eq yes "$(has '`survived` breaker verdict')" "a surviving breaker verdict is its own option"
+assert_eq yes "$(has 'exactly the numbers they select')" "/fix-findings gets exactly the numbers selected"
+assert_eq no "$(has 'which finding numbers to fix')" "the free-text 'which finding numbers' question is gone"
+assert_eq no "$(has '(recommended')" "the follow-up carries no '(recommended' label"
+
+# Every bold label in the menu paragraph, one per line. A label naming a
+# finding (S1, #3, F2, a bare digit) would let the menu choice carry a set into
+# the follow-up; `<numbers>` is the placeholder, not a number.
+labels="$(grep -oE '\*\*[^*]+\*\*' <<<"$menu_para" || true)"
+numbered="$(grep -E '(^|[^A-Za-z0-9<])([SF#]?[0-9]+)([^A-Za-z0-9>]|$)' <<<"$labels" || true)"
+assert_eq "" "$numbered" "no next-step menu label names a finding number"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1
