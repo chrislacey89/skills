@@ -21,7 +21,7 @@
 # worktree to the clone, overlays the working tree onto it (so uncommitted and
 # untracked suites are exercised as written), and runs every suite pre-push
 # runs — read from lefthook.yml, args included, and checked to be exactly
-# scripts/test-*.sh minus this one, so a suite registered in a shape the
+# scripts/test-*.sh minus this one and the other CI-only suite ($ci_only below), so a suite registered in a shape the
 # extraction cannot read fails here instead of dropping out — from that
 # worktree with GIT_DIR exported at the worktree's git dir, the way a hook run
 # from a Conductor workspace sees it. After each suite the clone's shared
@@ -70,6 +70,9 @@ set -u
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 self="scripts/$(basename "$0")"
+# The other CI-only suite. It re-runs suites too, so pre-push does not carry
+# it, and this one does not re-run it (lefthook.yml says the same).
+ci_only="scripts/test-fixture-root-collision.sh"
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
@@ -202,9 +205,9 @@ else bad "apparatus: a planted guarded suite was flagged — the check is not me
 # scripts/test-*.sh rather than trusted.
 read_suites() {
   sed -n 's/^[[:space:]]*run: \(bash scripts\/test-[A-Za-z0-9_-]*\.sh.*\)$/\1/p' "$1" \
-    | grep -vF -- "$self" >"$2" || true
+    | grep -vF -e "$self" -e "$ci_only" >"$2" || true
   awk '{print $2}' "$2" | sort -u >"$tmp/suites.read"
-  (cd "$repo_root" && printf '%s\n' scripts/test-*.sh) | grep -vxF -- "$self" | sort >"$tmp/suites.disk"
+  (cd "$repo_root" && printf '%s\n' scripts/test-*.sh) | grep -vxF -e "$self" -e "$ci_only" | sort >"$tmp/suites.disk"
   comm -23 "$tmp/suites.disk" "$tmp/suites.read" | sed 's/$/ is on disk but was not read from lefthook.yml/'
   comm -13 "$tmp/suites.disk" "$tmp/suites.read" | sed 's/$/ was read from lefthook.yml but is not on disk/'
 }
@@ -223,7 +226,7 @@ count=$(wc -l <"$suites" | tr -d ' ')
 if [ -z "$mismatch" ] && [ "$count" -gt 0 ]; then
   ok "read $count suite invocations from lefthook.yml, one per scripts/test-*.sh"
 else
-  bad "the suites read from lefthook.yml are not scripts/test-*.sh minus this one:"
+  bad "the suites read from lefthook.yml are not scripts/test-*.sh minus this one and $ci_only:"
   printf '%s\n' "$mismatch" | sed 's/^/       /'
 fi
 

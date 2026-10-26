@@ -329,6 +329,14 @@ jobs:
       - name: Run fixture git-isolation suite
         run: bash scripts/test-fixture-git-isolation.sh
 
+      # sidecar.sh identifies a project by its root commit, so two fixtures
+      # whose empty root commits differ only in a one-second timestamp are one
+      # project. This re-runs every suite that runs `sidecar.sh init` with both
+      # commit dates pinned, which turns that collision from intermittent into
+      # certain (#526). CI only, like the suite above; its header says why.
+      - name: Run fixture root-collision suite
+        run: bash scripts/test-fixture-root-collision.sh
+
   # The canon section is generated from `sources:` frontmatter (issue #273). Every
   # other check reads source files and reasons about what they would produce; this
   # one builds the site and reads what was produced, which is the difference

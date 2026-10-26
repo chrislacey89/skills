@@ -119,7 +119,9 @@ pre-push:
       run: bash scripts/test-skill-blocks-zsh-safe.sh
     # scripts/test-fixture-git-isolation.sh is deliberately absent: it runs in
     # CI only (#442). It still reads its suite list from this file, and fails
-    # unless that list is every scripts/test-*.sh but itself.
+    # unless that list is every scripts/test-*.sh but itself and
+    # scripts/test-fixture-root-collision.sh, which is CI-only for the same
+    # reason: it re-runs every suite that builds sidecars (#526).
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the
