@@ -47,7 +47,7 @@ author leans toward defending. The evidence check leans toward neither.
 never reaches it. Enter it:
 
 - from `/closeout` Step 2, when the PR's `reviewDecision` is
-  `CHANGES_REQUESTED` or it has unresolved review threads;
+  `CHANGES_REQUESTED`;
 - from `/help`, which recommends it on the same signal;
 - by typing `/respond-to-review` (current branch's PR) or
   `/respond-to-review <pr-number>`.

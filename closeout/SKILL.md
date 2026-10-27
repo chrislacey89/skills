@@ -110,7 +110,7 @@ The teardown is destructive; verify it is safe first (self-guard). All of these 
 - [ ] A PR exists for this branch and is mergeable (`mergeable` is `MERGEABLE`; `mergeStateStatus` is not `BLOCKED`/`DIRTY`).
 - [ ] Required checks are green and review is approved (`reviewDecision` is `APPROVED`, or the repo does not require review and the user has explicitly accepted).
 
-If any precondition fails, stop and report which one — do not merge or remove anything. A failed precondition is a signal to return to review, not to force through. When the one that failed is review — `reviewDecision` is `CHANGES_REQUESTED`, or a teammate's threads are still open — the route back is `/respond-to-review`: it checks each comment against the code, the human decides what to fix and what to push back on, and the fixes go through `/fix-findings` and a `/pre-merge` re-run before `/closeout` is run again.
+If any precondition fails, stop and report which one — do not merge or remove anything. A failed precondition is a signal to return to review, not to force through. When the one that failed is review — `reviewDecision` is `CHANGES_REQUESTED` — the route back is `/respond-to-review`: it checks each comment against the code, the human decides what to fix and what to push back on, and the fixes go through `/fix-findings` and a `/pre-merge` re-run before `/closeout` is run again.
 
 **Review currency — does the approval still cover *this* diff? (non-blocking)**
 
