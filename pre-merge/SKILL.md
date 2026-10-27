@@ -172,6 +172,11 @@ If you are running on a branch other than the user's working branch and `--pr` w
    TITLE="<title>"
    BODY_FILE="<path of the file holding the body written from the templates below>"
    BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
+   case "$(bash "$SC" backend stamp)" in
+     github) ;;
+     sidecar) echo "backend is sidecar: open the PR with the sidecar block below, not this block"; exit 0 ;;
+     *) echo "PR aborted: sidecar.sh backend stamp failed; not guessing the github templates" >&2; exit 1 ;;
+   esac
    [ -n "$BASE_BRANCH" ] || BASE_BRANCH=$(bash "$SC" base-ref --name) \
      || { echo "PR aborted: sidecar.sh base-ref failed; not letting gh pick a base" >&2; exit 1; }
    gh pr create --base "$BASE_BRANCH" --head "$(git branch --show-current)" --title "$TITLE" --body-file "$BODY_FILE"

@@ -77,16 +77,39 @@ run() {
 }
 
 (cd "$P" && bash "$SC" config set base_ref develop >/dev/null 2>&1)
-run "$SC" ""
+
+# The fixture's own sidecar answers `sidecar` for `backend stamp`, so the cases
+# that exercise the github block run it through a wrapper that answers `github`
+# there and defers every other subcommand to the real sidecar.sh. The block's
+# own guard is what the last cases below test.
+mkwrap() {
+    # shellcheck disable=SC2016  # the wrapper's own text; $1/$2 expand when it runs
+    printf '#!/usr/bin/env bash\nif [ "${1:-}" = backend ] && [ "${2:-}" = stamp ]; then %s; fi\nexec bash "%s" "$@"\n' "$2" "$SC" > "$1"
+}
+mkwrap "$tmp/github-sc.sh" 'echo github; exit 0'
+mkwrap "$tmp/sidecar-sc.sh" 'echo sidecar; exit 0'
+mkwrap "$tmp/refusing-sc.sh" 'echo refused >&2; exit 1'
+GSC="$tmp/github-sc.sh"
+
+run "$GSC" ""
 check "a declared base_ref reaches --base with the placeholder empty" "yes" \
     "$(grep -q -- '--base develop ' "$tmp/calls" && echo yes || echo no)"
 check "the block exits 0" 0 "$rc"
 
-run "$SC" "slice-1-branch"
+run "$GSC" "slice-1-branch"
 check "a stacked-PR placeholder overrides the declared base" "yes" \
     "$(grep -q -- '--base slice-1-branch ' "$tmp/calls" && echo yes || echo no)"
 
-printf '#!/usr/bin/env bash\necho boom >&2\nexit 1\n' > "$tmp/failing-sc.sh"
+run "$tmp/sidecar-sc.sh" ""
+check "a sidecar backend exits 0" 0 "$rc"
+check "a sidecar backend makes no gh call" "0" "$(grep -c . "$tmp/calls")"
+
+run "$tmp/refusing-sc.sh" ""
+check "a failed backend answer aborts nonzero" 1 "$rc"
+check "a failed backend answer makes no gh call" "0" "$(grep -c . "$tmp/calls")"
+
+# shellcheck disable=SC2016  # the stub's own text
+printf '#!/usr/bin/env bash\nif [ "${2:-}" = stamp ]; then echo github; exit 0; fi\necho boom >&2\nexit 1\n' > "$tmp/failing-sc.sh"
 run "$tmp/failing-sc.sh" ""
 check "a failing base-ref aborts nonzero" 1 "$rc"
 check "a failing base-ref makes no gh call" "0" "$(grep -c . "$tmp/calls")"
