@@ -339,7 +339,7 @@ inputs:
 
 - **Handed over:** the items' JSON exactly as Step 1 printed it, the PR diff
   (`gh pr diff <pr-number>`, or on Bitbucket, with the PR's branch checked
-  out, `git diff "$(bash "$SC" base-ref)...HEAD"`), and
+  out, `git diff "$BASE_REF...HEAD"`, `BASE_REF` set as in Step 1), and
   `references/comment-craft.md`, especially § *Receiving a review*.
 - **Reached for itself:** the merged tree, `git log` and `git show`, tests and
   their output, installed types, `docs/solutions/`.

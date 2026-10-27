@@ -43,7 +43,7 @@ bad() { printf '  FAIL %s\n' "$1"; if [ -n "${2:-}" ]; then printf '       %s\n'
 
 # Variables a block may read from the environment it was started in: the
 # harness or the user sets them, not another block.
-ENV_VARS="HOME PATH TMPDIR PWD USER SHELL IFS CI CLAUDE_PROJECT_DIR CONDUCTOR_WORKSPACE_PATH CODESPACES REMOTE_CONTAINERS SKILL_KIT_SIDECAR_ROOT SKILL_KIT_RESEARCH_ARCHIVE"
+ENV_VARS="HOME PATH TMPDIR PWD USER SHELL IFS CI CLAUDE_PROJECT_DIR CONDUCTOR_WORKSPACE_PATH CODESPACES REMOTE_CONTAINERS SKILL_KIT_SIDECAR_ROOT SKILL_KIT_RESEARCH_ARCHIVE BITBUCKET_TOKEN BITBUCKET_EMAIL"
 
 # file<TAB>var<TAB>reason. Remove an entry in the commit that fixes it.
 KNOWN="ts-audit/SKILL.md	CLAUDE_LIBRARY_DIR	a user's own override of the library path, set in their environment"
