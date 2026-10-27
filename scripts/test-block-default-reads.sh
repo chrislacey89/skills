@@ -46,8 +46,7 @@ bad() { printf '  FAIL %s\n' "$1"; if [ -n "${2:-}" ]; then printf '       %s\n'
 ENV_VARS="HOME PATH TMPDIR PWD USER SHELL IFS CI CLAUDE_PROJECT_DIR CONDUCTOR_WORKSPACE_PATH CODESPACES REMOTE_CONTAINERS SKILL_KIT_SIDECAR_ROOT SKILL_KIT_RESEARCH_ARCHIVE"
 
 # file<TAB>var<TAB>reason. Remove an entry in the commit that fixes it.
-KNOWN="ts-audit/SKILL.md	CLAUDE_LIBRARY_DIR	a user's own override of the library path, set in their environment
-pre-merge/SKILL.md	BASE_BRANCH	PR #604 review concern 1: the Phase 2 sidecar block keeps a stacked-PR base only when preset"
+KNOWN="ts-audit/SKILL.md	CLAUDE_LIBRARY_DIR	a user's own override of the library path, set in their environment"
 
 # scan <file>... — prints file<TAB>line<TAB>var for each read-before-assign default.
 scan() {

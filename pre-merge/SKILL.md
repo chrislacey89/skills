@@ -163,7 +163,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
    gh pr list --head $(git branch --show-current) --json number,url
    ```
 
-2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (override `--base` for stacked-PR slices to the sibling slice's branch) or `gh pr edit`.
+2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (for stacked-PR slices, put the sibling slice's branch in the block's `BASE_BRANCH=` placeholder on the `sidecar` backend, or override `--base` directly on `github`) or `gh pr edit`.
 
 **Ask where the pack's text goes first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md), and the sidecar block below asks before it does anything else. `github` uses the two templates below. `sidecar` means the repo's `forge.write` lacks `prs`: the PR still opens, but it is an ordinary PR, and everything the templates carry for the pack lives on the work item instead. Anything else is a refusal: stop and relay what `backend` printed on stderr, because the templates on a failed answer write pack text into a client's PR.
 
@@ -173,6 +173,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 SC="<this skill's directory>/references/sidecar.sh"
 W="W-<n>"            # the work item Phase 1 step 2 read; empty when step 1's answer was "none"
 TITLE="<plain title>"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
 case "$(bash "$SC" backend stamp)" in
   sidecar) ;;
   github) echo "backend is github: write the PR from the templates below, not this block"; exit 0 ;;
@@ -200,7 +201,7 @@ fi
 PR_URL=$(gh pr list --head "$BRANCH" --json url -q '.[0].url // ""') \
   || { echo "PR lookup failed" >&2; rm -f "$DESC_FILE"; exit 1; }
 if [ -z "$PR_URL" ]; then
-  [ -n "${BASE_BRANCH:-}" ] || BASE_BRANCH=$(bash "$SC" base-ref --name) \
+  [ -n "$BASE_BRANCH" ] || BASE_BRANCH=$(bash "$SC" base-ref --name) \
     || { echo "PR aborted: sidecar.sh base-ref failed" >&2; rm -f "$DESC_FILE"; exit 1; }
   OUT=$(gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$TITLE" --body-file "$DESC_FILE") \
     || { echo "PR create failed" >&2; rm -f "$DESC_FILE"; exit 1; }

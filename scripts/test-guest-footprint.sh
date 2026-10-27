@@ -178,8 +178,9 @@ run_pm() {
     local b="${pm_block//<this skill\'s directory>\/references\/sidecar.sh/$2}"
     b="${b//W=\"W-<n>\"/W=\"$1\"}"
     b="${b//TITLE=\"<plain title>\"/TITLE=\"Fix the report totals\"}"
+    b="${b//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"slice-1-branch\"}"
     b="$(awk 'index($0, "Nothing below adds to it.") { print "cat \"$DESC_SRC\" > \"$DESC_FILE\""; next } 1' <<<"$b")"
-    pm_out="$(cd "$P" && DESC_SRC="$tmp/desc" PATH="$tmp/bin:$PATH" BASE_BRANCH=slice-1-branch bash -c "$b" 2>"$tmp/stderr")"; pm_rc=$?
+    pm_out="$(cd "$P" && DESC_SRC="$tmp/desc" PATH="$tmp/bin:$PATH" bash -c "$b" 2>"$tmp/stderr")"; pm_rc=$?
 }
 
 # run_chain <label> <W value> <extra description line or empty> — a fresh guest
@@ -213,7 +214,8 @@ check "the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
 cp "$GH_STUB/pr-body" "$tmp/before"
 b="${pm_block//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
 b="${b//W=\"W-<n>\"/W=\"W-1\"}"
-(cd "$P" && PATH="$tmp/bin:$PATH" BASE_BRANCH=main bash -c "$b" >/dev/null 2>&1)
+b="${b//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"\"}"
+(cd "$P" && PATH="$tmp/bin:$PATH" bash -c "$b" >/dev/null 2>&1)
 check "a re-run creates no second PR" 1 "$(grep -c '^pr create' "$GH_STUB/calls")"
 check "a re-run leaves the existing PR body as it was" "$(cat "$tmp/before")" "$(cat "$GH_STUB/pr-body")"
 
