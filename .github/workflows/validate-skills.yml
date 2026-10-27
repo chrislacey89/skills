@@ -183,6 +183,12 @@ jobs:
       - name: Run markdown diff-attribute contract suite
         run: bash scripts/test-markdown-diff-attribute.sh
 
+      # A skill block that reads ${VAR:-} before assigning VAR defaults silently
+      # in the fresh shell an agent runs it in. Allowlisted exceptions are named
+      # in the script and fail once they stop matching.
+      - name: Run block default-read suite
+        run: bash scripts/test-block-default-reads.sh
+
       # Executes the commands setup-pre-commit/SKILL.md documents for its
       # security gates (missing binary, unreachable registry, detection grep,
       # yaml shape). Needs neither gitleaks nor the network; an absent
