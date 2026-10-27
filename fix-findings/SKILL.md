@@ -170,20 +170,53 @@ The fixer's instructions, in order:
    later round, from the tree. One commit per fix — a fix
    squashed together with another is a fix nobody can read separately.
    **When the lines the finding anchors on came from one commit on this
-   branch, make it a fixup of that commit.** Find it from the finding's file
-   and line range:
+   branch, and the branch is unshared, make it a fixup of that commit.** Find
+   it from the finding's file and line range:
 
    ```bash
    # $BASE_REF as /pre-merge Phase 1 step 3 derives it; FILE, START, END from the finding's anchor.
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $1 }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
+   { git rev-parse -q --verify '@{u}' >/dev/null || [ -n "$(git ls-remote --heads origin "$(git branch --show-current)" 2>/dev/null)" ]; } && FIXUP_TARGET=
    ```
 
    A non-empty `FIXUP_TARGET` means one branch commit wrote every anchored
-   line. Commit with `git commit --fixup="$FIXUP_TARGET"`, and give `-m` the message
-   and trailer above. Otherwise (lines from the base, or from several
-   commits), make an ordinary commit. It is still one commit per fix, and it is
+   line and the branch passes `/pre-merge` Phase 2's unshared test. The last
+   line is that test. A pushed branch gets no fixups because `/pre-merge`
+   never offers to fold one, so its `fixup!` subject would merge as-is.
+   Commit with `git commit --fixup="$FIXUP_TARGET"`, and give `-m` the message
+   and trailer above. Then check that the branch still folds:
+
+   ```bash
+   # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
+   FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
+   TRIAL_HEAD=$(git rev-parse HEAD)
+   TRIAL_DIR=$(mktemp -d)
+   if git clone -q --shared --no-checkout "$(git rev-parse --show-toplevel)" "$TRIAL_DIR" \
+     && git -C "$TRIAL_DIR" checkout -q --detach "$TRIAL_HEAD" \
+     && GIT_SEQUENCE_EDITOR=: git -C "$TRIAL_DIR" -c user.name=trial -c user.email=trial@invalid \
+          rebase -q -i --autosquash "$FORK_POINT" >/dev/null 2>&1; then
+     echo "fold trial: clean"
+   else
+     git log -1 --format=%B HEAD | sed '1,2d' > "$TRIAL_DIR.msg"
+     git commit -q --amend --only -F "$TRIAL_DIR.msg"
+     echo "fold trial: would not fold; recommitted as an ordinary commit" >&2
+   fi
+   rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg"
+   ```
+
+   The trial runs `/pre-merge`'s fold in a throwaway clone, so the branch and
+   the shared git directory are untouched. A fixup conflicts there when a later
+   commit on the branch edited the same region. The fold is one rebase, so a
+   single conflicting fixup would abort it for every other fixup on the
+   branch. The `else` arm keeps the commit and its `-m` text and drops the
+   `fixup!` subject line. Report the SHA after it ran. When every earlier
+   fixup on the branch passed this trial, a failure is caused by the commit
+   just made.
+
+   Otherwise (lines from the base, from several commits, or a shared branch),
+   make an ordinary commit. It is still one commit per fix, and it is
    reviewed on its own. The `fixup!` subject only lets `/pre-merge`'s handoff
    offer to fold the fix into its target later. Git's docs on what that fold
    does to this message: *"The -m option may be used to supplement the log

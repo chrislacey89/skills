@@ -150,9 +150,19 @@ fold_block="$(awk '
 fixup_target_block="$(awk '
     /^   FIXUP_TARGET=\$\(git (-c [A-Za-z.]+=[a-z]+ )*blame/ { on = 1 }
     on { sub(/^   /, ""); print }
-    on && /\|\| FIXUP_TARGET=$/ { exit }
+    on && /&& FIXUP_TARGET=$/ { exit }
 ' "$fixfindings_skill")"
 [[ "$fixup_target_block" == *'|| FIXUP_TARGET='* ]] || fatal "no FIXUP_TARGET block found in $fixfindings_skill"
+[[ "$fixup_target_block" == *'&& FIXUP_TARGET='* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no unshared-branch line"
+
+# The fold-trial block that follows it (#611): from its comment line to the
+# cleanup. Section 12 runs it against a fixup that folds and one that does not.
+fold_trial_block="$(awk '
+    /^   # After `git commit --fixup`: would \/pre-merge.s fold still apply cleanly\?/ { on = 1 }
+    on { sub(/^   /, ""); print }
+    on && /^rm -rf "\$TRIAL_DIR" "\$TRIAL_DIR.msg"$/ { exit }
+' "$fixfindings_skill")"
+[[ "$fold_trial_block" == *'rebase -q -i --autosquash'* ]] || fatal "no fold-trial block found in $fixfindings_skill"
 
 printf 'scope block (%s lines) and rounds line extracted\n' "$(printf '%s\n' "$scope_block" | grep -c .)"
 
@@ -641,6 +651,10 @@ assert_eq "2" "$(git -C "$repo3" rev-list --count main..HEAD)" \
     "fold fixture precondition: the autosquash folded three commits into two"
 assert_eq "$(git -C "$repo3" rev-parse "$reviewed_sha3^{tree}")" "$(git -C "$repo3" rev-parse 'HEAD^{tree}')" \
     "fold fixture precondition: the fold left the reviewed tree unchanged"
+# A fold must not carry /fix-findings' run trailer into the commit it corrects:
+# git discards a fixup's -m text when it squashes it, and this pins that.
+assert_eq "" "$(git -C "$repo3" log --format=%B main..HEAD | grep 'Fix-Findings-Run:' || true)" \
+    "a folded fixup leaves no Fix-Findings-Run trailer in the branch's commit messages"
 
 run_scope3() {
     local out files scope
@@ -731,6 +745,78 @@ git -C "$repo4" config blame.blankBoundary true
 git -C "$repo4" config blame.markUnblamableLines true
 assert_eq "" "$(run_target 1 1)" "blame.blankBoundary/markUnblamableLines set: a base line still yields no target"
 assert_eq "$change_b_sha" "$(run_target 2 2)" "blame display config set: a single-commit line is still the target"
+
+# A shared branch never gets a fixup: /pre-merge offers the fold only on an
+# unshared branch, so a `fixup!` subject there would merge as-is (#611). Both
+# ways of sharing count — a push with -u, and a plain push with no upstream.
+bare4="$sandbox/bare4.git"
+git init -q --bare "$bare4"
+git -C "$repo4" remote add origin "$bare4"
+git -C "$repo4" push -q origin feature 2>/dev/null
+assert_eq "" "$(run_target 2 2)" "plain push without -u: a single-commit line yields no target"
+git -C "$repo4" branch -q --set-upstream-to=origin/feature
+assert_eq "" "$(run_target 2 2)" "pushed with an upstream: a single-commit line yields no target"
+# The unshared test is copied from /pre-merge Phase 2; pin the copy to it.
+lsremote_premerge="$(grep -o "git ls-remote --heads origin [^\`]*" "$premerge_skill" | head -1 || true)"
+[[ -n "$lsremote_premerge" && "$fixup_target_block" == *"$lsremote_premerge"* ]] && r=same || r=differs
+assert_eq same "$r" "the fixup-target block's remote check is /pre-merge Phase 2's"
+# shellcheck disable=SC2016  # literal text being matched
+upstream_cmd='git rev-parse -q --verify '"'"'@{u}'"'"
+grep -qF -- "$upstream_cmd" "$premerge_skill" && [[ "$fixup_target_block" == *"$upstream_cmd"* ]] && r=same || r=differs
+assert_eq same "$r" "the fixup-target block's upstream check is /pre-merge Phase 2's"
+
+# --- 12b. The fold trial demotes a fixup the fold could not apply (#611) ------
+section "fold trial: a fixup that would not fold becomes an ordinary commit"
+repo6="$sandbox/repo6"
+mkdir -p "$repo6"
+(
+    cd "$repo6" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'one\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'two\n' > two.txt
+    git add two.txt && git commit -q -m 'feature: two'
+    printf 'one, fixed\n' > one.txt
+    git add one.txt && git commit -q --fixup=HEAD~1 -m 'fix one' -m 'Fix-Findings-Run: 20261027T000000Z'
+)
+run_trial() { (cd "$repo6" && BASE_REF=main bash -c "$fold_trial_block" 2>&1); }
+worktrees_before="$(git -C "$repo6" worktree list | grep -c .)"
+clean_head="$(git -C "$repo6" rev-parse HEAD)"
+assert_eq "fold trial: clean" "$(run_trial)" "a fixup no later commit overlaps: the trial reports clean"
+assert_eq "$clean_head" "$(git -C "$repo6" rev-parse HEAD)" "a clean trial leaves the fixup commit as it was"
+
+one_sha6="$(git -C "$repo6" rev-parse HEAD~2)"
+(
+    cd "$repo6" || exit 1
+    printf 'one, rewritten by a later commit\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: rewrite one'
+    printf 'one, fixed again\n' > one.txt
+    git add one.txt && git commit -q --fixup="$one_sha6" -m 'fix one again' -m 'Fix-Findings-Run: 20261027T000001Z'
+)
+conflict_tree6="$(git -C "$repo6" rev-parse 'HEAD^{tree}')"
+count6="$(git -C "$repo6" rev-list --count main..HEAD)"
+case "$(run_trial)" in
+    *"would not fold"*) assert_eq ok ok "a fixup a later commit overlaps: the trial names the demotion" ;;
+    *) assert_eq "fold trial: would not fold ..." "$(run_trial)" "a fixup a later commit overlaps: the trial names the demotion" ;;
+esac
+assert_eq "fix one again" "$(git -C "$repo6" log -1 --format=%s)" "demoted: the subject is the fixer's message, not fixup!"
+assert_eq "Fix-Findings-Run: 20261027T000001Z" "$(git -C "$repo6" log -1 --format=%B | grep '^Fix-Findings-Run:')" \
+    "demoted: the run trailer survives"
+assert_eq "$conflict_tree6" "$(git -C "$repo6" rev-parse 'HEAD^{tree}')" "demoted: the fix's content is unchanged"
+assert_eq "$count6" "$(git -C "$repo6" rev-list --count main..HEAD)" "demoted: still one commit per fix"
+assert_eq "feature" "$(git -C "$repo6" branch --show-current)" "the trial leaves the branch checked out"
+assert_eq "$worktrees_before" "$(git -C "$repo6" worktree list | grep -c .)" "the trial registers no worktree"
+assert_eq "" "$(git -C "$repo6" status --porcelain)" "the trial leaves the working tree clean"
+# The fold /pre-merge offers now succeeds where it would have aborted.
+case "$(cd "$repo6" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
+    folded:*) assert_eq ok ok "after the demotion, /pre-merge's fold applies" ;;
+    *) assert_eq "folded: ..." "aborted" "after the demotion, /pre-merge's fold applies" ;;
+esac
 
 # --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
 # A plain `git push origin <branch>` publishes the branch with no upstream, so
