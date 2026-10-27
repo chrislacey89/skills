@@ -107,6 +107,8 @@ pre-push:
       run: bash scripts/test-compound-restamp-handoff.sh
     prose-fix-disposition-tests:
       run: bash scripts/test-prose-fix-disposition.sh
+    respond-to-review-contract-tests:
+      run: bash scripts/test-respond-to-review-contract.sh
     excavate-entry-contract-tests:
       run: bash scripts/test-excavate-entry-contract.sh
     sidecar-resolution-tests:

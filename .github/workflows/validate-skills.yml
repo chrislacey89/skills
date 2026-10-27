@@ -283,6 +283,9 @@ jobs:
       - name: Run prose-fix disposition contract suite
         run: bash scripts/test-prose-fix-disposition.sh
 
+      - name: Run respond-to-review contract suite
+        run: bash scripts/test-respond-to-review-contract.sh
+
       # /compound Phase 3 and /excavate Step 7 both write the docs/solutions/ entry
       # format, and /research Phase 3 reads `volatility` and `date` from every
       # entry. A key changed in one template leaves the other's entries malformed
