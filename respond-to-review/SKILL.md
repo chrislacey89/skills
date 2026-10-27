@@ -93,9 +93,9 @@ THREADS_JQ='
 | if $p == null or $p.number != $n
      or ($p.reviewThreads.nodes | type) != "array"
      or ($p.reviews.nodes | type) != "array"
-     or ($p.reviewThreads.nodes | length) != ([$p.reviewThreads.totalCount, 100] | min)
-     or ($p.reviews.nodes | length) != ([$p.reviews.totalCount, 100] | min)
-     or ([$p.reviewThreads.nodes[] | select((.comments.nodes | length) != ([.comments.totalCount, 50] | min))] | length) > 0
+     or ($p.reviewThreads.nodes | length) != $p.reviewThreads.totalCount
+     or ($p.reviews.nodes | length) != $p.reviews.totalCount
+     or ([$p.reviewThreads.nodes[] | select((.comments.nodes | length) != .comments.totalCount)] | length) > 0
   then "unknown"
   else
     ($p.author.login // "") as $me

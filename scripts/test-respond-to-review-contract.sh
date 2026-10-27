@@ -148,6 +148,20 @@ jq '.data.repository.pullRequest = null' "$tmp/ok.json" > "$tmp/null-pr.json"
 check "a PR that did not come back prints unknown" unknown "$(runfetch "$tmp/null-pr.json")"
 check "a failed gh call prints unknown" unknown "$(runfetch "$tmp/does-not-exist.json")"
 
+# Past the bound: a PR with more than 100 threads or reviews, or a thread with
+# more than 50 comments, returns a full page whose length equals the bound, so a
+# guard that compares against min(totalCount, bound) passes it silently.
+# The fixtures pad each list to the bound, as GitHub would return it.
+fixture "$tmp/ok-over.json" 4 3 2
+jq '.data.repository.pullRequest.reviewThreads |= (.totalCount = 150 | .nodes = [range(100) as $i | .nodes[0] | .id = "PRRT_\($i)"])' "$tmp/ok-over.json" > "$tmp/over-threads.json"
+check "a thread list past the 100 bound prints unknown" unknown "$(runfetch "$tmp/over-threads.json")"
+jq '.data.repository.pullRequest.reviews |= (.totalCount = 150 | .nodes = [range(100) as $i | .nodes[1] | .id = "PRR_\($i)"])' "$tmp/ok-over.json" > "$tmp/over-reviews.json"
+check "a review list past the 100 bound prints unknown" unknown "$(runfetch "$tmp/over-reviews.json")"
+jq '.data.repository.pullRequest.reviewThreads.nodes[0].comments |= (.totalCount = 80 | .nodes = [range(50) as $i | .nodes[0]])' "$tmp/ok-over.json" > "$tmp/over-comments.json"
+check "a thread with comments past the 50 bound prints unknown" unknown "$(runfetch "$tmp/over-comments.json")"
+jq '.data.repository.pullRequest.reviewThreads |= (.totalCount = 100 | .nodes = [range(100) as $i | .nodes[0] | .id = "PRRT_\($i)"])' "$tmp/ok-over.json" > "$tmp/at-bound.json"
+check "a list exactly at the bound is still read whole" 1 "$(runfetch "$tmp/at-bound.json" | jq -e '.items | length == 101' >/dev/null 2>&1 && echo 1 || echo 0)"
+
 # Mutation: the resolved filter is load-bearing — without it a settled thread
 # comes back as feedback, and the id assertion above must notice.
 sed 's/| select(.isResolved | not)//' "$tmp/fetch.sh" > "$tmp/fetch-mut.sh"
@@ -156,7 +170,7 @@ MUT="$(GH_FIXTURE="$tmp/ok.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut.sh" 
 check "M1: without the resolved filter the id assertion would fail" 1 \
     "$([ "$(jq -r '[.items[].id] | join(" ")' <<<"$MUT" 2>/dev/null)" != "PRRT_old PRRT_a PRR_cr" ] && echo 1 || echo 0)"
 # Mutation: the truncation guard is load-bearing.
-grep -v 'reviewThreads.nodes | length) != (\[$p.reviewThreads.totalCount' "$tmp/fetch.sh" > "$tmp/fetch-mut2.sh"
+grep -v 'reviewThreads.nodes | length) != $p.reviewThreads.totalCount' "$tmp/fetch.sh" > "$tmp/fetch-mut2.sh"
 check "M2: without the thread-count guard a short read is not unknown" 1 \
     "$([ "$(GH_FIXTURE="$tmp/short-threads.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut2.sh" 2>/dev/null)" != unknown ] && echo 1 || echo 0)"
 
