@@ -77,6 +77,8 @@ pre-push:
       run: bash scripts/test-shellcheck-version-parity.sh
     markdown-diff-attribute-tests:
       run: bash scripts/test-markdown-diff-attribute.sh
+    block-default-reads-tests:
+      run: bash scripts/test-block-default-reads.sh
     setup-pre-commit-gates-tests:
       run: bash scripts/test-setup-pre-commit-gates.sh
     guards-can-fire-tests:
@@ -113,6 +115,8 @@ pre-push:
       run: bash scripts/test-state-backend.sh
     guest-footprint-tests:
       run: bash scripts/test-guest-footprint.sh
+    github-pr-base-tests:
+      run: bash scripts/test-github-pr-base.sh
     write-a-prd-sidecar-branch-tests:
       run: bash scripts/test-write-a-prd-sidecar-branch.sh
     prd-to-issues-sidecar-branch-tests:

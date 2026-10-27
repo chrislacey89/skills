@@ -90,26 +90,16 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 3. **Detect the base branch and assess the diff:**
    ```bash
-   BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
-   if [ -z "$BASE_BRANCH" ]; then
-     for candidate in main master prod develop trunk; do
-       if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
-     done
-   fi
-   # A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
-   # $BASE_REF points at it, and is the only thing safe as a range endpoint.
-   if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
-     BASE_REF="origin/$BASE_BRANCH"
-   else
-     BASE_REF="$BASE_BRANCH"
-     echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
-   fi
+   SC="<this skill's directory>/references/sidecar.sh"
+   # $BASE_REF is the range endpoint; $BASE_BRANCH is the name `--base` takes.
+   BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+   BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
    git diff "$BASE_REF...HEAD" --stat
    git log --oneline "$BASE_REF..HEAD"
    ```
-   For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target) and re-derive `$BASE_REF` from it. If no diff from the base, tell the user there's nothing to review and stop. Do not hardcode `main` — Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name.
+   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, no variable set here reaches a later block: put the sibling slice's branch name (the upstream the PR will target) in the `BASE_BRANCH=` placeholder of each block that consumes it (the Phase 2 block for your backend and the Phase 4 stamp block). If no diff from the base, tell the user there's nothing to review and stop.
 
-   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+   **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`. When `origin/<base>` does not resolve, `base-ref` measures against the local branch and says so on stderr; if the counts look wrong, `git fetch` and re-run.
 
 4. **Decide the scope — the whole branch, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or a hand fix after a deliberate lock deletion — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
    ```bash
@@ -173,7 +163,24 @@ If you are running on a branch other than the user's working branch and `--pr` w
    gh pr list --head $(git branch --show-current) --json number,url
    ```
 
-2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (override `--base` for stacked-PR slices to the sibling slice's branch) or `gh pr edit`.
+2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (for stacked-PR slices, put the sibling slice's branch in the `BASE_BRANCH=` placeholder of the block for your backend) or `gh pr edit`. Phase 1's `$BASE_BRANCH` does not reach this step: each fenced block runs in its own shell, so the `github` block below asks `base-ref --name` itself.
+
+   **On the `github` backend**, after writing the title and the body from the templates below:
+
+   ```bash
+   SC="<this skill's directory>/references/sidecar.sh"
+   TITLE="<title>"
+   BODY_FILE="<path of the file holding the body written from the templates below>"
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
+   case "$(bash "$SC" backend stamp)" in
+     github) ;;
+     sidecar) echo "backend is sidecar: open the PR with the sidecar block below, not this block"; exit 0 ;;
+     *) echo "PR aborted: sidecar.sh backend stamp failed; not guessing the github templates" >&2; exit 1 ;;
+   esac
+   [ -n "$BASE_BRANCH" ] || BASE_BRANCH=$(bash "$SC" base-ref --name) \
+     || { echo "PR aborted: sidecar.sh base-ref failed; not letting gh pick a base" >&2; exit 1; }
+   gh pr create --base "$BASE_BRANCH" --head "$(git branch --show-current)" --title "$TITLE" --body-file "$BODY_FILE"
+   ```
 
 **Ask where the pack's text goes first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md), and the sidecar block below asks before it does anything else. `github` uses the two templates below. `sidecar` means the repo's `forge.write` lacks `prs`: the PR still opens, but it is an ordinary PR, and everything the templates carry for the pack lives on the work item instead. Anything else is a refusal: stop and relay what `backend` printed on stderr, because the templates on a failed answer write pack text into a client's PR.
 
@@ -183,6 +190,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 SC="<this skill's directory>/references/sidecar.sh"
 W="W-<n>"            # the work item Phase 1 step 2 read; empty when step 1's answer was "none"
 TITLE="<plain title>"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
 case "$(bash "$SC" backend stamp)" in
   sidecar) ;;
   github) echo "backend is github: write the PR from the templates below, not this block"; exit 0 ;;
@@ -210,6 +218,8 @@ fi
 PR_URL=$(gh pr list --head "$BRANCH" --json url -q '.[0].url // ""') \
   || { echo "PR lookup failed" >&2; rm -f "$DESC_FILE"; exit 1; }
 if [ -z "$PR_URL" ]; then
+  [ -n "$BASE_BRANCH" ] || BASE_BRANCH=$(bash "$SC" base-ref --name) \
+    || { echo "PR aborted: sidecar.sh base-ref failed" >&2; rm -f "$DESC_FILE"; exit 1; }
   OUT=$(gh pr create --base "$BASE_BRANCH" --head "$BRANCH" --title "$TITLE" --body-file "$DESC_FILE") \
     || { echo "PR create failed" >&2; rm -f "$DESC_FILE"; exit 1; }
   PR_URL=$(printf '%s\n' "$OUT" | tail -1)
@@ -462,11 +472,19 @@ Write it only after the findings above have been presented — the stamp asserts
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 REVIEWED_SHA=$(git rev-parse HEAD)
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 2 was given; an earlier block's shell variable does not reach this one
+# This block runs in its own shell, so Phase 1's $BASE_REF is not set here: a stacked base is
+# recorded as origin/<branch> when that resolves (else the bare name), and otherwise ask again.
+if [ -n "$BASE_BRANCH" ]; then
+  if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"; else BASE_REF="$BASE_BRANCH"; fi
+else
+  BASE_REF=$(bash "$SC" base-ref) || { echo "stamp aborted: sidecar.sh base-ref failed" >&2; exit 1; }
+fi
 
 # The lock flag below is reachable only after the stamp is committed in the
 # sidecar, for the same reason as on the PR-body path: a flag with no stamp
 # locks the branch on the strength of a review nothing recorded.
-if ! bash "$SC" stamp write "$(git branch --show-current)" "$REVIEWED_SHA" --base-ref "${BASE_REF:-}"; then
+if ! bash "$SC" stamp write "$(git branch --show-current)" "$REVIEWED_SHA" --base-ref "$BASE_REF"; then
   echo "stamp aborted: sidecar stamp write failed" >&2; exit 1
 fi
 
