@@ -206,7 +206,7 @@ def rootid($by; $d):
         | {r: $r, cs: ([.[] | select((.deleted // false) == false and (.pending // false) == false)]
                        | sort_by(.created_on, .id))})
     | map(select(.r.resolution == null and (.r.pending // false) == false and (.cs | length) > 0)
-        | select((.cs[0].user.uuid // "") != $me)
+        | select((.r.user.uuid // "") != $me)
         | {kind: "thread", id: (.r.id | tostring), path: (.r.inline.path // null),
            line: (.r.inline.to // null), outdated: null,
            url: (.r.links.html.href // null), at: .cs[0].created_on, last_at: .cs[-1].created_on,
@@ -276,7 +276,8 @@ It prints the same JSON object as the GitHub arm, or `unknown`.
   Bitbucket has no review summary with a body, so no item is `kind: "review"`.
 - **What is left out.** The same three rules as the GitHub arm, in Bitbucket's
   fields: a thread whose top-level comment carries a `resolution`, a thread
-  the PR's author started (compared by account `uuid`), and comments that are
+  the PR's author started (compared by account `uuid`, read off the top-level
+  comment even if that comment was since deleted), and comments that are
   `deleted` or `pending` (an unpublished draft). A thread with nothing left
   after that is dropped.
 - **Two fields differ.** `outdated` is always `null`, because Bitbucket's

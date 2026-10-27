@@ -327,6 +327,19 @@ jq '.source.commit.hash = "0123456789ab"' "$tmp/bb-ok/pr.json.bak" > "$tmp/bb-ok
 check "head stays the abbreviated hash when it does not resolve locally" "0123456789ab" "$(runbb "$tmp/bb-ok" | jq -r '.head' 2>/dev/null)"
 mv "$tmp/bb-ok/pr.json.bak" "$tmp/bb-ok/pr.json"
 
+# A teammate's root comment that was deleted, then the author's reply, then a
+# second teammate's reply: the author did not start that thread, so it stays.
+mkdir -p "$tmp/bb-delroot"
+cp "$tmp/bb-ok/pr.json" "$tmp/bb-delroot/pr.json"
+jq -n '
+  def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who}, content: {raw: ("c" + (id | tostring))}};
+  {size: 3, pagelen: 100, page: 1, values: [
+     (c(1; "teammate"; "2026-10-02T00:00:00Z") + {deleted: true}),
+     (c(2; "me"; "2026-10-03T00:00:00Z") + {parent: {id: 1}}),
+     (c(3; "other"; "2026-10-04T00:00:00Z") + {parent: {id: 1}})]}' > "$tmp/bb-delroot/page1.json"
+check "a thread whose teammate root was deleted is kept when the author replied first" "other:c3 me:c2" \
+    "$(runbb "$tmp/bb-delroot" | jq -r '.items[] | [.comments[] | "\(.author):\(.body)"] | reverse | join(" ")' 2>/dev/null)"
+
 # Every way the read can be short, failed, or unprovable prints unknown.
 bbcase() { rm -rf "$tmp/bb-c"; cp -R "$tmp/bb-ok" "$tmp/bb-c"; }
 bbcase; bbfix "$tmp/bb-c" 10
