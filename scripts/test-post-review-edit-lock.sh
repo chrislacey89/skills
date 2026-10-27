@@ -930,6 +930,14 @@ else
 fi
 sidecar_read="$(cd "$stamprepo" && SKILL_KIT_SIDECAR_ROOT="$sc_root" bash "$sidecar_sh" stamp read "$(git -C "$stamprepo" branch --show-current)" 2>/dev/null)"
 assert_eq "$(git -C "$stamprepo" rev-parse HEAD)" "$sidecar_read" "…and the stamp it committed reads back as the head it reviewed"
+# The block runs in its own shell, so it must ask base-ref itself (#597): a stamp that
+# records an empty base_ref is the failure this pins.
+sidecar_stamp_base="$(jq -r '.base_ref // empty' "$sc_root"/lock/reviews/*.json 2>/dev/null | head -n1 || true)"
+if [ -n "$sidecar_stamp_base" ]; then
+    assert_eq "non-empty" "non-empty" "…and the stamp records a non-empty base_ref"
+else
+    assert_eq "non-empty" "empty" "…and the stamp records a non-empty base_ref"
+fi
 rm -f "$stamprepo/$stamp_rel"
 
 # -----------------------------------------------------------------------------

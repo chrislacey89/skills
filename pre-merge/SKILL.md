@@ -454,11 +454,13 @@ Write it only after the findings above have been presented — the stamp asserts
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 REVIEWED_SHA=$(git rev-parse HEAD)
+# This block runs in its own shell, so Phase 1's $BASE_REF is not set here: ask again.
+BASE_REF=$(bash "$SC" base-ref) || { echo "stamp aborted: sidecar.sh base-ref failed" >&2; exit 1; }
 
 # The lock flag below is reachable only after the stamp is committed in the
 # sidecar, for the same reason as on the PR-body path: a flag with no stamp
 # locks the branch on the strength of a review nothing recorded.
-if ! bash "$SC" stamp write "$(git branch --show-current)" "$REVIEWED_SHA" --base-ref "${BASE_REF:-}"; then
+if ! bash "$SC" stamp write "$(git branch --show-current)" "$REVIEWED_SHA" --base-ref "$BASE_REF"; then
   echo "stamp aborted: sidecar stamp write failed" >&2; exit 1
 fi
 
