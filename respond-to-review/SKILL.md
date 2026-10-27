@@ -242,6 +242,8 @@ if [ -n "${BITBUCKET_TOKEN:-}" ] && [ -n "$SLUG" ] && PRJ=$(bb_get "$API"); then
   PAGES=$(mktemp) && URL="$API/comments?pagelen=100" && n=0 && ok=1
   while [ -n "$URL" ]; do
     n=$((n + 1))
+    # A newline, quote, or backslash would let the URL write its own curl config lines.
+    case "$URL" in *'"'*|*\\*|*[[:cntrl:]]*) ok=0; break ;; esac
     case "$URL" in https://api.bitbucket.org/2.0/*) ;; *) ok=0; break ;; esac
     [ "$n" -le 50 ] && PAGE=$(bb_get "$URL") || { ok=0; break; }
     printf '%s\n' "$PAGE" >> "$PAGES"
