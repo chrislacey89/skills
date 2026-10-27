@@ -265,9 +265,20 @@ check "M5: with a loose match the trailer is attributed to a body line, not the 
 section "never posts, never mutates, never writes the record by hand"
 
 # posts <file> — print each forge-writing call in the file's fenced blocks.
+# Backslash continuations are joined first so a flag on a later line is seen.
+# Three shapes beyond the plain verbs: any `gh api` that is not a graphql call
+# yet carries a field flag (a field makes it a POST), any --method/-X write
+# (`--method=POST` included), and any `mutation` keyword whatever follows it.
+# The skill's own Step 1 fetch is `gh api graphql ... -f query='query(...)'`,
+# which the graphql exclusion keeps silent.
 posts() {
     awk '/^ *```/ { on = !on; next } on' "$1" \
-        | grep -nE 'gh +(pr|issue) +(comment|review|edit|close|merge)|gh +api .*(-X|--method) *(POST|PATCH|PUT|DELETE)|mutation[[:space:]]*[({]|resolveReviewThread|addPullRequestReview' || true
+        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment|addPullRequestReviewThreadReply' || true
+    awk '/^ *```/ { on = !on; next } on' "$1" \
+        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+        | grep -E 'gh +api ' | grep -vE 'gh +api +([^ ]+ +)*graphql( |$)' \
+        | grep -E '(^| )(-f|-F|--field|--raw-field)([ =]|[^ -])' || true
 }
 check "no fenced block in /respond-to-review writes to the forge" "" "$(posts "$R2R")"
 cp "$R2R" "$tmp/planted.md"
@@ -276,6 +287,18 @@ check "M3: the detector fires on a planted gh pr comment" 1 "$(posts "$tmp/plant
 cp "$R2R" "$tmp/planted2.md"
 printf '\n```bash\ngh api graphql -f query='"'"'mutation { resolveReviewThread(input: {threadId: "x"}) { thread { id } } }'"'"'\n```\n' >> "$tmp/planted2.md"
 check "M4: the detector fires on a planted resolve mutation" 1 "$(posts "$tmp/planted2.md" | grep -c . | awk '{print ($1 > 0)}')"
+
+# Renamed shapes of the same forbidden act, none of which the verbs above name.
+plant() { cp "$R2R" "$tmp/$1.md"; printf '\n```bash\n%s\n```\n' "$2" >> "$tmp/$1.md"; }
+plant p-field 'gh api repos/o/r/pulls/7/comments/1/replies -f body="done"'
+plant p-capf 'gh api -F body=@reply.md repos/o/r/issues/7/comments'
+plant p-cont 'gh api repos/o/r/pulls/7/comments/1/replies \
+  --raw-field body="done"'
+plant p-eq 'gh api --method=POST repos/o/r/issues/7/comments'
+plant p-named 'gh api graphql -f query='"'"'mutation Reply($id: ID!) { addComment(input: {subjectId: $id, body: "x"}) { clientMutationId } }'"'"''
+for c in p-field p-capf p-cont p-eq p-named; do
+    check "M6: the detector fires on planted shape $c" 1 "$(posts "$tmp/$c.md" | grep -c . | awk '{print ($1 > 0)}')"
+done
 
 check "no fenced block inlines a sidecar path" 0 \
     "$(awk '/^ *```/ { on = !on; next } on' "$R2R" | grep -c '\.claude/sidecars')"
