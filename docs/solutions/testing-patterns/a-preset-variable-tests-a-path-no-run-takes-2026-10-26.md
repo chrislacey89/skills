@@ -44,11 +44,11 @@ The test supplied the precondition the code was supposed to establish. In the fi
 ## Solution
 
 - **Fixture that discriminates.** The `base-ref` fixture now runs `git remote set-head origin develop`, so following `origin/HEAD` gives `develop` and the first fallback candidate gives `main` (commit `44dd3e5`). A breaker reversed the lookup order and the suite failed four checks.
-- **Inputs through the agent's channel.** A value a block needs from an earlier step goes in a placeholder line beside `W=` and `TITLE=`, which the test fills by substitution, or the block computes it with the verb in its own shell (the stamp block, commit `395eb83`). The stacked-PR placeholder for Phase 2 is still open on PR #604 (review concern 1).
+- **Inputs through the agent's channel.** A value a block needs from an earlier step goes in a placeholder line beside `W=` and `TITLE=`, which the test fills by substitution, or the block computes it with the verb in its own shell (the stamp block, commit `395eb83`).
 
 ## Prevention
 
-**Code-level:** `scripts/test-block-default-reads.sh` scans every fenced shell block in `*/SKILL.md` and `docs/*.md` and fails on a `${VAR:-...}` read of a variable the block has not assigned earlier, except harness variables and a named `KNOWN` list whose entries must still match. It flags the pre-fix stamp line at `99a3085:pre-merge/SKILL.md:461` and the open Phase 2 line, and a fixture keeps a non-shell fence from flipping its block tracking. It does not catch a plain `$VAR` read across blocks, or a fixture whose paths coincide.
+**Code-level:** `scripts/test-block-default-reads.sh` scans every fenced shell block in `*/SKILL.md` and `docs/*.md` and fails on a `${VAR:-...}` read of a variable the block has not assigned earlier, except harness variables and a named `KNOWN` list whose entries must still match. It does not catch a plain `$VAR` read across blocks, or a fixture whose paths coincide.
 
 **Process-level:** when a test sets a variable the block under test reads, ask whether an agent running that block could have it set. When a test asserts a fallback-capable lookup, check that the fixture makes the primary path and the fallback disagree.
 
