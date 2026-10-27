@@ -898,13 +898,15 @@ git config --file "$sc_gitconfig" user.name "Lock Tester"
 git config --file "$sc_gitconfig" user.email "lock@example.invalid"
 
 sidecar_block_status=0
+sidecar_stacked_base=""
 run_sidecar_stamp_block() {
     rm -f "$stamprepo/$stamp_rel"
     sidecar_block_status=0
+    local blk="${sidecar_stamp_block//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"$sidecar_stacked_base\"}"
     ( cd "$stamprepo" \
         && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" \
            SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" CLAUDE_PROJECT_DIR="$stamprepo" \
-           bash -c "${sidecar_stamp_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}" ) \
+           bash -c "${blk//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}" ) \
         >/dev/null 2>&1 || sidecar_block_status=$?
 }
 
@@ -938,6 +940,16 @@ if [ -n "$sidecar_stamp_base" ]; then
 else
     assert_eq "non-empty" "empty" "…and the stamp records a non-empty base_ref"
 fi
+rm -f "$stamprepo/$stamp_rel"
+
+# A stacked PR's sibling branch, filled into the placeholder, is what the stamp records (#604).
+git -C "$stamprepo" branch -f slice-1-branch HEAD >/dev/null 2>&1
+rm -f "$sc_root"/lock/reviews/*.json
+sidecar_stacked_base="slice-1-branch"
+run_sidecar_stamp_block
+sidecar_stacked_recorded="$(jq -r '.base_ref // empty' "$sc_root"/lock/reviews/*.json 2>/dev/null | head -n1 || true)"
+assert_eq "slice-1-branch" "$sidecar_stacked_recorded" "a filled stacked base is what the stamp records"
+sidecar_stacked_base=""
 rm -f "$stamprepo/$stamp_rel"
 
 # -----------------------------------------------------------------------------

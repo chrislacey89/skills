@@ -455,8 +455,14 @@ Write it only after the findings above have been presented — the stamp asserts
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 REVIEWED_SHA=$(git rev-parse HEAD)
-# This block runs in its own shell, so Phase 1's $BASE_REF is not set here: ask again.
-BASE_REF=$(bash "$SC" base-ref) || { echo "stamp aborted: sidecar.sh base-ref failed" >&2; exit 1; }
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 2 was given; an earlier block's shell variable does not reach this one
+# This block runs in its own shell, so Phase 1's $BASE_REF is not set here: a stacked base is
+# recorded as origin/<branch> when that resolves (else the bare name), and otherwise ask again.
+if [ -n "$BASE_BRANCH" ]; then
+  if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"; else BASE_REF="$BASE_BRANCH"; fi
+else
+  BASE_REF=$(bash "$SC" base-ref) || { echo "stamp aborted: sidecar.sh base-ref failed" >&2; exit 1; }
+fi
 
 # The lock flag below is reachable only after the stamp is committed in the
 # sidecar, for the same reason as on the PR-body path: a flag with no stamp
