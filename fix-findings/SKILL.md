@@ -200,10 +200,15 @@ The fixer's instructions, in order:
      echo "fold trial: clean"
    else
      git log -1 --format=%B HEAD | sed '1,2d' > "$TRIAL_DIR.msg"
-     git commit -q --amend --only -F "$TRIAL_DIR.msg"
-     echo "fold trial: would not fold; recommitted as an ordinary commit" >&2
+     if git commit -q --amend --only -F "$TRIAL_DIR.msg"; then
+       echo "fold trial: would not fold; recommitted as an ordinary commit" >&2
+     else
+       echo "fold trial: would not fold, and the recommit failed; HEAD is still a fixup! commit" >&2
+       TRIAL_FAILED=1
+     fi
    fi
    rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg"
+   [ -z "${TRIAL_FAILED:-}" ]
    ```
 
    The trial runs `/pre-merge`'s fold in a throwaway clone, so the branch and
@@ -211,7 +216,7 @@ The fixer's instructions, in order:
    commit on the branch edited the same region. The fold is one rebase, so a
    single conflicting fixup would abort it for every other fixup on the
    branch. The `else` arm keeps the commit and its `-m` text and drops the
-   `fixup!` subject line. Report the SHA after it ran. When every earlier
+   `fixup!` subject line. A failed recommit (a `commit-msg` hook or signing refusing the amend) exits the block nonzero and leaves the `fixup!` commit in place: report that as a failure, not a handled fold. Report the SHA after it ran. When every earlier
    fixup on the branch passed this trial, a failure is caused by the commit
    just made.
 

@@ -156,11 +156,11 @@ fixup_target_block="$(awk '
 [[ "$fixup_target_block" == *'&& FIXUP_TARGET='* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no unshared-branch line"
 
 # The fold-trial block that follows it (#611): from its comment line to the
-# cleanup. Section 12 runs it against a fixup that folds and one that does not.
+# cleanup and its exit-status line. Section 12 runs it against a fixup that folds and one that does not.
 fold_trial_block="$(awk '
     /^   # After `git commit --fixup`: would \/pre-merge.s fold still apply cleanly\?/ { on = 1 }
     on { sub(/^   /, ""); print }
-    on && /^rm -rf "\$TRIAL_DIR" "\$TRIAL_DIR.msg"$/ { exit }
+    on && /^\[ -z "\$\{TRIAL_FAILED:-\}" \]$/ { exit }
 ' "$fixfindings_skill")"
 [[ "$fold_trial_block" == *'rebase -q -i --autosquash'* ]] || fatal "no fold-trial block found in $fixfindings_skill"
 
@@ -817,6 +817,39 @@ case "$(cd "$repo6" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
     folded:*) assert_eq ok ok "after the demotion, /pre-merge's fold applies" ;;
     *) assert_eq "folded: ..." "aborted" "after the demotion, /pre-merge's fold applies" ;;
 esac
+
+# A recommit the amend refuses must not be reported as handled.
+section "fold trial: a failed recommit is reported as a failure"
+repo7="$sandbox/repo7"
+mkdir -p "$repo7"
+(
+    cd "$repo7" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'one\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'one, rewritten\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: rewrite one'
+    printf 'one, fixed\n' > one.txt
+    git add one.txt && git commit -q --fixup=HEAD~1 -m 'fix one' -m 'Fix-Findings-Run: 20261027T000002Z'
+    # shellcheck disable=SC2016  # the hook body is literal text for sh
+    printf '#!/bin/sh\ncase "$(head -1 "$1")" in "fixup! "*) exit 0 ;; *) echo "commit-msg: bad subject" >&2; exit 1 ;; esac\n' > .git/hooks/commit-msg
+    chmod +x .git/hooks/commit-msg
+)
+head7="$(git -C "$repo7" rev-parse HEAD)"
+out7="$(cd "$repo7" && BASE_REF=main bash -c "$fold_trial_block" 2>&1)" && rc7=0 || rc7=$?
+[[ "$rc7" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "a refused recommit: the block exits nonzero"
+case "$out7" in
+    *"recommitted as an ordinary commit"*) assert_eq "no success line" "$out7" "a refused recommit: no success line" ;;
+    *) assert_eq ok ok "a refused recommit: no success line" ;;
+esac
+assert_eq "$head7" "$(git -C "$repo7" rev-parse HEAD)" "a refused recommit: HEAD is untouched"
+assert_eq "fixup! feature: one" "$(git -C "$repo7" log -1 --format=%s)" "a refused recommit: the subject is still fixup!"
 
 # --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
 # A plain `git push origin <branch>` publishes the branch with no upstream, so
