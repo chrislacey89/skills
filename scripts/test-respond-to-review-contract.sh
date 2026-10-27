@@ -292,6 +292,13 @@ runbb() {
         BITBUCKET_TOKEN="$tok" "${2:-bash}" "$tmp/bb.sh" 2>/dev/null)
 }
 
+# runbberr <fixture-dir> [email] — stderr only (stdout dropped), same setup as runbb.
+runbberr() {
+    : > "$tmp/bb-calls"
+    (cd "$tmp/bbrepo" && env -u BITBUCKET_EMAIL ${2:+BITBUCKET_EMAIL="$2"} BB_FX="$1" BB_CALLS="$tmp/bb-calls" PATH="$tmp/bbbin:$PATH" \
+        BITBUCKET_TOKEN=s3cr3t-token bash "$tmp/bb.sh" >/dev/null 2>"$tmp/bb-err"; cat "$tmp/bb-err")
+}
+
 bbfix "$tmp/bb-ok" 9
 OUT="$(runbb "$tmp/bb-ok")"
 check "a whole read prints JSON, not unknown" 1 "$(jq -e '.items | type == "array"' <<<"$OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
@@ -362,6 +369,12 @@ bbcase; echo 500 > "$tmp/bb-c/page2.code"
 check "a non-200 page prints unknown" unknown "$(runbb "$tmp/bb-c")"
 bbcase; echo 401 > "$tmp/bb-c/pr.code"
 check "a non-200 PR read prints unknown" unknown "$(runbb "$tmp/bb-c")"
+ERR="$(runbberr "$tmp/bb-c")"
+check "a 401 names the status and the path on stderr" 1 "$(case "$ERR" in *"HTTP 401 for /2.0/repositories/acme/app/pullrequests/7"*) echo 1 ;; *) echo 0 ;; esac)"
+check "a 401 without BITBUCKET_EMAIL says an API token needs it" 1 "$(case "$ERR" in *BITBUCKET_EMAIL*) echo 1 ;; *) echo 0 ;; esac)"
+check "the token never reaches stderr" 0 "$(printf '%s' "$ERR" | grep -c s3cr3t-token)"
+check "a non-200 still prints only unknown on stdout" unknown "$(runbb "$tmp/bb-c")"
+check "with BITBUCKET_EMAIL set the hint is not printed" 0 "$(runbberr "$tmp/bb-c" me@example.com | grep -c 'needs BITBUCKET_EMAIL')"
 bbcase
 check "a curl that fails outright prints unknown" unknown "$(BB_FAIL=page1 runbb "$tmp/bb-c")"
 bbcase; rm "$tmp/bb-c/page2.json"

@@ -230,7 +230,13 @@ bb_get() {
     bb_auth="header = \"Authorization: Bearer $BITBUCKET_TOKEN\""
   fi
   bb_code=$(printf '%s\nurl = "%s"\n' "$bb_auth" "$1" | curl -sS -o "$bb_out" -w '%{http_code}' -K -) || bb_code=000
-  [ "$bb_code" = 200 ] && cat "$bb_out"
+  if [ "$bb_code" = 200 ]; then
+    cat "$bb_out"
+  else
+    bb_path=${1#*://}
+    printf 'bitbucket: HTTP %s for /%s\n' "$bb_code" "${bb_path#*/}" >&2
+    case "$bb_code" in 401|403) [ -n "${BITBUCKET_EMAIL:-}" ] || echo 'bitbucket: an API token needs BITBUCKET_EMAIL set' >&2 ;; esac
+  fi
   rm -f "$bb_out"
   [ "$bb_code" = 200 ]
 }
@@ -263,7 +269,8 @@ It prints the same JSON object as the GitHub arm, or `unknown`.
   failed or returned anything but 200, a page was not JSON, the PR did not come
   back, a reply points at a comment that was not read, or the comments read do
   not add up to the `size` the first page reported. The same rule as the GitHub
-  arm applies: re-run once, then tell the human and stop. Bitbucket marks
+  arm applies: re-run once, then tell the human and stop. The arm names the
+  HTTP status and request path on stderr, never the token. Bitbucket marks
   `size` optional in its
   [pagination](https://developer.atlassian.com/cloud/bitbucket/rest/intro/#pagination)
   contract, so a response without it is `unknown` too: there is nothing to
