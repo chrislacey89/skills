@@ -224,9 +224,11 @@ cat > "$tmp/bbbin/curl" <<'STUB'
 # read on stdin, so the test can see where the token went.
 out=""
 printf 'ARGV %s\n' "$*" >> "$BB_CALLS"
+wcode=0; case "$*" in *' -w '*) wcode=1 ;; esac
 while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
 cfg="$(cat)"
 printf '%s\n' "$cfg" >> "$BB_CALLS"
+[ -n "$out" ] || out=/dev/stdout
 url="$(printf '%s\n' "$cfg" | sed -n 's/^url = "\(.*\)"$/\1/p')"
 case "$url" in
     https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/7) route=pr ;;
@@ -237,7 +239,9 @@ esac
 [ -n "${BB_FAIL:-}" ] && [ "$route" = "$BB_FAIL" ] && exit 7
 code=200; [ -f "$BB_FX/$route.code" ] && code="$(cat "$BB_FX/$route.code")"
 if [ -f "$BB_FX/$route.json" ]; then cp "$BB_FX/$route.json" "$out"; else code=404; : > "$out"; fi
-printf '%s' "$code"
+[ "$wcode" = 1 ] && printf '%s' "$code"
+[ "$wcode" = 1 ] || [ "$code" = 200 ] || exit 22
+exit 0
 STUB
 chmod +x "$tmp/bbbin/curl"
 
@@ -255,7 +259,7 @@ BB_HEAD="$(git -C "$tmp/bbrepo" rev-parse HEAD)"
 bbfix() {
     mkdir -p "$1"
     jq -n --arg head "${BB_HEAD:0:12}" '{id: 7, state: "OPEN", author: {uuid: "{me}", nickname: "me"},
-        source: {branch: {name: "feat"}, commit: {hash: $head}}}' > "$1/pr.json"
+        destination: {branch: {name: "main"}}, source: {branch: {name: "feat"}, commit: {hash: $head}}}' > "$1/pr.json"
     jq -n --arg tricky "$TRICKY" --argjson size "$2" '
       def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who},
                           links: {html: {href: ("https://bitbucket.org/acme/app/pull-requests/7#comment-" + (id | tostring))}}};
@@ -552,6 +556,48 @@ check "the record is committed through sidecar.sh commit" 1 "$(grep -c '"\$SC" c
 
 # -----------------------------------------------------------------------------
 section "routes and bundles"
+
+section "Step 2's Bitbucket diff block (#612): the PR's own two branches, never an empty diff"
+
+DIFFB="$(block "$R2R" 'git diff "$BASE_REF...origin/$SRC"')"
+check "the Bitbucket diff block is found" 1 "$([ -n "$DIFFB" ] && echo 1 || echo 0)"
+printf '%s' "$DIFFB" | sed 's/^PR=<pr-number>$/PR=7/' > "$tmp/bbdiff.sh"
+check "the Bitbucket diff block's PR placeholder is substituted" 1 "$(grep -cx 'PR=7' "$tmp/bbdiff.sh")"
+check "the Bitbucket diff block reads no variable an earlier block set" 0 \
+    "$(grep -c 'BASE_REF:-\|BASE_BRANCH' "$tmp/bbdiff.sh")"
+
+# A real remote the block can fetch from: main, and feat with one added file.
+# Its path carries bitbucket.org/acme/app so the block's slug sed reads it.
+BBREMOTE="$tmp/bitbucket.org/acme/app.git"
+rm -rf "$tmp/bitbucket.org" "$tmp/bbseed"; mkdir -p "$tmp/bitbucket.org/acme"; git init -q --bare "$BBREMOTE"
+git init -q "$tmp/bbseed"; git -C "$tmp/bbseed" checkout -q -b main
+git -C "$tmp/bbseed" commit -q --allow-empty -m base
+git -C "$tmp/bbseed" checkout -q -b feat
+echo hello > "$tmp/bbseed/added.txt"; git -C "$tmp/bbseed" add added.txt; git -C "$tmp/bbseed" commit -q -m feat
+git -C "$tmp/bbseed" push -q "$BBREMOTE" main feat
+git -C "$tmp/bbrepo" remote set-url origin "$BBREMOTE"
+
+# runbbdiff <fixture-dir> — HEAD in bbrepo is its own unrelated commit, so a diff
+# that reads HEAD (or an unset BASE_REF) would be empty or wrong.
+runbbdiff() {
+    : > "$tmp/bb-calls"
+    (cd "$tmp/bbrepo" && env -u BITBUCKET_EMAIL -u BASE_REF BB_FX="$1" BB_CALLS="$tmp/bb-calls" PATH="$tmp/bbbin:$PATH" \
+        BITBUCKET_TOKEN="${BB_TOK-s3cr3t-token}" bash "$tmp/bbdiff.sh" 2>"$tmp/bbdiff.err"; echo "exit=$?")
+}
+DOUT="$(runbbdiff "$tmp/bb-ok")"
+check "it prints the PR's own diff, from the remote branches, without the PR branch checked out" 1 \
+    "$(grep -c '^+hello$' <<<"$DOUT")"
+check "and exits 0" 1 "$(grep -cx 'exit=0' <<<"$DOUT")"
+bbcase; jq 'del(.destination)' "$tmp/bb-ok/pr.json" > "$tmp/bb-c/pr.json"
+DOUT="$(runbbdiff "$tmp/bb-c")"
+check "a PR with no destination branch prints nothing and exits nonzero, not an empty diff" "exit=1" "$DOUT"
+bbcase; jq '.source.branch.name = ""' "$tmp/bb-ok/pr.json" > "$tmp/bb-c/pr.json"
+check "an empty source branch name prints nothing and exits nonzero" "exit=1" "$(runbbdiff "$tmp/bb-c")"
+bbcase; jq '.source.branch.name = "gone"' "$tmp/bb-ok/pr.json" > "$tmp/bb-c/pr.json"
+check "a branch that cannot be fetched prints nothing and exits nonzero" "exit=1" "$(runbbdiff "$tmp/bb-c")"
+check "a missing token prints nothing and exits nonzero" "exit=1" "$(BB_TOK='' runbbdiff "$tmp/bb-ok")"
+check "the diff block's every request is a plain GET" 0 "$(grep -ciE '^(request|data|form|json|upload-file|-X|-d) ' "$tmp/bb-calls")"
+git -C "$tmp/bbrepo" remote set-url origin git@bitbucket.org:acme/app.git
 
 for b in docs/comment-craft.md docs/next-step-menu.md init-pipeline/scripts/sidecar.sh; do
     check "the manifest bundles $b into respond-to-review" 1 \

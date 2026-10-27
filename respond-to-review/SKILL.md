@@ -333,13 +333,30 @@ carrying one fix's reasoning into the next is the risk `/fix-findings` guards
 against per finding. An evidence reader seeing two related comments together
 is not that risk.
 
+On Bitbucket there is no `gh pr diff`. This block reads the PR's own
+destination and source branch names and diffs the two remote branches, so it
+needs neither the PR's branch checked out nor a guessed base. It stops, with
+nothing on stdout, if either name or either fetch is missing:
+
+```bash
+PR=<pr-number>
+SLUG=$(git remote get-url origin 2>/dev/null | sed -nE 's#^.*bitbucket\.org[:/]+##p' | sed -E 's#\.git$##; s#/+$##')
+if [ -n "${BITBUCKET_EMAIL:-}" ]; then AUTH="user = \"$BITBUCKET_EMAIL:$BITBUCKET_TOKEN\""; else AUTH="header = \"Authorization: Bearer $BITBUCKET_TOKEN\""; fi
+NAMES=$([ -n "${BITBUCKET_TOKEN:-}" ] && [ -n "$SLUG" ] && printf '%s\nurl = "%s"\n' "$AUTH" "https://api.bitbucket.org/2.0/repositories/$SLUG/pullrequests/$PR" \
+  | curl -sS -f -K - | jq -r '[.destination.branch.name, .source.branch.name] | if all(type == "string" and length > 0) then join(" ") else empty end')
+read -r DEST SRC <<<"$NAMES"
+[ -n "$DEST" ] && [ -n "$SRC" ] || { echo "PR destination or source branch not read: no diff" >&2; exit 1; }
+git fetch -q origin "+refs/heads/$DEST:refs/remotes/origin/$DEST" "+refs/heads/$SRC:refs/remotes/origin/$SRC" || { echo "fetch failed: no diff" >&2; exit 1; }
+BASE_REF="origin/$DEST"
+git diff "$BASE_REF...origin/$SRC"
+```
+
 The context contract is `/pre-merge` Phase 3's (read it there, under *The
 context contract is about provenance, not permission*), with this skill's
 inputs:
 
 - **Handed over:** the items' JSON exactly as Step 1 printed it, the PR diff
-  (`gh pr diff <pr-number>`, or on Bitbucket, with the PR's branch checked
-  out, `git diff "$BASE_REF...HEAD"`, `BASE_REF` set as in Step 1), and
+  (`gh pr diff <pr-number>` on GitHub, the block below on Bitbucket), and
   `references/comment-craft.md`, especially § *Receiving a review*.
 - **Reached for itself:** the merged tree, `git log` and `git show`, tests and
   their output, installed types, `docs/solutions/`.
