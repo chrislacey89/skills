@@ -316,7 +316,7 @@ check "head_ref is the PR's source branch" "feat" "$(jq -r '.head_ref' <<<"$OUT"
 check "it follows the next link to page 2" 1 "$(grep -c '^url = .*&page=2"$' "$tmp/bb-calls")"
 check "the token never appears in curl's arguments" 0 "$(grep '^ARGV ' "$tmp/bb-calls" | grep -c 's3cr3t-token')"
 check "without an email the token is sent as a Bearer header" 3 "$(grep -cx 'header = "Authorization: Bearer s3cr3t-token"' "$tmp/bb-calls")"
-check "every request is a plain GET (no request or data line reaches curl)" 0 "$(grep -ciE '^(request|data|form|json|upload-file|-X|-d) ' "$tmp/bb-calls")"
+check "every request is a plain GET (no request or data line reaches curl)" 0 "$(grep -ciE '^(ARGV .*(^| )(-[A-Za-z]*X|--request|-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file)([ =]|$)|(request|data|data-[a-z]+|form|form-[a-z]+|json|upload-file) *([=:]| ))' "$tmp/bb-calls")"
 check "the arm reads the same under zsh" "$OUT" "$(runbb "$tmp/bb-ok" zsh)"
 OUTE="$(cd "$tmp/bbrepo" && BB_FX="$tmp/bb-ok" BB_CALLS="$tmp/bb-calls" PATH="$tmp/bbbin:$PATH" BITBUCKET_TOKEN=s3cr3t-token BITBUCKET_EMAIL=me@example.com bash "$tmp/bb.sh" 2>/dev/null)"
 check "with an email the token is sent as user credentials" 1 "$(grep -cx 'user = "me@example.com:s3cr3t-token"' "$tmp/bb-calls" | awk '{print ($1 > 0)}')"
@@ -532,11 +532,19 @@ posts() {
         | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
         | grep -E 'gh +api ' | grep -vE 'gh +api +([^ ]+ +)*graphql( |$)' \
         | grep -E '(^| )(-f|-F|--field|--raw-field)([ =]|[^ -])' || true
-    # curl, which the Bitbucket arm runs: a body flag on the command line, or a
-    # request/data key in the config it reads on stdin, makes a request a write.
+    # curl, which the Bitbucket arm runs: a body flag on the command line, a
+    # -X/--request that names any method but GET, or a request/data key in the
+    # config it reads on stdin, makes a request a write. curl's config file
+    # (man curl, -K/--config) takes `key = value`, `key=value`, `key: value` and
+    # `key value`, quoted or not, so the key match accepts all four after a line
+    # start or a printf \n; the quoted `key = "` form is also kept mid-line.
     awk '/^ *```/ { on = !on; next } on' "$1" \
         | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
-        | grep -nE '(^|[^[:alnum:]_])curl .*(^| )(-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file)([ =]|$)|(^|[^[:alnum:]_-]|\\n)(request|data|data-[a-z]+|json|form|upload-file) *= *"' || true
+        | grep -nE '(^|[^[:alnum:]_])curl( |.* )(-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file)([ =]|$)|(^|[^[:alnum:]_-]|\\n)(request|data|data-[a-z]+|json|form|upload-file) *= *"|(^[[:space:]]*|\\n)(request|data|data-[a-z]+|json|form|form-[a-z]+|upload-file) *([=:]| ) *[^[:space:]=:]' || true
+    awk '/^ *```/ { on = !on; next } on' "$1" \
+        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+        | grep -nE '(^|[^[:alnum:]_])curl( |.* )(-[A-Za-z]*X|--request)([ =]|[A-Z])' \
+        | grep -vE '(-[A-Za-z]*X|--request)[ =]*["'"'"']?GET(["'"'"'[:space:]]|$)' || true
 }
 check "no fenced block in /respond-to-review writes to the forge" "" "$(posts "$R2R")"
 cp "$R2R" "$tmp/planted.md"
@@ -556,8 +564,12 @@ plant p-eq 'gh api --method=POST repos/o/r/issues/7/comments'
 plant p-named 'gh api graphql -f query='"'"'mutation Reply($id: ID!) { addComment(input: {subjectId: $id, body: "x"}) { clientMutationId } }'"'"''
 plant p-curl-data 'curl -sS -K - --data '"'"'{"content":{"raw":"done"}}'"'"' "$API/comments"'
 plant p-curl-cfg 'printf '"'"'%s\nrequest = "POST"\nurl = "%s"\n'"'"' "$bb_auth" "$1" | curl -sS -K -'
+plant p-curl-del 'curl -sS --request DELETE "$u"'
+plant p-curl-eq 'curl --request=DELETE "$u"'
+plant p-curl-bare 'printf '"'"'%s\nrequest = POST\nurl = "%s"\n'"'"' "$bb_auth" "$1" | curl -sS -K -'
+plant p-curl-colon 'printf '"'"'%s\nrequest: POST\n'"'"' "$bb_auth" | curl -sS -K -'
 plant p-curl-json 'curl -sS --json @reply.json "$API/comments"'
-for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-json; do
+for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-del p-curl-eq p-curl-bare p-curl-colon p-curl-json; do
     check "M6: the detector fires on planted shape $c" 1 "$(posts "$tmp/$c.md" | grep -c . | awk '{print ($1 > 0)}')"
 done
 
@@ -609,7 +621,7 @@ check "an empty source branch name prints nothing and exits nonzero" "exit=1" "$
 bbcase; jq '.source.branch.name = "gone"' "$tmp/bb-ok/pr.json" > "$tmp/bb-c/pr.json"
 check "a branch that cannot be fetched prints nothing and exits nonzero" "exit=1" "$(runbbdiff "$tmp/bb-c")"
 check "a missing token prints nothing and exits nonzero" "exit=1" "$(BB_TOK='' runbbdiff "$tmp/bb-ok")"
-check "the diff block's every request is a plain GET" 0 "$(grep -ciE '^(request|data|form|json|upload-file|-X|-d) ' "$tmp/bb-calls")"
+check "the diff block's every request is a plain GET" 0 "$(grep -ciE '^(ARGV .*(^| )(-[A-Za-z]*X|--request|-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file)([ =]|$)|(request|data|data-[a-z]+|form|form-[a-z]+|json|upload-file) *([=:]| ))' "$tmp/bb-calls")"
 git -C "$tmp/bbrepo" remote set-url origin git@bitbucket.org:acme/app.git
 
 for b in docs/comment-craft.md docs/next-step-menu.md init-pipeline/scripts/sidecar.sh; do
