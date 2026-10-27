@@ -151,10 +151,10 @@ It prints one JSON object, or the single word `unknown`.
   `unknown`. This skill is GitHub-only for now.
 
 If the PR's `state` is not `OPEN`, say so and stop. If `head_ref` is not the
-current branch, the evidence check can still run, but say before Step 4 that
+current branch, the evidence check can still run, but say before Step 5 that
 fixes need the PR's branch checked out.
 
-**When the record already exists, read it first** (Step 5 says where it
+**When the record already exists, read it first** (Step 4 says where it
 lives). Its thread markers say which items an earlier round already settled:
 
 ```bash
@@ -175,7 +175,7 @@ whose disposition is not `open`, is **settled**. Show it with its earlier
 disposition, and leave it out of the evidence check. An item that is new, or
 whose `last_at` moved because someone replied, gets the full check. On a miss
 the resolver says why (no sidecar, typically). Carry on without a prior round,
-and Step 5 says what happens to the record.
+and Step 4 says what happens to the record.
 
 For threads disposed **fix** in an earlier round, read what landed from the
 tree, not from memory. `/fix-findings` ends each teammate-sourced fix commit
@@ -253,7 +253,7 @@ disposition.
 
 | Disposition | What this skill does with it |
 |---|---|
-| **fix** | hands it to `/fix-findings` in Step 4 |
+| **fix** | hands it to `/fix-findings` in Step 5 |
 | **push back** | drafts a reply per `references/comment-craft.md` § *Receiving a review*: Triple-R, the evidence as Rationale, the tone rules, a signal prefix if the team uses them |
 | **postpone** | drafts a follow-up issue body and a one-line reply saying it was split out. The human files the issue (`/qa` is the pack's intake for it) |
 | **answer** | nothing unless asked. The human replies. If asked, draft from the evidence row |
@@ -263,25 +263,14 @@ name on a PR the team reads, and on a guest repo that PR is the client's. No
 skill names, no `Fix-Findings-Run` or `Review-Thread` lines, no `W-` ids, no
 "the evidence check found". Write as the author, citing code.
 
-### Step 4. Hand the fixes to `/fix-findings`
-
-If any thread is marked **fix**, invoke `/fix-findings` with exactly those
-numbers. Hand it each item's JSON verbatim, which carries the comment bodies
-and the thread URL, and the Step 2 evidence row beside it. The human's typed
-disposition is the selection `/fix-findings` requires. This skill adds no
-number to it, and drops none from it. `/fix-findings` takes it from there: a
-fresh fixer per thread, which may still report `refuted`, a breaker, one
-`Review-Thread: <url>` line per commit, and its own handoff to a `/pre-merge`
-re-run.
-
-If no thread is marked **fix**, skip this step.
-
-### Step 5. Write the record to the sidecar
+### Step 4. Write the record to the sidecar
 
 The record is the author's durable, off-GitHub account of this review, for
 coming back to it later. It lives in the project's sidecar, a private
 local-only git repository outside the working tree, at the path `sidecar.sh`
-computes, and it is committed there:
+computes, and it is committed there. Write it **before** Step 5: `/fix-findings`
+ends in its own menu and nothing returns control here, and on a first round
+its fallback source, this record, would not exist yet:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -325,6 +314,19 @@ name it in the handoff below. Do not run `/compound` from here.
 round to the terminal, say it was not persisted, and offer `/init-pipeline` to
 create a sidecar. Never fall back to a file in the project's tree. On a guest
 repo that file would land in the client's repository.
+
+### Step 5. Hand the fixes to `/fix-findings`
+
+If any thread is marked **fix**, invoke `/fix-findings` with exactly those
+numbers. Hand it each item's JSON verbatim, which carries the comment bodies
+and the thread URL, and the Step 2 evidence row beside it. The human's typed
+disposition is the selection `/fix-findings` requires. This skill adds no
+number to it, and drops none from it. `/fix-findings` takes it from there: a
+fresh fixer per thread, which may still report `refuted`, a breaker, one
+`Review-Thread: <url>` line per commit, and its own handoff to a `/pre-merge`
+re-run.
+
+If no thread is marked **fix**, skip this step.
 
 ## Handoff
 
