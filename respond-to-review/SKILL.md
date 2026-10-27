@@ -253,7 +253,7 @@ disposition.
 | Disposition | What this skill does with it |
 |---|---|
 | **fix** | hands it to `/fix-findings` in Step 4 |
-| **push back** | drafts a reply per `references/comment-craft.md` § *Receiving a review*: Triple-R, the evidence as Rationale, tone pass, signal prefix if the team uses them |
+| **push back** | drafts a reply per `references/comment-craft.md` § *Receiving a review*: Triple-R, the evidence as Rationale, the tone rules, a signal prefix if the team uses them |
 | **postpone** | drafts a follow-up issue body and a one-line reply saying it was split out. The human files the issue (`/qa` is the pack's intake for it) |
 | **answer** | nothing unless asked. The human replies. If asked, draft from the evidence row |
 

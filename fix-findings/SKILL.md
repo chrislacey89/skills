@@ -1,6 +1,6 @@
 ---
 name: fix-findings
-description: "Invoked helper skill for fixing the /pre-merge findings a human has already chosen, with a fresh sub-agent writing each fix and a second fresh sub-agent trying to break it. Enter from the /pre-merge next-step menu option \"Fix a finding on this branch first\" or by typing /fix-findings <numbers>; never self-trigger without finding numbers the human picked. Not for choosing which findings to act on, not for stamping review currency, and not for merging."
+description: "Invoked helper skill for fixing the review findings a human has already chosen (from a /pre-merge review, or teammate review threads marked fix in /respond-to-review), with a fresh sub-agent writing each fix and a second fresh sub-agent trying to break it. Enter from the /pre-merge next-step menu option \"Fix a finding on this branch first\", from /respond-to-review, or by typing /fix-findings <numbers>; never self-trigger without finding numbers the human picked. Not for choosing which findings to act on, not for stamping review currency, and not for merging."
 sources:
   primary:
     - "Engineering a Safer World — Nancy Leveson"
@@ -39,8 +39,9 @@ is why a second agent attacks the fix rather than the fixer re-checking it.
 **Invoked helper, model-invocable but human-gated.** It fires in two ways: the
 human picks **Fix a finding on this branch first** from `/pre-merge` Phase 4's
 next-step menu and then names the finding numbers, and `/pre-merge` invokes it
-with those numbers; or the human types `/fix-findings <numbers>` directly after
-reading a review. It is model-invocable so the menu choice can actually run it —
+with those numbers; or the human marks teammate review threads **fix** in `/respond-to-review`,
+which invokes it with those thread numbers; or the human types
+`/fix-findings <numbers>` directly after reading a review. It is model-invocable so the menu choice can actually run it —
 the cost is its `description` in every session's context window (`CLAUDE.md`
 § *Invocation mechanics*). What gates it is the input, not the flag: never
 invoke it without finding numbers a human named in this session. A model that
@@ -72,15 +73,21 @@ human to dispose of findings, so there is no valid input.
 
 ## Inputs
 
-- **The finding numbers** the human named — typed as `/fix-findings 1 3 4`, or
-  given in answer to `/pre-merge`'s follow-up question after the menu choice.
+- **The finding numbers** the human named — typed as `/fix-findings 1 3 4`,
+  given in answer to `/pre-merge`'s follow-up question after the menu choice, or
+  typed as a **fix** disposition in `/respond-to-review`.
 - **The findings themselves.** In author-mode they are terminal output from the
   `/pre-merge` run still in this session. If that session is gone, read the
   `## Review Disposition Ledger` loop-mode wrote for exactly this case, where
   [references/state-backend.md](references/state-backend.md) § Where the
-  review's records live says it is. If neither is available, stop and say so — do not reconstruct a
-  finding from memory and fix your reconstruction.
-- **A branch with a `/pre-merge` review behind it.** Working tree clean.
+  review's records live says it is. For teammate review threads they are the
+  items `/respond-to-review` hands over: each thread's comments verbatim, its
+  URL, and the evidence row beside it, from that run in this session or from
+  its record in the sidecar. If none of these is available, stop and say so — do not reconstruct a
+  finding from memory and fix your reconstruction. A thread paraphrased into a
+  finding is a reconstruction.
+- **A branch with a review behind it** — a `/pre-merge` review, or a
+  teammate's review on its open PR. Working tree clean.
 
 If a number the human gave does not correspond to a finding, say which numbers
 exist and stop. Do not guess at intent, and do not silently fix the neighbors.
@@ -157,7 +164,10 @@ The fixer's instructions, in order:
 4. **Run the project's test command** and report the exit status verbatim.
 5. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does, and whose last line is `Fix-Findings-Run: <run id>` — the
-   id Step 0 fixed, passed in the brief verbatim. One commit per fix — a fix
+   id Step 0 fixed, passed in the brief verbatim. A fix for a teammate review
+   thread also carries `Review-Thread: <url>`, the thread's URL verbatim, on
+   the line just above it. That is how `/respond-to-review` finds the fix on a
+   later round, from the tree. One commit per fix — a fix
    squashed together with another is a fix nobody can read separately.
    **When the lines the finding anchors on came from one commit on this
    branch, make it a fixup of that commit.** Find it from the finding's file
@@ -363,7 +373,8 @@ Step 2 gives: the breaker is forbidden to read the original working tree at
 all, so handing it the reconciliation would contradict the restriction that
 makes its read-only isolation mean anything.
 
-Then print one block per finding — number, the fixer's verdict and commit SHA,
+Then print one block per finding — number (and, for a teammate review thread,
+its URL, so the author can reply to it), the fixer's verdict and commit SHA,
 the after-state on a prose-claim finding, the breaker's verdict **and the SHA it
 archived**, and the command behind each. No conclusions the human cannot re-run.
 
@@ -536,8 +547,9 @@ stop.
 ## Handoff
 
 - **Expected input:** the finding numbers a human chose from a `/pre-merge`
-  review, plus the findings themselves (terminal output or the ledger), on a
-  clean branch that has been reviewed.
+  review, or the teammate review threads a human marked **fix** in
+  `/respond-to-review`, plus the findings themselves (terminal output, the
+  ledger, or the verbatim threads), on a clean branch that has been reviewed.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it
   archived, and the command behind it; `refuted` reports for findings the
