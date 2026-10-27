@@ -676,7 +676,7 @@ check "config set refuses a tag name" 1 "$rc"
 check "a refused tag leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
 
 # Hand edits: the verb refuses each shape, and never prints the fallback.
-bset() { jq "$1" "$BSJ" > "$BR/sj" && mv "$BR/sj" "$BSJ"; }
+bset() { jq "$@" "$BSJ" > "$BR/sj" && mv "$BR/sj" "$BSJ"; }
 bset '.base_ref = "gone"'
 brun "$BR/clone" base-ref
 check "a declared base_ref that resolves to no ref exits 1 and prints no ref" "1 " "$rc $out"
@@ -686,6 +686,12 @@ check "--name refuses the same unresolvable base_ref" "1 " "$rc $out"
 bset '.base_ref = "v1"'
 brun "$BR/clone" base-ref
 check "a declared base_ref naming only a tag exits 1 and prints no ref" "1 " "$rc $out"
+for expr in 'develop~1' 'develop^' 'develop^{tree}' 'HEAD'; do
+    # shellcheck disable=SC2016 # $e is a jq variable, not a shell one
+    bset --arg e "$expr" '.base_ref = $e'
+    brun "$BR/clone" base-ref
+    check "a hand-set revision expression $expr exits 1 and prints no ref" "1 " "$rc $out"
+done
 bset '.base_ref = ""'
 brun "$BR/clone" base-ref
 check "a declared-empty base_ref exits 1 rather than falling back" "1 " "$rc $out"
