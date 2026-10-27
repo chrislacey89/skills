@@ -97,7 +97,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
    git diff "$BASE_REF...HEAD" --stat
    git log --oneline "$BASE_REF..HEAD"
    ```
-   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, override `$BASE_BRANCH` with the sibling slice's branch name (the upstream the PR will target) and set `$BASE_REF` to `origin/<that branch>`. If no diff from the base, tell the user there's nothing to review and stop.
+   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, no variable set here reaches a later block: put the sibling slice's branch name (the upstream the PR will target) in the `BASE_BRANCH=` placeholder of each block that consumes it (the Phase 2 block for your backend and the Phase 4 stamp block). If no diff from the base, tell the user there's nothing to review and stop.
 
    **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`. When `origin/<base>` does not resolve, `base-ref` measures against the local branch and says so on stderr; if the counts look wrong, `git fetch` and re-run.
 
