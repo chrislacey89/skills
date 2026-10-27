@@ -21,11 +21,18 @@
 #      outdated threads and bots are kept; items are numbered in time order;
 #      every comment body survives byte for byte; and every short or failed
 #      read prints `unknown`.
+#   1b. Step 1's forge selection, and its Bitbucket Cloud arm against a stubbed
+#      `curl` (#610): the same filters in Bitbucket's fields, replies grouped
+#      under their top-level comment, the same JSON keys as the GitHub arm,
+#      byte-exact bodies, a token that never reaches curl's arguments or a host
+#      other than api.bitbucket.org, and `unknown` for every short, failed, or
+#      unprovable read. Run under bash and zsh.
 #   2. Step 1's record read against planted records: the latest round wins per
 #      thread, and a marker in any other shape is not read.
 #   3. Step 1's Review-Thread log read against a scratch repo, and the trailer
 #      string agreeing with the one /fix-findings Step 1 tells its fixer to write.
-#   4. No fenced block in the skill posts, replies, resolves, or mutates, and
+#   4. No fenced block in the skill posts, replies, resolves, or mutates (gh or
+#      curl), and
 #      the record goes through sidecar.sh rather than an inlined path.
 #   5. The routes and bundles the skill depends on exist.
 # Every detector is mutation-tested below.
@@ -175,6 +182,199 @@ check "M2: without the thread-count guard a short read is not unknown" 1 \
     "$([ "$(GH_FIXTURE="$tmp/short-threads.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut2.sh" 2>/dev/null)" != unknown ] && echo 1 || echo 0)"
 
 # -----------------------------------------------------------------------------
+section "Step 1's forge selection"
+
+SEL="$(block "$R2R" 'config get forge.kind')"
+check "the forge-selection block is found" 1 "$([ -n "$SEL" ] && echo 1 || echo 0)"
+# sel <sidecar forge.kind or "-" for no sidecar> <origin url>
+sel() {
+    cat > "$tmp/sc-forge.sh" <<STUB
+#!/usr/bin/env bash
+[ "\$1 \$2 \$3" = "config get forge.kind" ] || { echo "stub sidecar: unexpected call: \$*" >&2; exit 1; }
+[ "$1" = - ] && { echo "SIDECAR MISS: none" >&2; exit 1; }
+echo "$1"
+STUB
+    rm -rf "$tmp/selrepo"; git init -q "$tmp/selrepo"
+    git -C "$tmp/selrepo" remote add origin "$2"
+    printf '%s' "$SEL" | sed "s|^SC=\"<this skill's directory>/references/sidecar.sh\"$|SC=\"$tmp/sc-forge.sh\"|" > "$tmp/sel.sh"
+    (cd "$tmp/selrepo" && bash "$tmp/sel.sh")
+}
+check "the sidecar's forge.kind decides" "forge=bitbucket" "$(sel bitbucket https://github.com/acme/app.git)"
+check "a sidecar naming github keeps the GitHub arm on a Bitbucket origin" "forge=github" "$(sel github git@bitbucket.org:acme/app.git)"
+check "gitlab is reported, so the skill can stop" "forge=gitlab" "$(sel gitlab https://gitlab.com/acme/app.git)"
+check "no sidecar: a Bitbucket ssh origin picks bitbucket" "forge=bitbucket" "$(sel - git@bitbucket.org:acme/app.git)"
+check "no sidecar: a Bitbucket https origin picks bitbucket" "forge=bitbucket" "$(sel - https://me@bitbucket.org/acme/app.git)"
+check "a sidecar naming no forge falls back to origin" "forge=bitbucket" "$(sel none https://bitbucket.org/acme/app)"
+check "anything else keeps the GitHub arm (GitHub Enterprise included)" "forge=github" "$(sel - https://git.corp.example/acme/app.git)"
+
+# -----------------------------------------------------------------------------
+section "Step 1's Bitbucket Cloud arm, against a stubbed curl"
+
+BB="$(block "$R2R" 'BB_JQ=')"
+check "the Bitbucket arm is found" 1 "$([ -n "$BB" ] && echo 1 || echo 0)"
+printf '%s' "$BB" | sed 's/^PR=<pr-number>$/PR=7/' > "$tmp/bb.sh"
+check "the Bitbucket arm's PR placeholder is substituted" 1 "$(grep -cx 'PR=7' "$tmp/bb.sh")"
+check "the Bitbucket arm makes no gh call" 0 "$(grep -c '(^|[^[:alnum:]_])gh ' "$tmp/bb.sh")"
+
+mkdir -p "$tmp/bbbin"
+cat > "$tmp/bbbin/curl" <<'STUB'
+#!/usr/bin/env bash
+# Answers from $BB_FX/<route>.json with $BB_FX/<route>.code (default 200), the
+# way curl -o <file> -w '%{http_code}' -K - does. Records argv and the config
+# read on stdin, so the test can see where the token went.
+out=""
+printf 'ARGV %s\n' "$*" >> "$BB_CALLS"
+while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2 ;; *) shift ;; esac; done
+cfg="$(cat)"
+printf '%s\n' "$cfg" >> "$BB_CALLS"
+url="$(printf '%s\n' "$cfg" | sed -n 's/^url = "\(.*\)"$/\1/p')"
+case "$url" in
+    https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/7) route=pr ;;
+    https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/7/comments\?pagelen=100) route=page1 ;;
+    *'&page=2') route=page2 ;;
+    *) route=none ;;
+esac
+[ -n "${BB_FAIL:-}" ] && [ "$route" = "$BB_FAIL" ] && exit 7
+code=200; [ -f "$BB_FX/$route.code" ] && code="$(cat "$BB_FX/$route.code")"
+if [ -f "$BB_FX/$route.json" ]; then cp "$BB_FX/$route.json" "$out"; else code=404; : > "$out"; fi
+printf '%s' "$code"
+STUB
+chmod +x "$tmp/bbbin/curl"
+
+rm -rf "$tmp/bbrepo"; git init -q "$tmp/bbrepo"
+git -C "$tmp/bbrepo" remote add origin git@bitbucket.org:acme/app.git
+git -C "$tmp/bbrepo" commit -q --allow-empty -m base
+BB_HEAD="$(git -C "$tmp/bbrepo" rev-parse HEAD)"
+
+# bbfix <dir> <size> — a PR and two comment pages, covering every filter:
+#   1 teammate inline root (the tricky body), 2 the author's reply to 1,
+#   5 a teammate reply to 2 (a reply chain two deep, on page 2),
+#   3 a resolved inline root, 4 a teammate general comment,
+#   6 a root the PR author started, 7 a pending draft, 8 a deleted reply to 4,
+#   9 a root whose only comment is deleted.
+bbfix() {
+    mkdir -p "$1"
+    jq -n --arg head "${BB_HEAD:0:12}" '{id: 7, state: "OPEN", author: {uuid: "{me}", nickname: "me"},
+        source: {branch: {name: "feat"}, commit: {hash: $head}}}' > "$1/pr.json"
+    jq -n --arg tricky "$TRICKY" --argjson size "$2" '
+      def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who},
+                          links: {html: {href: ("https://bitbucket.org/acme/app/pull-requests/7#comment-" + (id | tostring))}}};
+      {size: $size, pagelen: 100, page: 1,
+       next: "https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/7/comments?pagelen=100&page=2",
+       values: [
+         (c(1; "teammate"; "2026-10-02T00:00:00Z") + {content: {raw: $tricky}, inline: {path: "src/a.ts", from: null, to: 4}}),
+         (c(2; "me"; "2026-10-03T00:00:00Z") + {content: {raw: "Fair point."}, parent: {id: 1}, inline: {path: "src/a.ts", to: 4}}),
+         (c(3; "teammate"; "2026-10-01T00:00:00Z") + {content: {raw: "settled"}, inline: {path: "src/b.ts", to: 9}, resolution: {type: "resolved"}}),
+         (c(6; "me"; "2026-10-01T01:00:00Z") + {content: {raw: "note to self"}}),
+         (c(7; "teammate"; "2026-10-01T03:00:00Z") + {content: {raw: "draft"}, pending: true})
+       ]}' > "$1/page1.json"
+    jq -n --argjson size "$2" '
+      def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who},
+                          links: {html: {href: ("https://bitbucket.org/acme/app/pull-requests/7#comment-" + (id | tostring))}}};
+      {size: $size, pagelen: 100, page: 2, values: [
+         (c(4; "teammate"; "2026-10-04T00:00:00Z") + {content: {raw: "Please split the migration out."}}),
+         (c(5; "teammate"; "2026-10-05T00:00:00Z") + {content: {raw: "Still stands."}, parent: {id: 2}}),
+         (c(8; "teammate"; "2026-10-06T00:00:00Z") + {content: {raw: ""}, deleted: true, parent: {id: 4}}),
+         (c(9; "teammate"; "2026-10-01T04:00:00Z") + {content: {raw: ""}, deleted: true})
+       ]}' > "$1/page2.json"
+}
+# runbb <fixture-dir> [shell] — with a token, unless BB_NO_TOKEN is set.
+runbb() {
+    : > "$tmp/bb-calls"
+    tok=s3cr3t-token
+    [ -n "${BB_NO_TOKEN:-}" ] && tok=
+    (cd "$tmp/bbrepo" && env -u BITBUCKET_EMAIL BB_FX="$1" BB_CALLS="$tmp/bb-calls" PATH="$tmp/bbbin:$PATH" \
+        BITBUCKET_TOKEN="$tok" "${2:-bash}" "$tmp/bb.sh" 2>/dev/null)
+}
+
+bbfix "$tmp/bb-ok" 9
+OUT="$(runbb "$tmp/bb-ok")"
+check "a whole read prints JSON, not unknown" 1 "$(jq -e '.items | type == "array"' <<<"$OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
+check "it keeps exactly the unresolved, non-author, non-draft, non-deleted threads" "1 4" "$(jq -r '[.items[].id] | join(" ")' <<<"$OUT" 2>/dev/null)"
+check "every item carries the GitHub arm's keys" \
+    "at comments id kind last_at line n outdated path url" \
+    "$(jq -r '[.items[] | keys | join(" ")] | unique | join("|")' <<<"$OUT" 2>/dev/null)"
+check "every comment carries the GitHub arm's keys" "at author body url" \
+    "$(jq -r '[.items[].comments[] | keys | join(" ")] | unique | join("|")' <<<"$OUT" 2>/dev/null)"
+check "the top level carries the GitHub arm's keys" "head head_ref items pr state" "$(jq -r 'keys | join(" ")' <<<"$OUT" 2>/dev/null)"
+check "items are numbered 1..n in time order" "1 2" "$(jq -r '[.items[].n] | map(tostring) | join(" ")' <<<"$OUT" 2>/dev/null)"
+check "a reply two deep, on a later page, joins its top-level thread in time order" "teammate me teammate" \
+    "$(jq -r '.items[] | select(.id == "1") | [.comments[].author] | join(" ")' <<<"$OUT" 2>/dev/null)"
+check "a deleted reply is dropped from its thread" 1 "$(jq -r '.items[] | select(.id == "4") | .comments | length' <<<"$OUT" 2>/dev/null)"
+check "an inline thread carries path and the new-file line" "src/a.ts 4" "$(jq -r '.items[] | select(.id == "1") | "\(.path) \(.line)"' <<<"$OUT" 2>/dev/null)"
+check "a general comment carries null path and line, as a thread" "null null thread" \
+    "$(jq -r '.items[] | select(.id == "4") | "\(.path) \(.line) \(.kind)"' <<<"$OUT" 2>/dev/null)"
+check "outdated is null, never guessed" "null" "$(jq -r '[.items[].outdated] | unique | map(tostring) | join(" ")' <<<"$OUT" 2>/dev/null)"
+check "last_at is the newest comment's time" "2026-10-05T00:00:00Z" "$(jq -r '.items[] | select(.id == "1") | .last_at' <<<"$OUT" 2>/dev/null)"
+check "a comment body survives byte for byte" "$TRICKY" "$(jq -r '.items[] | select(.id == "1") | .comments[0].body' <<<"$OUT" 2>/dev/null)"
+check "head is expanded to the full SHA when it resolves locally" "$BB_HEAD" "$(jq -r '.head' <<<"$OUT" 2>/dev/null)"
+check "head_ref is the PR's source branch" "feat" "$(jq -r '.head_ref' <<<"$OUT" 2>/dev/null)"
+check "it follows the next link to page 2" 1 "$(grep -c '^url = .*&page=2"$' "$tmp/bb-calls")"
+check "the token never appears in curl's arguments" 0 "$(grep '^ARGV ' "$tmp/bb-calls" | grep -c 's3cr3t-token')"
+check "without an email the token is sent as a Bearer header" 3 "$(grep -cx 'header = "Authorization: Bearer s3cr3t-token"' "$tmp/bb-calls")"
+check "every request is a plain GET (no request or data line reaches curl)" 0 "$(grep -ciE '^(request|data|form|json|upload-file|-X|-d) ' "$tmp/bb-calls")"
+check "the arm reads the same under zsh" "$OUT" "$(runbb "$tmp/bb-ok" zsh)"
+OUTE="$(cd "$tmp/bbrepo" && BB_FX="$tmp/bb-ok" BB_CALLS="$tmp/bb-calls" PATH="$tmp/bbbin:$PATH" BITBUCKET_TOKEN=s3cr3t-token BITBUCKET_EMAIL=me@example.com bash "$tmp/bb.sh" 2>/dev/null)"
+check "with an email the token is sent as user credentials" 1 "$(grep -cx 'user = "me@example.com:s3cr3t-token"' "$tmp/bb-calls" | awk '{print ($1 > 0)}')"
+check "with an email the read is the same" "$OUT" "$OUTE"
+
+cp "$tmp/bb-ok/pr.json" "$tmp/bb-ok/pr.json.bak"
+jq '.source.commit.hash = "0123456789ab"' "$tmp/bb-ok/pr.json.bak" > "$tmp/bb-ok/pr.json"
+check "head stays the abbreviated hash when it does not resolve locally" "0123456789ab" "$(runbb "$tmp/bb-ok" | jq -r '.head' 2>/dev/null)"
+mv "$tmp/bb-ok/pr.json.bak" "$tmp/bb-ok/pr.json"
+
+# Every way the read can be short, failed, or unprovable prints unknown.
+bbcase() { rm -rf "$tmp/bb-c"; cp -R "$tmp/bb-ok" "$tmp/bb-c"; }
+bbcase; bbfix "$tmp/bb-c" 10
+check "comments short of the reported size print unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase; jq 'del(.size)' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"
+check "a first page without size prints unknown (nothing to prove the read whole)" unknown "$(runbb "$tmp/bb-c")"
+bbcase; echo 500 > "$tmp/bb-c/page2.code"
+check "a non-200 page prints unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase; echo 401 > "$tmp/bb-c/pr.code"
+check "a non-200 PR read prints unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase
+check "a curl that fails outright prints unknown" unknown "$(BB_FAIL=page1 runbb "$tmp/bb-c")"
+bbcase; rm "$tmp/bb-c/page2.json"
+check "a next link that 404s prints unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase; printf '<html>rate limited</html>' > "$tmp/bb-c/page2.json"
+check "a page that is not JSON prints unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase; jq '.values = null' "$tmp/bb-ok/page2.json" > "$tmp/bb-c/page2.json"
+check "a page without a values array prints unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase; jq '.id = 8' "$tmp/bb-ok/pr.json" > "$tmp/bb-c/pr.json"
+check "a response for another PR prints unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase; jq '.values[1].parent.id = 999' "$tmp/bb-ok/page2.json" > "$tmp/bb-c/page2.json"
+check "a reply to a comment that was not read prints unknown" unknown "$(runbb "$tmp/bb-c")"
+bbcase; jq '.values += [.values[0] | .id = 50 | .parent = {id: 51}, (.values[0] | .id = 51 | .parent = {id: 50})] | .size = 11' "$tmp/bb-ok/page2.json" > "$tmp/bb-c/page2.json"
+jq '.size = 11' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"
+check "a reply cycle prints unknown, not a hang" unknown "$(runbb "$tmp/bb-c")"
+bbcase; jq '.next = "https://evil.example/2.0/x?pagelen=100&page=2"' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"
+check "a next link off api.bitbucket.org prints unknown" unknown "$(runbb "$tmp/bb-c")"
+check "and the token is never sent there" 0 "$(grep -c 'evil.example' "$tmp/bb-calls")"
+check "a missing token prints unknown, with no request made" "unknown 0" "$(o="$(BB_NO_TOKEN=1 runbb "$tmp/bb-ok")"; echo "$o $(grep -c . "$tmp/bb-calls")")"
+git -C "$tmp/bbrepo" remote set-url origin https://github.com/acme/app.git
+check "an origin that is not Bitbucket prints unknown" unknown "$(runbb "$tmp/bb-ok")"
+git -C "$tmp/bbrepo" remote set-url origin https://me@bitbucket.org/acme/app.git
+check "an https origin with a user resolves the same slug" "$OUT" "$(runbb "$tmp/bb-ok")"
+git -C "$tmp/bbrepo" remote set-url origin git@bitbucket.org:acme/app.git
+
+# Mutations: the size guard, the resolution filter, and the host guard each
+# carry an assertion above.
+grep -vF 'or ([$pages[].values[]] | length) != $pages[0].size' "$tmp/bb.sh" > "$tmp/bb-mut1.sh"
+check "M8: the mutation removed the size guard" 0 "$(grep -cF '!= $pages[0].size' "$tmp/bb-mut1.sh")"
+bbfix "$tmp/bb-short" 10
+check "M8: without the size guard a short read is not unknown" 1 \
+    "$(cp "$tmp/bb-mut1.sh" "$tmp/bb.sh.m"; mv "$tmp/bb.sh" "$tmp/bb.sh.real"; mv "$tmp/bb.sh.m" "$tmp/bb.sh"; r="$(runbb "$tmp/bb-short")"; mv "$tmp/bb.sh.real" "$tmp/bb.sh"; [ "$r" != unknown ] && echo 1 || echo 0)"
+sed 's/select(\.r\.resolution == null and /select(/' "$tmp/bb.sh" > "$tmp/bb-mut2.sh"
+check "M9: the mutation removed the resolution filter" 0 "$(grep -c 'resolution == null' "$tmp/bb-mut2.sh")"
+check "M9: without the resolution filter the id assertion would fail" 1 \
+    "$(mv "$tmp/bb.sh" "$tmp/bb.sh.real"; cp "$tmp/bb-mut2.sh" "$tmp/bb.sh"; r="$(runbb "$tmp/bb-ok" | jq -r '[.items[].id] | join(" ")' 2>/dev/null)"; mv "$tmp/bb.sh.real" "$tmp/bb.sh"; [ "$r" != "1 4" ] && echo 1 || echo 0)"
+sed 's|https://api.bitbucket.org/2.0/\*) ;;|*) ;;|' "$tmp/bb.sh" > "$tmp/bb-mut3.sh"
+check "M10: the mutation removed the host guard" 1 "$(grep -c '^ *case "\$URL" in \*) ;;' "$tmp/bb-mut3.sh")"
+check "M10: without the host guard the token is sent off-host" 1 \
+    "$(bbcase; jq '.next = "https://evil.example/2.0/x?pagelen=100&page=2"' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"; mv "$tmp/bb.sh" "$tmp/bb.sh.real"; cp "$tmp/bb-mut3.sh" "$tmp/bb.sh"; runbb "$tmp/bb-c" >/dev/null; mv "$tmp/bb.sh.real" "$tmp/bb.sh"; grep -c 'evil.example' "$tmp/bb-calls" | awk '{print ($1 > 0)}')"
+
+# -----------------------------------------------------------------------------
 section "Step 1's record read, against planted records"
 
 READ="$(block "$R2R" 'disposition=[^ ]+')"
@@ -315,6 +515,11 @@ posts() {
         | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
         | grep -E 'gh +api ' | grep -vE 'gh +api +([^ ]+ +)*graphql( |$)' \
         | grep -E '(^| )(-f|-F|--field|--raw-field)([ =]|[^ -])' || true
+    # curl, which the Bitbucket arm runs: a body flag on the command line, or a
+    # request/data key in the config it reads on stdin, makes a request a write.
+    awk '/^ *```/ { on = !on; next } on' "$1" \
+        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+        | grep -nE '(^|[^[:alnum:]_])curl .*(^| )(-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file)([ =]|$)|(^|[^[:alnum:]_-]|\\n)(request|data|data-[a-z]+|json|form|upload-file) *= *"' || true
 }
 check "no fenced block in /respond-to-review writes to the forge" "" "$(posts "$R2R")"
 cp "$R2R" "$tmp/planted.md"
@@ -332,7 +537,10 @@ plant p-cont 'gh api repos/o/r/pulls/7/comments/1/replies \
   --raw-field body="done"'
 plant p-eq 'gh api --method=POST repos/o/r/issues/7/comments'
 plant p-named 'gh api graphql -f query='"'"'mutation Reply($id: ID!) { addComment(input: {subjectId: $id, body: "x"}) { clientMutationId } }'"'"''
-for c in p-field p-capf p-cont p-eq p-named; do
+plant p-curl-data 'curl -sS -K - --data '"'"'{"content":{"raw":"done"}}'"'"' "$API/comments"'
+plant p-curl-cfg 'printf '"'"'%s\nrequest = "POST"\nurl = "%s"\n'"'"' "$bb_auth" "$1" | curl -sS -K -'
+plant p-curl-json 'curl -sS --json @reply.json "$API/comments"'
+for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-json; do
     check "M6: the detector fires on planted shape $c" 1 "$(posts "$tmp/$c.md" | grep -c . | awk '{print ($1 > 0)}')"
 done
 
