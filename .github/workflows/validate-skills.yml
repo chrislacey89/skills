@@ -310,6 +310,11 @@ jobs:
       - name: Run guest footprint contract suite
         run: bash scripts/test-guest-footprint.sh
 
+      # /pre-merge Phase 2's github-backend PR block, extracted and run against a
+      # stubbed gh: the declared base must reach --base; a failing base-ref aborts (#604).
+      - name: Run github PR base contract suite
+        run: bash scripts/test-github-pr-base.sh
+
       # /write-a-prd Step 8's fenced blocks, extracted and run (one shell each)
       # on the github, sidecar, and refusing-backend arms (#523).
       - name: Run write-a-prd sidecar branch contract suite

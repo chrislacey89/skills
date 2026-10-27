@@ -163,7 +163,19 @@ If you are running on a branch other than the user's working branch and `--pr` w
    gh pr list --head $(git branch --show-current) --json number,url
    ```
 
-2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (for stacked-PR slices, put the sibling slice's branch in the block's `BASE_BRANCH=` placeholder on the `sidecar` backend, or override `--base` directly on `github`) or `gh pr edit`.
+2. **Create or update the PR.** Use `gh pr create --base "$BASE_BRANCH"` (for stacked-PR slices, put the sibling slice's branch in the `BASE_BRANCH=` placeholder of the block for your backend) or `gh pr edit`. Phase 1's `$BASE_BRANCH` does not reach this step: each fenced block runs in its own shell, so the `github` block below asks `base-ref --name` itself.
+
+   **On the `github` backend**, after writing the title and the body from the templates below:
+
+   ```bash
+   SC="<this skill's directory>/references/sidecar.sh"
+   TITLE="<title>"
+   BODY_FILE="<path of the file holding the body written from the templates below>"
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
+   [ -n "$BASE_BRANCH" ] || BASE_BRANCH=$(bash "$SC" base-ref --name) \
+     || { echo "PR aborted: sidecar.sh base-ref failed; not letting gh pick a base" >&2; exit 1; }
+   gh pr create --base "$BASE_BRANCH" --head "$(git branch --show-current)" --title "$TITLE" --body-file "$BODY_FILE"
+   ```
 
 **Ask where the pack's text goes first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md), and the sidecar block below asks before it does anything else. `github` uses the two templates below. `sidecar` means the repo's `forge.write` lacks `prs`: the PR still opens, but it is an ordinary PR, and everything the templates carry for the pack lives on the work item instead. Anything else is a refusal: stop and relay what `backend` printed on stderr, because the templates on a failed answer write pack text into a client's PR.
 
