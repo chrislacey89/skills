@@ -390,6 +390,24 @@ check "a reply to a comment that was not read prints unknown" unknown "$(runbb "
 bbcase; jq '.values += [.values[0] | .id = 50 | .parent = {id: 51}, (.values[0] | .id = 51 | .parent = {id: 50})] | .size = 11' "$tmp/bb-ok/page2.json" > "$tmp/bb-c/page2.json"
 jq '.size = 11' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"
 check "a reply cycle prints unknown, not a hang" unknown "$(runbb "$tmp/bb-c")"
+# The page cap: a next link that never ends. Every page points at another page
+# on api.bitbucket.org, so only the cap stops the loop (page1, then page2 again
+# and again): 1 PR request plus 50 page requests, then unknown.
+bbcase; jq '.next = "https://api.bitbucket.org/2.0/repositories/acme/app/pullrequests/7/comments?pagelen=100&page=2"' "$tmp/bb-ok/page2.json" > "$tmp/bb-c/page2.json"
+check "a next link that never ends prints unknown, not a loop" unknown "$(runbb "$tmp/bb-c")"
+check "and the arm stops after 50 page requests (51 requests with the PR read)" 51 "$(grep -c '^ARGV ' "$tmp/bb-calls")"
+# The depth cap, apart from a cycle: a chain of N comments, each replying to the
+# one before. 50 deep is read whole; 102 deep prints unknown.
+bbchain() {
+    rm -rf "$tmp/bb-c"; mkdir -p "$tmp/bb-c"; cp "$tmp/bb-ok/pr.json" "$tmp/bb-c/pr.json"
+    jq -n --argjson n "$1" '{size: $n, pagelen: 100, page: 1, values: [range(1; $n + 1) as $i
+      | {id: $i, created_on: "2026-10-02T00:00:00Z", user: {uuid: "{teammate}", nickname: "teammate"}, content: {raw: ("c" + ($i | tostring))}}
+        + (if $i > 1 then {parent: {id: ($i - 1)}} else {} end)]}' > "$tmp/bb-c/page1.json"
+}
+bbchain 50
+check "a 50-deep reply chain is read as one thread" 50 "$(runbb "$tmp/bb-c" | jq -r '.items[0].comments | length' 2>/dev/null)"
+bbchain 102
+check "a 102-deep reply chain with no cycle prints unknown" unknown "$(runbb "$tmp/bb-c")"
 bbcase; jq '.next = "https://evil.example/2.0/x?pagelen=100&page=2"' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"
 check "a next link off api.bitbucket.org prints unknown" unknown "$(runbb "$tmp/bb-c")"
 check "and the token is never sent there" 0 "$(grep -c 'evil.example' "$tmp/bb-calls")"

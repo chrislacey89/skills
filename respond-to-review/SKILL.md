@@ -277,6 +277,8 @@ It prints the same JSON object as the GitHub arm, or `unknown`.
   prove the read whole against. The arm follows each page's `next` link and
   never builds a page URL itself, and it refuses a `next` that leaves
   `api.bitbucket.org` rather than send the token there.
+- **Bounds.** It reads up to 50 pages of 100 comments, and follows reply chains
+  up to 100 deep, and says `unknown` rather than silently truncating past them.
 - **How Bitbucket's comments become threads.** Bitbucket returns one flat list
   in which a reply names its `parent`. Every comment is grouped under the
   top-level comment its reply chain leads to, and each group is one item of
