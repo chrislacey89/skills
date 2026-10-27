@@ -90,6 +90,7 @@ case "$FORGE" in
   github|gitlab|bitbucket) ;;
   *) case "$(git remote get-url origin 2>/dev/null)" in
        *bitbucket.org[:/]*) FORGE=bitbucket ;;
+       *://gitlab.com[:/]*|*://*@gitlab.com[:/]*|*@gitlab.com:*|*://gitlab.*|*://*@gitlab.*|*@gitlab.*:*) FORGE=gitlab ;;
        *) FORGE=github ;;
      esac ;;
 esac

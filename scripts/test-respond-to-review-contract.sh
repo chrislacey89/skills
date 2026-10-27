@@ -206,6 +206,9 @@ check "gitlab is reported, so the skill can stop" "forge=gitlab" "$(sel gitlab h
 check "no sidecar: a Bitbucket ssh origin picks bitbucket" "forge=bitbucket" "$(sel - git@bitbucket.org:acme/app.git)"
 check "no sidecar: a Bitbucket https origin picks bitbucket" "forge=bitbucket" "$(sel - https://me@bitbucket.org/acme/app.git)"
 check "a sidecar naming no forge falls back to origin" "forge=bitbucket" "$(sel none https://bitbucket.org/acme/app)"
+check "no sidecar: a gitlab.com https origin is gitlab, so the skill can stop" "forge=gitlab" "$(sel - https://gitlab.com/acme/app.git)"
+check "no sidecar: a self-hosted gitlab.* ssh origin is gitlab" "forge=gitlab" "$(sel - git@gitlab.example.org:acme/app.git)"
+check "no sidecar: a github.com origin whose owner is named gitlab stays github" "forge=github" "$(sel - https://github.com/gitlab/app.git)"
 check "anything else keeps the GitHub arm (GitHub Enterprise included)" "forge=github" "$(sel - https://git.corp.example/acme/app.git)"
 
 # -----------------------------------------------------------------------------
