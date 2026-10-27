@@ -184,7 +184,7 @@ with a `Review-Thread: <url>` line:
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
-git log --format='@@commit %h%n%B' "$BASE_REF..HEAD" | awk '/^@@commit / { sha = $2 } /^Review-Thread: / { print sha, $2 }'
+git log --format=commit.%h%n%B "$BASE_REF..HEAD" | awk '/^commit\./ { sha = substr($0, 8) } /^Review-Thread: / { print sha, $2 }'
 ```
 
 ### Step 2. Check each claim in a fresh sub-agent
