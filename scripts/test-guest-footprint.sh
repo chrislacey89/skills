@@ -171,14 +171,16 @@ mkguest() {
 }
 
 # run_pm <W value> <sidecar.sh path> <extra description line or empty> — Phase
-# 2's block in $P with the stubbed gh; stdout in $pm_out, exit in $pm_rc.
+# 2's block (the BASE_BRANCH placeholder is filled with $PM_BASE, a stacked-PR
+# sibling by default; PM_BASE="" leaves it empty, as an agent does for a PR that
+# targets the base) in $P with the stubbed gh; stdout in $pm_out, exit in $pm_rc.
 run_pm() {
     printf 'Fix the totals.\n\nThe report summed refunds twice.\n' > "$tmp/desc"
     [ -z "$3" ] || printf '%s\n' "$3" >> "$tmp/desc"
     local b="${pm_block//<this skill\'s directory>\/references\/sidecar.sh/$2}"
     b="${b//W=\"W-<n>\"/W=\"$1\"}"
     b="${b//TITLE=\"<plain title>\"/TITLE=\"Fix the report totals\"}"
-    b="${b//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"slice-1-branch\"}"
+    b="${b//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"${PM_BASE-slice-1-branch}\"}"
     b="$(awk 'index($0, "Nothing below adds to it.") { print "cat \"$DESC_SRC\" > \"$DESC_FILE\""; next } 1' <<<"$b")"
     pm_out="$(cd "$P" && DESC_SRC="$tmp/desc" PATH="$tmp/bin:$PATH" bash -c "$b" 2>"$tmp/stderr")"; pm_rc=$?
 }
@@ -218,6 +220,26 @@ b="${b//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE
 (cd "$P" && PATH="$tmp/bin:$PATH" bash -c "$b" >/dev/null 2>&1)
 check "a re-run creates no second PR" 1 "$(grep -c '^pr create' "$GH_STUB/calls")"
 check "a re-run leaves the existing PR body as it was" "$(cat "$tmp/before")" "$(cat "$GH_STUB/pr-body")"
+
+# The placeholder left empty is the common run: the block must ask base-ref for
+# the base, and stop when base-ref refuses.
+mkguest "empty base" init
+git -C "$P" branch develop
+(cd "$P" && bash "$SC" config set base_ref develop >/dev/null 2>&1) || bad "empty base: declare base_ref" "config set failed"
+PM_BASE="" run_pm W-1 "$SC" ""
+check "an empty BASE_BRANCH placeholder exits 0" 0 "$pm_rc"
+check "an empty BASE_BRANCH placeholder takes the declared base as --base" 1 "$(grep -c -- '^pr create --base develop ' "$GH_STUB/calls")"
+
+cat > "$tmp/no-base-ref-sc.sh" <<NOBASE
+#!/usr/bin/env bash
+[ "\$1" = base-ref ] && { echo "base-ref refused" >&2; exit 1; }
+exec bash "$SC" "\$@"
+NOBASE
+mkguest "empty base, refused" init
+PM_BASE="" run_pm W-1 "$tmp/no-base-ref-sc.sh" ""
+check "an empty BASE_BRANCH with base-ref refusing exits nonzero" 1 "$pm_rc"
+check "…and opens no PR" 0 "$(grep -c '^pr create' "$GH_STUB/calls")"
+check "…and says base-ref failed" 1 "$(grep -c 'base-ref failed' "$tmp/stderr")"
 
 # -----------------------------------------------------------------------------
 section "no work item: the PR opens, is recorded nowhere, and carries no pack text"
