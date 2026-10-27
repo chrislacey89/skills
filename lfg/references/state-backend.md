@@ -36,7 +36,9 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 | `/execute`'s `## Review Notes` | a block in the PR body | the newest comment on the work item whose first line is `## Review Notes` |
 | Loop-mode `## Review Disposition Ledger` | a block in the PR body | the newest comment on the work item whose first line is `## Review Disposition Ledger` |
 
-On the `sidecar` backend with no work item (the operator answered "none"), the last three rows have no home. Notes and a ledger are printed to the terminal and named as not persisted, and are never written into the PR instead.
+On the `sidecar` backend with no work item (the operator answered "none"), the last three rows have no home.
+
+`/respond-to-review`'s record is not in the table, because `backend stamp` does not decide it. It goes to `<sidecar>/review-responses/pr-<n>.md` on either backend, found through `sidecar.sh path review-responses` and committed with `sidecar.sh commit`. It is the author's private account of a teammate's review, never written to the PR, and its directory is separate from `reviews/` so it cannot collide with a stamp. With no sidecar it is printed to the terminal and named as not persisted. Notes and a ledger are printed to the terminal and named as not persisted, and are never written into the PR instead.
 
 `sidecar.sh init` derives `forge.write` from `mode` and the forge: owned on a known forge gets `["issues","labels","milestones","prs"]`, and everything else gets `[]`. `sidecar.sh config set mode` re-derives it. `tracker.write` is not read by `backend`.
 
