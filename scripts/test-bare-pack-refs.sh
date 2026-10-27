@@ -56,7 +56,7 @@ triage-issue/SKILL.md|parameter-level fixes (#12) when a structural fix (#5–#3
 triage-issue/systems-reference.md|| #12 | Parameters |
 triage-issue/systems-reference.md|| #11 | Buffers |
 triage-issue/systems-reference.md|default to #12 (tweak a parameter) or #11 (add capacity)
-pre-merge/references/comment-craft.md|PRs #134 and #147
+docs/comment-craft.md|PRs #134 and #147
 docs/writing-for-humans.md|Closes #27.
 docs/visual-recap-design.md|(so `#23` breaks
 docs/visual-recap-design.md|the ref, not the branch name (#298)

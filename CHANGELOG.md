@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.35.0 — /respond-to-review: a teammate's review is checked before anything is fixed (#607)
+
+On a team, most PRs get a human review after `/pre-merge` has stamped them, and the pack had no route for it. The post-review edit lock refused implementation edits unless `/fix-findings` was running, and `/fix-findings` accepted only `/pre-merge`'s own findings, so the only way to act on a teammate's comment was to delete the lock by hand and fix in the session that wrote the code. Routing the comments straight into `/fix-findings` would have fixed every one of them, including the wrong ones, the preferences, and the out-of-scope requests. Some review comments need pushback.
+
+### Changes
+
+- **New side-route `/respond-to-review` (#607)** — reads the PR's unresolved threads verbatim in one GraphQL call (`unknown` on any short read), has a fresh read-only sub-agent sort each claim into `supported` / `refuted` / `preference` / `out-of-scope` / `discussion` with a citation, and asks the human to decide each thread: fix, push back, postpone, or answer. It never posts, resolves, stamps, or merges. Reply drafts carry no pack vocabulary, because they are posted under the author's name, on a guest repo to the client's PR.
+- **A record in the sidecar, read on the next round (#607)** — each round is appended to `<sidecar>/review-responses/pr-<n>.md` through a new `sidecar.sh path review-responses`, and a re-run reads it first so settled threads are not re-litigated. With no sidecar the round is printed and named as not persisted. It never falls back to the project tree. A thread that was `supported` and fixed is marked a `/compound` candidate, because a teammate found what the pack's own review let through.
+- **`/fix-findings` takes threads marked fix (#607)** — the human's typed disposition is the selection, the threads arrive verbatim, and each fix commit carries `Review-Thread: <url>` above `Fix-Findings-Run:`. Its four invariants are unchanged.
+- **Routes (#607)** — `/closeout` Step 2 names `/respond-to-review` when review is what failed, and `/help` row 1 recommends it on `CHANGES_REQUESTED`.
+- **`comment-craft.md` moves to `docs/` (#607)** — it gains a § *Receiving a review* that reads 5P and Triple-R from the author's side, and it is bundled into `/pre-merge` and `/respond-to-review`.
+- **Pinned by `scripts/test-respond-to-review-contract.sh` (#607)** — the fetch block, the record read, and the `Review-Thread:` log read are extracted and run against a stubbed `gh`, planted records, and a scratch repo, and a never-post detector scans the skill's fenced blocks. Each detector is mutation-tested.
+
 ## v1.34.0 — review fixes fold into the commits they correct, before anything is shared (#566)
 
 A `/fix-findings` round leaves each fix as its own commit at the end of the branch, so a reader stepping through the history meets a mistake in one commit and its correction several commits later. Folding the fix in (`fixup!` plus an autosquash) is the standard repair. Until now the fold changed every SHA and left the content alone, and every review-currency check read that as divergence. On guest repos the fold also had to be force-pushed, because `/pre-merge` opened the PR before the review ran.

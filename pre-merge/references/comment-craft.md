@@ -1,6 +1,6 @@
 # Comment Craft
 
-Used by `/pre-merge` when running in reviewer-mode (`--pr <number>`). Author-mode `/pre-merge` produces terminal advisories on your own branch; reviewer-mode produces *PR comment text* on someone else's branch. Comment text is read by another developer in the heat of a review thread, so its craft matters separately from the architectural judgment carried by `review-checklist.md`.
+Used by `/pre-merge` when running in reviewer-mode (`--pr <number>`), and by `/respond-to-review` from the other side of the thread (§ *Receiving a review* below). Author-mode `/pre-merge` produces terminal advisories on your own branch; reviewer-mode produces *PR comment text* on someone else's branch. Comment text is read by another developer in the heat of a review thread, so its craft matters separately from the architectural judgment carried by `review-checklist.md`.
 
 This doc captures the convergent comment-craft methodology from three independent sources: Tacke (*Looks Good to Me*, 2024), Rigby et al. (*Convergent Contemporary Software Peer Review Practices*, 2013), and Cohen et al. (*Best Kept Secrets of Peer Code Review*, 2006). Where the books converge, the rule is treated as load-bearing. Where they diverge, the call-out is named.
 
@@ -98,9 +98,21 @@ Three implications for `/pre-merge` reviewer-mode:
 - **Frame Concerns as collaborative resolution targets.** "We need to address X before merge" beats "this is broken." Both can be objective; only the first preserves the working relationship.
 - **Cohen's Big Brother Effect — do not weaponize metrics.** If the project tracks review metrics (response time, comment count, defect classification), do not use those metrics to evaluate individuals. Tracking-as-pressure produces theatrical reviews and corrupts the data being collected.
 
+## Receiving a review — the same gate, read from the author's side
+
+`/respond-to-review` uses this doc when a teammate's review lands on the author's PR. The rubric above was written for the person *writing* the comment, and it answers the receiving author's question just as well: which of these comments can I challenge, and on what grounds?
+
+- **5P, run on the incoming comment.** *Ponder* asks whether the comment carries an objective justification: a fact, a convention, a principle, a prior PR, a measurement. A comment with none is a preference. It may still be worth taking, but the author is entitled to say no to it. *Postpone* asks whether the concern is in scope for this PR. A valid concern that is out of scope gets a follow-up issue, not a change on this branch. A reviewer who skipped the gate does not oblige the author to skip it too.
+- **Signals carry the reviewer's own blocking claim.** A comment prefixed `nitpick:` or `levelup:` has already said it does not block. One with no signal has said nothing, so read its blocking weight off the 5P result, not off its tone.
+- **A pushback reply is an action-requiring comment, so it gets Triple-R.** The *Request* is what the author proposes instead (keep it as is, do it differently, defer it). The *Rationale* is the evidence: the file and line, the test, the doc that contradicts the claim. The *Result* is the state that settles the thread. A pushback without a Result produces the same follow-up exchange as a review comment without one.
+- **Tone runs both directions.** "We" over sentence-initial "you", and ask rather than command. "You Are Not Your Code" also means the reviewer is not their comment: the reply challenges the claim, never the person who made it.
+- **A second round of disagreement goes to MMG.** If the reviewer replies and the two positions still conflict, stop trading comments and take it offline (§ *MMG Exchange*). Record the outcome in the thread.
+
+The author still decides. The rubric tells the author which comments *can* be challenged and gives each challenge its evidence. Whether to challenge is still the author's call.
+
 ## Author preparation — when reviewing your own author-mode work
 
-This doc is reviewer-side, but Cohen's Author Preparation principle informs author-mode `/pre-merge` too: before requesting review, the author should annotate the diff (rationale, risky areas, deliberate non-changes) so the reviewer's first read is informed. Author-mode `/pre-merge`'s PR body template (see `SKILL.md`'s "PR body template" section, particularly the "plain-language walkthrough" requirement that defers to `references/writing-for-humans.md`) already operationalizes this — the walkthrough *is* the author preparation.
+This doc is reviewer-side, but Cohen's Author Preparation principle informs author-mode `/pre-merge` too: before requesting review, the author should annotate the diff (rationale, risky areas, deliberate non-changes) so the reviewer's first read is informed. Author-mode `/pre-merge`'s PR body template (see `/pre-merge`'s `SKILL.md`, "PR body template" section, particularly the "plain-language walkthrough" requirement that defers to `references/writing-for-humans.md`) already operationalizes this — the walkthrough *is* the author preparation.
 
 ## Quick reference — the comment loop
 

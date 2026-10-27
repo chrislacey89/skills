@@ -299,6 +299,11 @@ section "20 parallel commits, 3 runs"
 
 SOL="$(cd "$PROJ" && bash "$SC" path solutions)"
 check "path solutions is the sidecar's solutions/ directory" "$SIDECAR/solutions" "$SOL"
+RR="$(cd "$PROJ" && bash "$SC" path review-responses)"
+check "path review-responses is the sidecar's review-responses/ directory" "$SIDECAR/review-responses" "$RR"
+check "path review-responses creates the directory" "yes" "$([ -d "$SIDECAR/review-responses" ] && echo yes || echo no)"
+run "$PROJ" path reviews
+check "path refuses a directory it does not name (reviews/ belongs to the stamp)" 2 "$rc"
 mkdir -p "$SOL/concurrency"
 for r in 1 2 3; do
     before="$(git -C "$SIDECAR" rev-list --count HEAD)"

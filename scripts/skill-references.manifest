@@ -51,6 +51,7 @@ docs/next-step-menu.md          fix-findings
 docs/trivial-task-rule.md  execute
 docs/trivial-task-rule.md  lfg
 docs/state-backend.md      pre-merge
+docs/comment-craft.md      pre-merge
 docs/state-backend.md      closeout
 docs/state-backend.md      write-a-prd
 docs/state-backend.md      prd-to-issues
@@ -71,3 +72,6 @@ init-pipeline/scripts/sidecar.sh  handoff
 init-pipeline/scripts/sidecar.sh  prd-to-issues
 init-pipeline/scripts/sidecar.sh  closeout
 init-pipeline/scripts/sidecar.sh  git-guardrails-claude-code
+docs/comment-craft.md      respond-to-review
+docs/next-step-menu.md     respond-to-review
+init-pipeline/scripts/sidecar.sh  respond-to-review

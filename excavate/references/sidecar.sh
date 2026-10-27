@@ -4,7 +4,8 @@
 # A sidecar is a private git repository outside the project's tree, at
 # ${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}/<name>/, holding the pack's
 # per-project configuration (sidecar.json), the research archive (research/),
-# and solutions entries (solutions/<category>/). This script is the only thing
+# solutions entries (solutions/<category>/), and /respond-to-review's records
+# (review-responses/). This script is the only thing
 # that computes a sidecar path or runs git against one; skills call it from
 # their bundled references/sidecar.sh and never inline either.
 #
@@ -16,7 +17,7 @@
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
 #   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
-#   sidecar.sh path <research|solutions>
+#   sidecar.sh path <research|solutions|review-responses>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
 #   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
@@ -745,8 +746,8 @@ cmd_solutions_dirs() {
 
 cmd_path() {
     local sc
-    [ $# -eq 1 ] || die_usage "usage: sidecar.sh path <research|solutions>"
-    case "$1" in research|solutions) ;; *) die_usage "path: expected research or solutions, got: $1" ;; esac
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh path <research|solutions|review-responses>"
+    case "$1" in research|solutions|review-responses) ;; *) die_usage "path: expected research, solutions, or review-responses, got: $1" ;; esac
     sc="$(do_resolve)" || exit 1
     mkdir -p "$sc/$1" || refuse "path: cannot create $sc/$1"
     printf '%s\n' "$sc/$1"

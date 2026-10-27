@@ -66,7 +66,7 @@ git branch --show-current
 git log --oneline "$BASE_REF..HEAD"
 
 # Open PR for the current branch, if any
-gh pr list --head "$(git branch --show-current)" --state open --json number,title,url
+gh pr list --head "$(git branch --show-current)" --state open --json number,title,url,reviewDecision
 
 # Open issues with PRD or slice labels, or in open milestones
 gh issue list --state open --json number,title,labels,milestone --limit 50
@@ -161,7 +161,7 @@ Walk through these checks in priority order. The first one that matches is the r
 
 | # | Signal | Recommendation | One-line reason |
 |---|---|---|---|
-| 1 | Open PR on current branch | Merge the PR, then run `/compound` | "You have an open PR on `<branch>` — if review is done, merge it and capture lessons." |
+| 1 | Open PR on current branch | `reviewDecision` is `CHANGES_REQUESTED`: `/respond-to-review`. Otherwise: merge the PR, then run `/compound` | Changes requested: "A teammate requested changes on PR #`<n>` — `/respond-to-review` checks each comment against the code before you decide what to fix or push back on." Otherwise: "You have an open PR on `<branch>` — if review is done, merge it and capture lessons." |
 | 2 | Current branch has commits ahead of base, no open PR | `/pre-merge` | "You have `<N>` commits ahead of `<base>` with no PR yet — `/pre-merge` creates it and runs the architectural review." |
 | 3 | Open slice issues referencing a PRD, none closed | `/execute` on the highest-priority slice with an empty `open_blockers` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
 | 4 | Open slice issues referencing a PRD, some closed | `/execute` on the next slice with an empty `open_blockers` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |

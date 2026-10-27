@@ -297,7 +297,7 @@ pop_count="$(grep -c . "$population_file" || true)"
 
 # Pin the two files earlier censuses missed — one per historical miss. If an
 # allowlist edit ever drops them, this fails before the scan goes blind.
-assert_true "$(grep -qx 'pre-merge/references/comment-craft.md' "$population_file" && echo true || echo false)" "population contains pre-merge/references/comment-craft.md (v1's miss)"
+assert_true "$(grep -qx 'docs/comment-craft.md' "$population_file" && echo true || echo false)" "population contains docs/comment-craft.md (v1's miss, at its canonical path since it moved out of pre-merge/references/)"
 assert_true "$(grep -qx 'vite-project/src/data/workflow-data.js' "$population_file" && echo true || echo false)" "population contains vite-project/src/data/workflow-data.js (v2's miss — not a .md file)"
 
 section "No roster restatement survives in the census population"

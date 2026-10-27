@@ -1,10 +1,10 @@
 # Skill Kit
 
 [![License: MIT](https://img.shields.io/github/license/chrislacey89/skills)](LICENSE)
-![Skills](https://img.shields.io/badge/skills-34-blue)
+![Skills](https://img.shields.io/badge/skills-35-blue)
 ![CLI](https://img.shields.io/badge/npx%20skills-compatible-green)
 
-Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 34 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
+Skill Kit is a pipeline-first Claude Code skills pack for structured feature delivery. 35 composable skills that take a feature from idea to shipped — with explicit handoffs, verified research, and a compounding knowledge loop.
 
 Built around structured research, GitHub-native state, and a compounding knowledge loop in `docs/solutions/`. Compatible with Claude Code, Cursor, Windsurf, and any agent that can consume SKILL.md files.
 
@@ -73,7 +73,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 |-------|-------------|
 | [execute](execute/) | Execute a unit of work end-to-end with verification |
 | [tdd](tdd/) | Test-driven development with red-green-refactor loop (invoked from `/execute`) |
-| [fix-findings](fix-findings/) | Fix the `/pre-merge` findings you chose, with a fresh sub-agent writing each fix and a second one trying to break it — run from the `/pre-merge` menu or typed, never selects findings, never stamps |
+| [fix-findings](fix-findings/) | Fix the review findings you chose (from `/pre-merge`, or teammate threads from `/respond-to-review`), with a fresh sub-agent writing each fix and a second one trying to break it — run from the `/pre-merge` menu or typed, never selects findings, never stamps |
 | [triage-issue](triage-issue/) | Deep bug diagnosis + root cause + TDD fix plan (invoked from `/qa` per issue) |
 | [improve-codebase-architecture](improve-codebase-architecture/) | Surface deepening opportunities for shallow modules |
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
@@ -97,6 +97,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [pre-merge](pre-merge/) | Author-mode: create the PR and run an architectural review before merge. Reviewer-mode (`--pr <n>`): review someone else's PR and draft comment text. Loop-mode (`--loop`, or auto-entered on an AFK `/execute` handoff): records every finding in a durable ledger on the PR with the evidence for or against it, so findings survive the session — makes no commits and no decisions; the operator settles each row |
 | [walk-commits](walk-commits/) | Interactive commit-by-commit comprehension walkthrough before merge — intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off (optional, recommended by `/pre-merge`; can render per-commit callouts via the shared visual-rendering core) |
 | [visual-recap](visual-recap/) | Render a finished diff/PR/branch as a self-contained interactive HTML artifact in one of two modes — a scrolling recap (file-tree + change flags, annotated split diffs with line-anchored callouts, contract cards, UI wireframes, before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a walkthrough deck (premise → changes → mechanism → aftermath, one idea per screen); CSS-spine diagrams for trivial flows, Mermaid-via-CDN for multi-stage graphs, copy-text feedback loop (optional, never auto-invoked, transient artifact) |
+| [respond-to-review](respond-to-review/) | Respond to a teammate's review of your PR — a fresh sub-agent checks each comment against the code, you decide fix / push back / postpone / answer, fixes go to `/fix-findings`, pushback gets a reply draft you post, and a record stays in the sidecar |
 | [closeout](closeout/) | Merge the reviewed PR, tear down the worktree, prune the branch, and return to a clean base |
 | [compound](compound/) | Capture lessons learned into docs/solutions/ — onto the open PR, handed back to `/pre-merge` so the entry is reviewed and re-stamped before `/closeout` merges (default), or post-merge as the fallback |
 | [excavate](excavate/) | Mine a legacy repo's last 12 months of git history (and PR threads via `gh`) into ranked hotspots, cited recovered decisions, and a who-to-ask map, then offer a PR of `docs/solutions/` entries the pipeline already reads. User-invoked only (`disable-model-invocation: true`); never merges |
