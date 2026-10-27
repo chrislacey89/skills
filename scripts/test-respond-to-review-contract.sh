@@ -129,6 +129,7 @@ runfetch() { GH_FIXTURE="$1" PATH="$tmp/bin:$PATH" bash "$tmp/fetch.sh" 2>/dev/n
 
 fixture "$tmp/ok.json" 4 3 2
 OUT="$(runfetch "$tmp/ok.json")"
+GH_OUT="$OUT"
 check "a whole read prints JSON, not unknown" 1 "$(jq -e '.items | type == "array"' <<<"$OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
 check "it keeps exactly the unresolved, non-author threads and the non-empty, non-author reviews" \
     "PRRT_old PRRT_a PRR_cr" "$(jq -r '[.items[].id] | join(" ")' <<<"$OUT" 2>/dev/null)"
@@ -295,12 +296,23 @@ bbfix "$tmp/bb-ok" 9
 OUT="$(runbb "$tmp/bb-ok")"
 check "a whole read prints JSON, not unknown" 1 "$(jq -e '.items | type == "array"' <<<"$OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
 check "it keeps exactly the unresolved, non-author, non-draft, non-deleted threads" "1 4" "$(jq -r '[.items[].id] | join(" ")' <<<"$OUT" 2>/dev/null)"
-check "every item carries the GitHub arm's keys" \
-    "at comments id kind last_at line n outdated path url" \
-    "$(jq -r '[.items[] | keys | join(" ")] | unique | join("|")' <<<"$OUT" 2>/dev/null)"
-check "every comment carries the GitHub arm's keys" "at author body url" \
-    "$(jq -r '[.items[].comments[] | keys | join(" ")] | unique | join("|")' <<<"$OUT" 2>/dev/null)"
-check "the top level carries the GitHub arm's keys" "head head_ref items pr state" "$(jq -r 'keys | join(" ")' <<<"$OUT" 2>/dev/null)"
+# The expected key sets are read off the GitHub arm's real output (GH_OUT, from
+# the same fixture), not typed here: a key added to that arm must fail these.
+# Every Bitbucket item is a thread, so only the GitHub arm's thread items count.
+gh_item_keys() { jq -r '[.items[] | select(.kind == "thread") | keys | join(" ")] | unique | join("|")' <<<"$1" 2>/dev/null; }
+gh_comment_keys() { jq -r '[.items[] | select(.kind == "thread") | .comments[] | keys | join(" ")] | unique | join("|")' <<<"$1" 2>/dev/null; }
+gh_top_keys() { jq -r 'keys | join(" ")' <<<"$1" 2>/dev/null; }
+check "the GitHub arm's key sets were read (not empty)" 1 \
+    "$([ -n "$(gh_item_keys "$GH_OUT")" ] && [ -n "$(gh_comment_keys "$GH_OUT")" ] && [ -n "$(gh_top_keys "$GH_OUT")" ] && echo 1 || echo 0)"
+check "every item carries the GitHub arm's keys" "$(gh_item_keys "$GH_OUT")" "$(gh_item_keys "$OUT")"
+check "every comment carries the GitHub arm's keys" "$(gh_comment_keys "$GH_OUT")" "$(gh_comment_keys "$OUT")"
+check "the top level carries the GitHub arm's keys" "$(gh_top_keys "$GH_OUT")" "$(gh_top_keys "$OUT")"
+# M13: a key added to the GitHub arm must break all three comparisons.
+sed 's/{kind: "thread", id, path,/{kind: "thread", foo: 1, id, path,/' "$tmp/fetch.sh" > "$tmp/fetch-mut13.sh"
+check "M13: the mutation added a key to the GitHub arm's thread" 1 "$(grep -c 'foo: 1' "$tmp/fetch-mut13.sh")"
+MUT13="$(GH_FIXTURE="$tmp/ok.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut13.sh" 2>/dev/null)"
+check "M13: a key added to the GitHub arm no longer matches the Bitbucket arm's items" 1 \
+    "$([ "$(gh_item_keys "$MUT13")" != "$(gh_item_keys "$OUT")" ] && echo 1 || echo 0)"
 check "items are numbered 1..n in time order" "1 2" "$(jq -r '[.items[].n] | map(tostring) | join(" ")' <<<"$OUT" 2>/dev/null)"
 check "a reply two deep, on a later page, joins its top-level thread in time order" "teammate me teammate" \
     "$(jq -r '.items[] | select(.id == "1") | [.comments[].author] | join(" ")' <<<"$OUT" 2>/dev/null)"
