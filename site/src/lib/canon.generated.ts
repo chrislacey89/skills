@@ -69,6 +69,7 @@ export const canon: CanonWork[] = [
 		citations: [
 			{ skill: "fix-findings", tier: "secondary" },
 			{ skill: "pre-merge", tier: "secondary" },
+			{ skill: "respond-to-review", tier: "primary" },
 			{ skill: "visual-recap", tier: "primary" },
 			{ skill: "walk-commits", tier: "secondary" },
 		],
@@ -246,6 +247,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "Looks Good to Me — Adrienne Braganza Tacke",
+		title: "Looks Good to Me",
+		author: "Adrienne Braganza Tacke",
+		type: "book",
+		citations: [
+			{ skill: "respond-to-review", tier: "secondary" },
+		],
+	},
+	{
 		full: "Mocking Techniques in Vitest — Epic Web Dev",
 		title: "Mocking Techniques in Vitest",
 		author: "Epic Web Dev",
@@ -279,6 +289,7 @@ export const canon: CanonWork[] = [
 		author: "Peter C. Rigby",
 		type: "paper",
 		citations: [
+			{ skill: "respond-to-review", tier: "secondary" },
 			{ skill: "walk-commits", tier: "secondary" },
 		],
 	},
@@ -390,6 +401,7 @@ export const canon: CanonWork[] = [
 			{ skill: "handoff", tier: "primary" },
 			{ skill: "improve-pipeline", tier: "secondary" },
 			{ skill: "prototype", tier: "secondary" },
+			{ skill: "respond-to-review", tier: "secondary" },
 			{ skill: "visual-recap", tier: "primary" },
 		],
 	},
