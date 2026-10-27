@@ -51,6 +51,7 @@ docs/next-step-menu.md          fix-findings
 docs/trivial-task-rule.md  execute
 docs/trivial-task-rule.md  lfg
 docs/state-backend.md      pre-merge
+docs/comment-craft.md      pre-merge
 docs/state-backend.md      closeout
 docs/state-backend.md      write-a-prd
 docs/state-backend.md      prd-to-issues
