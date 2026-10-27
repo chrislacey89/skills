@@ -777,12 +777,12 @@ mkdir -p "$repo6"
     printf 'base\n' > base.txt
     git add base.txt && git commit -q -m 'base'
     git switch -q -c feature
-    printf 'one\n' > one.txt
+    printf 'a\nB\nc\n' > one.txt
     git add one.txt && git commit -q -m 'feature: one'
     printf 'two\n' > two.txt
     git add two.txt && git commit -q -m 'feature: two'
-    printf 'one, fixed\n' > one.txt
-    git add one.txt && git commit -q --fixup=HEAD~1 -m 'fix one' -m 'Fix-Findings-Run: 20261027T000000Z'
+    printf 'two, fixed\n' > two.txt
+    git add two.txt && git commit -q --fixup=HEAD -m 'fix two' -m 'Fix-Findings-Run: 20261027T000000Z'
 )
 run_trial() { (cd "$repo6" && BASE_REF=main bash -c "$fold_trial_block" 2>&1); }
 worktrees_before="$(git -C "$repo6" worktree list | grep -c .)"
@@ -790,13 +790,23 @@ clean_head="$(git -C "$repo6" rev-parse HEAD)"
 assert_eq "fold trial: clean" "$(run_trial)" "a fixup no later commit overlaps: the trial reports clean"
 assert_eq "$clean_head" "$(git -C "$repo6" rev-parse HEAD)" "a clean trial leaves the fixup commit as it was"
 
-one_sha6="$(git -C "$repo6" rev-parse HEAD~2)"
+# The shape #611 reproduced: the anchored line (B) still belongs to 'feature:
+# one', and a later commit edits the line next to it. The fixup target comes
+# from /fix-findings' own selection block, so the fixture is one a real run
+# reaches. repo6 has no remote or upstream, so the block does not clear it.
 (
     cd "$repo6" || exit 1
-    printf 'one, rewritten by a later commit\n' > one.txt
-    git add one.txt && git commit -q -m 'feature: rewrite one'
-    printf 'one, fixed again\n' > one.txt
-    git add one.txt && git commit -q --fixup="$one_sha6" -m 'fix one again' -m 'Fix-Findings-Run: 20261027T000001Z'
+    printf 'a\nB\nc2\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: edit the line next to B'
+    printf 'a\nB, fixed\nc2\n' > one.txt
+)
+one_sha6="$(git -C "$repo6" rev-parse HEAD~3)"
+target6="$(cd "$repo6" && BASE_REF=main FILE=one.txt START=2 END=2 \
+    bash -c "$fixup_target_block"'; printf "%s" "$FIXUP_TARGET"')"
+assert_eq "$one_sha6" "$target6" "the fixture's fixup target is the one /fix-findings' selection block picks"
+(
+    cd "$repo6" || exit 1
+    git add one.txt && git commit -q --fixup="$target6" -m 'fix one again' -m 'Fix-Findings-Run: 20261027T000001Z'
 )
 conflict_tree6="$(git -C "$repo6" rev-parse 'HEAD^{tree}')"
 count6="$(git -C "$repo6" rev-list --count main..HEAD)"
