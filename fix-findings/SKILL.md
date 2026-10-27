@@ -190,6 +190,7 @@ The fixer's instructions, in order:
 
    ```bash
    # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
+   : "${BASE_REF:?derive it with the Phase 1 step 3 block before running this}"
    FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
    TRIAL_HEAD=$(git rev-parse HEAD)
    TRIAL_DIR=$(mktemp -d)

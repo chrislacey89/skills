@@ -851,6 +851,23 @@ esac
 assert_eq "$head7" "$(git -C "$repo7" rev-parse HEAD)" "a refused recommit: HEAD is untouched"
 assert_eq "fixup! feature: one" "$(git -C "$repo7" log -1 --format=%s)" "a refused recommit: the subject is still fixup!"
 
+# A real run reaches the trial in a fresh shell, so BASE_REF is unset there.
+section "fold trial: an unset BASE_REF refuses rather than demoting"
+head8="$(git -C "$repo7" rev-parse HEAD)"
+out8="$(cd "$repo7" && env -u BASE_REF bash -c "$fold_trial_block" 2>&1)" && rc8=0 || rc8=$?
+[[ "$rc8" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "an unset BASE_REF: the block exits nonzero"
+case "$out8" in
+    *"BASE_REF"*) assert_eq ok ok "an unset BASE_REF: the refusal names the variable" ;;
+    *) assert_eq "a message naming BASE_REF" "$out8" "an unset BASE_REF: the refusal names the variable" ;;
+esac
+case "$out8" in
+    *"recommitted as an ordinary commit"*) assert_eq "no demotion line" "$out8" "an unset BASE_REF: no demotion" ;;
+    *) assert_eq ok ok "an unset BASE_REF: no demotion" ;;
+esac
+assert_eq "$head8" "$(git -C "$repo7" rev-parse HEAD)" "an unset BASE_REF: HEAD is untouched"
+assert_eq "fixup! feature: one" "$(git -C "$repo7" log -1 --format=%s)" "an unset BASE_REF: the subject is still fixup!"
+
 # --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
 # A plain `git push origin <branch>` publishes the branch with no upstream, so
 # the `@{u}` check alone would keep deferring review of a branch others can read.
