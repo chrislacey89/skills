@@ -221,6 +221,42 @@ PRR_cr 2026-10-04T00:00:00Z postpone" "$GOT"
 rm "$tmp/sidecar/review-responses/pr-7.md"
 check "no record prints nothing (a first round)" "" "$(bash "$tmp/read.sh")"
 
+# The record above is typed by hand. The one Step 4 tells the agent to write is
+# the template, so fill ITS marker line and read that back. The reader treats
+# any disposition but the literal `open` as settled; if the template's word for
+# an undecided thread drifted, every undecided thread would skip the evidence
+# check and nothing else here would notice.
+TPL="$(grep -m1 '^<!-- thread: id=<thread-id> last-at=<last_at> disposition=<' "$R2R")"
+check "the template's thread marker is found" 1 "$([ -n "$TPL" ] && echo 1 || echo 0)"
+TPL_WORDS="$(sed -n 's/.*disposition=<\([^>]*\)>.*/\1/p' <<<"$TPL" | tr '|' '\n' | sort | tr '\n' ' ')"
+check "the template names exactly the five disposition words the skill relies on" \
+    "answer fix open postpone push-back " "$TPL_WORDS"
+check "the settled rule says a disposition other than \`open\` is settled" 1 \
+    "$(grep -c 'whose disposition is not `open`, is \*\*settled\*\*' "$R2R" | awk '{print ($1 > 0)}')"
+check "an unnamed item is recorded as \`open\`" 1 \
+    "$(grep -c 'An item not named is recorded as `open`' "$R2R" | awk '{print ($1 > 0)}')"
+{
+    printf '# Review responses — PR 7\n\n## Round 1\n\n'
+    n=0
+    for w in $TPL_WORDS; do
+        n=$((n + 1))
+        sed -e "s|<thread-id>|T$n|" -e "s|<last_at>|2026-10-0${n}T00:00:00Z|" \
+            -e "s|disposition=<[^>]*>|disposition=$w|" <<<"$TPL"
+    done
+} > "$tmp/sidecar/review-responses/pr-7.md"
+check "every filled template marker is read, with the word it carries" \
+    "T1 2026-10-01T00:00:00Z answer
+T2 2026-10-02T00:00:00Z fix
+T3 2026-10-03T00:00:00Z open
+T4 2026-10-04T00:00:00Z postpone
+T5 2026-10-05T00:00:00Z push-back" "$(bash "$tmp/read.sh")"
+# Mutation: a template that spells the undecided word differently is caught.
+sed 's/disposition=<fix|push-back|postpone|answer|open>/disposition=<fix|push-back|postpone|answer|undecided>/' "$R2R" > "$tmp/r2r-mut.md"
+MUT_WORDS="$(grep -m1 '^<!-- thread: id=<thread-id>' "$tmp/r2r-mut.md" | sed -n 's/.*disposition=<\([^>]*\)>.*/\1/p' | tr '|' '\n' | sort | tr '\n' ' ')"
+check "M7: a renamed undecided word fails the five-word pin" 1 \
+    "$([ "$MUT_WORDS" != "answer fix open postpone push-back " ] && echo 1 || echo 0)"
+rm "$tmp/sidecar/review-responses/pr-7.md"
+
 # -----------------------------------------------------------------------------
 section "the Review-Thread trailer, written by /fix-findings and read by /respond-to-review"
 
