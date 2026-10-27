@@ -49,8 +49,8 @@ never reaches it. Enter it:
 - from `/closeout` Step 2, when the PR's `reviewDecision` is
   `CHANGES_REQUESTED` or it has unresolved review threads;
 - from `/help`, which recommends it on the same signal;
-- by typing `/respond-to-review` (current branch's PR) or
-  `/respond-to-review <pr-number>`.
+- by typing `/respond-to-review` or `/respond-to-review <pr-number>` (Step 1
+  says which PR each form reads).
 
 It is model-invocable so those routes can run it rather than only name it. The
 cost is its `description` in every session's context. What gates it is the
