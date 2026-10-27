@@ -214,7 +214,7 @@ BB="$(block "$R2R" 'BB_JQ=')"
 check "the Bitbucket arm is found" 1 "$([ -n "$BB" ] && echo 1 || echo 0)"
 printf '%s' "$BB" | sed 's/^PR=<pr-number>$/PR=7/' > "$tmp/bb.sh"
 check "the Bitbucket arm's PR placeholder is substituted" 1 "$(grep -cx 'PR=7' "$tmp/bb.sh")"
-check "the Bitbucket arm makes no gh call" 0 "$(grep -c '(^|[^[:alnum:]_])gh ' "$tmp/bb.sh")"
+check "the Bitbucket arm makes no gh call" 0 "$(grep -cE '(^|[^[:alnum:]_])gh ' "$tmp/bb.sh")"
 
 mkdir -p "$tmp/bbbin"
 cat > "$tmp/bbbin/curl" <<'STUB'
@@ -400,6 +400,9 @@ sed 's|https://api.bitbucket.org/2.0/\*) ;;|*) ;;|' "$tmp/bb.sh" > "$tmp/bb-mut3
 check "M10: the mutation removed the host guard" 1 "$(grep -c '^ *case "\$URL" in \*) ;;' "$tmp/bb-mut3.sh")"
 check "M10: without the host guard the token is sent off-host" 1 \
     "$(bbcase; jq '.next = "https://evil.example/2.0/x?pagelen=100&page=2"' "$tmp/bb-ok/page1.json" > "$tmp/bb-c/page1.json"; mv "$tmp/bb.sh" "$tmp/bb.sh.real"; cp "$tmp/bb-mut3.sh" "$tmp/bb.sh"; runbb "$tmp/bb-c" >/dev/null; mv "$tmp/bb.sh.real" "$tmp/bb.sh"; grep -c 'evil.example' "$tmp/bb-calls" | awk '{print ($1 > 0)}')"
+{ cat "$tmp/bb.sh"; printf '\ngh api repos/x\n'; } > "$tmp/bb-mut5.sh"
+check "M12: the mutation planted a gh call in the arm" 1 "$(grep -c '^gh api repos/x$' "$tmp/bb-mut5.sh")"
+check "M12: the no-gh-call check fires on a planted gh call" 1 "$(grep -cE '(^|[^[:alnum:]_])gh ' "$tmp/bb-mut5.sh" | awk '{print ($1 > 0)}')"
 
 # -----------------------------------------------------------------------------
 section "Step 1's record read, against planted records"
