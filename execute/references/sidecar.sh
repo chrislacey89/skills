@@ -641,10 +641,13 @@ config_set_base_ref() {
 
 # base_ref_of <name>: the range-endpoint ref for a base branch name, per the
 # header; returns 1, printing nothing, when neither form resolves.
+# Only a remote-tracking or local branch counts: a tag, or a revision expression
+# such as @{-1} (whichever branch was checked out before), is not a base.
 base_ref_of() {
-    if pgit rev-parse --verify -q "origin/$1" >/dev/null 2>&1; then
+    case "$1" in *'@{'*) return 1 ;; esac
+    if pgit rev-parse --verify -q "refs/remotes/origin/$1" >/dev/null 2>&1; then
         printf 'origin/%s\n' "$1"
-    elif pgit rev-parse --verify -q "$1" >/dev/null 2>&1; then
+    elif pgit rev-parse --verify -q "refs/heads/$1" >/dev/null 2>&1; then
         printf 'note: origin/%s does not resolve — measuring against the local branch, which may be stale\n' "$1" >&2
         printf '%s\n' "$1"
     else

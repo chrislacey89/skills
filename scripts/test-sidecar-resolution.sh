@@ -665,6 +665,15 @@ check "config set refuses a branch that resolves to no ref" 1 "$rc"
 check "a refused set leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
 brun "$BR/clone" config set base_ref
 check "config set base_ref needs a value" 2 "$rc"
+git -C "$BR/clone" tag v1
+# A branch switch gives @{-1} something to expand to, so git's own name check accepts it.
+git -C "$BR/clone" checkout -q -b prev && git -C "$BR/clone" checkout -q -
+brun "$BR/clone" config set base_ref '@{-1}'
+check "config set refuses a revision expression like @{-1}" 1 "$rc"
+check "a refused @{-1} leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
+brun "$BR/clone" config set base_ref v1
+check "config set refuses a tag name" 1 "$rc"
+check "a refused tag leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
 
 # Hand edits: the verb refuses each shape, and never prints the fallback.
 bset() { jq "$1" "$BSJ" > "$BR/sj" && mv "$BR/sj" "$BSJ"; }
@@ -674,6 +683,9 @@ check "a declared base_ref that resolves to no ref exits 1 and prints no ref" "1
 contains "the refusal names the key" "base_ref is gone" "$err"
 brun "$BR/clone" base-ref --name
 check "--name refuses the same unresolvable base_ref" "1 " "$rc $out"
+bset '.base_ref = "v1"'
+brun "$BR/clone" base-ref
+check "a declared base_ref naming only a tag exits 1 and prints no ref" "1 " "$rc $out"
 bset '.base_ref = ""'
 brun "$BR/clone" base-ref
 check "a declared-empty base_ref exits 1 rather than falling back" "1 " "$rc $out"
