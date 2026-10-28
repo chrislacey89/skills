@@ -2522,7 +2522,7 @@ guard_repo="$base_sandbox/guard"
     printf '%s\n' 'slug=$(owner archive-dir)' 'echo kept' > owner.sh
     git commit -q -am feature
 )
-guard_out="$( cd "$guard_repo" && BASE_REF=prod bash -c "$guard_line" 2>&1 || true )"
+guard_out="$( ( cd "$guard_repo" && BASE_REF=prod bash -c "$guard_line" 2>&1 ) || true )"
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
 assert_contains "$guard_out" '-[ -n "$slug" ] || exit 1' "the sweep lists a removed 'exit' guard inside a surviving file"
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
