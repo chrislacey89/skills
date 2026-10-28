@@ -440,6 +440,10 @@ Finding 5 — fixed at b7c8d9e, pointer → docs/architecture.md
 
 Finding 6 — rejected: reworded at 9f8e7d6, reverted at 5c4b3a2
   controller: `git show --word-diff 9f8e7d6 -- src/retry.ts` → the site adds words that are not a reference
+
+Finding 7 — blocked, leftover fixup! commit e1f2a3b
+  fixer:   blocked — fold-trial recommit refused by the commit-msg hook
+  breaker: none — not spawned for a blocked fix
 ```
 
 The archived SHA is on the breaker's line because it is the one thing that says
@@ -598,7 +602,9 @@ stop.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it
   archived, and the command behind it; `refuted` reports for findings the
-  tree did not confirm; and a revert for any prose-claim fix Step 1 rejected. It produces no stamp, no PR edit, and no merge.
+  tree did not confirm; a revert for any prose-claim fix Step 1 rejected; and,
+  for a `blocked` fix that left a `fixup!` commit (Step 1), that commit's SHA
+  with no breaker verdict. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode. It reads
   the stamp off the PR itself (`pre-merge/SKILL.md` Phase 1 step 4), takes the
   post-stamp delta — these fix commits — as its subject, runs the review
