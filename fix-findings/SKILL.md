@@ -170,20 +170,62 @@ The fixer's instructions, in order:
    later round, from the tree. One commit per fix — a fix
    squashed together with another is a fix nobody can read separately.
    **When the lines the finding anchors on came from one commit on this
-   branch, make it a fixup of that commit.** Find it from the finding's file
-   and line range:
+   branch, and the branch is unshared, make it a fixup of that commit.** Find
+   it from the finding's file and line range:
 
    ```bash
    # $BASE_REF as /pre-merge Phase 1 step 3 derives it; FILE, START, END from the finding's anchor.
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $1 }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
+   { git rev-parse -q --verify '@{u}' >/dev/null || [ -n "$(git ls-remote --heads origin "$(git branch --show-current)" 2>/dev/null)" ]; } && FIXUP_TARGET=
    ```
 
    A non-empty `FIXUP_TARGET` means one branch commit wrote every anchored
-   line. Commit with `git commit --fixup="$FIXUP_TARGET"`, and give `-m` the message
-   and trailer above. Otherwise (lines from the base, or from several
-   commits), make an ordinary commit. It is still one commit per fix, and it is
+   line and the branch passes `/pre-merge` Phase 2's unshared test. The last
+   line is that test. A pushed branch gets no fixups because `/pre-merge`
+   never offers to fold one, so its `fixup!` subject would merge as-is.
+   Commit with `git commit --fixup="$FIXUP_TARGET"`, and give `-m` the message
+   and trailer above. Then check that the branch still folds:
+
+   ```bash
+   # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
+   : "${BASE_REF:?derive it with the Phase 1 step 3 block before running this}"
+   FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
+   TRIAL_HEAD=$(git rev-parse HEAD)
+   TRIAL_DIR=$(mktemp -d)
+   if git clone -q --shared --no-checkout "$(git rev-parse --show-toplevel)" "$TRIAL_DIR" \
+     && git -C "$TRIAL_DIR" checkout -q --detach "$TRIAL_HEAD" \
+     && GIT_SEQUENCE_EDITOR=: git -C "$TRIAL_DIR" -c user.name=trial -c user.email=trial@invalid \
+          rebase -q -i --autosquash "$FORK_POINT" >/dev/null 2>&1; then
+     echo "fold trial: clean"
+   else
+     git log -1 --format=%B HEAD | sed '1,2d' > "$TRIAL_DIR.msg"
+     if git commit -q --amend --only -F "$TRIAL_DIR.msg"; then
+       echo "fold trial: would not fold; recommitted as an ordinary commit" >&2
+     else
+       echo "fold trial: would not fold, and the recommit failed; HEAD is still a fixup! commit" >&2
+       TRIAL_FAILED=1
+     fi
+   fi
+   rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg"
+   [ -z "${TRIAL_FAILED:-}" ]
+   ```
+
+   The trial runs `/pre-merge`'s fold in a throwaway clone, so the branch and
+   the shared git directory are untouched. A fixup conflicts there when a later
+   commit on the branch edited the same region. The fold is one rebase, so a
+   single conflicting fixup would abort it for every other fixup on the
+   branch. The `else` arm keeps the commit and its `-m` text and drops the
+   `fixup!` subject line. A failed recommit (a `commit-msg` hook or signing
+   refusing the amend) exits the block nonzero and leaves the `fixup!` commit
+   in place: report that as `blocked` (see the report below), not `fixed`.
+   Report the SHA after it ran. When every earlier
+   fixup on the branch passed this trial, a failure is caused by the commit
+   just made.
+
+   Otherwise (lines from the base, from several commits, or a shared branch),
+   make an ordinary commit. It is still one commit per fix, and it is
    reviewed on its own. The `fixup!` subject only lets `/pre-merge`'s handoff
    offer to fold the fix into its target later. Git's docs on what that fold
    does to this message: *"The -m option may be used to supplement the log
@@ -196,6 +238,9 @@ The fixer's instructions, in order:
 
 The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
+A fold trial whose recommit failed is `blocked`: the report names the leftover
+`fixup!` commit by SHA and says its subject must be reworded by hand (or the
+commit amended once the hook or signer is fixed).
 A `fixed` under item 3's prose-claim case also names the after-state of the
 site the finding anchored on:
 
@@ -395,6 +440,10 @@ Finding 5 — fixed at b7c8d9e, pointer → docs/architecture.md
 
 Finding 6 — rejected: reworded at 9f8e7d6, reverted at 5c4b3a2
   controller: `git show --word-diff 9f8e7d6 -- src/retry.ts` → the site adds words that are not a reference
+
+Finding 7 — blocked, leftover fixup! commit e1f2a3b
+  fixer:   blocked — fold-trial recommit refused by the commit-msg hook
+  breaker: none — not spawned for a blocked fix
 ```
 
 The archived SHA is on the breaker's line because it is the one thing that says
@@ -553,7 +602,9 @@ stop.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it
   archived, and the command behind it; `refuted` reports for findings the
-  tree did not confirm; and a revert for any prose-claim fix Step 1 rejected. It produces no stamp, no PR edit, and no merge.
+  tree did not confirm; a revert for any prose-claim fix Step 1 rejected; and,
+  for a `blocked` fix that left a `fixup!` commit (Step 1), that commit's SHA
+  with no breaker verdict. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode. It reads
   the stamp off the PR itself (`pre-merge/SKILL.md` Phase 1 step 4), takes the
   post-stamp delta — these fix commits — as its subject, runs the review
