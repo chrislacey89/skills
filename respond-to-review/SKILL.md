@@ -49,8 +49,8 @@ never reaches it. Enter it:
 - from `/closeout` Step 2, when the PR's `reviewDecision` is
   `CHANGES_REQUESTED` or it has unresolved review threads;
 - from `/help`, which recommends it on the same signal;
-- by typing `/respond-to-review` (current branch's PR) or
-  `/respond-to-review <pr-number>`.
+- by typing `/respond-to-review` or `/respond-to-review <pr-number>` (Step 1
+  says which PR each form reads).
 
 It is model-invocable so those routes can run it rather than only name it. The
 cost is its `description` in every session's context. What gates it is the
@@ -80,10 +80,32 @@ It reconnects at `/fix-findings` → `/pre-merge` re-run → `/closeout`, the pa
 
 ### Step 1. Read the review, word for word
 
-Resolve the PR: the number the human gave, or the current branch's PR
-(`gh pr view --json number -q .number`). Then read its unresolved review
-threads and its non-empty review summaries in one GraphQL call. The block
-numbers them in time order and keeps every comment body exactly as written:
+First pick the read arm. The sidecar's `forge.kind` decides, and the `origin`
+host decides when there is no sidecar or it names no forge:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+FORGE="$(bash "$SC" config get forge.kind 2>/dev/null)" || FORGE=
+case "$FORGE" in
+  github|gitlab|bitbucket) ;;
+  *) case "$(git remote get-url origin 2>/dev/null)" in
+       *bitbucket.org[:/]*) FORGE=bitbucket ;;
+       *://gitlab.com[:/]*|*://*@gitlab.com[:/]*|*@gitlab.com:*|*://gitlab.*|*://*@gitlab.*|*@gitlab.*:*) FORGE=gitlab ;;
+       *) FORGE=github ;;
+     esac ;;
+esac
+echo "forge=$FORGE"
+```
+
+`bitbucket` takes the Bitbucket Cloud arm below. `gitlab` has no arm: say so
+and stop. Anything else takes the GitHub arm. Both arms print the same JSON,
+so nothing after this step knows which forge it came from.
+
+**GitHub arm.** Resolve the PR: the number the human gave, or the current
+branch's PR (`gh pr view --json number -q .number`). Then read its unresolved
+review threads and its non-empty review summaries in one GraphQL call. The
+block numbers them in time order and keeps every comment body exactly as
+written:
 
 ```bash
 PR=<pr-number>
@@ -147,8 +169,135 @@ It prints one JSON object, or the single word `unknown`.
   decides what a bot's comment is worth, not this block.
 - **Bounds.** It reads up to 100 threads, 100 reviews, and 50 comments per
   thread, and says `unknown` rather than silently truncating past them.
-- **On a forge `gh` cannot reach** the call fails and the block prints
-  `unknown`. This skill is GitHub-only for now.
+
+**Bitbucket Cloud arm.** It needs the PR number from the human, and a
+read-only token in `BITBUCKET_TOKEN`. A repository, project, or workspace access token
+is sent as a Bearer token. An API token is sent with your Atlassian email, so set
+`BITBUCKET_EMAIL` beside it ([access tokens](https://support.atlassian.com/bitbucket-cloud/docs/using-access-tokens/),
+[API tokens](https://support.atlassian.com/bitbucket-cloud/docs/using-api-tokens/)).
+The scope it needs is the one the two endpoints declare,
+`read:pullrequest:bitbucket`. It reads the pull request, then every page of
+[its comments](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/#api-repositories-workspace-repo-slug-pullrequests-pull-request-id-comments-get),
+and maps them into the GitHub arm's JSON:
+
+```bash
+PR=<pr-number>
+BB_JQ='
+def rootid($by; $d):
+  if $d > 100 then error("reply chain too deep")
+  elif (.parent.id // null) == null then .id
+  else ($by[.parent.id | tostring] // error("reply to a comment not read")) | rootid($by; $d + 1) end;
+[inputs][0] | if (. | type) != "object" then "unknown" else
+.pr as $p | .pages as $pages
+| if ($p | type) != "object" or $p.id != $n
+     or ($p.state | type) != "string"
+     or ($p.source.branch.name | type) != "string"
+     or ($pages | type) != "array" or ($pages | length) == 0
+     or ([$pages[] | select((.values | type) != "array")] | length) > 0
+     or ($pages[0].size | type) != "number"
+     or ([$pages[].values[]] | length) != $pages[0].size
+  then "unknown"
+  else try (
+    ($p.author.uuid // "") as $me
+    | [$pages[].values[]] as $all
+    | ($all | INDEX(.id | tostring)) as $by
+    | [$all[] | . + {root: rootid($by; 0)}]
+    | group_by(.root)
+    | map($by[.[0].root | tostring] as $r
+        | {r: $r, cs: ([.[] | select((.deleted // false) == false and (.pending // false) == false)]
+                       | sort_by(.created_on, .id))})
+    | map(select(.r.resolution == null and (.r.pending // false) == false and (.cs | length) > 0)
+        | select((.r.user.uuid // "") != $me)
+        | {kind: "thread", id: (.r.id | tostring), path: (.r.inline.path // null),
+           line: (.r.inline.to // null), outdated: null,
+           url: (.r.links.html.href // null), at: .cs[0].created_on, last_at: .cs[-1].created_on,
+           comments: [.cs[] | {author: (.user.nickname // .user.display_name // "ghost"),
+                               body: (.content.raw // ""), url: (.links.html.href // null), at: .created_on}]})
+    | sort_by(.at)
+    | {pr: $p.id, state: $p.state, head: (if $full != "" then $full else $p.source.commit.hash end),
+       head_ref: $p.source.branch.name, items: (to_entries | map(.value + {n: (.key + 1)}))}
+    | tojson
+  ) catch "unknown"
+  end
+end'
+# GET one URL with the token from the environment; the body on stdout, and a
+# nonzero exit unless the status was 200. The token goes to curl on stdin, never
+# in its arguments.
+bb_get() {
+  bb_out=$(mktemp) || return 1
+  if [ -n "${BITBUCKET_EMAIL:-}" ]; then
+    bb_auth="user = \"$BITBUCKET_EMAIL:$BITBUCKET_TOKEN\""
+  else
+    bb_auth="header = \"Authorization: Bearer $BITBUCKET_TOKEN\""
+  fi
+  bb_code=$(printf '%s\nurl = "%s"\n' "$bb_auth" "$1" | curl -sS -o "$bb_out" -w '%{http_code}' -K -) || bb_code=000
+  if [ "$bb_code" = 200 ]; then
+    cat "$bb_out"
+  else
+    bb_path=${1#*://}
+    printf 'bitbucket: HTTP %s for /%s\n' "$bb_code" "${bb_path#*/}" >&2
+    case "$bb_code" in 401|403) [ -n "${BITBUCKET_EMAIL:-}" ] || echo 'bitbucket: an API token needs BITBUCKET_EMAIL set' >&2 ;; esac
+  fi
+  rm -f "$bb_out"
+  [ "$bb_code" = 200 ]
+}
+SLUG=$(git remote get-url origin 2>/dev/null | sed -nE 's#^.*bitbucket\.org[:/]+##p' | sed -E 's#\.git$##; s#/+$##')
+case "$SLUG" in */*/*|/*|*/|'') SLUG= ;; */*) ;; *) SLUG= ;; esac
+API="https://api.bitbucket.org/2.0/repositories/$SLUG/pullrequests/$PR"
+RESP=null
+if [ -n "${BITBUCKET_TOKEN:-}" ] && [ -n "$SLUG" ] && PRJ=$(bb_get "$API"); then
+  PAGES=$(mktemp) && URL="$API/comments?pagelen=100" && n=0 && ok=1
+  while [ -n "$URL" ]; do
+    n=$((n + 1))
+    # A newline, quote, or backslash would let the URL write its own curl config lines.
+    case "$URL" in *'"'*|*\\*|*[[:cntrl:]]*) ok=0; break ;; esac
+    case "$URL" in https://api.bitbucket.org/2.0/*) ;; *) ok=0; break ;; esac
+    [ "$n" -le 50 ] && PAGE=$(bb_get "$URL") || { ok=0; break; }
+    printf '%s\n' "$PAGE" >> "$PAGES"
+    URL=$(jq -r '.next // empty' <<<"$PAGE") || { ok=0; break; }
+  done
+  SHORT=$(jq -r '.source.commit.hash // empty' <<<"$PRJ" 2>/dev/null)
+  FULL=$( [ -n "$SHORT" ] && git rev-parse --verify --quiet "$SHORT^{commit}" 2>/dev/null)
+  [ "$ok" = 1 ] && RESP=$(jq -cn --argjson pr "$PRJ" --slurpfile pages "$PAGES" '{pr: $pr, pages: $pages}' 2>/dev/null) || RESP=null
+  rm -f "$PAGES"
+fi
+jq -rn --argjson n "$PR" --arg full "${FULL:-}" "$BB_JQ" <<<"${RESP:-null}" || echo unknown
+```
+
+It prints the same JSON object as the GitHub arm, or `unknown`.
+
+- **`unknown`** means the token or the `origin` slug is missing, a request
+  failed or returned anything but 200, a page was not JSON, the PR did not come
+  back, a reply points at a comment that was not read, or the comments read do
+  not add up to the `size` the first page reported. The same rule as the GitHub
+  arm applies: re-run once, then tell the human and stop. The arm names the
+  HTTP status and request path on stderr, never the token. Bitbucket marks
+  `size` optional in its
+  [pagination](https://developer.atlassian.com/cloud/bitbucket/rest/intro/#pagination)
+  contract, so a response without it is `unknown` too: there is nothing to
+  prove the read whole against. The arm follows each page's `next` link and
+  never builds a page URL itself, and it refuses a `next` that leaves
+  `api.bitbucket.org` rather than send the token there.
+- **Bounds.** It reads up to 50 pages of 100 comments, and follows reply chains
+  up to 100 deep, and says `unknown` rather than silently truncating past them.
+- **How Bitbucket's comments become threads.** Bitbucket returns one flat list
+  in which a reply names its `parent`. Every comment is grouped under the
+  top-level comment its reply chain leads to, and each group is one item of
+  `kind: "thread"`. An inline thread carries the anchor's `path` and its line
+  in the new file (`inline.to`). A general comment carries `null` for both.
+  Bitbucket has no review summary with a body, so no item is `kind: "review"`.
+- **What is left out.** The same three rules as the GitHub arm, in Bitbucket's
+  fields: a thread whose top-level comment carries a `resolution`, a thread
+  the PR's author started (compared by account `uuid`, read off the top-level
+  comment even if that comment was since deleted), and comments that are
+  `deleted` or `pending` (an unpublished draft). A thread with nothing left
+  after that is dropped.
+- **Two fields differ.** `outdated` is always `null`, because Bitbucket's
+  comment schema has no outdated flag and the arm does not guess one. `head` is
+  the full SHA when the abbreviated hash Bitbucket returns resolves in the
+  local clone, and the abbreviated hash otherwise.
+- **It never writes to Bitbucket.** Every request is a GET, and a read-only
+  token is all it needs.
 
 If the PR's `state` is not `OPEN`, say so and stop. If `head_ref` is not the
 current branch, the evidence check can still run, but say before Step 5 that
@@ -197,13 +346,31 @@ carrying one fix's reasoning into the next is the risk `/fix-findings` guards
 against per finding. An evidence reader seeing two related comments together
 is not that risk.
 
+On Bitbucket there is no `gh pr diff`. This block reads the PR's own
+destination and source branch names and diffs the two remote branches, so it
+needs neither the PR's branch checked out nor a guessed base. It stops, with
+nothing on stdout, if either name or either fetch is missing:
+
+```bash
+PR=<pr-number>
+SLUG=$(git remote get-url origin 2>/dev/null | sed -nE 's#^.*bitbucket\.org[:/]+##p' | sed -E 's#\.git$##; s#/+$##')
+if [ -n "${BITBUCKET_EMAIL:-}" ]; then AUTH="user = \"$BITBUCKET_EMAIL:$BITBUCKET_TOKEN\""; else AUTH="header = \"Authorization: Bearer $BITBUCKET_TOKEN\""; fi
+NAMES=$([ -n "${BITBUCKET_TOKEN:-}" ] && [ -n "$SLUG" ] && printf '%s\nurl = "%s"\n' "$AUTH" "https://api.bitbucket.org/2.0/repositories/$SLUG/pullrequests/$PR" \
+  | curl -sS -f -K - | jq -r '[.destination.branch.name, .source.branch.name] | if all(type == "string" and length > 0) then join(" ") else empty end')
+read -r DEST SRC <<<"$NAMES"
+[ -n "$DEST" ] && [ -n "$SRC" ] || { echo "PR destination or source branch not read: no diff" >&2; exit 1; }
+git fetch -q origin "+refs/heads/$DEST:refs/remotes/origin/$DEST" "+refs/heads/$SRC:refs/remotes/origin/$SRC" || { echo "fetch failed: no diff" >&2; exit 1; }
+BASE_REF="origin/$DEST"
+git diff "$BASE_REF...origin/$SRC"
+```
+
 The context contract is `/pre-merge` Phase 3's (read it there, under *The
 context contract is about provenance, not permission*), with this skill's
 inputs:
 
 - **Handed over:** the items' JSON exactly as Step 1 printed it, the PR diff
-  (`gh pr diff <pr-number>`), and `references/comment-craft.md`, especially
-  § *Receiving a review*.
+  (`gh pr diff <pr-number>` on GitHub, the block below on Bitbucket), and
+  `references/comment-craft.md`, especially § *Receiving a review*.
 - **Reached for itself:** the merged tree, `git log` and `git show`, tests and
   their output, installed types, `docs/solutions/`.
 - **Withheld absolutely:** this session's reasoning about the code, and its
@@ -330,8 +497,8 @@ If no thread is marked **fix**, skip this step.
 
 ## Handoff
 
-- **Expected input:** an open PR on GitHub with a teammate's review, and the
-  human who will decide each thread.
+- **Expected input:** an open PR on GitHub or Bitbucket Cloud with a
+  teammate's review, and the human who will decide each thread.
 - **Produces:** an evidence row per unsettled thread, the human's disposition
   for each, reply drafts for pushback and postponed threads, a `/fix-findings`
   run on the threads marked **fix**, and a review-response round in the
