@@ -828,6 +828,42 @@ case "$(cd "$repo6" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
     *) assert_eq "folded: ..." "aborted" "after the demotion, /pre-merge's fold applies" ;;
 esac
 
+# The trial predicts /pre-merge's fold, so it must rebase onto the same commit:
+# the branch's fork point. Here the base moved after the branch forked, with an
+# edit that conflicts with the branch's first commit. A rebase onto the base's
+# tip would conflict and demote a fixup the fold applies cleanly. This runs the
+# trial and the fold on one fixture, so it compares behavior rather than text.
+section "fold trial: rebases onto the fork point, as /pre-merge's fold does"
+repo9="$sandbox/repo9"
+mkdir -p "$repo9"
+(
+    cd "$repo9" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'a\nb\nc\n' > one.txt
+    git add one.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'a\nB\nc\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'two\n' > two.txt
+    git add two.txt && git commit -q -m 'feature: two'
+    printf 'two, fixed\n' > two.txt
+    git add two.txt && git commit -q --fixup=HEAD -m 'fix two' -m 'Fix-Findings-Run: 20261027T000003Z'
+    git switch -q main
+    printf 'a\nb, moved\nc\n' > one.txt
+    git add one.txt && git commit -q -m 'base moves on'
+    git switch -q feature
+)
+head9="$(git -C "$repo9" rev-parse HEAD)"
+assert_eq "fold trial: clean" "$(cd "$repo9" && BASE_REF=main bash -c "$fold_trial_block" 2>&1)" \
+    "a base that moved after the fork: the trial still reports clean"
+assert_eq "$head9" "$(git -C "$repo9" rev-parse HEAD)" "a base that moved after the fork: the fixup is not demoted"
+case "$(cd "$repo9" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
+    folded:*) assert_eq ok ok "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
+    *) assert_eq "folded: ..." "aborted" "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
+esac
+
 # A recommit the amend refuses must not be reported as handled.
 section "fold trial: a failed recommit is reported as a failure"
 repo7="$sandbox/repo7"
