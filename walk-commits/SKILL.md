@@ -51,27 +51,13 @@ Cohen and Rigby both cap effective review at roughly **100–300 LOC and 30–60
 Resolve the commit range to walk — the commits on this branch not yet on the base branch:
 
 ```bash
-BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
-if [ -z "$BASE_BRANCH" ]; then
-  for candidate in main master prod develop trunk; do
-    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
-  done
-fi
-# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
-# $BASE_REF points at it, and is the only thing safe as a range endpoint.
-if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
-  BASE_REF="origin/$BASE_BRANCH"
-else
-  BASE_REF="$BASE_BRANCH"
-  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
-fi
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
 git log --oneline --no-merges "$BASE_REF..HEAD"
 git diff --stat "$BASE_REF...HEAD"
 ```
 
 Do not hardcode `main` — detect the base (this repo itself uses `prod`). If the range is empty or the base can't be resolved, ask the user which range to walk. The `git diff` is three-dot (diff from the merge base) while the `git log` stays two-dot (commits reachable from HEAD but not the base) — these are different operators for different questions, and swapping the diff to two-dot reports deletions for base-side work this branch never touched.
-
-**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 Then present an **overview before the first commit** (Spinellis: *overview first*). It is short and does two jobs:
 

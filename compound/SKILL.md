@@ -63,26 +63,12 @@ Without this step, you've done traditional engineering with AI assistance. The f
 
 On the in-PR default path the work under review is the open PR branch, so the commands below read it directly — a `git log` and a `git diff` of the branch against the base it will merge into, while it is still unmerged. On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, that diff is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work.
 
-Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. `/pre-merge`, `/help`, `/walk-commits` and `/visual-recap` carry this same block for the same reason.
+Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. `sidecar.sh base-ref` answers with a ref, never a bare name, so every skill that measures a branch asks it rather than deriving the base itself.
 
 ```bash
-BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
-if [ -z "$BASE_BRANCH" ]; then
-  for candidate in main master prod develop trunk; do
-    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
-  done
-fi
-# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
-# $BASE_REF points at it, and is the only thing safe as a range endpoint.
-if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
-  BASE_REF="origin/$BASE_BRANCH"
-else
-  BASE_REF="$BASE_BRANCH"
-  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
-fi
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
 ```
-
-**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 Look at:
 

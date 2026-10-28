@@ -36,27 +36,14 @@ Build a state snapshot in two phases: first detect the base branch sequentially 
 **Phase 1a — detect the base branch (run first, sequentially):**
 
 ```bash
-# Prefer the remote's HEAD, fall back through common names
-BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
-if [ -z "$BASE_BRANCH" ]; then
-  for candidate in main master prod develop trunk; do
-    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
-  done
-fi
-# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
-# $BASE_REF points at it, and is the only thing safe as a range endpoint.
-if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
-  BASE_REF="origin/$BASE_BRANCH"
-else
-  BASE_REF="$BASE_BRANCH"
-  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
-fi
+# $BASE_REF is the range endpoint; $BASE_BRANCH is the name `--base` takes.
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
 echo "base=$BASE_BRANCH ref=$BASE_REF"
 ```
 
-Do not hardcode `main` or `master` — not every repo uses them (Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name). If `origin/HEAD` is not set and none of the fallback candidates exist, ask the user for the base branch name before continuing.
-
-**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
+Do not hardcode `main` or `master` — not every repo uses them (Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name). `base-ref` answers with the sidecar's declared `base_ref` when there is one, and otherwise the remote's default. When it exits nonzero it has found no base: relay its stderr and ask the user for the base branch name before continuing.
 
 **Phase 1b — gather the snapshot (run in parallel, each call independent):**
 
