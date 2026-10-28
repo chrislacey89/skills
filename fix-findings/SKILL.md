@@ -240,10 +240,7 @@ The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
 A fold trial whose recommit failed is `blocked`: the report names the leftover
 `fixup!` commit by SHA and says its subject must be reworded by hand (or the
-commit amended once the hook or signer is fixed). The controller spawns no
-breaker for it and leaves the finding for § Handoff's menu without offering the
-fold, because the leftover `fixup!` commit aborts `/pre-merge`'s fold for every
-other fixup on the branch.
+commit amended once the hook or signer is fixed).
 A `fixed` under item 3's prose-claim case also names the after-state of the
 site the finding anchored on:
 
