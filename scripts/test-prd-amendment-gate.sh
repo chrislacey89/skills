@@ -146,5 +146,25 @@ SLICE_FAIL=0
 SLICE_BODY="$slice_no_parent"
 assert_eq "no-parent-prd" "$(run_gate)" "slice without a Parent PRD section → no-parent-prd"
 
+# The matcher has to read what /prd-to-issues really writes and what GitHub's web
+# editor saves, not only hand-typed text. The body below is the issue template
+# itself (extracted, so a change there is exercised), with its two placeholders
+# filled: the parent as #7 and the Boundary Map's "From #<issue-number>" as #41.
+real_slice="$(awk '/^<issue-template>$/{c=1; next} /^<\/issue-template>$/{c=0} c' "$repo_root/prd-to-issues/SKILL.md" \
+    | sed -e 's/#<prd-issue-number>/#7/' -e 's/#<issue-number>/#41/')"
+GQL="$(gql '"2026-10-05T09:00:00Z"' "[$(decomp 2026-10-01T00:00:00Z)]")"
+edited_after="prd-edited-after-decomposition edited=2026-10-05T09:00:00Z decomposed=2026-10-01T00:00:00Z"
+
+SLICE_BODY="$real_slice"
+assert_eq "$edited_after" "$(run_gate)" "real /prd-to-issues template body → parent #7 read"
+
+SLICE_BODY="${real_slice//$'\n'/$'\r\n'}"
+assert_eq "$edited_after" "$(run_gate)" "same template with CRLF line endings (web editor) → parent still read"
+
+# A parent given as a URL, not a bare #<n>, leaves the section with no number;
+# the gate must stop at the next heading rather than take the Boundary Map's #41.
+SLICE_BODY=$'## Parent PRD\n\nhttps://github.com/o/r/issues/7\n\n## Boundary Map\n\n- From #41: `a.ts`'
+assert_eq "no-parent-prd" "$(run_gate)" "URL-form parent → stops at the next heading, no Boundary Map #41 picked up"
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]
