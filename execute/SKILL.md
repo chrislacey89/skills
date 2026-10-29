@@ -301,6 +301,55 @@ If all assumptions still hold, proceed to Step 1. If any assumption has changed,
 
 Skip this gate entirely for one-off tasks without an "Assumptions from Parent PRD" section.
 
+**Parent-PRD amendment gate.** A PRD can be edited after `/prd-to-issues` cut its slices, and nothing carries the edit into the slice bodies. A slice whose acceptance criterion predates a tightened rule is implemented, tested, verified and reviewed against the older wording, because every one of those steps reads the slice. This gate runs on every slice with a `## Parent PRD` section, whether or not it has an assumptions section. On a run that finds nothing it costs one read: it compares the time the PRD body was last edited with the time of the latest `Decomposed into:` comment on it (`/prd-to-issues` §8). `lastEditedAt` moves on body edits and not on comments ([GraphQL: Issue](https://docs.github.com/en/graphql/reference/objects#issue)):
+
+```bash
+N=<n>
+AMEND_JQ='
+[inputs][0] | if (.errors // [] | length) > 0 then "unknown" else
+.data.repository.issue as $p
+| if $p == null or $p.number != $prd
+     or ($p.comments.nodes | type) != "array"
+     or ($p.comments.nodes | length) != ([$p.comments.totalCount, 100] | min)
+  then "unknown"
+  else
+    ([$p.comments.nodes[] | select([.body | split("\n")[] | select(test("^Decomposed into: #[0-9]+"))] | length > 0) | .createdAt] | max) as $decomposed
+    | if $decomposed == null then "no-decomposition-record"
+      elif $p.lastEditedAt != null and ($p.lastEditedAt | fromdateiso8601) > ($decomposed | fromdateiso8601)
+        then "prd-edited-after-decomposition edited=\($p.lastEditedAt) decomposed=\($decomposed)"
+      else "prd-unchanged"
+      end
+  end
+end'
+if ! SLICE_BODY=$(gh issue view "$N" --json body -q .body); then
+  echo unknown
+else
+  PRD=$(printf '%s\n' "$SLICE_BODY" | awk '/^## Parent PRD[[:space:]]*$/ { on = 1; next } on && /^## / { exit } on && match($0, /#[0-9]+/) { print substr($0, RSTART + 1, RLENGTH - 1); exit }')
+  if [ -z "$PRD" ]; then
+    echo no-parent-prd
+  else
+    RESP=$(gh api graphql -F owner='{owner}' -F repo='{repo}' -F n="$PRD" -f query='
+      query($owner: String!, $repo: String!, $n: Int!) {
+        repository(owner: $owner, name: $repo) {
+          issue(number: $n) {
+            number lastEditedAt
+            comments(last: 100) { totalCount nodes { body createdAt } }
+          }
+        }
+      }') || RESP=null
+    jq -rn --argjson prd "$PRD" "$AMEND_JQ" <<<"${RESP:-null}" || echo unknown
+  fi
+fi
+```
+
+- **`prd-unchanged`** or **`no-parent-prd`**: proceed.
+- **`prd-edited-after-decomposition`** or **`no-decomposition-record`**: read the PRD's current body and compare it with this slice's acceptance criteria and boundary map. With no decomposition record there is no boundary to compare against, so the gate does the read. A conflict is any criterion or declaration the PRD now tightens, loosens, or replaces. On a conflict, **stop**. Quote both texts to the user and route to `/correct-course`, which updates the slice body. Do not implement to either text in the meantime. In an AFK iteration, post the two quotes as a comment on the slice issue and exit. With no conflict, proceed, and record the edit and the comparison under **Assumptions that shifted** in the Step 6 review notes.
+- **`unknown`**: re-run once. If it is still `unknown`, tell the user the read failed, and do the PRD comparison by hand rather than proceed on it.
+
+`scripts/test-prd-amendment-gate.sh` runs this block against a stubbed `gh` for each verdict, and pins its `Decomposed into:` matcher to the issue-shape gate's.
+
+On a sidecar work item this gate has no timestamp to read: work items record `created` and nothing later. Step 1's sidecar block already prints the parent PRD's body, so on that backend do the comparison above there, every time.
+
 **Un-discharged feasibility check (advisory).** If the task's research artifact (archive file or spike issue) still carries `Uncertain` or `Speculative` assumptions whose verdicts are cheaply settled by 10 lines of throwaway code — does the library actually expose this, does the streaming path emit partial tags, does this format render where we need it — surface them now and suggest `/prototype` FEASIBILITY before main implementation. This is advisory, not blocking (per XP's *slack* principle); the user may have a reason to proceed and discover the answer mid-implementation. But the cost asymmetry is real (XP's *Defect Cost Increase*): a spike at this moment costs minutes, while the same assumption discovered mid-implementation costs hours of pivot. State the un-discharged assumptions explicitly and let the user decide. Skip this check for one-off tasks without a research artifact or when every assumption is already tagged `Verified` / `Refuted`.
 
 **Consumes verification gate.** Only for issue-based slice work. If the task comes from a GitHub issue created by `/prd-to-issues`, and its `## Boundary Map` / `### Consumes` section references an already-closed upstream slice, spend 60 seconds verifying each listed symbol exists at the declared path in the current tree. This catches upstream boundary-map drift before implementation starts.
