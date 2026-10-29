@@ -174,7 +174,7 @@ The fixer's instructions, in order:
    it from the finding's file and line range:
 
    ```bash
-   # $BASE_REF as /pre-merge Phase 1 step 3 derives it; FILE, START, END from the finding's anchor.
+   # $BASE_REF from `bash "$SC" base-ref`; FILE, START, END from the finding's anchor.
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $1 }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
@@ -190,7 +190,7 @@ The fixer's instructions, in order:
 
    ```bash
    # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
-   : "${BASE_REF:?derive it with the Phase 1 step 3 block before running this}"
+   : "${BASE_REF:?set it from sidecar.sh base-ref before running this}"
    FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
    TRIAL_HEAD=$(git rev-parse HEAD)
    TRIAL_DIR=$(mktemp -d)
@@ -624,7 +624,7 @@ depends on how many rounds this branch has already had, and that number is read
 from the tree — the `Fix-Findings-Run:` line Step 1 writes — never recalled:
 
 ```bash
-# $BASE_REF: the base branch's ref, derived as /pre-merge Phase 1 step 3 derives it.
+# $BASE_REF: the base branch's ref, from `bash "$SC" base-ref`.
 ROUNDS=$(git log --format=%B "$BASE_REF..HEAD" | sed -n 's/^Fix-Findings-Run: //p' | sort -u | wc -l | tr -d ' ')
 ```
 

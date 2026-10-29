@@ -74,7 +74,7 @@ This stand-down is deliberately *asymmetric* with `/closeout`'s teardown check. 
 - **Worktrunk** (if `wt` is available): `wt switch --create <branch-name>` — creates a new worktree + branch from the appropriate base and switches to it, giving full filesystem isolation. Use the `/worktrunk` skill for guidance.
 - **Plain git**: `git checkout <base> && git checkout -b <branch-name>` — creates a new branch from the appropriate base in the current working directory.
 
-The **appropriate base** is the repo's own base branch by default — whatever the repo declares (`git symbolic-ref refs/remotes/origin/HEAD --short | sed 's@^origin/@@'`). Do not assume `main`. For a slice with an unmerged `Consumes from #N` dependency that produces symbols this slice imports, branch from that sibling slice's branch instead so the stacked PR can target the sibling's PR (Hammant *Trunk-Based Development* Ch. 13: multiple PRs per story; the sibling's PR must still merge to the repo's base branch within 2 days).
+The **appropriate base** is the repo's own base branch by default — whatever `bash "$SC" base-ref --name` prints, with `SC` set to this skill's `references/sidecar.sh`. Do not assume `main`. For a slice with an unmerged `Consumes from #N` dependency that produces symbols this slice imports, branch from that sibling slice's branch instead so the stacked PR can target the sibling's PR (Hammant *Trunk-Based Development* Ch. 13: multiple PRs per story; the sibling's PR must still merge to the repo's base branch within 2 days).
 
 Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
 
@@ -489,24 +489,10 @@ Then apply the verification ladder — use the strongest tier you can reach:
 **Deletion Completeness (when this slice's diff deletes or renames a module).** Read the trigger off the diff, which you already have, rather than off a section header nothing in the pipeline writes:
 
 ```bash
-BASE_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD --short 2>/dev/null | sed 's@^origin/@@')
-if [ -z "$BASE_BRANCH" ]; then
-  for candidate in main master prod develop trunk; do
-    if git rev-parse --verify "$candidate" >/dev/null 2>&1; then BASE_BRANCH=$candidate; break; fi
-  done
-fi
-# A name is not a ref. $BASE_BRANCH names the branch (for `--base`, `git switch`);
-# $BASE_REF points at it, and is the only thing safe as a range endpoint.
-if git rev-parse --verify "origin/$BASE_BRANCH" >/dev/null 2>&1; then
-  BASE_REF="origin/$BASE_BRANCH"
-else
-  BASE_REF="$BASE_BRANCH"
-  echo "note: origin/$BASE_BRANCH does not resolve — measuring against the local branch, which may be stale" >&2
-fi
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
 git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
 ```
-
-**Residual:** `$BASE_REF` is only as fresh as the last `git fetch`, and on a triangular fork (or a remote not named `origin`) `origin/$BASE_BRANCH` may be absent or track your fork rather than upstream — the `else` branch then falls back to the local branch, which is the stale-ref behavior this guard exists to avoid. It says so on stderr rather than falling back silently, because a plausible wrong answer with no signal is what let this defect live for five months. If the counts look wrong, `git fetch` and re-run, or set `BASE_REF` by hand.
 
 Deleted paths print as `D<TAB><path>`, renames as `R<score><TAB><old><TAB><new>`. Any output at all fires the rung; empty output skips it. Gate on the output, not the exit status — the command exits 0 either way. A `### Deletes` section in the slice body is an optional hint that names which surfaces to sweep; it is not the trigger.
 

@@ -75,3 +75,5 @@ init-pipeline/scripts/sidecar.sh  git-guardrails-claude-code
 docs/comment-craft.md      respond-to-review
 docs/next-step-menu.md     respond-to-review
 init-pipeline/scripts/sidecar.sh  respond-to-review
+init-pipeline/scripts/sidecar.sh  walk-commits
+init-pipeline/scripts/sidecar.sh  visual-recap
