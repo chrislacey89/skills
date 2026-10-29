@@ -762,6 +762,104 @@ pm3out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$pm3"' >/
 check "/pre-merge step 3, run, takes the declared base for both forms" "develop|origin/develop" "$pm3out"
 
 # -----------------------------------------------------------------------------
+section "range: a slice's own commits, the base fallback, and could-not-look (#599)"
+
+# Its own root, for the same reason as base-ref's: the corrupt case below.
+RG="$tmp/rg"; mkdir -p "$RG"
+RG_ROOT="$RG/sidecars"
+rrun() {
+    local d="$1"; shift
+    out="$(cd "$d" && SKILL_KIT_SIDECAR_ROOT="$RG_ROOT" bash "$SC" "$@" 2>"$RG/err")"; rc=$?
+    err="$(cat "$RG/err")"
+}
+mkrepo "$RG/up"
+git clone -q "$RG/up" "$RG/p"
+git -C "$RG/p" remote set-head origin main >/dev/null
+rrun "$RG/p" range
+check "a miss with no id is the base range" "0 origin/main..HEAD" "$rc $out"
+rrun "$RG/p" range W-1
+check "a miss with an id is the base range too: no sidecar, no work item" "0 origin/main..HEAD" "$rc $out"
+rrun "$RG/p" range nope
+check "range refuses an id that is not W-<n>" 2 "$rc"
+
+rrun "$RG/p" init --name rg --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+check "init the range sidecar (fixture sanity)" 0 "$rc"
+RSJ="$RG_ROOT/rg/sidecar.json"
+printf 'slice body\n' > "$RG/body"
+rrun "$RG/p" work create --kind slice --body-file "$RG/body"; S1="$out"
+rrun "$RG/p" work create --kind slice --body-file "$RG/body"; S2="$out"
+check "two slices created (fixture sanity)" "W-1 W-2" "$S1 $S2"
+rrun "$RG/p" range "$S1"
+check "an item with no start_sha is the base range" "0 origin/main..HEAD" "$rc $out"
+check "no start_sha prints no notice" "" "$err"
+
+# Two slices committed on one branch, each start recorded the way /execute does.
+git -C "$RG/p" switch -q -c feature
+rrun "$RG/p" work set "$S1" start_sha "$(git -C "$RG/p" rev-parse HEAD)"
+check "work set start_sha accepts 40 hex" 0 "$rc"
+rrun "$RG/p" work view "$S1" --json
+check "start_sha reads back from view --json" "$(git -C "$RG/p" rev-parse HEAD)" "$(printf '%s' "$out" | jq -r .start_sha)"
+printf 'a\n' > "$RG/p/a.txt"; git -C "$RG/p" add a.txt; git -C "$RG/p" commit -q -m 'slice 1: a'
+S2_START="$(git -C "$RG/p" rev-parse HEAD)"
+rrun "$RG/p" work set "$S2" start_sha "$S2_START"
+printf 'b\n' > "$RG/p/b.txt"; git -C "$RG/p" add b.txt; git -C "$RG/p" commit -q -m 'slice 2: b'
+printf 'c\n' > "$RG/p/c.txt"; git -C "$RG/p" add c.txt; git -C "$RG/p" commit -q -m 'slice 2: c'
+rrun "$RG/p" range "$S2"
+check "range on the second slice starts at its start_sha" "0 $S2_START..HEAD" "$rc $out"
+check "range on the second slice lists only its own commits" "slice 2: b slice 2: c" \
+    "$(git -C "$RG/p" log --reverse --format=%s "$out" | tr '\n' ' ' | sed 's/ $//')"
+rrun "$RG/p" range "$S1"
+check "range on the first slice covers both, never narrower than its span" \
+    "slice 1: a slice 2: b slice 2: c" "$(git -C "$RG/p" log --reverse --format=%s "$out" | tr '\n' ' ' | sed 's/ $//')"
+
+rrun "$RG/p" work set "$S2" start_sha abc1234
+check "work set refuses a start_sha that is not 40 hex" 1 "$rc"
+rrun "$RG/p" work set "$S2" start_sha "$(printf '%s' "$S2_START" | tr 'a-f' 'A-F')"
+check "work set refuses an uppercase start_sha" 1 "$rc"
+rrun "$RG/p" work view "$S2" --json
+check "a refused set leaves start_sha as it was" "$S2_START" "$(printf '%s' "$out" | jq -r .start_sha)"
+
+# A fold rewrites the start: reset slice 1's commit away and recommit on a new parent.
+git -C "$RG/p" switch -q -c folded main
+printf 'a2\n' > "$RG/p/a.txt"; git -C "$RG/p" add a.txt; git -C "$RG/p" commit -q -m 'slice 1: a (folded)'
+git -C "$RG/p" cherry-pick "$S2_START..feature" >/dev/null 2>&1
+check "the folded branch carries slice 2's commits on a rewritten start (fixture sanity)" \
+    "slice 1: a (folded) slice 2: b slice 2: c" "$(git -C "$RG/p" log --reverse --format=%s main..HEAD | tr '\n' ' ' | sed 's/ $//')"
+rrun "$RG/p" range "$S2"
+check "a start_sha the fold rewrote away falls back to the base range" "0 origin/main..HEAD" "$rc $out"
+contains "the notice names the work item" "$S2 started at" "$err"
+contains "the notice says the start is no longer on this branch" "no longer on this branch" "$err"
+git -C "$RG/p" switch -q feature
+
+# A start_sha naming no commit in this repository is no longer on the branch either.
+sed -i.bak "s/^start_sha: .*/start_sha: $(printf '%040d' 7)/" "$RG_ROOT/rg/work/$S2.md"
+rrun "$RG/p" range "$S2"
+check "a start_sha naming no commit falls back" "0 origin/main..HEAD" "$rc $out"
+contains "and names the item" "$S2 started at" "$err"
+mv "$RG_ROOT/rg/work/$S2.md.bak" "$RG_ROOT/rg/work/$S2.md"
+
+rrun "$RG/p" range W-99
+check "an id the sidecar backend does not hold exits 1 and prints no range" "1 " "$rc $out"
+printf 'not a work item\n' > "$RG_ROOT/rg/work/W-3.md"
+rrun "$RG/p" range W-3
+check "an unparseable work item exits 1 and prints no range" "1 " "$rc $out"
+rm -f "$RG_ROOT/rg/work/W-3.md"
+
+cp "$RSJ" "$RG/good.json"
+printf '{ not json\n' > "$RSJ"
+rrun "$RG/p" range "$S2"
+check "an unreadable sidecar.json exits 1 and prints no range" "1 " "$rc $out"
+rrun "$RG/p" range
+check "an unreadable sidecar.json exits 1 with no id too" "1 " "$rc $out"
+cp "$RG/good.json" "$RSJ"
+
+# The github slices backend has no work item to hold start_sha, so it always falls back.
+jq '.mode = "owned" | .forge.kind = "github" | .forge.write = ["issues","labels","milestones","prs"]' "$RSJ" > "$RG/sj" && mv "$RG/sj" "$RSJ"
+rrun "$RG/p" range W-99
+check "on the github backend an id with no work item is the base range" "0 origin/main..HEAD" "$rc $out"
+check "range commits nothing in the project" "" "$(git -C "$RG/p" status --porcelain)"
+
+# -----------------------------------------------------------------------------
 section "migrate-archive verb, --archive-alias validation, skipped-folder hint (#420)"
 
 mkdir -p "$tmp/mv"
