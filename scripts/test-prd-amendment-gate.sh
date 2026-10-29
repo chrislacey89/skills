@@ -132,6 +132,9 @@ assert_eq "unknown" "$(run_gate)" "GraphQL errors → unknown"
 GQL="$(jq -c '.data.repository.issue.number = 8' <<<"$(gql null '[]')")"
 assert_eq "unknown" "$(run_gate)" "response for a different issue → unknown"
 
+GQL="$(jq -c 'del(.data.repository.issue.lastEditedAt)' <<<"$(gql '"2026-10-05T09:00:00Z"' "[$(decomp 2026-10-01T00:00:00Z)]")")"
+assert_eq "unknown" "$(run_gate)" "lastEditedAt key absent from the response → unknown, not prd-unchanged"
+
 GQL_FAIL=1
 assert_eq "unknown" "$(run_gate)" "gh api failure → unknown"
 GQL_FAIL=0

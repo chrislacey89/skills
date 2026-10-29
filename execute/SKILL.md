@@ -309,6 +309,7 @@ AMEND_JQ='
 [inputs][0] | if (.errors // [] | length) > 0 then "unknown" else
 .data.repository.issue as $p
 | if $p == null or $p.number != $prd
+     or ($p | has("lastEditedAt") | not)
      or ($p.comments.nodes | type) != "array"
      or ($p.comments.nodes | length) != ([$p.comments.totalCount, 100] | min)
   then "unknown"
