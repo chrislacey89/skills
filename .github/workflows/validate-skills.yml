@@ -271,6 +271,12 @@ jobs:
       - name: Run delta review scope contract suite
         run: bash scripts/test-delta-review-scope.sh
 
+      # #617: /execute Step 0's parent-PRD amendment gate compares the PRD
+      # body's lastEditedAt with the latest Decomposed-into comment. This runs
+      # the extracted block against a stubbed gh for every verdict it names.
+      - name: Run PRD amendment gate contract suite
+        run: bash scripts/test-prd-amendment-gate.sh
+
       # #347's round: two instruments keyed on a bare `git ls-files` reported
       # clean on an unstaged file. This runs their extracted populations in a
       # fixture with a tracked, an untracked, and an ignored file.

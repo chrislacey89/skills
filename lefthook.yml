@@ -101,6 +101,8 @@ pre-push:
       run: bash scripts/test-host-signal-containment.sh
     delta-review-scope-tests:
       run: bash scripts/test-delta-review-scope.sh
+    prd-amendment-gate-tests:
+      run: bash scripts/test-prd-amendment-gate.sh
     population-covers-untracked-tests:
       run: bash scripts/test-population-covers-untracked.sh
     compound-restamp-handoff-tests:
