@@ -78,9 +78,12 @@ KW="relevant-keyword"
 bash "$SC" solutions-dirs | while IFS= read -r DIR; do
   [ -d "$DIR" ] && grep -rl -- "$KW" "$DIR"
 done
+bash "$SC" related-solutions-dirs | while IFS= read -r DIR; do
+  grep -rl -- "$KW" "$DIR" | sed 's/^/related project, unverified here: /'
+done
 true
 ```
-List matches from both locations; one does not shadow the other. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention: read it as a plain document, with no frontmatter or staleness check. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry's file path>"` (a fresh shell has no `SC`) and open the path it prints, not one you derive from the citing entry; a `MISSING:` line is shown to the user, not skipped. If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
+List matches from both locations; one does not shadow the other. A line marked `related project, unverified here:` comes from another project's sidecar the user linked with `sidecar.sh relate` (its header states the policy): read it as evidence about a sibling system, confirm it against this repo before relying on it, and never edit it. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention: read it as a plain document, with no frontmatter or staleness check. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry's file path>"` (a fresh shell has no `SC`) and open the path it prints, not one you derive from the citing entry; a `MISSING:` line is shown to the user, not skipped. If relevant solutions exist, read them. Incorporate their lessons into your understanding of the problem space. Surface relevant pitfalls, patterns, or decisions to the user during the interview — "We've hit X before in a similar feature, and the solution was Y. Should we apply the same pattern here?"
 
 **Research document** — Find the most recent research artifact for this feature. The artifact may live in either of two places depending on the project's `research.storage` setting:
 

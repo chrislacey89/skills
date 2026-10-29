@@ -1491,5 +1491,85 @@ cc_ptr="$(grep -c 'write-a-prd` § 4.s "Research document" lookup' "$repo_root/c
 check "correct-course points at write-a-prd's Research document lookup" "1" "$cc_ptr"
 contains "write-a-prd carries the Research document lookup correct-course points at" '**Research document** — Find the most recent research artifact' "$(cat "$repo_root/write-a-prd/SKILL.md")"
 
+# -----------------------------------------------------------------------------
+section "related projects: relate and related-solutions-dirs"
+
+# A lesson about something several repos share is written to one repo's
+# sidecar, and solutions-dirs only ever resolves the current one. relate links
+# another project by identity key; related-solutions-dirs reads it one hop,
+# read-only, and solutions-dirs (which /compound's overlap check reads) stays
+# as it was.
+RA="$tmp/rel/a"; RB="$tmp/rel/b"; RC="$tmp/rel/c"
+for d in "$RA" "$RB" "$RC"; do
+    mkrepo "$d"
+    (cd "$d" && bash "$SC" init --name "rel-$(basename "$d")" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1)
+done
+SA="$SKILL_KIT_SIDECAR_ROOT/rel-a"; SB="$SKILL_KIT_SIDECAR_ROOT/rel-b"; SCC="$SKILL_KIT_SIDECAR_ROOT/rel-c"
+mkdir -p "$SB/solutions/integration" "$SCC/solutions/integration"
+printf 'needle from b\n' > "$SB/solutions/integration/gateway.md"
+printf 'needle from c\n' > "$SCC/solutions/integration/bus.md"
+a_dirs_before="$(cd "$RA" && bash "$SC" solutions-dirs 2>/dev/null)"
+b_head_before="$(git -C "$SB" rev-parse HEAD)"
+
+runo "$RA" related-solutions-dirs
+check "with nothing related, related-solutions-dirs prints nothing and exits 0" "0 " "$rc $out"
+
+runo "$RA" relate "$RB"
+check "relate exits 0" 0 "$rc"
+b_root="$(jq -r '.keys[] | select(startswith("root:"))' "$SB/sidecar.json")"
+check "relate prints the key it stored" "$b_root" "$out"
+check "relate stores the other project's root: key, not its directory name" \
+    "[\"$b_root\"]" "$(jq -c '.solutions.related' "$SA/sidecar.json")"
+check "relate commits sidecar.json" "" "$(git -C "$SA" status --porcelain)"
+runo "$RA" relate "$RB"
+check "relating the same project twice stores it once" 1 "$(jq '.solutions.related | length' "$SA/sidecar.json")"
+run "$RA" relate "$RA"
+check "relate refuses the project's own checkout" 1 "$rc"
+run "$RA" relate "$tmp/rel/nowhere"
+check "relate refuses a path that is not a checkout" 1 "$rc"
+check "a refused relate leaves sidecar.json as it was" 1 "$(jq '.solutions.related | length' "$SA/sidecar.json")"
+check "relate made no commit in the related project's sidecar" "$b_head_before" "$(git -C "$SB" rev-parse HEAD)"
+
+# B relates C; reading from A must not follow B's link.
+runo "$RB" relate "$RC"
+runo "$RA" related-solutions-dirs
+check "related-solutions-dirs prints the related project's solutions dir, one hop only" "$SB/solutions" "$out"
+check "solutions-dirs is unchanged by a related project" "$a_dirs_before" "$(cd "$RA" && bash "$SC" solutions-dirs 2>/dev/null)"
+
+# A key that matches no sidecar (the project was removed) is skipped, not refused.
+jq '.solutions.related += ["root:0000000000000000000000000000000000000000"]' "$SA/sidecar.json" > "$SA/sj" && mv "$SA/sj" "$SA/sidecar.json"
+out="$(cd "$RA" && bash "$SC" related-solutions-dirs 2>"$tmp/rel.err")"; rc=$?
+check "a dangling related key still exits 0 and prints the live one" "0 $SB/solutions" "$rc $out"
+contains "a dangling related key is named on stderr" "matches no sidecar" "$(cat "$tmp/rel.err")"
+git -C "$SA" checkout -q -- sidecar.json
+
+# A related project with no solutions/ yet is skipped, and not created.
+rm -rf "$SB/solutions"
+runo "$RA" related-solutions-dirs
+check "a related project with no solutions dir prints nothing" "0 " "$rc $out"
+check "related-solutions-dirs does not create the related solutions dir" "no" "$([ -e "$SB/solutions" ] && echo yes || echo no)"
+mkdir -p "$SB/solutions/integration"
+printf 'needle from b\n' > "$SB/solutions/integration/gateway.md"
+
+# No sidecar here: nothing related, and no SIDECAR MISS noise for a reader.
+out="$(cd "$NOSD" && bash "$SC" related-solutions-dirs 2>"$tmp/rel.err")"; rc=$?
+check "related-solutions-dirs with no sidecar exits 0 and prints nothing" "0 " "$rc $out"
+check "related-solutions-dirs with no sidecar stays quiet on a SIDECAR MISS" "" "$(cat "$tmp/rel.err")"
+
+# The three planning readers search related projects and label the hits;
+# /compound's overlap check and /help do not, so a sibling's entry can neither
+# suppress a local one nor count toward defect clustering.
+for pair in "research Phase 3:$p3" "execute past-solutions:$e_read" "write-a-prd past-solutions:$w_read"; do
+    # shellcheck disable=SC2016  # literal pattern
+    contains "the ${pair%%:*} block calls related-solutions-dirs" 'bash "$SC" related-solutions-dirs' "${pair#*:}"
+    out="$(cd "$RA" && bash -c "$(with_sc "${pair#*:}" | sed -e 's|^KW=.*|KW="needle"|')" 2>/dev/null)"; rc=$?
+    check "the ${pair%%:*} block runs cleanly with a related project" 0 "$rc"
+    contains "the ${pair%%:*} block labels the related hit" "related project, unverified here: $SB/solutions/integration/gateway.md" "$out"
+    lacks "the ${pair%%:*} block does not follow the related project's own link" "bus.md" "$out"
+done
+lacks "the compound overlap block does not read related projects" "related-solutions-dirs" "$c_read"
+lacks "compound/SKILL.md does not read related projects" "related-solutions-dirs" "$(cat "$COMPOUND")"
+lacks "help/SKILL.md does not read related projects" "related-solutions-dirs" "$(cat "$repo_root/help/SKILL.md")"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

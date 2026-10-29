@@ -20,6 +20,8 @@
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
 #   sidecar.sh path <research|solutions|review-responses>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
+#   sidecar.sh relate <path-to-other-checkout>   (links another project's sidecar for related-solutions-dirs; prints the key stored)
+#   sidecar.sh related-solutions-dirs   (prints, one per line, the related projects' solutions dirs; no sidecar needed)
 #   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
@@ -106,6 +108,25 @@
 # directory exists in the tree and is not already listed (a /excavate PR commits
 # there whatever in_tree_path says). With no sidecar it prints docs/solutions
 # alone. In-tree entries are relative to the current directory.
+#
+# related-solutions-dirs policy. Lessons about something several repositories
+# share (a gateway, a bus, an internal library) land in one repo's sidecar.
+# solutions.related lists identity keys of other projects' sidecars, which
+# relate writes; this verb prints each one's solutions/ that exists, in list
+# order, and never creates it. One hop: a related sidecar's own
+# solutions.related is not read. A key that matches no sidecar, or whose
+# lookup fails, is named on stderr and skipped, because a missing neighbor
+# must not block planning here. Nothing writes through these paths, and
+# solutions-dirs does not print them, so /compound's overlap check never
+# edits, dedupes against, or counts another project's entry. With no sidecar
+# it prints nothing. chrislacey89/skills#405's rule of one user and one
+# sidecar per project holds: every sidecar keeps its one writer.
+#
+# relate. Finds the sidecar of the checkout at <path> by that checkout's keys,
+# without resolving there (a resolve can commit new aliases into it), and
+# stores its root: key (else its first key) in this project's
+# solutions.related, once. Refuses a path that is no checkout, a checkout with
+# no sidecar, and this project itself.
 #
 # config set. forge.write is derived from mode (owned on a known forge gets
 # write access, guest gets none), so mode is changed through this verb and
@@ -829,6 +850,69 @@ cmd_solutions_dirs() {
     fi
 }
 
+cmd_related_solutions_dirs() {
+    local sc="" err rel key hit rc seen=""
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh related-solutions-dirs"
+    err="$(mktemp)" || refuse "related-solutions-dirs: cannot create a temp file"
+    if ! sc="$(do_resolve 2>"$err")"; then
+        grep -q 'SIDECAR MISS:' "$err" || cat "$err" >&2
+        rm -f "$err"
+        return 0
+    fi
+    cat "$err" >&2
+    rm -f "$err"
+    rel="$(jq -er '(.solutions.related // []) | if type == "array" then .[] | strings else error("not an array") end' "$sc/sidecar.json" 2>/dev/null)"
+    rc=$?
+    # -e exits 4 when the list is empty, which is not an error.
+    case "$rc" in 0|4) ;; *) refuse "related-solutions-dirs: solutions.related in $sc/sidecar.json is not an array of keys" ;; esac
+    for key in $rel; do
+        [ -n "$key" ] || continue
+        rc=0
+        hit="$(owners_of "$key")" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            printf 'sidecar.sh: cannot look up related key %s; skipped\n' "$key" >&2
+            continue
+        fi
+        hit="$(printf '%s\n' "$hit" | head -n 1)"
+        if [ -z "$hit" ]; then
+            printf 'sidecar.sh: related key %s matches no sidecar; skipped\n' "$key" >&2
+            continue
+        fi
+        [ "$hit" != "$sc" ] || continue
+        [ -d "$hit/solutions" ] || continue
+        case $'\n'"$seen"$'\n' in *$'\n'"$hit"$'\n'*) continue ;; esac
+        seen="${seen:+$seen$'\n'}$hit"
+        printf '%s\n' "$hit/solutions"
+    done
+    return 0
+}
+
+cmd_relate() {
+    local target sc other key tmp k o
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh relate <path-to-other-checkout>"
+    target="$1"
+    [ -d "$target" ] || refuse "relate: $target is not a directory"
+    (cd "$target" && in_repo) || refuse "relate: $target is not inside a git repository"
+    sc="$(do_resolve)" || exit 1
+    other=""
+    for k in $(cd "$target" && current_keys 2>/dev/null); do
+        o="$(owners_of "$k")" || refuse "relate: cannot look up $target's sidecar"
+        if [ -n "$o" ]; then other="$(printf '%s\n' "$o" | head -n 1)"; break; fi
+    done
+    [ -n "$other" ] || refuse "relate: no sidecar claims $target; run sidecar.sh init there first"
+    [ "$other" != "$sc" ] || refuse "relate: $target is this project"
+    key="$(jq -r '([.keys[]? | strings | select(startswith("root:"))][0]) // ([.keys[]? | strings][0]) // empty' "$other/sidecar.json")"
+    [ -n "$key" ] || refuse "relate: $other/sidecar.json carries no key"
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "relate: cannot write in $sc"
+    if jq --arg k "$key" '.solutions.related = (((.solutions.related // []) - [$k]) + [$k])' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "relate: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: relate $(basename "$other")" sidecar.json || exit 1
+    printf '%s\n' "$key"
+}
+
 cmd_path() {
     local sc
     [ $# -eq 1 ] || die_usage "usage: sidecar.sh path <research|solutions|review-responses>"
@@ -1361,6 +1445,8 @@ case "$verb" in
     range)   cmd_range "$@" ;;
     path)    cmd_path "$@" ;;
     solutions-dirs) cmd_solutions_dirs "$@" ;;
+    related-solutions-dirs) cmd_related_solutions_dirs "$@" ;;
+    relate)  cmd_relate "$@" ;;
     migrate-archive) cmd_migrate_archive "$@" ;;
     archive-dir) cmd_archive_dir "$@" ;;
     commit)  cmd_commit "$@" ;;
@@ -1368,5 +1454,5 @@ case "$verb" in
     backend) cmd_backend "$@" ;;
     stamp)   cmd_stamp "$@" ;;
     work)    cmd_work "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
 esac
