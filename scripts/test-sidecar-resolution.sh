@@ -838,6 +838,44 @@ check "a start_sha naming no commit falls back" "0 origin/main..HEAD" "$rc $out"
 contains "and names the item" "$S2 started at" "$err"
 mv "$RG_ROOT/rg/work/$S2.md.bak" "$RG_ROOT/rg/work/$S2.md"
 
+# The base moves under a recorded start: the start stays an ancestor of HEAD
+# but the range would fill with another PR's commits (and its Fix-Findings-Run
+# line). Its own clone, so the later cases keep their base.
+git clone -q "$RG/up" "$RG/p2"
+git -C "$RG/p2" remote set-head origin main >/dev/null
+git -C "$RG/p2" switch -q -c rebased
+P2_START="$(git -C "$RG/p2" rev-parse HEAD)"
+rrun "$RG/p2" work set "$S2" start_sha "$P2_START"
+printf 'f\n' > "$RG/p2/f.txt"; git -C "$RG/p2" add f.txt; git -C "$RG/p2" commit -q -m 'slice: f'
+rrun "$RG/p2" range "$S2"
+check "before the base moves the start is used (fixture sanity)" "0 $P2_START..HEAD" "$rc $out"
+printf 'o\n' > "$RG/up/o.txt"; git -C "$RG/up" add o.txt
+git -C "$RG/up" commit -q -m 'other PR: o' -m 'Fix-Findings-Run: 20200101T000000Z'
+git -C "$RG/p2" fetch -q origin
+git -C "$RG/p2" branch -q merged rebased
+git -C "$RG/p2" rebase -q origin/main >/dev/null 2>&1
+check "the rebased start is still an ancestor of HEAD (fixture sanity)" 0 \
+    "$(git -C "$RG/p2" merge-base --is-ancestor "$P2_START" HEAD; echo $?)"
+rrun "$RG/p2" range "$S2"
+check "after a rebase onto an advanced base the range is the base range" "0 origin/main..HEAD" "$rc $out"
+contains "the rebase notice names the work item" "$S2 started at" "$err"
+contains "and says the base moved" "the base moved under it" "$err"
+check "the base range lists only the slice's commit" "slice: f" \
+    "$(git -C "$RG/p2" log --format=%s "$out")"
+git -C "$RG/p2" switch -q merged
+git -C "$RG/p2" merge -q --no-edit origin/main >/dev/null 2>&1
+check "the merged branch holds the other PR's commit (fixture sanity)" "other PR: o" \
+    "$(git -C "$RG/p2" log --no-merges --format=%s -1 origin/main)"
+rrun "$RG/p2" range "$S2"
+check "after a merge from the base the range is the base range" "0 origin/main..HEAD" "$rc $out"
+contains "the merge notice names the work item" "$S2 started at" "$err"
+git -C "$RG/p2" switch -q rebased
+rrun "$RG/p2" work set "$S2" start_sha "$(git -C "$RG/p2" merge-base origin/main HEAD)"
+rrun "$RG/p2" range "$S2"
+check "a start recorded after the rebase is used again" \
+    "0 $(git -C "$RG/p2" merge-base origin/main HEAD)..HEAD" "$rc $out"
+check "and prints no notice" "" "$err"
+
 rrun "$RG/p" range W-99
 check "an id the sidecar backend does not hold exits 1 and prints no range" "1 " "$rc $out"
 printf 'not a work item\n' > "$RG_ROOT/rg/work/W-3.md"

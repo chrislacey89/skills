@@ -126,13 +126,16 @@
 #
 # range. The commits one slice's review covers, as <left>..HEAD. With a work
 # item whose start_sha (the HEAD /execute recorded when the slice started) is
-# an ancestor of HEAD, the left end is start_sha, so a branch carrying several
-# slices reviews and counts only this one. Every other case falls back to
+# an ancestor of HEAD, contains the branch's fork point from the base
+# (merge-base of base-ref and HEAD is an ancestor of it) and has no merge
+# after it, the left end is start_sha, so a branch carrying several slices
+# reviews and counts only this one. Every other case falls back to
 # base-ref's ref, which is never narrower than the slice: no <W-n>, a sidecar
 # miss, the github slices backend (it has no work item to hold start_sha), or
 # an item with no start_sha. A start_sha that is no longer an ancestor of HEAD
-# (a fold or rebase rewrote it) also falls back, with a notice on stderr naming
-# the item; it is never re-anchored. Could not look (base-ref failed, an
+# (a fold or rebase rewrote it), or that is still one but predates the base's
+# newer commits (a rebase onto an advanced base, a merge from the base), also
+# falls back, with a notice on stderr naming the item; it is never re-anchored. Could not look (base-ref failed, an
 # unreadable sidecar.json or work item, a <W-n> the sidecar backend does not
 # hold) exits 1 and prints no range.
 #
@@ -719,7 +722,7 @@ cmd_base_ref() {
 
 # The slice's review range; the outcomes are in the header.
 cmd_range() {
-    local id="" base sc errf f start rc
+    local id="" base sc errf f start rc fork merges why
     case "$#" in
         0) ;;
         1) id="$1"; is_work_id "$id" || die_usage "range: expected an id like W-3, got: $id" ;;
@@ -753,12 +756,37 @@ cmd_range() {
         rc=1
     fi
     case "$rc" in
-        0) printf '%s..HEAD\n' "$start" ;;
-        1) printf 'sidecar.sh: range: %s started at %s, which is no longer on this branch (a fold or rebase rewrote it); reviewing from %s instead\n' \
-               "$id" "${start:0:12}" "$base" >&2
-           printf '%s..HEAD\n' "$base" ;;
+        0|1) ;;
         *) refuse "range: git merge-base --is-ancestor $start HEAD exited $rc" ;;
     esac
+    why="is no longer on this branch (a fold or rebase rewrote it)"
+    if [ "$rc" = 0 ]; then
+        # Ancestry is not containment: a rebase onto an advanced base, or a merge
+        # from it, leaves the start an ancestor while the range fills with the
+        # base's own commits. Use the start only when it holds the fork point and
+        # no merge follows it.
+        rc=0
+        fork="$(pgit merge-base "$base" HEAD 2>/dev/null)" || rc=$?
+        case "$rc" in
+            0) if ! pgit merge-base --is-ancestor "$fork" "$start" 2>/dev/null; then
+                   rc=1
+               else
+                   merges="$(pgit log --merges --format=%H "$start..HEAD")" \
+                       || refuse "range: git log --merges $start..HEAD failed"
+                   [ -z "$merges" ] || rc=1
+               fi ;;
+            1) rc=1 ;;
+            *) refuse "range: git merge-base $base HEAD exited $rc" ;;
+        esac
+        [ "$rc" = 0 ] || why="no longer bounds only this branch's commits (the base moved under it: a rebase onto, or a merge from, $base)"
+    fi
+    if [ "$rc" = 0 ]; then
+        printf '%s..HEAD\n' "$start"
+    else
+        printf 'sidecar.sh: range: %s started at %s, which %s; reviewing from %s instead\n' \
+            "$id" "${start:0:12}" "$why" "$base" >&2
+        printf '%s..HEAD\n' "$base"
+    fi
 }
 
 cmd_migrate_archive() {
