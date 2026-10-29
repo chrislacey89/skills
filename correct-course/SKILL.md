@@ -72,6 +72,7 @@ Based on the trigger, determine the **earliest skill whose output is now untrust
 | Solution direction is wrong but the problem and appetite still hold | `/write-a-prd` |
 | Slice decomposition reveals work exceeds appetite | `/write-a-prd` (reshape), not `/prd-to-issues` (re-decompose) |
 | Boundary map contract was wrong, slices are still valid | `/prd-to-issues` |
+| PRD edited after decomposition (`/execute` Step 0's parent-PRD amendment gate stopped on a conflict), slice structure still valid | `/prd-to-issues` (re-decompose) |
 | Slice is correct but execution approach hit a wall | `/execute` (not a backtrack — try a different approach) |
 | Architectural concern from `/pre-merge` warrants rework | `/execute`, possibly `/request-refactor-plan` first |
 
@@ -85,6 +86,7 @@ Now list every durable artifact that needs to be dealt with before forward progr
 
 - **Research archive entry** (the absolute path the PRD cites; `/research` Phase 5c states where it is written) — if the earliest affected skill is `/shape`, leave the archive entry in place; it is point-in-time history and cannot mislead downstream skills that no longer reference it. If the earliest affected skill is `/research`, run `/research` again to produce a new dated entry superseding the old one; the prior snapshot remains in the archive as context. Archive entries are not deleted during backtracking — they live outside the repo and cost nothing to keep.
 - **PRD GitHub issue** — update in place if the problem and appetite still hold; comment and close if the entire PRD is being reshaped
+- **Slice GitHub issues for a PRD edited after decomposition** — `gh issue edit` each slice's acceptance criteria and boundary map to match the PRD's current text, then re-run `/prd-to-issues` § 8 to post a new `Decomposed into:` comment on the PRD. The new comment is what clears `/execute`'s amendment gate (it compares the PRD's last body edit with the latest such comment); editing the slice alone leaves the gate firing on every later run
 - **Slice GitHub issues** — comment on each and close as superseded if the PRD is being reshaped; comment and leave open only if the specific slice is still valid
 - **Planning or container milestone** — usually leave open; the milestone's feature issues or slice issues are the real artifacts
 - **Solutions entries** (in-tree or in the sidecar) — flag as stale if this situation reveals the documented lesson is wrong, but do not delete without the user's confirmation
