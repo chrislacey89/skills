@@ -17,6 +17,7 @@
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
 #   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
+#   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
 #   sidecar.sh path <research|solutions|review-responses>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
 #   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
@@ -31,7 +32,7 @@
 #                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
 #   sidecar.sh work view <W-n> [--json]
 #   sidecar.sh work edit <W-n> --body-file <f>   (refuses a body shorter than the one it replaces)
-#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha> <value>
+#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha|start_sha> <value>
 #   sidecar.sh work comment <W-n> --body-file <f>
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--unblocked] [--state <open|closed|all>]
@@ -122,6 +123,21 @@
 # string) and a declared base_ref that resolves to no ref exit 1 and print
 # nothing, because the fallback answers "nothing declared", never "could not
 # read what was declared". No base branch found at all exits 1 as well.
+#
+# range. The commits one slice's review covers, as <left>..HEAD. With a work
+# item whose start_sha (the HEAD /execute recorded when the slice started) is
+# an ancestor of HEAD, contains the branch's fork point from the base
+# (merge-base of base-ref and HEAD is an ancestor of it) and has no merge
+# after it, the left end is start_sha, so a branch carrying several slices
+# reviews and counts only this one. Every other case falls back to
+# base-ref's ref, which is never narrower than the slice: no <W-n>, a sidecar
+# miss, the github slices backend (it has no work item to hold start_sha), or
+# an item with no start_sha. A start_sha that is no longer an ancestor of HEAD
+# (a fold or rebase rewrote it), or that is still one but predates the base's
+# newer commits (a rebase onto an advanced base, a merge from the base), also
+# falls back, with a notice on stderr naming the item; it is never re-anchored. Could not look (base-ref failed, an
+# unreadable sidecar.json or work item, a <W-n> the sidecar backend does not
+# hold) exits 1 and prints no range.
 #
 # Identity. A sidecar is found by the keys in its sidecar.json, tried in order:
 #   root:<sha>               lexicographically first root commit; skipped in a
@@ -704,6 +720,75 @@ cmd_base_ref() {
     fi
 }
 
+# The slice's review range; the outcomes are in the header.
+cmd_range() {
+    local id="" base sc errf f start rc fork merges why
+    case "$#" in
+        0) ;;
+        1) id="$1"; is_work_id "$id" || die_usage "range: expected an id like W-3, got: $id" ;;
+        *) die_usage "usage: sidecar.sh range [<W-n>]" ;;
+    esac
+    base="$(cmd_base_ref)" || exit 1
+    [ -n "$id" ] || { printf '%s..HEAD\n' "$base"; return 0; }
+    errf="$(mktemp)" || refuse "range: cannot create a temp file"
+    if ! sc="$(do_resolve 2>"$errf")"; then
+        if grep -q 'SIDECAR MISS:' "$errf"; then
+            rm -f "$errf"; printf '%s..HEAD\n' "$base"; return 0
+        fi
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    rm -f "$errf"
+    f="$sc/work/$id.md"
+    if [ ! -f "$f" ]; then
+        case "$(cmd_backend slices 2>/dev/null)" in
+            github) printf '%s..HEAD\n' "$base"; return 0 ;;
+            *) refuse "range: no such work item: $id" ;;
+        esac
+    fi
+    start="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.start_sha // empty" "$f")" \
+        || refuse "range: $f does not parse"
+    [ -n "$start" ] || { printf '%s..HEAD\n' "$base"; return 0; }
+    printf '%s' "$start" | grep -qxE '[0-9a-f]{40}' || refuse "range: start_sha in $id is not 40 lowercase hex: $start"
+    rc=0
+    if pgit cat-file -e "$start^{commit}" 2>/dev/null; then
+        pgit merge-base --is-ancestor "$start" HEAD 2>/dev/null || rc=$?
+    else
+        rc=1
+    fi
+    case "$rc" in
+        0|1) ;;
+        *) refuse "range: git merge-base --is-ancestor $start HEAD exited $rc" ;;
+    esac
+    why="is no longer on this branch (a fold or rebase rewrote it)"
+    if [ "$rc" = 0 ]; then
+        # Ancestry is not containment: a rebase onto an advanced base, or a merge
+        # from it, leaves the start an ancestor while the range fills with the
+        # base's own commits. Use the start only when it holds the fork point and
+        # no merge follows it.
+        rc=0
+        fork="$(pgit merge-base "$base" HEAD 2>/dev/null)" || rc=$?
+        case "$rc" in
+            0) if ! pgit merge-base --is-ancestor "$fork" "$start" 2>/dev/null; then
+                   rc=1
+               else
+                   merges="$(pgit log --merges --format=%H "$start..HEAD")" \
+                       || refuse "range: git log --merges $start..HEAD failed"
+                   [ -z "$merges" ] || rc=1
+               fi ;;
+            1) rc=1 ;;
+            *) refuse "range: git merge-base $base HEAD exited $rc" ;;
+        esac
+        [ "$rc" = 0 ] || why="no longer bounds only this branch's commits (the base moved under it: a rebase onto, or a merge from, $base)"
+    fi
+    if [ "$rc" = 0 ]; then
+        printf '%s..HEAD\n' "$start"
+    else
+        printf 'sidecar.sh: range: %s started at %s, which %s; reviewing from %s instead\n' \
+            "$id" "${start:0:12}" "$why" "$base" >&2
+        printf '%s..HEAD\n' "$base"
+    fi
+}
+
 cmd_migrate_archive() {
     local aliases="" sc keys
     while [ $# -gt 0 ]; do
@@ -948,7 +1033,7 @@ cmd_stamp() {
 
 WORK_ID_RE='W-[0-9]+'
 WORK_COMMENT_RE='^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
-WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","reviewed_sha","superseded_by","created"]'
+WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","reviewed_sha","start_sha","superseded_by","created"]'
 
 # jq definitions shared by every work verb. parse_work reads a whole work file
 # (jq -Rs) into {fm, body, tail}: tail is the comment sections, kept as raw
@@ -1163,7 +1248,7 @@ work_edit() {
 
 work_set() {
     local id="${1:-}" field="${2:-}" value="${3-}" kind
-    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha> <value>"
+    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha|start_sha> <value>"
     work_existing "$id"
     case "$value" in *$'\n'*) die_usage "work set: the value must be one line" ;; esac
     kind="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.kind" "$WORK_DIR/$id.md")" || refuse "work set: $WORK_DIR/$id.md does not parse"
@@ -1176,9 +1261,9 @@ work_set() {
             [ "$kind" = prd ] || refuse "work set: decomposed_into is for prds; $id is a $kind"
             value="$(work_ids_csv decomposed_into "$value")" || exit $? ;;
         pr) [ -n "$value" ] || die_usage "work set: pr needs a value" ;;
-        reviewed_sha)
-            printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: reviewed_sha must be 40 lowercase hex characters: $value" ;;
-        *) die_usage "work set: field must be state, maturity, decomposed_into, pr, or reviewed_sha" ;;
+        reviewed_sha|start_sha)
+            printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: $field must be 40 lowercase hex characters: $value" ;;
+        *) die_usage "work set: field must be state, maturity, decomposed_into, pr, reviewed_sha, or start_sha" ;;
     esac
     if [ "$field" = decomposed_into ]; then
         # Replaced, never appended to: the reader always sees the latest decomposition.
@@ -1273,6 +1358,7 @@ case "$verb" in
     init)    cmd_init "$@" ;;
     config)  cmd_config "$@" ;;
     base-ref) cmd_base_ref "$@" ;;
+    range)   cmd_range "$@" ;;
     path)    cmd_path "$@" ;;
     solutions-dirs) cmd_solutions_dirs "$@" ;;
     migrate-archive) cmd_migrate_archive "$@" ;;
@@ -1282,5 +1368,5 @@ case "$verb" in
     backend) cmd_backend "$@" ;;
     stamp)   cmd_stamp "$@" ;;
     work)    cmd_work "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|path|solutions-dirs|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
 esac

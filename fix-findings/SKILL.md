@@ -88,6 +88,10 @@ human to dispose of findings, so there is no valid input.
   finding is a reconstruction.
 - **A branch with a review behind it** — a `/pre-merge` review, or a
   teammate's review on its open PR. Working tree clean.
+- **The slice's work item id** (`W-<n>`), on the sidecar backend: the one
+  `/pre-merge` Phase 1 step 2 named. § Handoff's round count reads it, so a
+  branch carrying several slices counts only this slice's rounds. On the
+  `github` backend there is none, and the count covers the branch.
 
 If a number the human gave does not correspond to a finding, say which numbers
 exist and stop. Do not guess at intent, and do not silently fix the neighbors.
@@ -624,9 +628,15 @@ depends on how many rounds this branch has already had, and that number is read
 from the tree — the `Fix-Findings-Run:` line Step 1 writes — never recalled:
 
 ```bash
-# $BASE_REF: the base branch's ref, from `bash "$SC" base-ref`.
-ROUNDS=$(git log --format=%B "$BASE_REF..HEAD" | sed -n 's/^Fix-Findings-Run: //p' | sort -u | wc -l | tr -d ' ')
+SC="<this skill's directory>/references/sidecar.sh"
+W="<the slice's W-<n> from § Inputs, or empty on the github backend>"
+RANGE="$(bash "$SC" range ${W:+"$W"})" || { echo "round count aborted: sidecar.sh range failed" >&2; exit 1; }
+ROUNDS=$(git log --format=%B "$RANGE" | sed -n 's/^Fix-Findings-Run: //p' | sort -u | wc -l | tr -d ' ')
 ```
+
+`range` is the slice's commits when its work item records a start still on
+this branch, and the range from `base-ref` otherwise. Step 1's blame range stays on
+`base-ref`, because a fixup may target an earlier slice's commit.
 
 **Below two rounds**, recommended option first: **→ Re-run `/pre-merge`
 (recommended — review the fixes and re-stamp)**, **Fix another finding —

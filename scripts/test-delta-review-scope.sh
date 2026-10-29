@@ -118,6 +118,16 @@ scope_block="$(awk '
 scope_block="${scope_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
 [[ "$scope_block" == *"$sidecar_sh"* ]] \
     || fatal "scope block's sidecar.sh placeholder was not substituted"
+# The work item step 2 named (#599): empty unless a case sets SCOPE_W, so every
+# case before section 9b runs as the github backend does, with no work item.
+# shellcheck disable=SC2016  # the ${...} is text for the extracted block to expand, not this shell
+scope_block="$(printf '%s\n' "$scope_block" | sed 's/^W="<[^"]*>"$/W="${SCOPE_W:-}"/')"
+# shellcheck disable=SC2016  # the pattern is the substituted literal text
+[[ "$scope_block" == *'W="${SCOPE_W:-}"'* ]] \
+    || fatal "scope block's W= placeholder was not substituted"
+# shellcheck disable=SC2016
+[[ "$scope_block" == *'RANGE="$(bash "$SC" range ${W:+"$W"})"'* ]] \
+    || fatal "scope block extracted from $premerge_skill no longer takes the first-review endpoint from sidecar.sh range"
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
 [[ "$scope_block" == *'REVIEWED_SHA=$(gh pr list --head'* ]] \
     || fatal "scope block extracted from $premerge_skill no longer reads the PR body on the github backend"
@@ -134,6 +144,15 @@ scope_block="${scope_block//<this skill\'s directory>\/references\/sidecar.sh/$s
 # shellcheck disable=SC2016  # the grep pattern is the skill's literal text — $(git log is markdown being matched, not a command substitution
 rounds_line="$(grep -m1 '^ROUNDS=\$(git log' "$fixfindings_skill" || true)"
 [[ -n "$rounds_line" ]] || fatal "no ROUNDS= line found in $fixfindings_skill"
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+[[ "$rounds_line" == *'git log --format=%B "$RANGE"'* ]] || fatal "the ROUNDS line in $fixfindings_skill no longer counts over \$RANGE"
+# shellcheck disable=SC2016
+range_line="$(grep -m1 '^RANGE="\$(bash "\$SC" range' "$fixfindings_skill" || true)"
+[[ -n "$range_line" ]] || fatal "no RANGE= line from sidecar.sh range found in $fixfindings_skill"
+grep -q '^W="<the slice' "$fixfindings_skill" || fatal "no W= placeholder for the slice found in $fixfindings_skill"
+# The three lines as the skill runs them, W taken from ROUNDS_W (empty: no work item).
+# shellcheck disable=SC2016  # the ${...} is text for the extracted block to expand, not this shell
+rounds_block="SC=\"$sidecar_sh\""$'\n''W="${ROUNDS_W:-}"'$'\n'"$range_line"$'\n'"$rounds_line"
 
 # The fold block from Phase 4's handoff (#566): from its BASE_REF guard to the
 # `fi` that closes the abort arm. Run in section 11 rather than restated, so a
@@ -392,7 +411,7 @@ assert_eq "review scope: whole branch, from main" \
 
 # --- 6. Round count from the Fix-Findings-Run line -------------------------------
 section "/fix-findings' round count is read from the tree"
-run_rounds() { (cd "$repo" && BASE_REF=main bash -c "$rounds_line; printf '%s' \"\$ROUNDS\""); }
+run_rounds() { (cd "$repo" && bash -c "$rounds_block"$'\n'"printf '%s' \"\$ROUNDS\"" 2>/dev/null); }
 
 assert_eq "0" "$(run_rounds)" "no Fix-Findings-Run line on the branch: zero rounds"
 before_count="$(git -C "$repo" rev-list --count HEAD)"
@@ -579,6 +598,76 @@ assert_eq "review scope: whole branch, from main" \
     "sidecar, merge after the stamp: whole branch"
 assert_eq "" "$(git -C "$repo2" status --porcelain)" \
     "sidecar backend: the scope read and every stamp verb left the project tree clean"
+
+# --- 9b. Two slices on one branch (#599) ----------------------------------------
+section "two slices on one branch: the second slice's first review and round count cover only its commits"
+# A long-lived branch carrying two slices, each with a fix round. /execute
+# records each slice's start as start_sha; range reads it. Without it the second
+# slice's first review re-read the first slice, and its round count included
+# the first slice's Fix-Findings-Run lines, which reordered the next-step menu.
+repo_slices="$sandbox/repo_slices"
+mkdir -p "$repo_slices"
+(
+    cd "$repo_slices" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base4\n' > base.txt
+    git add base.txt && git commit -q -m 'base (two-slice fixture)'
+    git switch -q -c feature
+)
+(cd "$repo_slices" && bash "$sidecar_sh" init --name slices --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+    || fatal "sidecar init failed in the two-slice fixture"
+printf 'slice\n' > "$sandbox/slice-body"
+w1="$(cd "$repo_slices" && bash "$sidecar_sh" work create --kind slice --body-file "$sandbox/slice-body" 2>/dev/null)"
+w2="$(cd "$repo_slices" && bash "$sidecar_sh" work create --kind slice --body-file "$sandbox/slice-body" 2>/dev/null)"
+assert_eq "W-1 W-2" "$w1 $w2" "fixture precondition: two slice work items"
+(cd "$repo_slices" && bash "$sidecar_sh" work set "$w1" start_sha "$(git rev-parse HEAD)" >/dev/null 2>&1) || fatal "start_sha for $w1 failed"
+before_count="$(git -C "$repo_slices" rev-list --count HEAD)"
+(
+    cd "$repo_slices" || exit 1
+    printf 's1\n' > s1.txt && git add s1.txt && git commit -q -m 'slice 1'
+    printf 's1fix\n' > s1fix.txt && git add s1fix.txt \
+        && git commit -q -m "$(printf 'fix: slice 1 finding\n\nFix-Findings-Run: 20261001T100000Z')"
+)
+assert_fixture_committed "$repo_slices" "two-slice fixture: slice 1" "$before_count" 2 s1.txt s1fix.txt
+(cd "$repo_slices" && bash "$sidecar_sh" work set "$w2" start_sha "$(git rev-parse HEAD)" >/dev/null 2>&1) || fatal "start_sha for $w2 failed"
+w2_start="$(git -C "$repo_slices" rev-parse HEAD)"
+before_count="$(git -C "$repo_slices" rev-list --count HEAD)"
+(
+    cd "$repo_slices" || exit 1
+    printf 's2\n' > s2.txt && git add s2.txt && git commit -q -m 'slice 2'
+    printf 's2fix\n' > s2fix.txt && git add s2fix.txt \
+        && git commit -q -m "$(printf 'fix: slice 2 finding\n\nFix-Findings-Run: 20261002T100000Z')"
+)
+assert_fixture_committed "$repo_slices" "two-slice fixture: slice 2" "$before_count" 2 s2.txt s2fix.txt
+(cd "$repo_slices" && bash "$sidecar_sh" stamp clear feature >/dev/null 2>&1)
+
+run_scope_slices() {
+    local out files scope
+    out="$(cd "$repo_slices" && SCOPE_W="$1" bash -c "$scope_block" 2>&1)"
+    scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
+    files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
+    printf '%s|%s' "$scope" "$files"
+}
+assert_eq "review scope: whole slice, from $w2_start ($w2's recorded start)|s2.txt s2fix.txt" \
+    "$(run_scope_slices "$w2")" \
+    "the second slice's first review reads only its own two files"
+assert_eq "review scope: whole branch, from main|s1.txt s1fix.txt s2.txt s2fix.txt" \
+    "$(run_scope_slices "")" \
+    "with no work item the first review is the whole branch, as before"
+w2_stamp="$(git -C "$repo_slices" rev-parse HEAD)"
+(cd "$repo_slices" && bash "$sidecar_sh" stamp write feature "$w2_stamp" >/dev/null 2>&1) || fatal "stamp write failed"
+before_count="$(git -C "$repo_slices" rev-list --count HEAD)"
+( cd "$repo_slices" && printf 's2b\n' > s2b.txt && git add s2b.txt && git commit -q -m 'slice 2: after its stamp' )
+assert_fixture_committed "$repo_slices" "two-slice fixture: post-stamp" "$before_count" 1 s2b.txt
+assert_eq "review scope: post-stamp delta, from $w2_stamp|s2b.txt" \
+    "$(run_scope_slices "$w2")" \
+    "a stamped re-run still takes the post-stamp delta when a work item is named"
+
+run_rounds_slices() { (cd "$repo_slices" && ROUNDS_W="$1" bash -c "$rounds_block"$'\n'"printf '%s' \"\$ROUNDS\"" 2>/dev/null); }
+assert_eq "1" "$(run_rounds_slices "$w2")" "the second slice's round count ignores the first slice's Fix-Findings-Run line"
+assert_eq "2" "$(run_rounds_slices "")" "with no work item the round count covers the branch, as before"
 
 # --- 10. A failed backend -----------------------------------------------------
 

@@ -213,6 +213,21 @@ Each verdict takes the action listed above, with these differences:
 - **`in-flight [...]`** — the item's `pr` field is set. A sidecar has no `closedByPullRequestsReferences`, so the field is the only signal, and it carries no branch to compare with the current one. When the PR it names is the one this branch opened, continue; otherwise the GraphQL rule applies.
 - **`takeable ever_wired=<k> comments=<m>`** — `ever_wired` counts every `blocked_by` id. Unlike on GitHub, `0` is a real empty list: `/prd-to-issues` writes `blocked_by` with the slice, so there is no pre-wiring repo for it to be confused with.
 
+**Record where the slice starts.** On `takeable`, once the branch this slice will be committed on is checked out and before its first commit, record `HEAD` as the work item's `start_sha`. `sidecar.sh range` reads it, so `/pre-merge`'s first review and `/fix-findings`' round count cover this slice's commits rather than every slice on a long-lived branch. A start already recorded is kept: a later iteration on the same slice must not move it forward past commits the slice already made, and a start a fold or rebase rewrote is not re-anchored either (`range` falls back to the base and says so):
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+J="$(bash "$SC" work view "$W" --json)" || { echo "start not recorded: cannot read $W" >&2; exit 1; }
+if [ -z "$(jq -r '.start_sha // empty' <<<"$J")" ]; then
+  bash "$SC" work set "$W" start_sha "$(git rev-parse HEAD)"
+else
+  echo "start_sha already recorded on $W: $(jq -r .start_sha <<<"$J")"
+fi
+```
+
+On the `github` backend there is no work item to hold it, and `range` reviews from the base.
+
 Skip this gate for one-off tasks not tied to a GitHub issue or a work item.
 
 **Ralph auto-detection gate.** Evaluate all three conditions:
