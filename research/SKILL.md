@@ -192,7 +192,7 @@ done
 true
 ```
 
-List matches from both locations; one does not shadow the other. A line marked `related project, unverified here:` comes from another project's sidecar the user linked with `sidecar.sh relate` (its header states the policy): read it as evidence about a sibling system, confirm it against this repo before relying on it, and never edit it. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention, not a `/compound` entry: read it as a plain document, and skip the staleness check below, which depends on frontmatter it does not carry.
+List matches from both locations; one does not shadow the other. A line marked `related project, unverified here:` comes from another project's sidecar, one in this repo's `solutions.system` group or linked with `sidecar.sh relate` (its header states the policy): read it as evidence about a sibling system, confirm it against this repo before relying on it, and never edit it. A match under an `in_tree_path` other than `docs/solutions` (`docs/adr`, `docs/decisions`, …) is that repo's own convention, not a `/compound` entry: read it as a plain document, and skip the staleness check below, which depends on frontmatter it does not carry.
 
 If relevant solutions exist, read them and incorporate their lessons. Note which past pitfalls or patterns apply. This is the compounding benefit — past work makes future research faster and more accurate.
 

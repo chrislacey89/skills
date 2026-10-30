@@ -1758,5 +1758,158 @@ lacks "the compound overlap block does not read related projects" "related-solut
 lacks "compound/SKILL.md does not read related projects" "related-solutions-dirs" "$(cat "$COMPOUND")"
 lacks "help/SKILL.md does not read related projects" "related-solutions-dirs" "$(cat "$repo_root/help/SKILL.md")"
 
+# -----------------------------------------------------------------------------
+section "system label: solutions.system and the group read path"
+
+# Pairwise links need n x (n-1) relate calls to cover a group and go patchy
+# silently. A repo declares its group once; related-solutions-dirs prints every
+# other sidecar carrying the same label. The label adds a read edge, never a
+# shared store.
+GA="$tmp/grp/a"; GB="$tmp/grp/b"; GC="$tmp/grp/c"; GD="$tmp/grp/d"; GE="$tmp/grp/e"
+for d in "$GA" "$GB" "$GC" "$GD" "$GE"; do
+    mkrepo "$d"
+    (cd "$d" && bash "$SC" init --name "grp-$(basename "$d")" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1)
+    mkdir -p "$SKILL_KIT_SIDECAR_ROOT/grp-$(basename "$d")/solutions/integration"
+    printf 'needle from %s\n' "$(basename "$d")" > "$SKILL_KIT_SIDECAR_ROOT/grp-$(basename "$d")/solutions/integration/$(basename "$d").md"
+done
+SGA="$SKILL_KIT_SIDECAR_ROOT/grp-a"; SGB="$SKILL_KIT_SIDECAR_ROOT/grp-b"; SGC="$SKILL_KIT_SIDECAR_ROOT/grp-c"; SGD="$SKILL_KIT_SIDECAR_ROOT/grp-d"; SGE="$SKILL_KIT_SIDECAR_ROOT/grp-e"
+ga_dirs_before="$(cd "$GA" && bash "$SC" solutions-dirs 2>/dev/null)"
+
+run "$GA" config set system payments-platform
+check "config set system exits 0" 0 "$rc"
+check "config set system stores solutions.system" "payments-platform" "$(jq -r '.solutions.system' "$SGA/sidecar.json")"
+check "config set system commits sidecar.json" "" "$(git -C "$SGA" status --porcelain sidecar.json)"
+
+# Three sidecars carrying one label see each other, in both directions.
+runo "$GB" config set system payments-platform
+runo "$GC" config set system payments-platform
+runo "$GA" related-solutions-dirs
+check "a labeled sidecar prints the other two members and not itself" "0 $SGB/solutions
+$SGC/solutions" "$rc $out"
+runo "$GC" related-solutions-dirs
+check "the group reads the same from another member" "0 $SGA/solutions
+$SGB/solutions" "$rc $out"
+check "no relate call stored a key" "null" "$(jq -c '.solutions.related' "$SGA/sidecar.json")"
+
+# No label, or a different one, is not a member, and an unlabeled sidecar's
+# output does not change when other sidecars carry labels.
+runo "$GE" config set system other-group
+runo "$GA" related-solutions-dirs
+lacks "a sidecar with no label is not printed" "grp-d" "$out"
+lacks "a sidecar with a different label is not printed" "grp-e" "$out"
+runo "$GD" related-solutions-dirs
+check "an unlabeled sidecar prints nothing" "0 " "$rc $out"
+out="$(cd "$GD" && bash "$SC" related-solutions-dirs 2>&1)"
+check "an unlabeled sidecar does not scan its neighbors" "" "$out"
+
+# Membership is the label alone: a member's own links are not followed, and a
+# project reached both ways prints once.
+runo "$GB" relate "$GD"
+runo "$GA" related-solutions-dirs
+lacks "a member's relate link is not followed" "grp-d" "$out"
+runo "$GA" relate "$GB"
+runo "$GA" relate "$GD"
+runo "$GA" related-solutions-dirs
+check "a relate link adds to the group and a member prints once" "$SGB/solutions
+$SGC/solutions
+$SGD/solutions" "$out"
+jq 'del(.solutions.related)' "$SGA/sidecar.json" > "$SGA/sj" && mv "$SGA/sj" "$SGA/sidecar.json"
+git -C "$SGA" commit -q -am "test: drop the links again"
+
+# A member with no solutions/ yet is skipped, and not created.
+mv "$SGC/solutions" "$SGC/solutions.away"
+runo "$GA" related-solutions-dirs
+check "a member with no solutions dir is skipped" "$SGB/solutions" "$out"
+check "the scan does not create a member's solutions dir" "no" "$([ -e "$SGC/solutions" ] && echo yes || echo no)"
+mv "$SGC/solutions.away" "$SGC/solutions"
+
+# An unreadable sibling is named and skipped, in each form the scan can meet.
+UNR="$SKILL_KIT_SIDECAR_ROOT/grp-unreadable"
+mkdir -p "$UNR"
+printf '{not json' > "$UNR/sidecar.json"
+out="$(cd "$GA" && bash "$SC" related-solutions-dirs 2>"$tmp/grp.err")"; rc=$?
+check "a corrupt sibling sidecar.json still exits 0 and prints the members" "0 $SGB/solutions
+$SGC/solutions" "$rc $out"
+contains "a corrupt sibling sidecar.json is named on stderr" "cannot read $UNR/sidecar.json; skipped" "$(cat "$tmp/grp.err")"
+printf '[]' > "$UNR/sidecar.json"
+out="$(cd "$GA" && bash "$SC" related-solutions-dirs 2>"$tmp/grp.err")"; rc=$?
+check "a sibling sidecar.json of the wrong shape still exits 0" "0 $SGB/solutions
+$SGC/solutions" "$rc $out"
+contains "a sibling sidecar.json of the wrong shape is named on stderr" "cannot read $UNR/sidecar.json; skipped" "$(cat "$tmp/grp.err")"
+rm "$UNR/sidecar.json"; ln -s "$UNR/gone" "$UNR/sidecar.json"
+out="$(cd "$GA" && bash "$SC" related-solutions-dirs 2>"$tmp/grp.err")"; rc=$?
+check "a dangling sibling sidecar.json still exits 0" "0 $SGB/solutions
+$SGC/solutions" "$rc $out"
+contains "a dangling sibling sidecar.json is named on stderr" "cannot read $UNR/sidecar.json (not a readable regular file); skipped" "$(cat "$tmp/grp.err")"
+rm "$UNR/sidecar.json"
+printf '{}' > "$UNR/sidecar.json"
+chmod 000 "$UNR"
+out="$(cd "$GA" && bash "$SC" related-solutions-dirs 2>"$tmp/grp.err")"; rc=$?
+chmod 755 "$UNR"
+if [ "$(id -u)" = 0 ]; then
+    ok "skipped as root: mode 000 does not stop root"
+else
+    check "a sibling directory that cannot be entered still exits 0" "0 $SGB/solutions
+$SGC/solutions" "$rc $out"
+    contains "a sibling directory that cannot be entered is named on stderr" "cannot read $UNR (cannot enter the directory); skipped" "$(cat "$tmp/grp.err")"
+fi
+rm -rf "$UNR"
+
+# An ill-formed label on this project is refused rather than read as "no group".
+jq '.solutions.system = "Payments-Platform"' "$SGE/sidecar.json" > "$SGE/sj" && mv "$SGE/sj" "$SGE/sidecar.json"
+run "$GE" related-solutions-dirs
+check "an ill-formed own label refuses" 1 "$rc"
+contains "the refusal names the label" "Payments-Platform" "$out"
+jq '.solutions.system = 7' "$SGE/sidecar.json" > "$SGE/sj" && mv "$SGE/sj" "$SGE/sidecar.json"
+run "$GE" related-solutions-dirs
+check "a non-string own label refuses" 1 "$rc"
+git -C "$SGE" checkout -q -- sidecar.json
+
+# The verb: the shape is enforced, "" leaves the group, and a new label warns.
+for bad in "Payments" "a b" ".hidden" "a/b"; do
+    run "$GD" config set system "$bad"
+    check "config set system refuses [$bad]" 2 "$rc"
+done
+check "a refused label writes nothing" "null" "$(jq -c '.solutions.system' "$SGD/sidecar.json")"
+ILL="$SKILL_KIT_SIDECAR_ROOT/grp-ill"
+mkdir -p "$ILL"
+printf '{"solutions":{"system":"Bad Label"}}' > "$ILL/sidecar.json"
+run "$GD" config set system payment-platform
+rm -rf "$ILL"
+check "a label no other sidecar carries is still written" "0 payment-platform" "$rc $(jq -r '.solutions.system' "$SGD/sidecar.json")"
+contains "a new label is named on stderr" "no other sidecar carries system label payment-platform" "$out"
+contains "the warning lists only well-formed labels in use" "labels in use: other-group, payments-platform)" "$out"
+run "$GD" config set system payments-platform
+lacks "joining a label in use does not warn" "no other sidecar" "$out"
+runo "$GA" related-solutions-dirs
+contains "a joining member shows up for the others" "$SGD/solutions" "$out"
+run "$GD" config set system ""
+check "an empty label leaves the group" "0 null" "$rc $(jq -c '.solutions.system' "$SGD/sidecar.json")"
+check "leaving the group commits" "" "$(git -C "$SGD" status --porcelain sidecar.json)"
+runo "$GA" related-solutions-dirs
+lacks "a member that left is not printed" "grp-d" "$out"
+run "$GB" config set system payments-platform
+lacks "re-setting a label does not warn while others carry it" "no other sidecar" "$out"
+
+# Read-only, and only the planning readers see the group.
+check "solutions-dirs is unchanged by a system label" "$ga_dirs_before" "$(cd "$GA" && bash "$SC" solutions-dirs 2>/dev/null)"
+ga_head="$(git -C "$SGB" rev-parse HEAD)"
+(cd "$GA" && bash "$SC" related-solutions-dirs >/dev/null 2>&1)
+check "the group read commits nothing in a member's sidecar" "$ga_head" "$(git -C "$SGB" rev-parse HEAD)"
+for pair in "research Phase 3:$p3" "execute past-solutions:$e_read" "write-a-prd past-solutions:$w_read"; do
+    out="$(cd "$GA" && bash -c "$(with_sc "${pair#*:}" | sed -e 's|^KW=.*|KW="needle"|')" 2>/dev/null)"
+    contains "the ${pair%%:*} block labels a group member's hit" "related project, unverified here: $SGB/solutions/integration/b.md" "$out"
+done
+out="$(cd "$GA" && bash -c "$(with_sc "$c_read" | sed -e 's|^KW=.*|KW="needle"|')" 2>/dev/null)"
+contains "the compound overlap block reads this project's own entry" "$SGA/solutions/integration/a.md" "$out"
+lacks "the compound overlap block does not read a group member's entry" "grp-b" "$out"
+
+# /init-pipeline offers the label once rather than one relate call per sibling,
+# and the state table names the group read path.
+contains "/init-pipeline offers the system label" 'config set system <label>' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+lacks "/init-pipeline no longer offers one relate call per sibling" 'one call per sibling' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+# shellcheck disable=SC2016  # literal pattern
+contains "SYSTEM-OVERVIEW's Institutional knowledge row names the group read path" 'same `solutions.system` label' "$(grep '^| Institutional knowledge |' "$repo_root/SYSTEM-OVERVIEW.md")"
+
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

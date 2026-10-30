@@ -16,6 +16,7 @@
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
+#   sidecar.sh config set system <label>   (joins this project's group for related-solutions-dirs; "" leaves it)
 #   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager> <cmd>   ("" declares none)
 #   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
 #   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards)
@@ -23,8 +24,8 @@
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
 #   sidecar.sh path <research|solutions|review-responses>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
-#   sidecar.sh relate <path-to-other-checkout>   (links another project's sidecar for related-solutions-dirs; prints the key stored)
-#   sidecar.sh related-solutions-dirs   (prints, one per line, the related projects' solutions dirs; no sidecar needed)
+#   sidecar.sh relate <path-to-other-checkout>   (links one project outside the group for related-solutions-dirs; prints the key stored)
+#   sidecar.sh related-solutions-dirs   (prints, one per line, the group's and the linked projects' solutions dirs; no sidecar needed)
 #   sidecar.sh migrate-archive [--archive-alias <dir>]...   (init's archive migration, for a sidecar that already exists; safe to re-run)
 #   sidecar.sh archive-dir   (prints <archive root>/<suggested name>; no sidecar needed)
 #   sidecar.sh commit -- <path>... -m <msg>
@@ -114,12 +115,20 @@
 #
 # related-solutions-dirs policy. Lessons about something several repositories
 # share (a gateway, a bus, an internal library) land in one repo's sidecar.
+# solutions.system is this project's group label, which config set writes;
+# every other sidecar under the sidecar root carrying the same label is a
+# member, so membership is symmetric and a new repo joins by setting its own
+# key. A sibling's sidecar.json that cannot be read is named on stderr and
+# skipped, and a sibling with no well-formed label is not a member. Sidecars
+# are local, so a group reaches only the members on this machine.
 # solutions.related lists identity keys of other projects' sidecars, which
-# relate writes; this verb prints each one's solutions/ that exists, in list
-# order, and never creates it. One hop: a related sidecar's own
-# solutions.related is not read. A key that matches no sidecar, or whose
-# lookup fails, is named on stderr and skipped, because a missing neighbor
-# must not block planning here. Nothing writes through these paths, and
+# relate writes, for a single link outside the group. This verb prints the
+# solutions/ that exists of each member, in sidecar-name order, then of each
+# related key, in list order, each project once, and never creates one. One
+# hop: a related sidecar's own solutions.related and solutions.system are not
+# read. A key that matches no sidecar, or whose lookup fails, is named on
+# stderr and skipped, because a missing neighbor must not block planning
+# here. Nothing writes through these paths, and
 # solutions-dirs does not print them, so /compound's overlap check never
 # edits, dedupes against, or counts another project's entry. With no sidecar
 # it prints nothing. chrislacey89/skills#405's rule of one user and one
@@ -136,6 +145,10 @@
 # never by editing sidecar.json. It overwrites forge.write with the derived
 # value. base_ref is the base branch's bare name (develop, not origin/develop),
 # checked against the same rule base-ref reads it with before it is written.
+# system is one sidecar-name-shaped label ([a-z0-9._-], no leading dot); ""
+# removes it. A label no other sidecar carries is written anyway and named on
+# stderr with the labels in use, because a mistyped label is a silent group of
+# one and the first member of a real group looks the same.
 # verify.<field> is a one-line command that is not all blanks; "" declares that
 # the repo has none.
 # verify.hazards is a JSON array whose every entry has a non-empty one-line
@@ -368,6 +381,36 @@ owners_of() {
         done
     fi
     [ -z "$hits" ] || printf '%s\n' "$hits"
+}
+
+# Sidecar names and system labels share one shape.
+label_ok() { case "$1" in ''|.*|*/*|*[!a-z0-9._-]*) return 1 ;; esac; }
+
+# "<label><TAB><sidecar dir>", one line per sidecar with a well-formed system
+# label, in sidecar-name order. Unlike owners_of, nothing here can claim an
+# identity, so a sidecar it cannot read is only named on stderr and skipped.
+system_labels() {
+    local d f label
+    for d in "$SIDECAR_ROOT"/*/; do
+        [ -d "$d" ] || continue
+        d="${d%/}"
+        f="$d/sidecar.json"
+        if [ ! -x "$d" ]; then
+            printf 'sidecar.sh: cannot read %s (cannot enter the directory); skipped\n' "$d" >&2
+            continue
+        fi
+        if [ ! -f "$f" ]; then
+            if [ -L "$f" ] || [ -e "$f" ]; then
+                printf 'sidecar.sh: cannot read %s (not a readable regular file); skipped\n' "$f" >&2
+            fi
+            continue
+        fi
+        if ! label="$(jq -r '.solutions.system | strings' "$f" 2>/dev/null)"; then
+            printf 'sidecar.sh: cannot read %s; skipped\n' "$f" >&2
+            continue
+        fi
+        if label_ok "$label"; then printf '%s\t%s\n' "$label" "$d"; fi
+    done
 }
 
 suggest_name() {
@@ -652,15 +695,16 @@ cmd_config() {
             jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
             ;;
         set)
-            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|verify.<field> <value>>"
+            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>>"
             case "$2" in
                 mode) config_set_mode "$3" ;;
                 base_ref) config_set_base_ref "$3" ;;
+                system) config_set_system "$3" ;;
                 verify.*) config_set_verify "${2#verify.}" "$3" ;;
-                *) die_usage "config set: expected mode, base_ref, or verify.<field>, got: $2" ;;
+                *) die_usage "config set: expected mode, base_ref, system, or verify.<field>, got: $2" ;;
             esac
             ;;
-        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|verify.<field> <value>>>" ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>>>" ;;
     esac
 }
 
@@ -695,6 +739,33 @@ config_set_base_ref() {
         rm -f "$tmp"; refuse "config set: could not update sidecar.json"
     fi
     commit_paths "$sc" "sidecar: set base_ref $b" sidecar.json || exit 1
+}
+
+config_set_system() {
+    local label="$1" sc tmp filter line others=""
+    # shellcheck disable=SC2016 # $l is a jq variable
+    filter='.solutions.system = $l'
+    if [ -z "$label" ]; then
+        filter='del(.solutions.system)'
+    elif ! label_ok "$label"; then
+        die_usage "config set: system must be lowercase letters, digits, '.', '_' or '-': $label"
+    fi
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    if jq --arg l "$label" "$filter" < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set system ${label:-none}" sidecar.json || exit 1
+    [ -n "$label" ] || return 0
+    for line in $(system_labels); do
+        [ "${line#*$'\t'}" != "$sc" ] || continue
+        [ "${line%%$'\t'*}" != "$label" ] || return 0
+        others="${others:+$others$'\n'}${line%%$'\t'*}"
+    done
+    others="$(printf '%s\n' "$others" | LC_ALL=C sort -u | sed '/^$/d' | paste -sd, - | sed 's/,/, /g')"
+    printf 'sidecar.sh: no other sidecar carries system label %s yet (labels in use: %s); check the spelling, because a mistyped label is a group of one\n' "$label" "${others:-none}" >&2
 }
 
 # The verify command fields, in the order profile prints them. config set
@@ -972,7 +1043,7 @@ cmd_solutions_dirs() {
 }
 
 cmd_related_solutions_dirs() {
-    local sc="" err rel key hit rc seen=""
+    local sc="" err own rel key hit rc line hits="" seen=""
     [ $# -eq 0 ] || die_usage "usage: sidecar.sh related-solutions-dirs"
     err="$(mktemp)" || refuse "related-solutions-dirs: cannot create a temp file"
     if ! sc="$(do_resolve 2>"$err")"; then
@@ -986,6 +1057,15 @@ cmd_related_solutions_dirs() {
     rc=$?
     # -e exits 4 when the list is empty, which is not an error.
     case "$rc" in 0|4) ;; *) refuse "related-solutions-dirs: solutions.related in $sc/sidecar.json is not an array of keys" ;; esac
+    own="$(jq -r '(.solutions.system // "") | if type == "string" then . else error("not a string") end' "$sc/sidecar.json" 2>/dev/null)" \
+        || refuse "related-solutions-dirs: solutions.system in $sc/sidecar.json is not a label"
+    if [ -n "$own" ]; then
+        label_ok "$own" || refuse "related-solutions-dirs: solutions.system in $sc/sidecar.json is not a label: $own"
+        for line in $(system_labels); do
+            [ "${line%%$'\t'*}" = "$own" ] || continue
+            hits="${hits:+$hits$'\n'}${line#*$'\t'}"
+        done
+    fi
     for key in $rel; do
         [ -n "$key" ] || continue
         rc=0
@@ -999,6 +1079,9 @@ cmd_related_solutions_dirs() {
             printf 'sidecar.sh: related key %s matches no sidecar; skipped\n' "$key" >&2
             continue
         fi
+        hits="${hits:+$hits$'\n'}$hit"
+    done
+    for hit in $hits; do
         [ "$hit" != "$sc" ] || continue
         [ -d "$hit/solutions" ] || continue
         case $'\n'"$seen"$'\n' in *$'\n'"$hit"$'\n'*) continue ;; esac
