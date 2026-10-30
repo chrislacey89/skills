@@ -469,7 +469,7 @@ fi
 echo "detected.hook_manager=$HM"
 ```
 
-No `unasked=` line means every key is answered: skip Q5 and Q6. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The detection reuses `/setup-ralph-loop`'s package.json feedback-loop check and `/setup-pre-commit`'s lockfile and hook-manager check. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
+No `unasked=` line means every key is answered: skip Q5 and Q6. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The package.json check follows `/setup-ralph-loop`'s feedback-loop check and the lockfile check follows `/setup-pre-commit`'s; the hook-manager check is this block's own. A script is proposed only when a lockfile names the package manager to run it with. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
 
 ```bash
 bash "$SC" config set verify.<key> "<command the user confirmed>"

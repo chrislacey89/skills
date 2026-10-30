@@ -840,6 +840,7 @@ cp "$PSJ" "$PF/good.json"
 before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
 for bad_h in '[{"command":"Bash(rm *)"}]' '[{"reason":""}]' '[{"reason":"   "}]' '[{"reason":42}]' \
              '[{"reason":"x","command":42}]' '[{"reason":"x","command":""}]' '[{"reason":"x","cmd":"y"}]' \
+             '[{"reason":"x","command":"   "}]' \
              '["just a string"]' '{"reason":"x"}' 'not json' '[{"reason":"two\nlines"}]'; do
     prun "$PF/clone" config set verify.hazards "$bad_h"
     if [ "$rc" -ne 0 ] && cmp -s "$PSJ" "$PF/good.json" && [ "$(git -C "$PF_ROOT/pf" rev-parse HEAD)" = "$before" ]; then
@@ -854,6 +855,9 @@ contains "a hazard with no reason is refused by name" "reason" "$err"
 prun "$PF/clone" config set verify.test $'pnpm test\nrm -rf /'
 check "a verify command containing a newline is refused" 1 "$rc"
 check "a refused command writes nothing" "pnpm run test" "$(jq -r .verify.test "$PSJ")"
+prun "$PF/clone" config set verify.test "   "
+check "a whitespace-only verify command is refused" 1 "$rc"
+check "a refused whitespace-only command writes nothing" "pnpm run test" "$(jq -r .verify.test "$PSJ")"
 prun "$PF/clone" config set verify.nosuch x
 check "an unknown verify field is a usage error" 2 "$rc"
 prun "$PF/clone" config set verify x
@@ -866,14 +870,18 @@ lacks "a declared-empty hazard list is not under Not declared" "hazards" "${out#
 
 # Hand edits the verbs would refuse: profile cannot trust what it read, so it prints no block.
 for shape in '.verify.test = 42' '.verify = "x"' '.verify.hazards = "x"' '.verify.hazards = [{"command":"y"}]' \
-             '.verify.test = "a\nb"' '.schema = "2"'; do
+             '.verify.test = "a\nb"' '.verify.test = "  "' '.verify.hazards = [{"reason":"x","command":" "}]' '.schema = "2"'; do
     cp "$PF/good.json" "$PSJ"; pset "$shape"
     prun "$PF/clone" profile
     check "a hand-set $shape makes profile exit 1 and print no block" "1 " "$rc $out"
+    contains "a hand-set $shape is refused by profile's own read, not base-ref's" "profile: cannot read verify" "$err"
 done
+# base-ref reads sidecar.json first, so an unparseable file stops there; this
+# case covers that refusal, and the shapes above cover profile's own read.
 printf '{ not json\n' > "$PSJ"
 prun "$PF/clone" profile
 check "an unreadable sidecar.json makes profile exit 1 and print no block" "1 " "$rc $out"
+contains "an unreadable sidecar.json stops at base-ref" "profile: no base ref" "$err"
 lacks "an unreadable sidecar.json is not reported as a miss" "SIDECAR MISS" "$err"
 cp "$PF/good.json" "$PSJ"
 
@@ -908,12 +916,26 @@ git -C "$PF_ROOT/pf" commit -q -am "fixture: every key answered"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
 check "Q5 on a fully answered sidecar prints no unasked line" "" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
 check "Q5 with no package.json or lockfile proposes no test command" "detected.test=" "$(printf '%s\n' "$q5out" | grep '^detected.test=')"
+printf '{"scripts":{"test":"vitest run"}}\n' > "$PF/clone/package.json"
+q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
+check "Q5 with a test script but no lockfile proposes no test command" "detected.test=" "$(printf '%s\n' "$q5out" | grep '^detected.test=')"
+rm -f "$PF/clone/package.json"
+# A failed profile prints no Not declared line, which the prose reads as
+# "every key answered"; the guard must stop the block instead.
+printf '{ not json\n' > "$PSJ"
+q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"; rc=$?
+check "Q5 on an unreadable sidecar.json exits 1" 1 "$rc"
+lacks "Q5 on an unreadable sidecar.json prints no unasked line" "unasked=" "$q5out"
+cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = ""'
 
 # /execute Step 4 reads the declared commands from profile and hard-codes no pnpm line.
 ex4="$(awk '/^### 4\. Verify/{f=1} /^#### Tier 1/{f=0} f' "$repo_root/execute/SKILL.md")"
 # shellcheck disable=SC2016
 contains "/execute Step 4 runs profile" 'bash "$SC" profile' "$ex4"
 lacks "/execute Step 4 hard-codes no pnpm command" "pnpm run" "$ex4"
+# An AFK run with no typecheck or test would commit every unit unchecked (#625).
+lacks "/execute Step 4 no longer runs an AFK iteration past an undeclared command" "run nothing for it" "$ex4"
+contains "/execute Step 4 stops an AFK iteration on an undeclared typecheck or test" "In an AFK iteration, **stop**" "$ex4"
 lacks "/execute's Review Notes template hard-codes no pnpm command" '| `pnpm run' "$(cat "$repo_root/execute/SKILL.md")"
 
 
