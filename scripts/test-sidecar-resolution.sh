@@ -933,6 +933,9 @@ ex4="$(awk '/^### 4\. Verify/{f=1} /^#### Tier 1/{f=0} f' "$repo_root/execute/SK
 # shellcheck disable=SC2016
 contains "/execute Step 4 runs profile" 'bash "$SC" profile' "$ex4"
 lacks "/execute Step 4 hard-codes no pnpm command" "pnpm run" "$ex4"
+# An AFK run with no typecheck or test would commit every unit unchecked (#625).
+lacks "/execute Step 4 no longer runs an AFK iteration past an undeclared command" "run nothing for it" "$ex4"
+contains "/execute Step 4 stops an AFK iteration on an undeclared typecheck or test" "In an AFK iteration, **stop**" "$ex4"
 lacks "/execute's Review Notes template hard-codes no pnpm command" '| `pnpm run' "$(cat "$repo_root/execute/SKILL.md")"
 
 

@@ -431,7 +431,7 @@ SC="<this skill's directory>/references/sidecar.sh"
 bash "$SC" resolve
 ```
 
-Exit 0 proceeds. On exit 1 in an **AFK iteration, stop**: print the resolver's stderr as printed — on `SIDECAR MISS` that is the `init` command — and leave it for a human, because creating a sidecar is a human act and an iteration that reads half its context reads as complete when it is not. In a HITL run, show the same line to the user and continue read-only: the solutions grep below falls back to `docs/solutions/`, and a research path the PRD cites is still checked as written.
+Exit 0 proceeds, and in an AFK iteration run Step 4's `profile` block now too, so its stop on an undeclared typecheck or test lands before any code is written rather than at Step 3's first commit. On exit 1 in an **AFK iteration, stop**: print the resolver's stderr as printed — on `SIDECAR MISS` that is the `init` command — and leave it for a human, because creating a sidecar is a human act and an iteration that reads half its context reads as complete when it is not. In a HITL run, show the same line to the user and continue read-only: the solutions grep below falls back to `docs/solutions/`, and a research path the PRD cites is still checked as written.
 
 **Read the research artifact for this feature.** The PRD's "Research Reference" section names where it lives — one of two locations depending on the project's `research.storage` mode:
 
@@ -541,7 +541,7 @@ SC="<this skill's directory>/references/sidecar.sh"
 bash "$SC" profile
 ```
 
-Run the typecheck and test commands listed under `Verify`, exactly as printed. A field printed as `none` is one the repo declared it does not have: skip it, and record the skip in the Step 6 review notes. A field named on the `Not declared` line was never asked. Do not guess a command for it, and never fall back to `pnpm`. In a HITL run, tell the user which ones are undeclared and ask what to run (`/init-pipeline` records the answer for next time). In an AFK iteration, run nothing for it and record it in the review notes as not declared. Do not run anything listed under `Hazards` without asking first. If `profile` exits nonzero, it printed why on stderr and printed no block. Relay that, and do not substitute a default.
+Run the typecheck and test commands listed under `Verify`, exactly as printed. A field printed as `none` is one the repo declared it does not have: skip it, and record the skip in the Step 6 review notes. This step runs only those two fields, so the rule for the `Not declared` line is about typecheck and test; the other keys on it are not this step's to act on. A typecheck or test named there was never asked. Do not guess a command for it, and never fall back to `pnpm`. In a HITL run, tell the user which of the two are undeclared and ask what to run (`/init-pipeline` records the answer for next time). In an AFK iteration, **stop**: commit nothing, leave the comment Step 6 describes for a task this context window cannot complete, naming the undeclared keys and that `/init-pipeline` declares them, and exit. An iteration that runs no typecheck or test still commits every unit, and the slice reads as verified when nothing checked it. Do not run anything listed under `Hazards` without asking first. If `profile` exits nonzero, it printed why on stderr and printed no block. Relay that, and do not substitute a default; in an AFK iteration, stop the same way.
 
 Fix any issues. If fixes are needed, commit them as a separate commit (e.g., "fix integration between X and Y").
 

@@ -95,7 +95,7 @@ The script should:
 - point Ralph at the task source
 - compute the unblocked set in the script, and tell Ralph to pick the highest-risk slice from it
 - tell Ralph to use `/execute`
-- tell Ralph to run the repo's real feedback loops
+- tell Ralph to run the repo's declared typecheck and test commands, and to stop when either is undeclared (`/execute` Step 4 reads both from `sidecar.sh profile`)
 - tell Ralph to stop after one reviewable slice
 
 Suggested shape:
@@ -121,7 +121,7 @@ if [ -z "$FRONTIER" ]; then
   exit 0
 fi
 
-claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
+claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the typecheck and test commands the repo declared; if either is undeclared, stop and say which. If all issue work is complete, say DONE and stop."
 ```
 
 Adapt the prompt to the actual task source and available commands.
@@ -166,7 +166,7 @@ for ((iteration=1; iteration<=$1; iteration++)); do
     break
   fi
 
-  claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the repo's feedback loops. If all issue work is complete, say DONE and stop."
+  claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the typecheck and test commands the repo declared; if either is undeclared, stop and say which. If all issue work is complete, say DONE and stop."
 
   echo "Ralph iteration $iteration complete."
 done
