@@ -57,12 +57,14 @@ Do not introduce `progress.txt` as durable state unless the user explicitly choo
 
 Inspect the target repo before generating scripts.
 
-Check for available commands in `package.json` or equivalent tooling:
+Read the commands the repo declared:
 
-- `typecheck`
-- `test`
-- `lint`
-- `build`
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" profile
+```
+
+`/execute` Step 4 stops an AFK iteration on an undeclared typecheck or test, so if either is listed under `Not declared`, run `/init-pipeline` to declare it before generating the scripts.
 
 Also note whether the repo already has:
 
@@ -97,6 +99,7 @@ The script should:
 - tell Ralph to use `/execute`
 - tell Ralph to run the repo's declared typecheck and test commands, and to stop when either is undeclared (`/execute` Step 4 reads both from `sidecar.sh profile`)
 - tell Ralph to stop after one reviewable slice
+- paste the output of `bash "$SC" profile` into the prompt, verbatim, and start no iteration if it fails. Write the bundled resolver's absolute installed path into `SC`, because the script runs from the repo root and not from this skill
 
 Suggested shape:
 
@@ -121,7 +124,12 @@ if [ -z "$FRONTIER" ]; then
   exit 0
 fi
 
-claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the typecheck and test commands the repo declared; if either is undeclared, stop and say which. If all issue work is complete, say DONE and stop."
+SC="<this skill's directory>/references/sidecar.sh"
+PROFILE=$(bash "$SC" profile) || { echo "sidecar.sh profile failed; not starting an iteration" >&2; exit 1; }
+
+claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the typecheck and test commands the repo declared; if either is undeclared, stop and say which. If all issue work is complete, say DONE and stop.
+
+$PROFILE"
 ```
 
 Adapt the prompt to the actual task source and available commands.
@@ -166,7 +174,12 @@ for ((iteration=1; iteration<=$1; iteration++)); do
     break
   fi
 
-  claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the typecheck and test commands the repo declared; if either is undeclared, stop and say which. If all issue work is complete, say DONE and stop."
+  SC="<this skill's directory>/references/sidecar.sh"
+  PROFILE=$(bash "$SC" profile) || { echo "sidecar.sh profile failed; stopping" >&2; exit 1; }
+
+  claude --message "Unblocked GitHub issues, takeable right now: $FRONTIER. Pick the highest-risk one of those that still needs implementation. Use /execute to implement exactly one reviewable slice. Run the typecheck and test commands the repo declared; if either is undeclared, stop and say which. If all issue work is complete, say DONE and stop.
+
+$PROFILE"
 
   echo "Ralph iteration $iteration complete."
 done

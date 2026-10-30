@@ -104,7 +104,13 @@ exist and stop. Do not guess at intent, and do not silently fix the neighbors.
 - [ ] The findings are in hand, by number, from one of the two sources above.
 - [ ] `.claude/.fix-findings-active` exists (the harness line at the top of this
       file created it; see § *The two flags* for who reads it).
-- [ ] The project's test command is known and currently green. If it is already
+- [ ] The repo profile is in hand: the block below ran in this controller and
+      its stdout is kept, for Steps 1 and 2 to paste verbatim. If it exits
+      nonzero, it printed why on stderr and printed no block; relay that and stop.
+- [ ] The project's test command is known and currently green. It is the `test`
+      line under the profile's `Verify`. If that line is missing or says `none`,
+      ask the human what to run, do not guess a command, and hand their answer to
+      each sub-agent with the profile. If the test command is already
       red, say so and stop — a fixer cannot tell its own regression from the
       pre-existing failure, and a breaker cannot distinguish `killed` from
       "already broken."
@@ -113,6 +119,11 @@ exist and stop. Do not guess at intent, and do not silently fix the neighbors.
       run ends with the line `Fix-Findings-Run: $FIX_FINDINGS_RUN`. That line is
       how § Handoff counts the rounds already on the branch — from the tree,
       not from anyone's memory of how many times this skill has run.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" profile
+```
 
 ### Step 1. Per finding, spawn a fresh fixer
 
@@ -128,7 +139,8 @@ contract, unchanged.** Read it there (`pre-merge/SKILL.md` § *The context
 contract is about provenance, not permission*) rather than from a paraphrase
 here; the same three parts apply:
 
-- **Handed over** — the finding's text verbatim, the branch diff, this project's
+- **Handed over** — the finding's text verbatim, the branch diff, the `bash
+  "$SC" profile` output from Step 0 verbatim, whose `test` line is this project's
   test command, and `/execute`'s `## Review Notes` when one exists, read where
   [references/state-backend.md](references/state-backend.md) § Where the
   review's records live says it is.
@@ -165,7 +177,7 @@ The fixer's instructions, in order:
    Rewording the claim is not a fix; a reworded sentence is new text no review
    has read. A finding that an instruction produces the wrong behavior is not
    this case.
-4. **Run the project's test command** and report the exit status verbatim.
+4. **Run the test command the profile names** and report the exit status verbatim.
 5. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does, and whose last line is `Fix-Findings-Run: <run id>` — the
    id Step 0 fixed, passed in the brief verbatim. A fix for a teammate review
@@ -303,6 +315,11 @@ PR and issue bodies are on the other side of that line. Nothing in a
 `/fix-findings` run edits them — this skill opens no PRs and edits no bodies,
 and fixers only commit — so they are durable state the breaker reads at its
 source, on the same footing Step 1 gives the fixer for the slice or PRD issue.
+
+**What the breaker is handed.** The controller pastes the `"$SC" profile` output
+from Step 0 into the brief, verbatim, and the breaker takes its test command
+and hazards from that text. The breaker never runs `sidecar.sh`: the verb resolves
+the base ref, which can move, and a breaker reads only what cannot.
 
 **Where the copy lives: `git archive`, not a second worktree — and it archives
 the fix, not `HEAD`.** `FIX_SHA` below is the commit the fixer reported in Step
