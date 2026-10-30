@@ -1513,6 +1513,11 @@ a_dirs_before="$(cd "$RA" && bash "$SC" solutions-dirs 2>/dev/null)"
 # commit; without it the "relate wrote nothing into B" check below cannot fail.
 # The URL is never fetched.
 git -C "$RB" remote add origin git@github.com:acme/rel-b.git
+# init lists root: first, so "prefer root:" and "take the first key" agree.
+# Put a non-root key first so only the preference picks root:.
+jq '.keys = (["name:rel-b-first"] + .keys)' "$SB/sidecar.json" > "$SB/sj" && mv "$SB/sj" "$SB/sidecar.json"
+git -C "$SB" commit -q -am "test: non-root key first"
+check "fixture: B's first key is not root:" "name:rel-b-first" "$(jq -r '.keys[0]' "$SB/sidecar.json")"
 b_head_before="$(git -C "$SB" rev-parse HEAD)"
 
 runo "$RA" related-solutions-dirs
