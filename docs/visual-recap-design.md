@@ -35,7 +35,7 @@ the reviewer auditing parallel hunks? scroll.**
 
 The values below are the proven reference (the "Visual Recap v2" surface): dark-first deep
 blue-ink canvas, a single electric-violet accent, monospace-forward dense layout, a fixed
-272px rail beside a centered ≤1000px scrolling column running overview → files → contracts
+272px rail beside a full-width scrolling column running overview → files → contracts
 (when schema/API surfaces changed) → diagram → wireframes (when rendered UI changed) →
 annotated changes → before/after → review. Every semantic color is tuned for WCAG AA
 contrast against its surface in **both** themes — light is the `:root` default, dark flips
@@ -247,8 +247,8 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
       </div>
     </aside>
 
-    <!-- MAIN: one scrolling column, ≤1000px, centered -->
-    <main style="max-width:1000px;width:100%;margin:0 auto;padding:var(--s8) var(--s7)">
+    <!-- MAIN: one scrolling column, full width — no max-width; title and lede keep their own reading measure -->
+    <main style="min-width:0;padding:var(--s8) var(--s7)">
       <!-- the blocks of §3–§9 drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
     </main>
   </div>
@@ -474,23 +474,24 @@ Stable ids per `visual-rendering-core.md` §4: callout cards and their markers s
       </div>
     </div>
 
-    <!-- split diff -->
-    <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)">
-      <div style="border-right:1px solid var(--border)">
+    <!-- split diff: this row is the block's one horizontal scroller; lines never scroll on their own.
+         Sides sit together when both fit and stack when one is too long, so AFTER never starts off screen. -->
+    <div style="display:flex;flex-wrap:wrap;overflow-x:auto">
+      <div style="flex:1 0 max-content;min-width:50%;box-sizing:border-box;border-right:1px solid var(--border)">
         <div style="padding:6px var(--s4);font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--del);border-bottom:1px solid var(--border);background:var(--bg-subtle)">BEFORE</div>
         <div style="padding:var(--s2) 0">
           <!-- a removed line: --del spine + --del-bg wash -->
-          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);border-left:2px solid var(--del);background:var(--del-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;overflow-x:auto;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">if</span> (!currentToken) {</code></div>
+          <div style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--del);background:var(--del-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">if</span> (!currentToken) {</code></div>
           <!-- a context line: transparent spine, no wash -->
-          <div style="display:grid;grid-template-columns:36px minmax(0,1fr);border-left:2px solid transparent"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">37</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;overflow-x:auto;padding:1px var(--s3);color:var(--fg)">}</code></div>
+          <div style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid transparent"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">37</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">}</code></div>
         </div>
       </div>
-      <div>
+      <div style="flex:1 0 max-content;min-width:50%">
         <div style="padding:6px var(--s4);font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--add);border-bottom:1px solid var(--border);background:var(--bg-subtle)">AFTER</div>
         <div style="padding:var(--s2) 0">
           <!-- an added + annotated line: --add spine + --add-bg, plus a numbered marker.
                The row carries .vr-line + id so the marker can wash it on activation. -->
-          <div id="line-c-session-ts-L33" class="vr-line" style="display:grid;grid-template-columns:36px minmax(0,1fr);border-left:2px solid var(--add);background:var(--add-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;overflow-x:auto;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)<button class="vr-marker" data-feedback-id="c-session-ts-L33" onclick="setActive('c-session-ts-L33')" style="width:17px;height:17px;margin-left:8px;font-size:10px;vertical-align:middle">1</button></code></div>
+          <div id="line-c-session-ts-L33" class="vr-line" style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--add);background:var(--add-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)<button class="vr-marker" data-feedback-id="c-session-ts-L33" onclick="setActive('c-session-ts-L33')" style="width:17px;height:17px;margin-left:8px;font-size:10px;vertical-align:middle">1</button></code></div>
         </div>
       </div>
     </div>
@@ -572,18 +573,18 @@ singular hardcoded id would make the second case collide with the first.
 ```html
 <section id="sec-compare-<slug>" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">05</span> &nbsp;Compare</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
-    <div>
+  <div style="display:flex;flex-wrap:wrap;gap:var(--s4);align-items:start;overflow-x:auto">
+    <div style="flex:1 0 max-content;min-width:calc(50% - var(--s2))">
       <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
       <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0">
-        <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">let</span> currentToken = <span style="color:var(--sx-n)">null</span></code></div>
+        <div style="display:grid;grid-template-columns:40px 1fr"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">let</span> currentToken = <span style="color:var(--sx-n)">null</span></code></div>
         <!-- …rest of the BEFORE state, one row per line… -->
       </div>
     </div>
-    <div>
+    <div style="flex:1 0 max-content;min-width:calc(50% - var(--s2))">
       <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
       <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0">
-        <div style="display:grid;grid-template-columns:40px minmax(0,1fr)"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;overflow-x:auto;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)</code></div>
+        <div style="display:grid;grid-template-columns:40px 1fr"><span style="text-align:right;padding:1px var(--s3);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">1</span><code style="font-family:var(--mono);font-size:13px;line-height:1.9;white-space:pre;padding:1px var(--s4);color:var(--fg)"><span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)</code></div>
         <!-- …rest of the AFTER state, identical frame and scale… -->
       </div>
     </div>
@@ -1096,12 +1097,12 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
     </div>
   </div>
   <!-- the §7 comparison, unchanged: identical frame and scale in every unit -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start">
-    <div>
+  <div style="display:flex;flex-wrap:wrap;gap:var(--s4);align-items:start;overflow-x:auto">
+    <div style="flex:1 0 max-content;min-width:calc(50% - var(--s2))">
       <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
       <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the BEFORE state, one row per line, exactly as §7… --></div>
     </div>
-    <div>
+    <div style="flex:1 0 max-content;min-width:calc(50% - var(--s2))">
       <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
       <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the AFTER state, identical frame and scale… --></div>
     </div>
@@ -1345,6 +1346,12 @@ and say what happens if nobody answers.
   verify any color you add against its surface in light *and* dark.
 - **Don't** let the container compete with the code: no heavy borders or card chrome around
   the diff.
+- **Don't** put `overflow` on a code line. Long lines keep `white-space:pre` and the block that
+  holds them is the one horizontal scroller, so a block has a single scrollbar along its bottom
+  edge and the row washes reach the end of the longest line. Before/after pairs wrap instead of
+  squeezing: side by side when both fit, stacked when one does not, so a long BEFORE line can
+  never push AFTER off screen. Per-line `overflow-x:auto` paints a
+  scrollbar under every long line, and scrolls each line out of step with its neighbors.
 - **Don't** introduce a third font family or a web font — two native system stacks only, so
   the file reads identically offline.
 - **Don't** render an options comparison (§11) whose columns all read the same weight when
@@ -1462,7 +1469,7 @@ reviewer will actually do:
 ```html
 <style>
   /* deck shell (§D3) — same §1 tokens, no new palette */
-  .dk{display:grid;grid-template-columns:290px minmax(0,1fr);align-items:start;max-width:1500px;margin:0 auto}
+  .dk{display:grid;grid-template-columns:290px minmax(0,1fr);align-items:start}
   @media (max-width:960px){.dk{grid-template-columns:1fr} .dk aside{position:static;height:auto}}
   .dk aside{position:sticky;top:0;height:100vh;overflow-y:auto;border-right:1px solid var(--border);background:var(--bg-subtle);padding:var(--s5) var(--s4)}
   .dk main{padding:var(--s7) var(--s7) var(--s8);min-width:0}
@@ -1565,12 +1572,14 @@ lesson.
   .chip.op{color:var(--risk);border-color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent)}
   .chip.keep{color:var(--accent);border-color:var(--accent);background:var(--accent-dim)}
   .chip.miss{color:var(--del);border-color:var(--del);background:var(--del-bg)}
-  .panes{display:grid;grid-template-columns:1fr 1fr;gap:var(--s4)}
-  @media (max-width:1180px){.panes{grid-template-columns:1fr}}
-  .pane{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden;box-shadow:var(--shadow);min-width:0}
+  .panes{display:flex;flex-wrap:wrap;gap:var(--s4);overflow-x:auto}
+  .pane{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden;box-shadow:var(--shadow);flex:1 0 max-content;min-width:calc(50% - var(--s2))}
   .pane-hd{display:flex;align-items:center;gap:var(--s2);padding:var(--s3) var(--s4);border-bottom:1px solid var(--border);font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;background:var(--bg-subtle)}
   .pane.b .pane-hd{color:var(--del)} .pane.a .pane-hd{color:var(--add)}
   .pane-path{margin-left:auto;font-family:var(--mono);font-size:10.5px;font-weight:400;letter-spacing:0;text-transform:none;color:var(--fg-faint)}
+  .pane .code{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.75;padding:var(--s3) 0}
+  .pane .ln{display:block;padding:0 var(--s4);white-space:pre}
+  .pane .ln.d{background:var(--del-bg)} .pane .ln.a{background:var(--add-bg)}
   .note{border-left:3px solid var(--accent);background:var(--bg-subtle);padding:var(--s3) var(--s4);border-radius:0 var(--r2) var(--r2) 0;font-size:13.5px;line-height:1.65;color:var(--fg-muted);margin-top:var(--s4);text-wrap:pretty}
   .note.warn{border-left-color:var(--risk)} .note.bad{border-left-color:var(--del)} .note.good{border-left-color:var(--add)}
   .note .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s1)}
