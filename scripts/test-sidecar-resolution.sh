@@ -1509,6 +1509,10 @@ mkdir -p "$SB/solutions/integration" "$SCC/solutions/integration"
 printf 'needle from b\n' > "$SB/solutions/integration/gateway.md"
 printf 'needle from c\n' > "$SCC/solutions/integration/bus.md"
 a_dirs_before="$(cd "$RA" && bash "$SC" solutions-dirs 2>/dev/null)"
+# B gains a remote after init, so a resolve run in B would have a new alias to
+# commit; without it the "relate wrote nothing into B" check below cannot fail.
+# The URL is never fetched.
+git -C "$RB" remote add origin git@github.com:acme/rel-b.git
 b_head_before="$(git -C "$SB" rev-parse HEAD)"
 
 runo "$RA" related-solutions-dirs
