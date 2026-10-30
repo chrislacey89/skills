@@ -102,7 +102,7 @@ check "init succeeds" 0 "$rc"
 SIDECAR="$out"
 check "init prints the sidecar path under SKILL_KIT_SIDECAR_ROOT" "$SKILL_KIT_SIDECAR_ROOT/proj" "$SIDECAR"
 J="$SIDECAR/sidecar.json"
-check "sidecar.json declares schema 1" 1 "$(jq -r .schema "$J")"
+check "sidecar.json declares schema 2" 2 "$(jq -r .schema "$J")"
 check "solutions.write is recorded" ask "$(jq -r .solutions.write "$J")"
 check "solutions.in_tree_path is recorded" docs/adr "$(jq -r .solutions.in_tree_path "$J")"
 check "sidecar.json carries a root: key" 1 "$(jq '[.keys[] | select(startswith("root:"))] | length' "$J")"
@@ -114,7 +114,7 @@ check "sidecar.json is committed" "" "$(git -C "$SIDECAR" status --porcelain)"
 runo "$PROJ" config get solutions.write
 check "config get solutions.write returns the value" ask "$out"
 runo "$PROJ" config get verify.typecheck
-check "config get on an empty key prints the empty string" "" "$out"
+check "config get on an absent key prints the empty string" "" "$out"
 
 # -----------------------------------------------------------------------------
 section "identity: main, subdirectory, linked worktree, fresh clone"
@@ -760,6 +760,162 @@ contains "/pre-merge step 3 takes BASE_BRANCH from the verb" 'BASE_BRANCH="$(bas
 pm3="${pm3//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
 pm3out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$pm3"' >/dev/null; printf "%s|%s" "$BASE_BRANCH" "$BASE_REF"' 2>/dev/null)"
 check "/pre-merge step 3, run, takes the declared base for both forms" "develop|origin/develop" "$pm3out"
+
+# -----------------------------------------------------------------------------
+section "profile: unasked, declared, declared-empty, and could-not-look (#600)"
+
+# Its own root, for the same reason as base-ref's: the corrupt case below.
+PF="$tmp/pf"; mkdir -p "$PF"
+PF_ROOT="$PF/sidecars"
+# prun <dir> <args...> — sidecar.sh under PF_ROOT; stdout in $out, stderr in $err, exit in $rc
+prun() {
+    local d="$1"; shift
+    out="$(cd "$d" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash "$SC" "$@" 2>"$PF/err")"; rc=$?
+    err="$(cat "$PF/err")"
+}
+mkrepo "$PF/up"
+git -C "$PF/up" branch develop
+git clone -q "$PF/up" "$PF/clone"
+git -C "$PF/clone" remote set-head origin develop >/dev/null
+PFH="## Repo profile (from the operator's sidecar; follow it)"
+ALL_UNASKED="Not declared (ask before running anything not listed): typecheck, test, lint, package_manager, hook_manager, hazards"
+
+prun "$PF/clone" profile
+check "a miss prints the all-unasked block, with base-ref's fallback" \
+    "0 $PFH"$'\n'"Base ref: origin/develop"$'\n'"$ALL_UNASKED" "$rc $out"
+prun "$PF/clone" profile extra
+check "profile takes no arguments" 2 "$rc"
+
+prun "$PF/clone" init --name pf --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "init the profile sidecar (fixture sanity)" 0 "$rc"
+PSJ="$PF_ROOT/pf/sidecar.json"
+check "a new init writes schema 2" 2 "$(jq -r .schema "$PSJ")"
+check "a new init writes no verify stub" false "$(jq 'has("verify")' "$PSJ")"
+prun "$PF/clone" profile
+check "a schema-2 sidecar with no verify key renders every key unasked" \
+    "0 $PFH"$'\n'"Base ref: origin/develop"$'\n'"$ALL_UNASKED" "$rc $out"
+
+# The four schema-1 sidecars in the wild carry init's old stub; "" there was never an answer.
+pset() { jq "$@" "$PSJ" > "$PF/sj" && mv "$PF/sj" "$PSJ"; }
+pset '.schema = 1 | .verify = {typecheck: "", test: "", lint: "", package_manager: "", hook_manager: ""}'
+git -C "$PF_ROOT/pf" commit -q -am "fixture: schema-1 stub"
+prun "$PF/clone" profile
+check "schema 1 with the init stub lists every verify field under Not declared" \
+    "0 $PFH"$'\n'"Base ref: origin/develop"$'\n'"$ALL_UNASKED" "$rc $out"
+lacks "schema 1's empty stub never renders as none" "none" "$out"
+
+prun "$PF/clone" config set verify.typecheck "pnpm run typecheck"
+check "config set verify.typecheck succeeds" 0 "$rc"
+check "the first verify write moves the sidecar to schema 2" 2 "$(jq -r .schema "$PSJ")"
+check "the migration drops the schema-1 stub, leaving only the answer" '{"typecheck":"pnpm run typecheck"}' "$(jq -c .verify "$PSJ")"
+check "the write is committed" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+check "the commit subject names the key" "sidecar: set verify.typecheck" "$(git -C "$PF_ROOT/pf" log -1 --format=%s)"
+
+prun "$PF/clone" config set verify.lint ""
+check "config set verify.lint to empty succeeds" 0 "$rc"
+prun "$PF/clone" profile
+contains "a declared-empty field on schema 2 renders as none" "  lint: none" "$out"
+contains "the unasked fields stay under Not declared" \
+    "Not declared (ask before running anything not listed): test, package_manager, hook_manager, hazards" "$out"
+lacks "a declared-empty field is not under Not declared" "lint, " "${out##*Not declared}"
+
+prun "$PF/clone" config set verify.test "pnpm run test"
+prun "$PF/clone" config set verify.hazards \
+    '[{"reason":"resets the shared staging database","command":"Bash(pnpm test:e2e*)"},{"reason":"never push to the staging branch"}]'
+check "config set verify.hazards with valid entries succeeds" 0 "$rc"
+prun "$PF/clone" profile
+check "the block matches the format #601 pastes" "0 $PFH
+Base ref: origin/develop
+Verify:
+  typecheck: pnpm run typecheck
+  test: pnpm run test
+  lint: none
+Hazards (do not run; ask first):
+  - Bash(pnpm test:e2e*): resets the shared staging database
+  - never push to the staging branch
+Not declared (ask before running anything not listed): package_manager, hook_manager" "$rc $out"
+
+# Every refused hazard list writes nothing and commits nothing.
+cp "$PSJ" "$PF/good.json"
+before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
+for bad_h in '[{"command":"Bash(rm *)"}]' '[{"reason":""}]' '[{"reason":"   "}]' '[{"reason":42}]' \
+             '[{"reason":"x","command":42}]' '[{"reason":"x","command":""}]' '[{"reason":"x","cmd":"y"}]' \
+             '["just a string"]' '{"reason":"x"}' 'not json' '[{"reason":"two\nlines"}]'; do
+    prun "$PF/clone" config set verify.hazards "$bad_h"
+    if [ "$rc" -ne 0 ] && cmp -s "$PSJ" "$PF/good.json" && [ "$(git -C "$PF_ROOT/pf" rev-parse HEAD)" = "$before" ]; then
+        ok "config set verify.hazards refuses $bad_h and writes nothing"
+    else
+        bad "config set verify.hazards refuses $bad_h and writes nothing" "rc=$rc, sidecar.json or HEAD changed"
+    fi
+done
+prun "$PF/clone" config set verify.hazards '[{"command":"Bash(rm *)"}]'
+contains "a hazard with no reason is refused by name" "reason" "$err"
+
+prun "$PF/clone" config set verify.test $'pnpm test\nrm -rf /'
+check "a verify command containing a newline is refused" 1 "$rc"
+check "a refused command writes nothing" "pnpm run test" "$(jq -r .verify.test "$PSJ")"
+prun "$PF/clone" config set verify.nosuch x
+check "an unknown verify field is a usage error" 2 "$rc"
+prun "$PF/clone" config set verify x
+check "a bare verify key is a usage error" 2 "$rc"
+
+prun "$PF/clone" config set verify.hazards '[]'
+prun "$PF/clone" profile
+contains "a declared-empty hazard list renders as none" "Hazards (do not run; ask first): none" "$out"
+lacks "a declared-empty hazard list is not under Not declared" "hazards" "${out##*Not declared}"
+
+# Hand edits the verbs would refuse: profile cannot trust what it read, so it prints no block.
+for shape in '.verify.test = 42' '.verify = "x"' '.verify.hazards = "x"' '.verify.hazards = [{"command":"y"}]' \
+             '.verify.test = "a\nb"' '.schema = "2"'; do
+    cp "$PF/good.json" "$PSJ"; pset "$shape"
+    prun "$PF/clone" profile
+    check "a hand-set $shape makes profile exit 1 and print no block" "1 " "$rc $out"
+done
+printf '{ not json\n' > "$PSJ"
+prun "$PF/clone" profile
+check "an unreadable sidecar.json makes profile exit 1 and print no block" "1 " "$rc $out"
+lacks "an unreadable sidecar.json is not reported as a miss" "SIDECAR MISS" "$err"
+cp "$PF/good.json" "$PSJ"
+
+out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" PATH="$nojq" bash "$SC" profile 2>"$PF/err")"; rc=$?
+check "with jq missing, profile exits 1 and prints no block" "1 " "$rc $out"
+mkrepo "$PF/nobase"; git -C "$PF/nobase" branch -m feature
+prun "$PF/nobase" profile
+check "with no base branch found, profile exits 1 and prints no block" "1 " "$rc $out"
+check "profile and config set write nothing in the project" "" "$(git -C "$PF/clone" status --porcelain)"
+
+# /init-pipeline section 8's Q5 block, as written: it names the unasked keys,
+# proposes defaults from the repo's files, and writes nothing.
+q5="$(fenced_with "$repo_root/init-pipeline/SKILL.md" 'detected.hook_manager')"
+[ -n "$q5" ] || bad "/init-pipeline carries the Q5 verify block" "no fenced block mentions detected.hook_manager"
+q5="${q5//<this skill\'s directory>\/scripts\/sidecar.sh/$SC}"
+printf '{"scripts":{"typecheck":"tsc --noEmit","test":"vitest run"}}\n' > "$PF/clone/package.json"
+: > "$PF/clone/pnpm-lock.yaml"; : > "$PF/clone/lefthook.yml"
+cp "$PF/good.json" "$PSJ"; pset 'del(.verify.lint, .verify.hazards)'
+git -C "$PF_ROOT/pf" commit -q -am "fixture: two keys unasked"
+before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
+q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
+check "Q5 names exactly the unasked keys" "unasked=lint, package_manager, hook_manager, hazards" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
+contains "Q5 proposes the lockfile's package manager" "detected.package_manager=pnpm" "$q5out"
+contains "Q5 proposes a package.json script through the package manager" "detected.test=pnpm run test" "$q5out"
+check "Q5 proposes nothing for lint when the script is absent" "detected.lint=" "$(printf '%s\n' "$q5out" | grep '^detected.lint=')"
+contains "Q5 proposes the hook manager" "detected.hook_manager=lefthook" "$q5out"
+check "Q5 writes nothing to the sidecar before the user confirms" "$before" "$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
+check "Q5 leaves sidecar.json clean" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+rm -f "$PF/clone/package.json" "$PF/clone/pnpm-lock.yaml" "$PF/clone/lefthook.yml"
+cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = ""'
+git -C "$PF_ROOT/pf" commit -q -am "fixture: every key answered"
+q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
+check "Q5 on a fully answered sidecar prints no unasked line" "" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
+check "Q5 with no package.json or lockfile proposes no test command" "detected.test=" "$(printf '%s\n' "$q5out" | grep '^detected.test=')"
+
+# /execute Step 4 reads the declared commands from profile and hard-codes no pnpm line.
+ex4="$(awk '/^### 4\. Verify/{f=1} /^#### Tier 1/{f=0} f' "$repo_root/execute/SKILL.md")"
+# shellcheck disable=SC2016
+contains "/execute Step 4 runs profile" 'bash "$SC" profile' "$ex4"
+lacks "/execute Step 4 hard-codes no pnpm command" "pnpm run" "$ex4"
+lacks "/execute's Review Notes template hard-codes no pnpm command" '| `pnpm run' "$(cat "$repo_root/execute/SKILL.md")"
+
 
 # -----------------------------------------------------------------------------
 section "range: a slice's own commits, the base fallback, and could-not-look (#599)"

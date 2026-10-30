@@ -525,7 +525,7 @@ Do not accumulate all changes into one commit. Commit after each self-contained 
 
 After completing each logical unit:
 
-1. Run `pnpm run typecheck` and `pnpm run test` (or the project's equivalent). Fix any failures before committing.
+1. Run the repo's declared typecheck and test commands, read from `profile` as Step 4 describes. Fix any failures before committing.
 2. Stage only the files for that unit — do not stage unrelated changes.
 3. Commit with a message that says what this unit accomplished, not "WIP" or "progress". When the unit corrects earlier behavior, write the incident history the paragraph above routes here — and put it in the PR body as well, not the commit message alone. A squash merge collapses these per-unit messages into one, and `/closeout` treats squash as the common convention, so the commit message alone is not a durable destination. The PR body is the copy that survives intact for a reader running `git blame` months later.
 
@@ -537,12 +537,14 @@ If a unit touches both a test and its implementation, they belong in the same co
 
 By this point, each logical unit has already been committed with passing typecheck and tests. Step 4 is the full-slice verification pass — confirming the whole feature works end-to-end, not just that individual units pass.
 
-Run the full feedback loops one final time:
+Run the full feedback loops one final time. The commands are the ones this repo declared, which the bundled resolver prints:
 
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" profile
 ```
-pnpm run typecheck
-pnpm run test
-```
+
+Run the typecheck and test commands listed under `Verify`, exactly as printed. A field printed as `none` is one the repo declared it does not have: skip it, and record the skip in the Step 6 review notes. A field named on the `Not declared` line was never asked. Do not guess a command for it, and never fall back to `pnpm`. In a HITL run, tell the user which ones are undeclared and ask what to run (`/init-pipeline` records the answer for next time). In an AFK iteration, run nothing for it and record it in the review notes as not declared. Do not run anything listed under `Hazards` without asking first. If `profile` exits nonzero, it printed why on stderr and printed no block. Relay that, and do not substitute a default.
 
 Fix any issues. If fixes are needed, commit them as a separate commit (e.g., "fix integration between X and Y").
 
@@ -781,8 +783,8 @@ Hand it to the reviewer instead, as a `## Review Notes` block in the PR body. Gi
 
 | Command | Exit | Tier |
 |---|---|---|
-| `pnpm run typecheck` | 0 | 2 |
-| `pnpm run test` | 0 | 2 |
+| `<typecheck command, as profile printed it>` | 0 | 2 |
+| `<test command, as profile printed it>` | 0 | 2 |
 | `curl -s -o /dev/null -w '%{http_code}' localhost:3000/reports` → `200` | 0 | 2.5 |
 | `shellcheck --version` → `0.9.0` (matches `.shellcheck-version`); `shellcheck scripts/*.sh` | 0 | 2 |
 

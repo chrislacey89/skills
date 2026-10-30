@@ -16,6 +16,9 @@
 #   sidecar.sh config get <dotted.key>
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
+#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager> <cmd>   ("" declares none)
+#   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
+#   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards)
 #   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
 #   sidecar.sh path <research|solutions|review-responses>
@@ -133,6 +136,22 @@
 # never by editing sidecar.json. It overwrites forge.write with the derived
 # value. base_ref is the base branch's bare name (develop, not origin/develop),
 # checked against the same rule base-ref reads it with before it is written.
+# verify.<field> is a one-line command; "" declares that the repo has none.
+# verify.hazards is a JSON array whose every entry has a non-empty one-line
+# reason and, optionally, a non-empty one-line command in Claude Code
+# permission-rule syntax (Bash(<pattern>)); no other keys. [] declares none.
+# A refused value writes nothing. The first verify write on a schema-1 sidecar
+# moves it to schema 2 in the same commit, dropping the "" values init used to
+# stub, because in schema 1 those were never answers.
+#
+# profile. An absent verify key is unasked, and so is "" in a schema-1
+# sidecar; on schema 2, "" and [] are declared none. The two never render the
+# same: a declared command prints under Verify, none prints as none, and an
+# unasked key is named on the Not declared line. Three outcomes: a block exits
+# 0, including on a sidecar miss, where every key is unasked and the Base ref
+# line is base-ref's fallback; could not look (no jq, base-ref failed, an
+# unreadable sidecar.json, a verify value of the wrong type or spanning lines)
+# exits 1 and prints no block.
 #
 # base-ref. A declared base_ref wins. A sidecar miss, or a sidecar with no
 # base_ref key, falls back to the derivation every skill used to inline:
@@ -514,7 +533,7 @@ cmd_init() {
         --arg storage "$storage" --arg forge "$forge_kind" --argjson fwrite "$forge_write" \
         --arg created "$(date +%Y-%m-%d)" \
         '{
-           schema: 1,
+           schema: 2,
            name: $name,
            keys: $ARGS.positional,
            mode: $mode,
@@ -522,7 +541,6 @@ cmd_init() {
            research: { storage: $storage },
            forge: { kind: $forge, write: $fwrite },
            tracker: { kind: "none", url: "", write: [] },
-           verify: { typecheck: "", test: "", lint: "", package_manager: "", hook_manager: "" },
            created: $created
          }' --args $keys > "$dir/sidecar.json" || refuse "init: could not write sidecar.json"
     commit_paths "$dir" "sidecar: init $name" sidecar.json || exit 1
@@ -633,14 +651,15 @@ cmd_config() {
             jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
             ;;
         set)
-            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>>"
+            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|verify.<field> <value>>"
             case "$2" in
                 mode) config_set_mode "$3" ;;
                 base_ref) config_set_base_ref "$3" ;;
-                *) die_usage "config set: expected mode or base_ref, got: $2" ;;
+                verify.*) config_set_verify "${2#verify.}" "$3" ;;
+                *) die_usage "config set: expected mode, base_ref, or verify.<field>, got: $2" ;;
             esac
             ;;
-        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>>>" ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|verify.<field> <value>>>" ;;
     esac
 }
 
@@ -675,6 +694,97 @@ config_set_base_ref() {
         rm -f "$tmp"; refuse "config set: could not update sidecar.json"
     fi
     commit_paths "$sc" "sidecar: set base_ref $b" sidecar.json || exit 1
+}
+
+VERIFY_FIELDS='["typecheck","test","lint","package_manager","hook_manager"]'
+
+# jq: the hazard list's errors, one per line; empty when every entry is valid.
+# shellcheck disable=SC2016 # $h is a jq variable
+HAZARDS_JQ='def one_line: type == "string" and (test("[\n\r]") | not);
+  if type != "array" then "hazards must be a JSON array"
+  else to_entries[] | .key as $i | .value as $h
+    | if ($h | type) != "object" then "hazard \($i) is not an object"
+      elif ($h | has("reason") | not) then "hazard \($i) has no reason"
+      elif ($h.reason | one_line | not) or ($h.reason | test("^\\s*$")) then "hazard \($i) needs a non-empty one-line reason"
+      elif ($h | has("command")) and (($h.command | one_line | not) or $h.command == "") then "hazard \($i) command must be a non-empty one-line string"
+      elif ($h | keys - ["reason", "command"] | length) > 0 then "hazard \($i) has keys other than reason and command: \($h | keys - ["reason", "command"] | join(", "))"
+      else empty end
+  end'
+
+config_set_verify() {
+    local f="$1" v="$2" sc tmp errs val
+    case "$f" in
+        typecheck|test|lint|package_manager|hook_manager)
+            case "$v" in *$'\n'*|*$'\r'*) refuse "config set: verify.$f must be one line" ;; esac
+            val="$(jq -n --arg v "$v" '$v')" ;;
+        hazards)
+            val="$(printf '%s' "$v" | jq -c . 2>/dev/null)" || refuse "config set: verify.hazards is not valid JSON"
+            errs="$(printf '%s' "$val" | jq -r "$HAZARDS_JQ")" || refuse "config set: could not check verify.hazards"
+            [ -z "$errs" ] || refuse "config set: verify.hazards refused, nothing written: ${errs//$'\n'/; }" ;;
+        *) die_usage "config set: verify field must be one of typecheck test lint package_manager hook_manager hazards, got: $f" ;;
+    esac
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    # shellcheck disable=SC2016 # $f and $v are jq variables
+    if jq --arg f "$f" --argjson v "$val" '
+        (if (.schema // 1) < 2 then
+            (if (.verify | type) == "object" then .verify |= with_entries(select(.value != "")) else . end)
+            | .schema = 2
+         else . end)
+        | .verify = ((if (.verify | type) == "object" then .verify else {} end) + {($f): $v})' \
+        < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set verify.$f" sidecar.json || exit 1
+}
+
+# The repo-facts block; the outcomes are in the header.
+# shellcheck disable=SC2016 # $s, $v, $f are jq variables
+PROFILE_JQ='def one_line: type == "string" and (test("[\n\r]") | not);
+  if type != "object" then error("not an object") else . end
+  | (.schema // 1) as $s
+  | if ($s | type) != "number" then error("schema is not a number") else . end
+  | (.verify // {}) as $v
+  | if ($v | type) != "object" then error("verify is not an object") else . end
+  | [$fields[] as $f
+      | if ($v | has($f) | not) then {f: $f, st: "unasked"}
+        elif ($v[$f] | one_line | not) then error("verify.\($f) is not a one-line string")
+        elif $v[$f] == "" then {f: $f, st: (if $s < 2 then "unasked" else "none" end)}
+        else {f: $f, st: "cmd", c: $v[$f]} end] as $rows
+  | (if ($v | has("hazards") | not) then null
+     else ([$v.hazards | '"$HAZARDS_JQ"'] | if length > 0 then error(join("; ")) else $v.hazards end) end) as $hz
+  | ([$rows[] | select(.st != "unasked")] | if length > 0 then
+        "Verify:", (.[] | "  \(.f): \(if .st == "none" then "none" else .c end)") else empty end),
+    (if $hz == null then empty
+     elif ($hz | length) == 0 then "Hazards (do not run; ask first): none"
+     else "Hazards (do not run; ask first):", ($hz[] | "  - " + (if has("command") then .command + ": " else "" end) + .reason) end),
+    ([($rows[] | select(.st == "unasked") | .f), (if $hz == null then "hazards" else empty end)]
+     | if length > 0 then "Not declared (ask before running anything not listed): " + join(", ") else empty end)'
+
+cmd_profile() {
+    local base sc errf body src
+    [ $# -eq 0 ] || die_usage "usage: sidecar.sh profile"
+    in_repo || refuse "not inside a git repository"
+    command -v jq >/dev/null 2>&1 || refuse "profile: jq is required to read the sidecar and is not on PATH; printing no profile"
+    base="$(cmd_base_ref)" || refuse "profile: no base ref (above); printing no profile"
+    errf="$(mktemp)" || refuse "profile: cannot create a temp file"
+    if sc="$(do_resolve 2>"$errf")"; then
+        cat "$errf" >&2; rm -f "$errf"
+        src="$sc/sidecar.json"
+    elif grep -q 'SIDECAR MISS:' "$errf"; then
+        rm -f "$errf"
+        src=/dev/null
+    else
+        cat "$errf" >&2; rm -f "$errf"; exit 1
+    fi
+    if [ "$src" = /dev/null ]; then
+        body="$(jq -nr --argjson fields "$VERIFY_FIELDS" '{} | '"$PROFILE_JQ" 2>&1)"
+    else
+        body="$(jq -r --argjson fields "$VERIFY_FIELDS" "$PROFILE_JQ" "$src" 2>&1)"
+    fi || refuse "profile: cannot read verify from $src: $body"
+    printf "## Repo profile (from the operator's sidecar; follow it)\nBase ref: %s\n%s\n" "$base" "$body"
 }
 
 # base_ref_of <name>: the range-endpoint ref for a base branch name, per the
@@ -1443,6 +1553,7 @@ case "$verb" in
     config)  cmd_config "$@" ;;
     base-ref) cmd_base_ref "$@" ;;
     range)   cmd_range "$@" ;;
+    profile) cmd_profile "$@" ;;
     path)    cmd_path "$@" ;;
     solutions-dirs) cmd_solutions_dirs "$@" ;;
     related-solutions-dirs) cmd_related_solutions_dirs "$@" ;;
@@ -1454,5 +1565,5 @@ case "$verb" in
     backend) cmd_backend "$@" ;;
     stamp)   cmd_stamp "$@" ;;
     work)    cmd_work "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
 esac

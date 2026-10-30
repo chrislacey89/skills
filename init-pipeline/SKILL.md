@@ -445,6 +445,47 @@ bash "$SC" config set base_ref <branch>
 
 `config set` takes the bare branch name, refuses `origin/<branch>`, and refuses a branch that resolves to no ref in this checkout. Relay a refusal as printed and ask again.
 
+**Q5 — the verify commands**, one question per key, in the order the block below prints them. The block reads which keys are still unasked from `profile`, and proposes a default for each from this repo's files. It writes nothing and runs none of what it detects.
+
+```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
+P="$(bash "$SC" profile)" || { echo "profile failed; stop and relay it" >&2; exit 1; }
+printf '%s\n' "$P" | sed -n 's/^Not declared (ask before running anything not listed): /unasked=/p'
+PM=
+for pair in pnpm-lock.yaml:pnpm package-lock.json:npm yarn.lock:yarn bun.lockb:bun bun.lock:bun; do
+  if [ -f "${pair%%:*}" ]; then PM="${pair#*:}"; break; fi
+done
+echo "detected.package_manager=$PM"
+for s in typecheck test lint; do
+  d=
+  if [ -n "$PM" ] && jq -e --arg s "$s" '.scripts[$s] | type == "string"' package.json >/dev/null 2>&1; then d="$PM run $s"; fi
+  echo "detected.$s=$d"
+done
+HM=
+if [ -f lefthook.yml ] || [ -f lefthook.yaml ]; then HM=lefthook
+elif [ -d .husky ]; then HM=husky
+elif [ -f .pre-commit-config.yaml ]; then HM=pre-commit
+fi
+echo "detected.hook_manager=$HM"
+```
+
+No `unasked=` line means every key is answered: skip Q5 and Q6. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The detection reuses `/setup-ralph-loop`'s package.json feedback-loop check and `/setup-pre-commit`'s lockfile and hook-manager check. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
+
+```bash
+bash "$SC" config set verify.<key> "<command the user confirmed>"
+bash "$SC" config set verify.<key> ""   # the repo has none
+```
+
+`""` declares none, which `profile` renders as `none`, while a key never written stays under `Not declared`. On a sidecar `init` wrote before this question existed (schema 1), the first of these writes moves the sidecar to schema 2 in the same commit and drops the empty values that `init` stubbed, so keys not yet answered still read as unasked. `config set` refuses a value that spans lines. Relay a refusal as printed and ask again.
+
+**Q6 — hazards** (`hazards` on the `unasked=` line): commands an agent must not run, or actions it must not take, in this repo without asking first. Nothing is detected, and the default is none. Each hazard needs a `reason`. A hazard may also carry a `command` in Claude Code permission-rule syntax, such as `Bash(pnpm test:e2e*)` ([hooks reference](https://code.claude.com/docs/en/hooks)), so that a later hook can match it. This skill does not enforce hazards. Write the confirmed list as one JSON array, or `[]` for none:
+
+```bash
+bash "$SC" config set verify.hazards '[{"reason":"resets the shared staging database","command":"Bash(pnpm test:e2e*)"},{"reason":"never push to the staging branch"}]'
+```
+
+`config set` refuses the whole list, writing nothing, when an entry has no non-empty one-line `reason`, carries a `command` that is not a non-empty one-line string, or has any other key. Relay the refusal as printed and ask again.
+
 ## Verification
 
 Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all eight. An auto-invoked Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, and Path D produces at most a refreshed marker-check span, § 8's sidecar, § 5's quality gate when the install was Path B, and with it the one-line rewrite § 5 ends with, so on either the pre-commit items below — and the quality-gate item, unless Path D ran § 5 — belong to the install that already ran and are not this run's to satisfy:
