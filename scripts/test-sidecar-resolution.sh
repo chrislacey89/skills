@@ -908,6 +908,17 @@ git -C "$PF_ROOT/pf" commit -q -am "fixture: every key answered"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
 check "Q5 on a fully answered sidecar prints no unasked line" "" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
 check "Q5 with no package.json or lockfile proposes no test command" "detected.test=" "$(printf '%s\n' "$q5out" | grep '^detected.test=')"
+printf '{"scripts":{"test":"vitest run"}}\n' > "$PF/clone/package.json"
+q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
+check "Q5 with a test script but no lockfile proposes no test command" "detected.test=" "$(printf '%s\n' "$q5out" | grep '^detected.test=')"
+rm -f "$PF/clone/package.json"
+# A failed profile prints no Not declared line, which the prose reads as
+# "every key answered"; the guard must stop the block instead.
+printf '{ not json\n' > "$PSJ"
+q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"; rc=$?
+check "Q5 on an unreadable sidecar.json exits 1" 1 "$rc"
+lacks "Q5 on an unreadable sidecar.json prints no unasked line" "unasked=" "$q5out"
+cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = ""'
 
 # /execute Step 4 reads the declared commands from profile and hard-codes no pnpm line.
 ex4="$(awk '/^### 4\. Verify/{f=1} /^#### Tier 1/{f=0} f' "$repo_root/execute/SKILL.md")"
