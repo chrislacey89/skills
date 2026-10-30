@@ -77,3 +77,4 @@ docs/next-step-menu.md     respond-to-review
 init-pipeline/scripts/sidecar.sh  respond-to-review
 init-pipeline/scripts/sidecar.sh  walk-commits
 init-pipeline/scripts/sidecar.sh  visual-recap
+init-pipeline/scripts/sidecar.sh  setup-ralph-loop

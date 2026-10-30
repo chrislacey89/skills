@@ -277,6 +277,11 @@ jobs:
       - name: Run PRD amendment gate contract suite
         run: bash scripts/test-prd-amendment-gate.sh
 
+      # #601: every sub-agent brief carries `sidecar.sh profile`, and no skill
+      # restates the profile's fields. Self-checks by planting both defects.
+      - name: Run profile paste-site contract suite
+        run: bash scripts/test-profile-paste-sites.sh
+
       # #347's round: two instruments keyed on a bare `git ls-files` reported
       # clean on an unstaged file. This runs their extracted populations in a
       # fixture with a tracked, an untracked, and an ignored file.
