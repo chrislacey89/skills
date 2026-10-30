@@ -840,6 +840,7 @@ cp "$PSJ" "$PF/good.json"
 before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
 for bad_h in '[{"command":"Bash(rm *)"}]' '[{"reason":""}]' '[{"reason":"   "}]' '[{"reason":42}]' \
              '[{"reason":"x","command":42}]' '[{"reason":"x","command":""}]' '[{"reason":"x","cmd":"y"}]' \
+             '[{"reason":"x","command":"   "}]' \
              '["just a string"]' '{"reason":"x"}' 'not json' '[{"reason":"two\nlines"}]'; do
     prun "$PF/clone" config set verify.hazards "$bad_h"
     if [ "$rc" -ne 0 ] && cmp -s "$PSJ" "$PF/good.json" && [ "$(git -C "$PF_ROOT/pf" rev-parse HEAD)" = "$before" ]; then
@@ -854,6 +855,9 @@ contains "a hazard with no reason is refused by name" "reason" "$err"
 prun "$PF/clone" config set verify.test $'pnpm test\nrm -rf /'
 check "a verify command containing a newline is refused" 1 "$rc"
 check "a refused command writes nothing" "pnpm run test" "$(jq -r .verify.test "$PSJ")"
+prun "$PF/clone" config set verify.test "   "
+check "a whitespace-only verify command is refused" 1 "$rc"
+check "a refused whitespace-only command writes nothing" "pnpm run test" "$(jq -r .verify.test "$PSJ")"
 prun "$PF/clone" config set verify.nosuch x
 check "an unknown verify field is a usage error" 2 "$rc"
 prun "$PF/clone" config set verify x
@@ -866,14 +870,18 @@ lacks "a declared-empty hazard list is not under Not declared" "hazards" "${out#
 
 # Hand edits the verbs would refuse: profile cannot trust what it read, so it prints no block.
 for shape in '.verify.test = 42' '.verify = "x"' '.verify.hazards = "x"' '.verify.hazards = [{"command":"y"}]' \
-             '.verify.test = "a\nb"' '.schema = "2"'; do
+             '.verify.test = "a\nb"' '.verify.test = "  "' '.verify.hazards = [{"reason":"x","command":" "}]' '.schema = "2"'; do
     cp "$PF/good.json" "$PSJ"; pset "$shape"
     prun "$PF/clone" profile
     check "a hand-set $shape makes profile exit 1 and print no block" "1 " "$rc $out"
+    contains "a hand-set $shape is refused by profile's own read, not base-ref's" "profile: cannot read verify" "$err"
 done
+# base-ref reads sidecar.json first, so an unparseable file stops there; this
+# case covers that refusal, and the shapes above cover profile's own read.
 printf '{ not json\n' > "$PSJ"
 prun "$PF/clone" profile
 check "an unreadable sidecar.json makes profile exit 1 and print no block" "1 " "$rc $out"
+contains "an unreadable sidecar.json stops at base-ref" "profile: no base ref" "$err"
 lacks "an unreadable sidecar.json is not reported as a miss" "SIDECAR MISS" "$err"
 cp "$PF/good.json" "$PSJ"
 
