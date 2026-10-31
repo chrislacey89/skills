@@ -70,7 +70,7 @@ one here and nowhere else.
 | Attempt cap | 2 verification attempts per slice |
 | Roll-up write cap | 2 attempts at the guarded PR-body write in Close step 6, the first included |
 | Gap label | `lfg-gap` |
-| Ledger gap issues per run | at most 1, the roll-up (Close step 6); every row that became one of its items records its number |
+| Ledger gap issues per run | defined once, in **Rolling up the ledger** below |
 | No-change row shapes | defined once, in **Rolling up the ledger** below |
 | Ledger transition this skill may write | `open → filed` |
 | PR banner first line | `> **LFG proof of concept** — built unattended; not production-reviewed. Promote or discard by human decision.` |
@@ -313,7 +313,7 @@ prove the path.
 3. **Open the PR** with the recap as its body (see **Recap**). The banner is the body's first line, and the body includes `Closes #<PRD-lite>` on the feature path.
 4. Invoke `/pre-merge --loop`, passing the PRD-lite issue number, or "none" on the tiny path. Loop-mode updates the existing PR, reviews it, writes its ledger, and stamps it.
 5. Read the PR body back. If the banner is no longer the first line, put it back with the guarded `mktemp` → fetch-with-exit-check → byte-count → edit → refuse-if-shorter → `gh pr edit --body-file` shape `/pre-merge` Phase 5 uses for its ledger.
-6. **Roll up the ledger** (see **Rolling up the ledger**). Sort the rows in state `open` into checklist items and no-change rows, and file one gap issue whose body is the checklist; note its number the moment it is filed. File none when no row is an item. Then, in one guarded write of the PR body, set every `open` row's state to `filed`: an item's row with the roll-up's number, a no-change row with the PRD-lite's number, where step 7 lists it (on the tiny path, the PR's own number, where the recap lists it). The same write fills in the recap's `gaps:` and `ledger:` lines. That is the ledger transition in **Locked vocabulary**, and the only ledger write this skill makes. Rows marked `fixed`, `accepted`, or `dropped` are decisions for the user. **Then check it finished:** read the PR body back and count the rows of its `## Review Disposition Ledger` table whose **State** cell is `open` (`/pre-merge`'s ledger defines the columns). The word `open` anywhere else in the body, such as the ledger's fixed prose line or an Evidence cell, is not a row. A non-zero count while the PR is open means the write did not land. Resume at the write only: the roll-up is already filed, so reuse its number (find it by its gap label and its link to the PRD-lite if you no longer hold it) and file nothing again. Retry the write until the roll-up write cap is spent. When the cap is spent with a row still `open`, take the **Error path** (see **Exit paths**): the continuation comment names the roll-up's number and the rows left unfiled, and the run goes on to step 7 rather than retrying.
+6. **Roll up the ledger** (see **Rolling up the ledger**). Sort the rows in state `open` into checklist items and no-change rows, and file the roll-up issue whose body is the checklist; note its number the moment it is filed. File none when no row is an item. Then, in one guarded write of the PR body, set every `open` row's state to `filed`, each with the number **Rolling up the ledger** assigns it. The same write fills in the recap's `gaps:` and `ledger:` lines. That is the ledger transition in **Locked vocabulary**, and the only ledger write this skill makes. Rows marked `fixed`, `accepted`, or `dropped` are decisions for the user. **Then check it finished:** read the PR body back and count the rows of its `## Review Disposition Ledger` table whose **State** cell is `open` (`/pre-merge`'s ledger defines the columns). The word `open` anywhere else in the body, such as the ledger's fixed prose line or an Evidence cell, is not a row. A non-zero count while the PR is open means the write did not land. Resume at the write only: the roll-up is already filed, so reuse its number (find it by its gap label and its link to the PRD-lite if you no longer hold it) and file nothing again. Retry the write until the roll-up write cap is spent. When the cap is spent with a row still `open`, take the **Error path** (see **Exit paths**): the continuation comment names the roll-up's number and the rows left unfiled, and the run goes on to step 7 rather than retrying.
 7. Post one roll-up comment on the PRD-lite issue that lists every gap issue, the stop tally, and an **Observations** list with one line per no-change row: its title and any file:line ref.
 8. Print the handoff (see **Handoff**). Render no next-step menu: nobody is present to answer it, so the printed line is the whole handoff.
 
@@ -338,6 +338,8 @@ Close step 6 turns the ledger's `open` rows into one gap issue. Filing one
 issue per row produced 8 to 18 issues per PR, and about a third of them asked
 for no change (chrislacey89/skills#688). This section decides which rows become items, when two
 rows are one item, and what an item looks like.
+
+A run files at most one roll-up issue. Every row that became one of its items records its number when the row moves to `filed`; a no-change row records the PRD-lite's number, where step 7 lists it (on the tiny path, the PR's own number, where the recap lists it).
 
 **No-change rows.** A row is a no-change row when it asks for no edit and its
 text has one of three shapes:
@@ -411,7 +413,7 @@ In every section, refer to an issue that must stay open without one, e.g.
 - `.claude/.lfg-active` present when `/pre-merge --loop` starts, or present after the run ends.
 - A ledger row this skill set to anything other than `filed`.
 - A handoff printed while the PR is open and its ledger still has a row in state `open`.
-- More than one ledger roll-up issue in a run, a checklist item that starts with an issue reference, or a no-change row filed as an item.
+- A roll-up that breaks the issue cap in **Rolling up the ledger**, a checklist item that starts with an issue reference, or a no-change row filed as an item.
 - A shipped slice whose PRD-lite box is unticked, or a stubbed slice whose box is ticked.
 - A PR body whose first line is not the banner.
 - Per-slice issues, a `/tdd` invocation on the feature path, or a `/closeout`.
