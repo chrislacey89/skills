@@ -1093,6 +1093,27 @@ for reader in execute walk-commits; do
     check "/$reader prints no ref from a design it could not read" "" "$rbout"
     if [ "$rc" -ne 0 ] && [ -n "$rberr" ]; then ok "/$reader fails loudly on a design it could not read"
     else bad "/$reader fails loudly on a design it could not read" "rc=$rc err=$rberr"; fi
+    # could-not-look is not "none declared": the block must fail loudly, not print nothing and exit 0.
+    printf '{ not json\n' > "$PSJ"
+    rbrun "$PF/clone"
+    check "/$reader prints no ref from a corrupt sidecar.json" "" "$rbout"
+    if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly on a corrupt sidecar.json"
+    else bad "/$reader fails loudly on a corrupt sidecar.json" "rc=$rc err=$rberr"; fi
+    cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
+    chmod 000 "$PSJ"
+    if [ -r "$PSJ" ]; then
+        bad "/$reader fails loudly on an unreadable sidecar.json" "the file is still readable (running as root?), so this arm proves nothing"
+    else
+        rbrun "$PF/clone"
+        check "/$reader prints no ref from an unreadable sidecar.json" "" "$rbout"
+        if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly on an unreadable sidecar.json"
+        else bad "/$reader fails loudly on an unreadable sidecar.json" "rc=$rc err=$rberr"; fi
+    fi
+    chmod 644 "$PSJ"; cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
+    rbout="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" PATH="$nojq" bash -c "$rb" 2>"$PF/rberr")"; rc=$?; rberr="$(cat "$PF/rberr")"
+    check "/$reader prints no ref with jq missing" "" "$rbout"
+    if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly with jq missing"
+    else bad "/$reader fails loudly with jq missing" "rc=$rc err=$rberr"; fi
 done
 cp "$PF/good.json" "$PSJ"
 ex5="$(awk '/^### 5\. Manual Verification/{f=1} /^#### Behavior Review/{f=0} f' "$repo_root/execute/SKILL.md")"

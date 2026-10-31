@@ -72,9 +72,15 @@ Then check whether the repo declares a design reference. This block prints its r
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-if bash "$SC" resolve >/dev/null 2>&1; then
-  bash "$SC" config get design.ref
-  bash "$SC" config get design.note
+ERR="$(mktemp)" || exit 1
+if bash "$SC" resolve >/dev/null 2>"$ERR"; then
+  rm -f "$ERR"
+  bash "$SC" config get design.ref || exit 1
+  bash "$SC" config get design.note || exit 1
+elif grep -q 'SIDECAR MISS:' "$ERR"; then
+  rm -f "$ERR"
+else
+  cat "$ERR" >&2; rm -f "$ERR"; exit 1
 fi
 ```
 
