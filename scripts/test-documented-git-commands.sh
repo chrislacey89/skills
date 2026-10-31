@@ -17,10 +17,10 @@
 # Covered today: /triage-issue Step 2's regression-bisect block (all three of
 # its lines) and its "prior incident patterns" fix-commit grep (#236), the
 # base branch every skill asks `sidecar.sh base-ref` for (#298, #598): the verb
-# is run once in a clone whose local base is stale, every skill's range lines
-# are run against its answer, /closeout's `--name` block is run for the bare
-# name (#310), and a census fails, naming the file, if any skill derives the
-# base itself again. Every fenced bash block in
+# is run once in a clone whose local base is stale, every skill's whole block
+# is run there with its range lines scored one at a time (#616), /closeout's
+# `--name` block is run for the bare name (#310), and a census fails, naming
+# the file, if any skill derives the base itself again. Every fenced bash block in
 # /excavate's process section is also run, against a fixture dated 2020 with an
 # absolute SINCE; its gh blocks are an explicit, named, counted skip set rather
 # than a silent one. Extend the suite when a skill
@@ -142,10 +142,16 @@
 #            elsewhere produced `claimed: the` — the parser reading English. It
 #            now reads the mapping whose left-hand side is the ref the fixture
 #            actually resolves, and skips a comment that claims nothing about it.
+#   8. Do not hand a block what its own earlier lines compute. This suite ran
+#      each skill's range lines with BASE_REF preset, so a wrong SC path, a
+#      BASE_REF= line below its readers, and a range line in a later block than
+#      its assignment all stayed green (#616). The last of those was live at
+#      three sites, /compound, /help, and /execute's guard sweep, where a fresh
+#      shell reads an empty BASE_REF and git answers with an empty range.
 #
 # WHAT THIS SUITE DOES NOT HOLD, said plainly so a green run is not misread:
 # the derivation census keys on the ways of asking a remote for its default
-# branch that it names. A skill that finds the base some way the signal does
+# branch, and the candidate-name lists, that it names. A skill that finds the base some way the signal does
 # not list is not caught; widen the signal when one appears. The verb's own
 # outcomes are pinned in test-sidecar-resolution.sh, not here.
 
@@ -548,9 +554,10 @@ assert_matches "$bisect_out" "$expected_bad is the first '?bad'? commit" \
 #
 # Every skill now asks `sidecar.sh base-ref` for the base instead of deriving
 # it, so the derivation is run once (below), a census forbids a copy from
-# coming back, and each skill's range lines are run against the verb's answer.
-# The wrong forms are built by mutating those extracted lines, so a site that
-# stops carrying the documented shape fails loudly rather than being skipped.
+# coming back, and each skill's whole block runs in the fixture and asks the
+# verb itself. The wrong forms are built by mutating those extracted blocks, so
+# a site that stops carrying the documented shape fails loudly rather than
+# being skipped.
 
 section "build a clone whose local base is behind origin/<base>"
 
@@ -659,6 +666,7 @@ section "the base-ref verb answers a ref and a name in the stale-base clone"
 d='$'
 sidecar="$repo_root/init-pipeline/scripts/sidecar.sh"
 [[ -f "$sidecar" ]] || fatal "init-pipeline/scripts/sidecar.sh is gone; every skill asks it for the base"
+placeholder="<this skill's directory>/references/sidecar.sh"
 # An empty sidecar root, so the verb takes its no-sidecar path here no matter
 # what sidecars exist on the machine running this suite.
 no_sidecars="$base_sandbox/no-sidecars"
@@ -722,9 +730,10 @@ section "no skill carries its own base-branch derivation"
 #
 # The signal is loose on purpose (header lesson 7(a)). It is not the one wording
 # the copies used: it is any `symbolic-ref`, any `git` command that names
-# `origin/HEAD`, any other way of asking a remote for its default branch, and
-# BASE_REF assigned from the `--name` form, which is a name used as a ref. A
-# citation inside inline code counts: execute/SKILL.md's cited
+# `origin/HEAD`, any other way of asking a remote for its default branch,
+# BASE_REF assigned from the `--name` form, which is a name used as a ref, and
+# two candidate branch names in a row, the fallback loop that runs on any repo
+# where `origin/HEAD` is unset (#618). A citation inside inline code counts: execute/SKILL.md's cited
 # `git symbolic-ref` was one an agent was told to run (#310).
 #
 # The scan set is every markdown file one level down (`*/SKILL.md`,
@@ -733,7 +742,7 @@ section "no skill carries its own base-branch derivation"
 # defective lines on purpose, the root files (CHANGELOG.md, README.md), and
 # init-pipeline/scripts/sidecar.sh, which is where the derivation belongs.
 # shellcheck disable=SC2016  # the pattern matches literal markdown, not expansions
-derivation_signal='symbolic-ref|(^|[^[:alnum:]_])git [^`]*origin/HEAD|defaultBranchRef|ls-remote --symref|remote show origin|BASE_REF="?\$\(bash "\$SC" base-ref --name'
+derivation_signal='symbolic-ref|(^|[^[:alnum:]_])git [^`]*origin/HEAD|defaultBranchRef|ls-remote --symref|remote show origin|BASE_REF="?\$\(bash "\$SC" base-ref --name|(^|[^[:alnum:]_-])(main|master|prod|develop|trunk) +(main|master|prod|develop|trunk)([^[:alnum:]_-]|$)'
 derivation_copies() {
     # Prints <file>:<line> for every line under $1 that derives the base itself.
     ( cd "$1" && for f in ./*/*.md ./*/references/*.md; do
@@ -747,7 +756,7 @@ derivation_copies() {
 # the clean file and the excluded docs/solutions entry must stay silent.
 planted="$base_sandbox/planted-copies"
 mkdir -p "$planted/fenced" "$planted/cited" "$planted/bundled/references" \
-    "$planted/asname" "$planted/clean" "$planted/docs/solutions/x"
+    "$planted/asname" "$planted/fallback" "$planted/clean" "$planted/docs/solutions/x"
 # shellcheck disable=SC2016  # planted fixtures are literal markdown
 {
     printf '# Fenced\n\n```bash\n'
@@ -762,13 +771,20 @@ printf '%s\n' 'BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.
 printf '%s\n' 'BASE_REF="$(bash "$SC" base-ref --name)"' > "$planted/asname/SKILL.md"
 # shellcheck disable=SC2016
 {
+    printf '%s\n' 'for b in main master prod develop trunk; do'
+    printf '%s\n' '  git rev-parse --verify -q "origin/$b" >/dev/null && { BASE_BRANCH="$b"; break; }'
+    printf '%s\n' 'done'
+} > "$planted/fallback/SKILL.md"
+# shellcheck disable=SC2016
+{
     printf '%s\n' 'SC="<this skill'"'"'s directory>/references/sidecar.sh"'
     printf '%s\n' 'BASE_REF="$(bash "$SC" base-ref)" || exit 1'
     printf '%s\n' 'BASE_BRANCH="$(bash "$SC" base-ref --name)" || exit 1'
     printf '%s\n' 'It answers the `origin/HEAD` default when no base_ref is declared.'
+    printf '%s\n' 'Many repos use `prod`, `develop`, or `trunk` rather than `main` or `master`.'
 } > "$planted/clean/SKILL.md"
 cp "$planted/fenced/SKILL.md" "$planted/docs/solutions/x/entry.md"
-assert_eq 'asname/SKILL.md:1 bundled/references/copy.md:1 cited/notes.md:1 fenced/SKILL.md:4' \
+assert_eq 'asname/SKILL.md:1 bundled/references/copy.md:1 cited/notes.md:1 fallback/SKILL.md:1 fenced/SKILL.md:4' \
     "$(derivation_copies "$planted" | sort | tr '\n' ' ' | sed 's/ $//')" \
     "the census names each planted copy by file and line, and nothing else"
 
@@ -823,14 +839,94 @@ for site in $verb_sites closeout/SKILL.md; do
     fi
 done
 
-# The range-running sections below read a skill's range lines one at a time.
-# respond-to-review's two are a log continued into an awk pipeline and a diff
-# against a PR head, neither of which this fixture has an oracle for; the range
-# census further down still checks their endpoints and operators.
+# The range-running sections below run a skill's whole block. /respond-to-review
+# is out by name: its two blocks need trailers and a stubbed Bitbucket API this
+# fixture does not have, and test-respond-to-review-contract.sh runs both whole.
+# The range census further down still checks their endpoints and operators.
 # shellcheck disable=SC2086  # word-splitting the space-separated list is the point
 run_sites="$(printf '%s\n' $verb_sites | grep -vx 'respond-to-review/SKILL.md' | tr '\n' ' ' | sed 's/ $//')"
 
-# -----------------------------------------------------------------------------
+# Each fenced block holding a range line, one file per block. The indent is
+# stripped the way extract_block_with strips it, so a block lifted from a
+# numbered list still matches extract_range_lines' output.
+block_root="$base_sandbox/range-blocks"
+for site in $run_sites; do
+    mkdir -p "$block_root/${site%%/*}"
+    awk -v dir="$block_root/${site%%/*}" '
+        /^[[:space:]]*```/ {
+            if (inblock) {
+                if (found) { k++; for (i = 1; i <= n; i++) print buf[i] > (dir "/" k); close(dir "/" k) }
+                inblock = 0; next
+            }
+            inblock = 1; n = 0; found = 0; next
+        }
+        inblock {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            buf[++n] = line
+            if (line ~ /^git (diff|log) .*[$][{]?BASE_/) found = 1
+        }
+    ' "$repo_root/$site"
+done
+
+block_holding() {
+    # Prints the block of site $1 that holds range line $2.
+    local f
+    for f in "$block_root/${1%%/*}"/*; do
+        [[ -f "$f" ]] || continue
+        if grep -qxF -- "$2" "$f"; then cat "$f"; return 0; fi
+    done
+    return 0
+}
+
+# Runs the whole block in $1, in order and in one shell, and prints what line $3
+# of it printed. Only two echoes are added, around that line. Nothing is
+# preset: BASE_REF and BASE_BRANCH are cleared, so the block has to compute them
+# the way it does in the fresh shell an agent runs it in. The block's status is
+# swallowed for the reason run_base_ref's callers use `set +e`: a broken block
+# must redden its own named check, not end the run. A block that stops before
+# the line prints $block_stopped, so a check whose right answer is empty cannot
+# pass on a block that never got there.
+range_mark='@@range-line'
+block_stopped='<the block stopped before this line>'
+run_range_line() {
+    local dir="$1" block="$2" line="$3" script out
+    # shellcheck disable=SC2016  # the awk program reads ENVIRON, not the shell
+    script="$(printf '%s\n' "${block//"$placeholder"/$sidecar}" | LINE="$line" MARK="$range_mark" awk '
+        $0 == ENVIRON["LINE"] { print "echo \"" ENVIRON["MARK"] " start\""; print; print "echo \"" ENVIRON["MARK"] " end\""; next }
+        { print }')"
+    out="$( ( cd "$dir" && env -u BASE_REF -u BASE_BRANCH SKILL_KIT_SIDECAR_ROOT="$no_sidecars" bash -c "$script" 2>&1 </dev/null ) || true )"
+    if [[ "$out" != *"$range_mark start"* ]]; then
+        printf '%s' "$block_stopped"
+        return 0
+    fi
+    printf '%s\n' "$out" | MARK="$range_mark" awk '
+        $0 == ENVIRON["MARK"] " end" { on = 0 }
+        on { print }
+        $0 == ENVIRON["MARK"] " start" { on = 1 }'
+}
+
+# The instrument first (header lesson 7(e)): the three faults #616 exists for
+# must each reach the check, and a BASE_REF exported by this suite's caller must
+# not stand in for the assignment.
+# shellcheck disable=SC2016  # planted blocks are literal skill text
+probe_line='git log --oneline "$BASE_REF..HEAD"'
+probe_good="SC=\"$placeholder\"
+$verb_marker || exit 1
+$probe_line"
+probe_bad_path="${probe_good//references\/sidecar.sh/scripts/sidecar.sh}"
+probe_late="$probe_line
+SC=\"$placeholder\"
+$verb_marker || exit 1"
+probe_no_assign="$probe_line"
+assert_eq 2 "$(run_range_line "$work" "$probe_good" "$probe_line" | grep -c .)" \
+    "run_range_line reads the probe line's own output from a whole block"
+assert_eq "$block_stopped" "$(run_range_line "$work" "$probe_bad_path" "$probe_line")" \
+    "a block whose SC path does not exist never reaches its range line"
+assert_eq '' "$(run_range_line "$work" "$probe_late" "$probe_line")" \
+    "a BASE_REF= line below its reader leaves the range empty, so the oracle reddens"
+assert_eq '' "$(BASE_REF=origin/prod run_range_line "$work" "$probe_no_assign" "$probe_line")" \
+    "a BASE_REF exported by the caller does not reach the block"
 
 # -----------------------------------------------------------------------------
 
@@ -880,27 +976,20 @@ do
         "stat_triple parses a planted summary: ${probe%|*}"
 done
 
-run_in_fixture() {
-    # Run one extracted command in the clone, with BASE_REF set to the verb's
-    # answer and BASE_BRANCH to its --name answer (the negative controls below
-    # swap one for the other).
-    #
-    # The status is deliberately swallowed. Assigning this to a variable is a
-    # simple command whose status is the substitution's, so under `set -e` a
-    # block that stops parsing would kill the run at that line and report no
-    # assertions at all — the same "reader hunts for a cause that was never
-    # named" failure the bisect-reset check above guards against. Let the
-    # assertions speak instead: a broken block yields empty output and reddens
-    # its own named check.
-    ( cd "$work" && BASE_REF="$fixture_ref" BASE_BRANCH="$fixture_name" bash -c "$1" 2>&1 ) || true
-}
-
 for site in $run_sites; do
     lines="$(extract_range_lines "$repo_root/$site")"
     [[ -n "$lines" ]] || fatal "no 'git diff'/'git log' range line found in $site"
     while IFS= read -r line; do
         [[ -n "$line" ]] || continue
-        out="$(run_in_fixture "$line")"
+        block="$(block_holding "$site" "$line")"
+        # A range line in a block that does not ask the verb reads an empty
+        # BASE_REF in a fresh shell, and git answers with an empty range.
+        if [[ "$block" != *"$verb_marker"* ]]; then
+            printf "  FAIL %s: '%s' sits in a block that does not set BASE_REF from base-ref\n" "$site" "$line"
+            fail=$((fail + 1))
+            continue
+        fi
+        out="$(run_range_line "$work" "$block" "$line")"
         # Keyed on the FLAGS, not on the subcommand. The first version of this
         # case matched every `git diff` line and asserted a stat triple against
         # it, so /execute's `--diff-filter=DR --name-status` line — which emits
@@ -952,6 +1041,9 @@ section "the fixture separates the right answer from each wrong one"
 # control.
 #
 # The three wrong answers are deliberately distinct from each other:
+# The name mutant is the block asking `base-ref --name` for BASE_REF, which is
+# the #298 defect in the shape it would take today.
+#
 #   bare name, three-dot  -> 4/30/0   (sweeps in c4+c5, merged before the cut)
 #   ref, two-dot          -> 4/10/50  (invents deletions for c6+c7)
 #   bare name, two-dot    -> 4/30/0   (/walk-commits and /visual-recap before #298:
@@ -968,8 +1060,11 @@ for site in $run_sites; do
     line="$(extract_range_lines "$repo_root/$site" | grep -m1 '^git diff .*--stat' || true)"
     [[ -n "$line" ]] || continue
 
-    stale_name="${line//\$BASE_REF/\$BASE_BRANCH}"
-    assert_eq '4/30/0' "$(stat_triple "$(run_in_fixture "$stale_name")")" \
+    block="$(block_holding "$site" "$line")"
+    verb_ref='base-ref)"'
+    verb_name='base-ref --name)"'
+    stale_name="${block//"$verb_ref"/$verb_name}"
+    assert_eq '4/30/0' "$(stat_triple "$(run_range_line "$work" "$stale_name" "$line")")" \
         "$site: using the bare name as the endpoint inflates the diff (the #298 defect is reachable here)"
 
     two_dot="${line/\.\.\./..}"
@@ -977,12 +1072,11 @@ for site in $run_sites; do
         printf '  FAIL %s: could not build a two-dot mutant from %q; the documented diff is not three-dot\n' "$site" "$line"
         fail=$((fail + 1))
     else
-        assert_eq '4/10/50' "$(stat_triple "$(run_in_fixture "$two_dot")")" \
+        assert_eq '4/10/50' "$(stat_triple "$(run_range_line "$work" "${block/"$line"/$two_dot}" "$two_dot")")" \
             "$site: two-dot 'git diff' invents deletions for base-side work (the operator defect propagates here)"
     fi
 
-    both="${stale_name/\.\.\./..}"
-    assert_eq '4/30/0' "$(stat_triple "$(run_in_fixture "$both")")" \
+    assert_eq '4/30/0' "$(stat_triple "$(run_range_line "$work" "${stale_name/"$line"/$two_dot}" "$two_dot")")" \
         "$site: with the bare name, two-dot and three-dot agree — the operator defect is masked until the ref is fixed"
 
     [[ -n "$first_diff_line" ]] || first_diff_line="$line"
@@ -1064,11 +1158,8 @@ for site in $run_sites; do
     [[ -n "$line" ]] || continue
     deltrig_sites=$((deltrig_sites + 1))
 
-    set +e
-    out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$line" 2>&1)"
-    status=$?
-    set -e
-    assert_eq 0 "$status" "$site's deletion-trigger line is a valid invocation"
+    block="$(block_holding "$site" "$line")"
+    out="$(run_range_line "$deltrig" "$block" "$line")"
     assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$out")" \
         "$site: the deletion-trigger line reports the branch's own deletion and rename"
 
@@ -1081,9 +1172,7 @@ for site in $run_sites; do
         printf '  FAIL %s: could not build a two-dot mutant from %q; the documented deletion trigger is not three-dot\n' "$site" "$line"
         fail=$((fail + 1))
     else
-        set +e
-        two_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$two_dot" 2>&1)"
-        set -e
+        two_out="$(run_range_line "$deltrig" "${block/"$line"/$two_dot}" "$two_dot")"
         assert_eq 'D base-added.txt;D doomed.txt;R renamed.txt;' "$(del_oracle "$two_out")" \
             "$site: two-dot invents a deletion for base-side work the branch never touched"
     fi
@@ -1097,9 +1186,7 @@ for site in $run_sites; do
         printf '  FAIL %s: could not build an unfiltered mutant from %q; the documented filter is not --diff-filter=DR\n' "$site" "$line"
         fail=$((fail + 1))
     else
-        set +e
-        unf_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$unfiltered" 2>&1)"
-        set -e
+        unf_out="$(run_range_line "$deltrig" "${block/"$line"/$unfiltered}" "$unfiltered")"
         assert_eq 'D doomed.txt;M keep.txt;R renamed.txt;' "$(del_oracle "$unf_out")" \
             "$site: without --diff-filter=DR the line also reports plain modifications, so the trigger stops discriminating"
     fi
@@ -1393,7 +1480,6 @@ assert_contains "$closeout_block" 'base-ref --name' "/closeout's base block asks
 # would print a line the operator could hand to `git switch`.
 ref_calls="$(printf '%s\n' "$closeout_block" | grep -E 'base-ref' | grep -vc -- 'base-ref --name' || true)"
 assert_eq 0 "$ref_calls" "/closeout's base block never asks base-ref for the ref form"
-placeholder="<this skill's directory>/references/sidecar.sh"
 [[ "$closeout_block" == *"$placeholder"* ]] || fatal "closeout/SKILL.md's base block no longer carries the $placeholder placeholder"
 set +e
 closeout_out="$(cd "$work" && SKILL_KIT_SIDECAR_ROOT="$no_sidecars" bash -c "${closeout_block//"$placeholder"/$sidecar}" 2>/dev/null)"
@@ -2522,7 +2608,7 @@ guard_repo="$base_sandbox/guard"
     printf '%s\n' 'slug=$(owner archive-dir)' 'echo kept' > owner.sh
     git commit -q -am feature
 )
-guard_out="$( ( cd "$guard_repo" && BASE_REF=prod bash -c "$guard_line" 2>&1 ) || true )"
+guard_out="$(run_range_line "$guard_repo" "$(block_holding execute/SKILL.md "$guard_line")" "$guard_line")"
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion
 assert_contains "$guard_out" '-[ -n "$slug" ] || exit 1' "the sweep lists a removed 'exit' guard inside a surviving file"
 # shellcheck disable=SC2016  # literal text to match against, or a script to write; never an expansion

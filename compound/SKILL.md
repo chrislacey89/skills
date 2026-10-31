@@ -63,27 +63,22 @@ Without this step, you've done traditional engineering with AI assistance. The f
 
 On the in-PR default path the work under review is the open PR branch, so the commands below read it directly — a `git log` and a `git diff` of the branch against the base it will merge into, while it is still unmerged. On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, that diff is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work.
 
-Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. `sidecar.sh base-ref` answers with a ref, never a bare name, so every skill that measures a branch asks it rather than deriving the base itself.
+Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. Ask `sidecar.sh base-ref`; do not derive the base.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+git log --oneline "$BASE_REF..HEAD"
+git diff --stat "$BASE_REF...HEAD"
 ```
 
 Look at:
 
-1. **Git log** — What commits were made? What changed?
-   ```bash
-   git log --oneline "$BASE_REF..HEAD"
-   ```
-   Base-relative, not `-20`: a fixed count reads the base's own history as "the work under review" on any branch shorter than it. Two-dot here is correct — these are the commits on this branch and not on the base. (The `git diff` below is three-dot for the mirror reason: it diffs from the merge base rather than subtracting base-side work.) On the post-merge fallback path the branch is gone, so use `gh pr diff <n>` as above.
+1. **Git log** — What commits were made? What changed? Base-relative, not `-20`: a fixed count reads the base's own history as "the work under review" on any branch shorter than it. Two-dot here is correct — these are the commits on this branch and not on the base. (The `git diff` is three-dot for the mirror reason: it diffs from the merge base rather than subtracting base-side work.) On the post-merge fallback path the branch is gone, so use `gh pr diff <n>` as above.
 
 2. **Issue thread** — What was the original problem? What was discussed?
 
 3. **The diff** — What files changed? What patterns emerged?
-   ```bash
-   git diff --stat "$BASE_REF...HEAD"
-   ```
 
 Ask the user: "What was the most important thing you learned or the trickiest part of this feature?" Their answer often reveals the highest-value lesson to capture.
 
