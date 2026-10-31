@@ -165,23 +165,35 @@ fold_block="$(awk '
 [[ "$fold_block" == *'git rebase -q -i --autosquash'* ]] || fatal "no fold block found in $premerge_skill"
 
 # The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
-# out of its list item. Section 12 runs it.
+# out of its list item and whole, from its comment to the line that prints the
+# answer. Section 12 runs it with nothing preset, the way a fresh shell does
+# (#619): the anchor reaches it by substitution, as it reaches an agent.
 fixup_target_block="$(awk '
-    /^   FIXUP_TARGET=\$\(git (-c [A-Za-z.]+=[a-z]+ )*blame/ { on = 1 }
+    /^   # Which one commit on this branch wrote every line the finding anchors on\?$/ { on = 1 }
     on { sub(/^   /, ""); print }
-    on && /&& FIXUP_TARGET=$/ { exit }
+    on && /^printf .FIXUP_TARGET=/ { exit }
 ' "$fixfindings_skill")"
+fixup_target_block="${fixup_target_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+# shellcheck disable=SC2016  # the ${...} is text for the extracted block to expand, not this shell
+fixup_target_block="$(printf '%s\n' "$fixup_target_block" | sed -e 's/^FILE="<[^"]*>"$/FILE="${TARGET_FILE:?}"/' \
+    -e 's/^START="<[^"]*>"$/START="${TARGET_START:?}"/' -e 's/^END="<[^"]*>"$/END="${TARGET_END:?}"/')"
+[[ "$fixup_target_block" == *"$sidecar_sh"* ]] || fatal "fixup-target block's sidecar.sh placeholder was not substituted"
+# shellcheck disable=SC2016  # the pattern is the substituted literal text
+[[ "$fixup_target_block" == *'END="${TARGET_END:?}"'* ]] || fatal "fixup-target block's anchor placeholders were not substituted"
 [[ "$fixup_target_block" == *'|| FIXUP_TARGET='* ]] || fatal "no FIXUP_TARGET block found in $fixfindings_skill"
 [[ "$fixup_target_block" == *'&& FIXUP_TARGET='* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no unshared-branch line"
 
-# The fold-trial block that follows it (#611): from its comment line to the
-# cleanup and its exit-status line. Section 12 runs it against a fixup that folds and one that does not.
+# The fold-trial block that follows it (#611): from its comment line to its
+# closing fence. Section 12 runs it whole against a fixup that folds, one that
+# does not, and each failure that is not a conflict (#614).
 fold_trial_block="$(awk '
     /^   # After `git commit --fixup`: would \/pre-merge.s fold still apply cleanly\?/ { on = 1 }
+    on && /^   ```$/ { exit }
     on { sub(/^   /, ""); print }
-    on && /^\[ -z "\$\{TRIAL_FAILED:-\}" \]$/ { exit }
 ' "$fixfindings_skill")"
 [[ "$fold_trial_block" == *'rebase -q -i --autosquash'* ]] || fatal "no fold-trial block found in $fixfindings_skill"
+fold_trial_block="${fold_trial_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+[[ "$fold_trial_block" == *"$sidecar_sh"* ]] || fatal "fold-trial block's sidecar.sh placeholder was not substituted"
 
 printf 'scope block (%s lines) and rounds line extracted\n' "$(printf '%s\n' "$scope_block" | grep -c .)"
 
@@ -818,15 +830,38 @@ mkdir -p "$repo4"
     git commit -q -am 'feature: add d'
 )
 assert_fixture_committed "$repo4" "fixup-target fixture" 0 3 f.txt
-change_b_sha="$(git -C "$repo4" rev-parse HEAD~1)"
-run_target() {
-    (cd "$repo4" && BASE_REF=main FILE=f.txt START="$1" END="$2" \
-        bash -c "$fixup_target_block"'; printf "%s" "$FIXUP_TARGET"')
+# point_origin_at_main <repo> — gives a fixture the origin/HEAD a clone has, so
+# sidecar.sh base-ref answers origin/main with nothing on stderr. No remote is
+# added: ls-remote still finds no branch, so the branch still reads as unshared.
+point_origin_at_main() {
+    git -C "$1" update-ref refs/remotes/origin/main main
+    git -C "$1" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 }
-assert_eq "$change_b_sha" "$(run_target 2 2)" "a line one branch commit wrote: that commit is the target"
+point_origin_at_main "$repo4"
+change_b_sha="$(git -C "$repo4" rev-parse HEAD~1)"
+# Prints the SHA the block's own last line printed, for <repo> <file> <start> <end>.
+run_target_in() {
+    local out
+    out="$(cd "$1" && env -u BASE_REF TARGET_FILE="$2" TARGET_START="$3" TARGET_END="$4" bash -c "$fixup_target_block" 2>/dev/null)"
+    printf '%s' "${out#FIXUP_TARGET=}"
+}
+run_target() { run_target_in "$repo4" f.txt "$1" "$2"; }
+assert_eq "$change_b_sha" "$(run_target 2 2)" "a line one branch commit wrote: that commit is the target, with BASE_REF unset"
 assert_eq "" "$(run_target 2 4)" "lines from two branch commits: no target"
 assert_eq "" "$(run_target 1 1)" "a line from the base: no target"
 assert_eq "" "$(run_target 1 2)" "a base line next to one branch commit's line: no target (every anchored line, not every non-base line)"
+# A base that cannot be read is not "no target": the block stops, rather than
+# sending the fixer to an ordinary commit on a broken lookup.
+sc_refuses="$sandbox/sc-refuses.sh"
+printf '#!/bin/sh\necho "base-ref: refused" >&2\nexit 1\n' > "$sc_refuses"
+out4="$(cd "$repo4" && env -u BASE_REF TARGET_FILE=f.txt TARGET_START=2 TARGET_END=2 \
+    bash -c "${fixup_target_block//$sidecar_sh/$sc_refuses}" 2>&1)" && rc4=0 || rc4=$?
+[[ "$rc4" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "base-ref refuses: the fixup-target block exits nonzero"
+case "$out4" in
+    *FIXUP_TARGET=*) assert_eq "no answer printed" "$out4" "base-ref refuses: the block prints no target" ;;
+    *) assert_eq ok ok "base-ref refuses: the block prints no target" ;;
+esac
 # A user's blame display config must not change the answer: blame.blankBoundary
 # blanks the SHA column on a base line, and blame.markUnblamableLines prefixes
 # `*`. Either would otherwise leak a non-SHA token into FIXUP_TARGET.
@@ -873,7 +908,11 @@ mkdir -p "$repo6"
     printf 'two, fixed\n' > two.txt
     git add two.txt && git commit -q --fixup=HEAD -m 'fix two' -m 'Fix-Findings-Run: 20261027T000000Z'
 )
-run_trial() { (cd "$repo6" && BASE_REF=main bash -c "$fold_trial_block" 2>&1); }
+point_origin_at_main "$repo6"
+# BASE_REF is cleared wherever the trial runs: a real run reaches it in a fresh
+# shell, so the block must compute its own (#614, #619).
+trial_in() { (cd "$1" && env -u BASE_REF bash -c "$fold_trial_block" 2>&1); }
+run_trial() { trial_in "$repo6"; }
 worktrees_before="$(git -C "$repo6" worktree list | grep -c .)"
 clean_head="$(git -C "$repo6" rev-parse HEAD)"
 assert_eq "fold trial: clean" "$(run_trial)" "a fixup no later commit overlaps: the trial reports clean"
@@ -890,8 +929,7 @@ assert_eq "$clean_head" "$(git -C "$repo6" rev-parse HEAD)" "a clean trial leave
     printf 'a\nB, fixed\nc2\n' > one.txt
 )
 one_sha6="$(git -C "$repo6" rev-parse HEAD~3)"
-target6="$(cd "$repo6" && BASE_REF=main FILE=one.txt START=2 END=2 \
-    bash -c "$fixup_target_block"'; printf "%s" "$FIXUP_TARGET"')"
+target6="$(run_target_in "$repo6" one.txt 2 2)"
 assert_eq "$one_sha6" "$target6" "the fixture's fixup target is the one /fix-findings' selection block picks"
 (
     cd "$repo6" || exit 1
@@ -944,8 +982,9 @@ mkdir -p "$repo9"
     git add one.txt && git commit -q -m 'base moves on'
     git switch -q feature
 )
+point_origin_at_main "$repo9"
 head9="$(git -C "$repo9" rev-parse HEAD)"
-assert_eq "fold trial: clean" "$(cd "$repo9" && BASE_REF=main bash -c "$fold_trial_block" 2>&1)" \
+assert_eq "fold trial: clean" "$(trial_in "$repo9")" \
     "a base that moved after the fork: the trial still reports clean"
 assert_eq "$head9" "$(git -C "$repo9" rev-parse HEAD)" "a base that moved after the fork: the fixup is not demoted"
 case "$(cd "$repo9" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
@@ -975,8 +1014,9 @@ mkdir -p "$repo7"
     printf '#!/bin/sh\ncase "$(head -1 "$1")" in "fixup! "*) exit 0 ;; *) echo "commit-msg: bad subject" >&2; exit 1 ;; esac\n' > .git/hooks/commit-msg
     chmod +x .git/hooks/commit-msg
 )
+point_origin_at_main "$repo7"
 head7="$(git -C "$repo7" rev-parse HEAD)"
-out7="$(cd "$repo7" && BASE_REF=main bash -c "$fold_trial_block" 2>&1)" && rc7=0 || rc7=$?
+out7="$(trial_in "$repo7")" && rc7=0 || rc7=$?
 [[ "$rc7" -ne 0 ]] && r=nonzero || r=zero
 assert_eq nonzero "$r" "a refused recommit: the block exits nonzero"
 case "$out7" in
@@ -986,22 +1026,240 @@ esac
 assert_eq "$head7" "$(git -C "$repo7" rev-parse HEAD)" "a refused recommit: HEAD is untouched"
 assert_eq "fixup! feature: one" "$(git -C "$repo7" log -1 --format=%s)" "a refused recommit: the subject is still fixup!"
 
-# A real run reaches the trial in a fresh shell, so BASE_REF is unset there.
-section "fold trial: an unset BASE_REF refuses rather than demoting"
-head8="$(git -C "$repo7" rev-parse HEAD)"
-out8="$(cd "$repo7" && env -u BASE_REF bash -c "$fold_trial_block" 2>&1)" && rc8=0 || rc8=$?
-[[ "$rc8" -ne 0 ]] && r=nonzero || r=zero
-assert_eq nonzero "$r" "an unset BASE_REF: the block exits nonzero"
-case "$out8" in
-    *"BASE_REF"*) assert_eq ok ok "an unset BASE_REF: the refusal names the variable" ;;
-    *) assert_eq "a message naming BASE_REF" "$out8" "an unset BASE_REF: the refusal names the variable" ;;
+# --- 12c. Only a conflict demotes (#614) ---------------------------------------
+# Each case below has a fixup that folds, so the demotion arm is always the wrong
+# answer. A trial that read the failure as a conflict would exit 0 with an
+# ordinary subject, which is what #614 reproduced.
+
+# clean_fixup_repo <dir> — a branch whose newest commit is a fixup that folds.
+clean_fixup_repo() {
+    mkdir -p "$1"
+    (
+        cd "$1" || exit 1
+        git init -q -b main .
+        git config user.email t@example.com
+        git config user.name t
+        printf 'base\n' > base.txt
+        git add base.txt && git commit -q -m 'base'
+        git switch -q -c feature
+        printf 'one\n' > one.txt
+        git add one.txt && git commit -q -m 'feature: one'
+        printf 'two\n' > two.txt
+        git add two.txt && git commit -q -m 'feature: two'
+        printf 'two, fixed\n' > two.txt
+        git add two.txt && git commit -q --fixup=HEAD -m 'fix two' -m 'Fix-Findings-Run: 20261030T000000Z'
+    )
+    point_origin_at_main "$1"
+}
+
+# assert_refused <label> <repo> <head before> <rc> <output> <expected text>
+assert_refused() {
+    local r
+    [[ "$4" -ne 0 ]] && r=nonzero || r=zero
+    assert_eq nonzero "$r" "$1: the block exits nonzero"
+    case "$5" in
+        *"$6"*) assert_eq ok ok "$1: the refusal says why" ;;
+        *) assert_eq "a message naming: $6" "$5" "$1: the refusal says why" ;;
+    esac
+    assert_eq "$3" "$(git -C "$2" rev-parse HEAD)" "$1: HEAD is untouched"
+    assert_eq "fixup! feature: two" "$(git -C "$2" log -1 --format=%s)" "$1: the subject is still fixup!"
+}
+
+section "fold trial: a fresh shell computes its own base (#619)"
+repo10="$sandbox/repo10"
+clean_fixup_repo "$repo10"
+head10="$(git -C "$repo10" rev-parse HEAD)"
+# No commit-msg hook here, on purpose: with one, an unguarded block that read an
+# empty BASE_REF would fail at the recommit and exit nonzero anyway, so this case
+# could not tell it from a guarded one.
+assert_eq "fold trial: clean" "$(trial_in "$repo10")" "BASE_REF unset: the block computes it and reports clean"
+assert_eq "$head10" "$(git -C "$repo10" rev-parse HEAD)" "BASE_REF unset: the fixup keeps its SHA"
+assert_eq "fold trial: clean" "$(cd "$repo10" && BASE_REF=origin/nope bash -c "$fold_trial_block" 2>&1)" \
+    "a stale BASE_REF in the environment is not read"
+
+section "fold trial: a base that cannot be used refuses (#614 item 1)"
+sc_nope="$sandbox/sc-nope.sh"
+printf '#!/bin/sh\necho origin/nope\n' > "$sc_nope"
+out10="$(cd "$repo10" && env -u BASE_REF bash -c "${fold_trial_block//$sidecar_sh/$sc_nope}" 2>&1)" && rc10=0 || rc10=$?
+assert_refused "a base ref that does not exist" "$repo10" "$head10" "$rc10" "$out10" "no merge base with origin/nope"
+out10="$(cd "$repo10" && env -u BASE_REF bash -c "${fold_trial_block//$sidecar_sh/$sc_refuses}" 2>&1)" && rc10=0 || rc10=$?
+assert_refused "base-ref refuses" "$repo10" "$head10" "$rc10" "$out10" "sidecar.sh base-ref failed"
+
+section "fold trial: a failed clone or checkout refuses (#614 item 1)"
+fail_bin="$sandbox/fail-bin"
+mkdir -p "$fail_bin"
+cat > "$fail_bin/git" <<'STUB'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    if [ "$arg" = "${GIT_FAIL_VERB:?}" ]; then echo "stub: git $arg fails" >&2; exit 128; fi
+done
+exec "${REAL_GIT:?}" "$@"
+STUB
+chmod +x "$fail_bin/git"
+# Not every mktemp honors TMPDIR, so a stub puts the throwaway directory where the
+# cleanup check can see it, and logs the path so an empty check cannot pass on a
+# directory made somewhere else. A file request (sidecar.sh's) goes to the real one.
+real_mktemp="$(command -v mktemp)"
+export REAL_MKTEMP="$real_mktemp"
+export TRIAL_TMP="$sandbox/trial-tmp" TRIAL_TMP_LOG="$sandbox/trial-tmp.log"
+mkdir -p "$TRIAL_TMP"
+cat > "$fail_bin/mktemp" <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = -d ]; then
+    dir="$("${REAL_MKTEMP:?}" -d "${TRIAL_TMP:?}/trial.XXXXXX")" || exit 1
+    printf '%s\n' "$dir" >> "${TRIAL_TMP_LOG:?}"
+    printf '%s\n' "$dir"
+    exit 0
+fi
+exec "${REAL_MKTEMP:?}" "$@"
+STUB
+chmod +x "$fail_bin/mktemp"
+# assert_trial_dir_gone <label> — one throwaway directory was made since the log
+# was last cleared, and nothing of it is left.
+assert_trial_dir_gone() {
+    assert_eq 1 "$(grep -c . "$TRIAL_TMP_LOG")" "$1: the block made its throwaway directory here"
+    assert_eq "" "$(find "$TRIAL_TMP" -mindepth 1 -print)" "$1: the throwaway directory is removed"
+    : > "$TRIAL_TMP_LOG"
+}
+for verb in clone checkout; do
+    out10="$(cd "$repo10" && env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB="$verb" \
+        bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
+    assert_refused "a failing $verb" "$repo10" "$head10" "$rc10" "$out10" "the throwaway $verb failed"
+    assert_trial_dir_gone "a failing $verb"
+done
+
+section "fold trial: a failing signer does not read as a conflict (#614 item 2)"
+# This suite never saw this while global config was isolated: GIT_CONFIG_GLOBAL
+# brings back the signing a user's run has.
+failing_signer="$sandbox/failing-signer"
+printf '#!/bin/sh\necho "signer: no one to approve this" >&2\nexit 1\n' > "$failing_signer"
+chmod +x "$failing_signer"
+signing_config="$sandbox/signing.gitconfig"
+printf '[commit]\n\tgpgsign = true\n[gpg]\n\tprogram = %s\n' "$failing_signer" > "$signing_config"
+# The instrument: this config must really refuse a commit, or the case proves nothing.
+GIT_CONFIG_GLOBAL="$signing_config" git -C "$repo10" commit -q --allow-empty -m 'probe' 2>/dev/null && r=signed || r=refused
+assert_eq refused "$r" "the failing signer refuses a real commit under this config"
+out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$signing_config" bash -c "$fold_trial_block" 2>&1)"
+assert_eq "fold trial: clean" "$out10" "global signing with a failing signer: the trial still reports clean"
+assert_eq "$head10" "$(git -C "$repo10" rev-parse HEAD)" "global signing with a failing signer: the fixup is not demoted"
+
+section "fold trial: a rebase that fails without a conflict refuses (#614 item 1)"
+# A global pre-rebase hook refuses before anything is replayed.
+refusing_hooks="$sandbox/refusing-hooks"
+mkdir -p "$refusing_hooks"
+printf '#!/bin/sh\nexit 1\n' > "$refusing_hooks/pre-rebase"
+chmod +x "$refusing_hooks/pre-rebase"
+hooks_config="$sandbox/hooks.gitconfig"
+printf '[core]\n\thooksPath = %s\n' "$refusing_hooks" > "$hooks_config"
+out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$hooks_config" bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
+assert_refused "a refusing pre-rebase hook" "$repo10" "$head10" "$rc10" "$out10" "the rebase failed without a conflict"
+
+# A fixup that undoes its target stops the rebase with nothing unmerged: the fold
+# aborts, but this is not a conflict either, so it goes to the human.
+repo12="$sandbox/repo12"
+clean_fixup_repo "$repo12"
+(
+    cd "$repo12" || exit 1
+    git reset -q --hard HEAD~1
+    printf 'three\n' > three.txt
+    git add three.txt && git commit -q -m 'feature: three'
+    git rm -q two.txt && git commit -q --fixup=HEAD~1 -m 'undo two' -m 'Fix-Findings-Run: 20261030T000001Z'
+)
+head12="$(git -C "$repo12" rev-parse HEAD)"
+out12="$(trial_in "$repo12")" && rc12=0 || rc12=$?
+assert_refused "a fixup that empties its target" "$repo12" "$head12" "$rc12" "$out12" "the rebase failed without a conflict"
+
+section "fold trial: a blocked leftover does not fail later fixups (#614 item 4)"
+repo11="$sandbox/repo11"
+mkdir -p "$repo11"
+(
+    cd "$repo11" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'one\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'one, rewritten\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: rewrite one'
+    printf 'two\n' > two.txt
+    git add two.txt && git commit -q -m 'feature: two'
+    printf 'one, fixed\n' > one.txt
+    git add one.txt && git commit -q --fixup=HEAD~2 -m 'fix one' -m 'Fix-Findings-Run: 20261030T000002Z'
+    # shellcheck disable=SC2016  # the hook body is literal text for sh
+    printf '#!/bin/sh\ncase "$(head -1 "$1")" in "fixup! "*) exit 0 ;; *) echo "commit-msg: bad subject" >&2; exit 1 ;; esac\n' > .git/hooks/commit-msg
+    chmod +x .git/hooks/commit-msg
+)
+point_origin_at_main "$repo11"
+leftover11="$(git -C "$repo11" rev-parse HEAD)"
+out11="$(trial_in "$repo11")" && rc11=0 || rc11=$?
+[[ "$rc11" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "the first fixup conflicts and its recommit is refused: blocked"
+assert_eq "$leftover11" "$(git -C "$repo11" rev-parse HEAD)" "the blocked fixup stays on the branch"
+(
+    cd "$repo11" || exit 1
+    printf 'two, fixed\n' > two.txt
+    git add two.txt && git commit -q --fixup=HEAD~1 -m 'fix two' -m 'Fix-Findings-Run: 20261030T000003Z'
+)
+clean11="$(git -C "$repo11" rev-parse HEAD)"
+out11="$(trial_in "$repo11")" && rc11=0 || rc11=$?
+assert_eq 0 "$rc11" "a clean fixup after a leftover: the block exits 0"
+assert_eq "$clean11" "$(git -C "$repo11" rev-parse HEAD)" "a clean fixup after a leftover: it is not demoted"
+assert_eq "fixup! feature: two" "$(git -C "$repo11" log -1 --format=%s)" "a clean fixup after a leftover: the subject is still fixup!"
+case "$out11" in
+    "fold trial: clean"*"$leftover11"*) assert_eq ok ok "a clean fixup after a leftover: clean, and the leftover is named" ;;
+    *) assert_eq "clean, naming $leftover11" "$out11" "a clean fixup after a leftover: clean, and the leftover is named" ;;
 esac
-case "$out8" in
-    *"recommitted as an ordinary commit"*) assert_eq "no demotion line" "$out8" "an unset BASE_REF: no demotion" ;;
-    *) assert_eq ok ok "an unset BASE_REF: no demotion" ;;
-esac
-assert_eq "$head8" "$(git -C "$repo7" rev-parse HEAD)" "an unset BASE_REF: HEAD is untouched"
-assert_eq "fixup! feature: one" "$(git -C "$repo7" log -1 --format=%s)" "an unset BASE_REF: the subject is still fixup!"
+# A skip that cannot move on must not spin: an AFK fixer has no one to stop it.
+out11="$(cd "$repo11" && env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--skip \
+    bash -c "$fold_trial_block" 2>&1)" && rc11=0 || rc11=$?
+assert_refused "a rebase --skip that fails" "$repo11" "$clean11" "$rc11" "$out11" "rebase --skip did not move past"
+# The skip must judge the new commit, not wave everything through: a second
+# conflicting fixup after the leftover is still demoted, and the leftover stays.
+rm "$repo11/.git/hooks/commit-msg"
+(
+    cd "$repo11" || exit 1
+    printf 'one, fixed again\n' > one.txt
+    git add one.txt && git commit -q --fixup=HEAD~4 -m 'fix one again' -m 'Fix-Findings-Run: 20261030T000004Z'
+)
+out11="$(trial_in "$repo11")" && rc11=0 || rc11=$?
+assert_eq 0 "$rc11" "a conflicting fixup after a leftover: the block exits 0"
+assert_eq "fix one again" "$(git -C "$repo11" log -1 --format=%s)" "a conflicting fixup after a leftover: it is still demoted"
+assert_eq "fixup! feature: one" "$(git -C "$repo11" log -1 --format=%s "$leftover11")" "the leftover itself is not touched"
+
+section "fold trial: a conflict the fixup causes in a later commit still demotes"
+# The stop is on an ordinary commit, not the fixup: 'three' adds a file the fixup
+# adds earlier by moving up. Skipping that stop would call a conflict clean.
+repo13="$sandbox/repo13"
+clean_fixup_repo "$repo13"
+(
+    cd "$repo13" || exit 1
+    git reset -q --hard HEAD~1
+    printf 'three\n' > three.txt
+    git add three.txt && git commit -q -m 'feature: three'
+    git rm -q three.txt && git commit -q -m 'feature: drop three'
+    printf 'three, from the fix\n' > three.txt
+    git add three.txt && git commit -q --fixup=HEAD~2 -m 'add three' -m 'Fix-Findings-Run: 20261030T000005Z'
+)
+out13="$(trial_in "$repo13")" && rc13=0 || rc13=$?
+assert_eq 0 "$rc13" "a later commit conflicts: the block exits 0"
+assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out13" "a later commit conflicts: the trial names the demotion"
+assert_eq "add three" "$(git -C "$repo13" log -1 --format=%s)" "a later commit conflicts: the fixup is demoted"
+
+section "fold trial: the block runs under zsh, the shell an agent has on macOS"
+if command -v zsh >/dev/null 2>&1; then
+    zsh_clean="$(cd "$repo10" && env -u BASE_REF zsh -f -c "$fold_trial_block" 2>&1)"
+    assert_eq "fold trial: clean" "$zsh_clean" "zsh: a clean fixup reports clean"
+    : > "$TRIAL_TMP_LOG"
+    zsh_out="$(cd "$repo10" && env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=clone \
+        zsh -f -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
+    assert_refused "zsh, a failing clone" "$repo10" "$head10" "$rc10" "$zsh_out" "the throwaway clone failed"
+    assert_trial_dir_gone "zsh, a failing clone"
+else
+    printf '  skip zsh is not installed\n'
+fi
 
 # --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
 # A plain `git push origin <branch>` publishes the branch with no upstream, so
