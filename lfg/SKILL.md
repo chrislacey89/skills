@@ -272,7 +272,7 @@ For each slice, in order:
 2. Write the code that makes it pass.
 3. Run the tracer test. Passing means the runner exits 0.
 4. Commit the slice.
-5. Tick the slice's box in the PRD-lite's **Slices** checklist, with the guarded `mktemp` → fetch-with-exit-check → byte-count → edit → refuse-if-shorter shape `/pre-merge` Phase 5 uses for its ledger, reading `gh issue view <PRD-lite> --json body` and writing `gh issue edit <PRD-lite> --body-file`. Change that slice's `- [ ]` to `- [x]` and nothing else. Tick it here, after the commit, not in a sweep at Close: an error-path exit then still leaves a checklist that says which slices shipped. A slice stubbed at the attempt cap stays unticked, because its gap issue is the record that it did not ship.
+5. Tick the slice's box in the PRD-lite's **Slices** checklist, with the guarded `mktemp` → fetch-with-exit-check → byte-count → edit → refuse-if-shorter shape `/pre-merge` Phase 5 uses for its ledger, taking that block as written with `gh issue view <PRD-lite>` and `gh issue edit <PRD-lite>` in place of its `gh pr view` and `gh pr edit`, so the fetch keeps its `-q .body`. Change that slice's `- [ ]` to `- [x]` and nothing else. Tick it here, after the commit, not in a sweep at Close: an error-path exit then still leaves a checklist that says which slices shipped. A slice stubbed at the attempt cap stays unticked, because its gap issue is the record that it did not ship.
 
 **Attempt cap.** A failed run in step 3 is one attempt. When a slice reaches the
 attempt cap without a passing run, stop working it. Reduce it to a stub that keeps the skeleton wired,
