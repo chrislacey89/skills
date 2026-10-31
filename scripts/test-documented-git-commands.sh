@@ -151,7 +151,7 @@
 #
 # WHAT THIS SUITE DOES NOT HOLD, said plainly so a green run is not misread:
 # the derivation census keys on the ways of asking a remote for its default
-# branch that it names. A skill that finds the base some way the signal does
+# branch, and the candidate-name lists, that it names. A skill that finds the base some way the signal does
 # not list is not caught; widen the signal when one appears. The verb's own
 # outcomes are pinned in test-sidecar-resolution.sh, not here.
 
@@ -730,9 +730,10 @@ section "no skill carries its own base-branch derivation"
 #
 # The signal is loose on purpose (header lesson 7(a)). It is not the one wording
 # the copies used: it is any `symbolic-ref`, any `git` command that names
-# `origin/HEAD`, any other way of asking a remote for its default branch, and
-# BASE_REF assigned from the `--name` form, which is a name used as a ref. A
-# citation inside inline code counts: execute/SKILL.md's cited
+# `origin/HEAD`, any other way of asking a remote for its default branch,
+# BASE_REF assigned from the `--name` form, which is a name used as a ref, and
+# two candidate branch names in a row, the fallback loop that runs on any repo
+# where `origin/HEAD` is unset (#618). A citation inside inline code counts: execute/SKILL.md's cited
 # `git symbolic-ref` was one an agent was told to run (#310).
 #
 # The scan set is every markdown file one level down (`*/SKILL.md`,
@@ -741,7 +742,7 @@ section "no skill carries its own base-branch derivation"
 # defective lines on purpose, the root files (CHANGELOG.md, README.md), and
 # init-pipeline/scripts/sidecar.sh, which is where the derivation belongs.
 # shellcheck disable=SC2016  # the pattern matches literal markdown, not expansions
-derivation_signal='symbolic-ref|(^|[^[:alnum:]_])git [^`]*origin/HEAD|defaultBranchRef|ls-remote --symref|remote show origin|BASE_REF="?\$\(bash "\$SC" base-ref --name'
+derivation_signal='symbolic-ref|(^|[^[:alnum:]_])git [^`]*origin/HEAD|defaultBranchRef|ls-remote --symref|remote show origin|BASE_REF="?\$\(bash "\$SC" base-ref --name|(^|[^[:alnum:]_-])(main|master|prod|develop|trunk) +(main|master|prod|develop|trunk)([^[:alnum:]_-]|$)'
 derivation_copies() {
     # Prints <file>:<line> for every line under $1 that derives the base itself.
     ( cd "$1" && for f in ./*/*.md ./*/references/*.md; do
@@ -755,7 +756,7 @@ derivation_copies() {
 # the clean file and the excluded docs/solutions entry must stay silent.
 planted="$base_sandbox/planted-copies"
 mkdir -p "$planted/fenced" "$planted/cited" "$planted/bundled/references" \
-    "$planted/asname" "$planted/clean" "$planted/docs/solutions/x"
+    "$planted/asname" "$planted/fallback" "$planted/clean" "$planted/docs/solutions/x"
 # shellcheck disable=SC2016  # planted fixtures are literal markdown
 {
     printf '# Fenced\n\n```bash\n'
@@ -770,13 +771,20 @@ printf '%s\n' 'BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.
 printf '%s\n' 'BASE_REF="$(bash "$SC" base-ref --name)"' > "$planted/asname/SKILL.md"
 # shellcheck disable=SC2016
 {
+    printf '%s\n' 'for b in main master prod develop trunk; do'
+    printf '%s\n' '  git rev-parse --verify -q "origin/$b" >/dev/null && { BASE_BRANCH="$b"; break; }'
+    printf '%s\n' 'done'
+} > "$planted/fallback/SKILL.md"
+# shellcheck disable=SC2016
+{
     printf '%s\n' 'SC="<this skill'"'"'s directory>/references/sidecar.sh"'
     printf '%s\n' 'BASE_REF="$(bash "$SC" base-ref)" || exit 1'
     printf '%s\n' 'BASE_BRANCH="$(bash "$SC" base-ref --name)" || exit 1'
     printf '%s\n' 'It answers the `origin/HEAD` default when no base_ref is declared.'
+    printf '%s\n' 'Many repos use `prod`, `develop`, or `trunk` rather than `main` or `master`.'
 } > "$planted/clean/SKILL.md"
 cp "$planted/fenced/SKILL.md" "$planted/docs/solutions/x/entry.md"
-assert_eq 'asname/SKILL.md:1 bundled/references/copy.md:1 cited/notes.md:1 fenced/SKILL.md:4' \
+assert_eq 'asname/SKILL.md:1 bundled/references/copy.md:1 cited/notes.md:1 fallback/SKILL.md:1 fenced/SKILL.md:4' \
     "$(derivation_copies "$planted" | sort | tr '\n' ' ' | sed 's/ $//')" \
     "the census names each planted copy by file and line, and nothing else"
 
