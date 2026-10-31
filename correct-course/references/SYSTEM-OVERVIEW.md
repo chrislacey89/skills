@@ -262,7 +262,7 @@ A companion to Boundary Maps. The Boundary Map answers *what flows between slice
 
 ## Where State Lives
 
-On Skill Kit's own path, durable state never lives in the project tree; the table below gives each kind's place. Its main homes are GitHub (issues and milestones) and the project's sidecar (a private, local-only git repository outside the working tree at `~/.claude/sidecars/<name>/`, holding `sidecar.json`, `research/`, and `solutions/`, and reached only through `sidecar.sh`). The one exception is a project's own choice. A project that already commits `docs/solutions/` can tell `/compound` to write lessons there (`solutions.write: in-tree`). That directory, like the project's skills, is then code the project commits on purpose, not pipeline state.
+On Skill Kit's own path, durable state never lives in the project tree; the table below gives each kind's place. Its main homes are GitHub (issues and milestones) and the project's sidecar (a private, local-only git repository outside the working tree at `~/.claude/sidecars/<name>/`, holding `sidecar.json`, `research/`, `solutions/`, `reviews/`, and `review-responses/`, and reached only through `sidecar.sh`). The one exception is a project's own choice. A project that already commits `docs/solutions/` can tell `/compound` to write lessons there (`solutions.write: in-tree`). That directory, like the project's skills, is then code the project commits on purpose, not pipeline state.
 
 | State | Location | Why |
 |-------|----------|-----|
@@ -272,6 +272,7 @@ On Skill Kit's own path, durable state never lives in the project tree; the tabl
 | QA bugs | GitHub issues | Created during manual QA, closed by Ralph |
 | Technical research | Per-project, selected by `research.storage` in the project's `sidecar.json`. Default `archive` → file outside the repo, at the path `/research` Phase 5c writes. Opt-in `spike-issue` → closed `research`-labeled GitHub issue in the same repo as the PRD | Storage location matches the project's audience flow without forcing a global rule. Archive is right for solo / single-machine / private work. Spike-issue is right for public, portfolio, OSS, multi-contributor, or multi-machine work where the PRD's audience reads via GitHub. Both carry the same frontmatter and equivalent authority |
 | Review stamp | The PR body's `## Review Currency` block, or `<sidecar>/reviews/<branch-slug>.json` when `sidecar.sh backend stamp` answers `sidecar` (rule in `docs/state-backend.md`) | `/pre-merge` is its only writer on either backend; `/closeout` compares it with the head before merge. A repo whose `forge.write` lacks `prs` gets no pack text in its PRs |
+| Teammate review responses | `<sidecar>/review-responses/pr-<n>.md` on either backend, found through `sidecar.sh path review-responses` (rule in `docs/state-backend.md`) | `/respond-to-review` appends a round per review and reads it on the next one. It is the author's private account, never written to the PR |
 | Per-project configuration | `sidecar.json` in the project's sidecar (`mode`, `solutions.write`, `solutions.in_tree_path`, `research.storage`, `forge`, `tracker`, `verify`, `conventions`, `design`) | Read with `sidecar.sh config get`, or as the brief block `sidecar.sh profile` prints; never written into the project's tree |
 | Institutional knowledge | `<sidecar>/solutions/` by default; `docs/solutions/` in repo when the sidecar's `solutions.write` is `in-tree`; readers consult both. `/research`, `/write-a-prd`, and `/execute` also read, never write, the `solutions/` of every sidecar on this machine with the same `solutions.system` label, plus any linked with `sidecar.sh relate` | Compounds over time, consulted during planning; a lesson about something several repos share reaches every repo in the group |
 | Workflow definitions | `.claude/skills/` in repo | Composable, load-on-demand, version-controlled |
@@ -408,7 +409,7 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 ├── triage-issue/                    # Bug investigation + structural diagnosis + TDD fix plan, delegated per-issue from /qa when depth is needed
 │   ├── SKILL.md
 │   └── systems-reference.md
-├── fix-findings/                    # Fresh fixer + advisory breaker for the /pre-merge findings a human chose; menu- or user-invoked, never selects, never stamps
+├── fix-findings/                    # Fresh fixer + advisory breaker for the findings a human chose, from /pre-merge or marked fix in /respond-to-review; never selects, never stamps
 │   ├── SKILL.md
 │   └── references/                 # mutation-at-consumption.md, next-step-menu.md (bundled)
 │

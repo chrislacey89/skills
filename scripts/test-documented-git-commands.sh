@@ -842,9 +842,12 @@ done
 # The range-running sections below run a skill's whole block. /respond-to-review
 # is out by name: its two blocks need trailers and a stubbed Bitbucket API this
 # fixture does not have, and test-respond-to-review-contract.sh runs both whole.
+# /fix-findings is out by name too: its only base-ref range is a `git blame` line
+# inside the fixup-target block, which needs a finding's anchor, and
+# test-delta-review-scope.sh runs that block and the fold trial whole.
 # The range census further down still checks their endpoints and operators.
 # shellcheck disable=SC2086  # word-splitting the space-separated list is the point
-run_sites="$(printf '%s\n' $verb_sites | grep -vx 'respond-to-review/SKILL.md' | tr '\n' ' ' | sed 's/ $//')"
+run_sites="$(printf '%s\n' $verb_sites | grep -vxE 'respond-to-review/SKILL.md|fix-findings/SKILL.md' | tr '\n' ' ' | sed 's/ $//')"
 
 # Each fenced block holding a range line, one file per block. The indent is
 # stripped the way extract_block_with strips it, so a block lifted from a
