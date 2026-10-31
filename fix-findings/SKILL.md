@@ -190,55 +190,88 @@ The fixer's instructions, in order:
    it from the finding's file and line range:
 
    ```bash
-   # $BASE_REF from `bash "$SC" base-ref`; FILE, START, END from the finding's anchor.
+   # Which one commit on this branch wrote every line the finding anchors on?
+   SC="<this skill's directory>/references/sidecar.sh"
+   FILE="<the finding's file>"
+   START="<the anchor's first line>"
+   END="<the anchor's last line>"
+   BASE_REF="$(bash "$SC" base-ref)" || { echo "fixup target aborted: sidecar.sh base-ref failed" >&2; exit 1; }
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $1 }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
    { git rev-parse -q --verify '@{u}' >/dev/null || [ -n "$(git ls-remote --heads origin "$(git branch --show-current)" 2>/dev/null)" ]; } && FIXUP_TARGET=
+   printf 'FIXUP_TARGET=%s\n' "$FIXUP_TARGET"
    ```
 
-   A non-empty `FIXUP_TARGET` means one branch commit wrote every anchored
-   line and the branch passes `/pre-merge` Phase 2's unshared test. The last
-   line is that test. A pushed branch gets no fixups because `/pre-merge`
+   A SHA on the printed line means one branch commit wrote every anchored
+   line and the branch passes `/pre-merge` Phase 2's unshared test, which is
+   the `@{u}` line. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
-   Commit with `git commit --fixup="$FIXUP_TARGET"`, and give `-m` the message
+   Commit with `git commit --fixup=<that SHA>`, and give `-m` the message
    and trailer above. Then check that the branch still folds:
 
    ```bash
    # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
-   : "${BASE_REF:?set it from sidecar.sh base-ref before running this}"
-   FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
-   TRIAL_HEAD=$(git rev-parse HEAD)
-   TRIAL_DIR=$(mktemp -d)
-   if git clone -q --shared --no-checkout "$(git rev-parse --show-toplevel)" "$TRIAL_DIR" \
-     && git -C "$TRIAL_DIR" checkout -q --detach "$TRIAL_HEAD" \
-     && GIT_SEQUENCE_EDITOR=: git -C "$TRIAL_DIR" -c user.name=trial -c user.email=trial@invalid \
-          rebase -q -i --autosquash "$FORK_POINT" >/dev/null 2>&1; then
+   SC="<this skill's directory>/references/sidecar.sh"
+   trial_abort() { echo "fold trial aborted: $1; the fixup! commit stays" >&2; exit 1; }
+   BASE_REF="$(bash "$SC" base-ref)" || trial_abort "sidecar.sh base-ref failed"
+   FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || trial_abort "no merge base with $BASE_REF"
+   TRIAL_HEAD=$(git rev-parse HEAD) || trial_abort "cannot read HEAD"
+   TRIAL_DIR=$(mktemp -d) || trial_abort "mktemp failed"
+   trap 'rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg"' EXIT
+   git clone -q --shared --no-checkout "$(git rev-parse --show-toplevel)" "$TRIAL_DIR" || trial_abort "the throwaway clone failed"
+   git -C "$TRIAL_DIR" checkout -q --detach "$TRIAL_HEAD" || trial_abort "the throwaway checkout failed"
+   trial_git() { git -C "$TRIAL_DIR" -c user.name=trial -c user.email=trial@invalid -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
+   FOLDED=yes
+   GIT_SEQUENCE_EDITOR=: trial_git rebase -q -i --autosquash "$FORK_POINT" || FOLDED=no
+   LEFTOVERS=
+   while [ "$FOLDED" = no ]; do
+     STOPPED=$(git -C "$TRIAL_DIR" rev-parse -q --verify REBASE_HEAD) || break
+     [ "$STOPPED" != "$TRIAL_HEAD" ] || break
+     case "$(git -C "$TRIAL_DIR" log -1 --format=%s "$STOPPED")" in "fixup! "*) ;; *) break ;; esac
+     case " $LEFTOVERS " in *" $STOPPED "*) trial_abort "rebase --skip did not move past $STOPPED" ;; esac
+     LEFTOVERS="$LEFTOVERS $STOPPED"
+     FOLDED=yes
+     trial_git rebase --skip || FOLDED=no
+   done
+   if [ "$FOLDED" = yes ]; then
      echo "fold trial: clean"
-   else
+     [ -z "$LEFTOVERS" ] || echo "fold trial: ignored earlier fixup! commits that still will not fold:$LEFTOVERS" >&2
+   elif [ -n "$(git -C "$TRIAL_DIR" ls-files -u)" ]; then
      git log -1 --format=%B HEAD | sed '1,2d' > "$TRIAL_DIR.msg"
      if git commit -q --amend --only -F "$TRIAL_DIR.msg"; then
        echo "fold trial: would not fold; recommitted as an ordinary commit" >&2
      else
        echo "fold trial: would not fold, and the recommit failed; HEAD is still a fixup! commit" >&2
-       TRIAL_FAILED=1
+       exit 1
      fi
+   else
+     trial_abort "the rebase failed without a conflict"
    fi
-   rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg"
-   [ -z "${TRIAL_FAILED:-}" ]
    ```
 
    The trial runs `/pre-merge`'s fold in a throwaway clone, so the branch and
    the shared git directory are untouched. A fixup conflicts there when a later
    commit on the branch edited the same region. The fold is one rebase, so a
    single conflicting fixup would abort it for every other fixup on the
-   branch. The `else` arm keeps the commit and its `-m` text and drops the
-   `fixup!` subject line. A failed recommit (a `commit-msg` hook or signing
-   refusing the amend) exits the block nonzero and leaves the `fixup!` commit
-   in place: report that as `blocked` (see the report below), not `fixed`.
-   Report the SHA after it ran. When every earlier
-   fixup on the branch passed this trial, a failure is caused by the commit
-   just made.
+   branch. Only a conflict demotes: the conflict arm keeps the commit and its
+   `-m` text and drops the `fixup!` subject line. Any other failure (no base
+   ref, a failed clone, a rebase that stopped with nothing unmerged) exits
+   nonzero with `fold trial aborted:` and leaves the `fixup!` commit in place.
+   So does a failed recommit (a `commit-msg` hook or signing refusing the
+   amend). Report any nonzero exit as `blocked` (see the report below), not
+   `fixed`. Report the SHA after it ran.
+
+   The trial answers one question, whether the content folds, so signing is
+   off for its rebase. A throwaway commit needs no signature, a signer can fail
+   in a clone with no one to approve it, and a `--shared` clone does not read
+   the repository's own config anyway. A signing failure in the real fold is
+   not something a demotion could fix.
+
+   An earlier `fixup!` commit that a blocked fixer left behind stops the rebase
+   too. The trial skips any such commit and goes on, so it judges only the
+   commit just made, and it names what it skipped on stderr. Report those
+   SHAs: `/pre-merge`'s fold aborts until each one is reworded.
 
    Otherwise (lines from the base, from several commits, or a shared branch),
    make an ordinary commit. It is still one commit per fix, and it is
@@ -256,7 +289,9 @@ The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
 A fold trial whose recommit failed is `blocked`: the report names the leftover
 `fixup!` commit by SHA and says its subject must be reworded by hand (or the
-commit amended once the hook or signer is fixed).
+commit amended once the hook or signer is fixed). A trial that printed `fold
+trial aborted:` is `blocked` too: the report names the `fixup!` commit and
+relays that line, and the fix is to clear its cause and run the trial again.
 A `fixed` under item 3's prose-claim case also names the after-state of the
 site the finding anchored on:
 
@@ -442,7 +477,8 @@ makes its read-only isolation mean anything.
 Then print one block per finding — number (and, for a teammate review thread,
 its URL, so the author can reply to it), the fixer's verdict and commit SHA,
 the after-state on a prose-claim finding, the breaker's verdict **and the SHA it
-archived**, and the command behind each. No conclusions the human cannot re-run.
+archived** (or `none` and why, when no breaker was spawned), and the command
+behind each. No conclusions the human cannot re-run.
 
 ```
 Finding 3 — fixed at a1b2c3d
@@ -461,9 +497,11 @@ Finding 5 — fixed at b7c8d9e, pointer → docs/architecture.md
 
 Finding 6 — rejected: reworded at 9f8e7d6, reverted at 5c4b3a2
   controller: `git show --word-diff 9f8e7d6 -- src/retry.ts` → the site adds words that are not a reference
+  breaker: none — not spawned for a rejected fix
 
 Finding 7 — blocked, leftover fixup! commit e1f2a3b
-  fixer:   blocked — fold-trial recommit refused by the commit-msg hook
+  fixer:   blocked — fold-trial block → 1, recommit refused by the commit-msg hook;
+           reword e1f2a3b's subject by hand, or amend it once the hook is fixed
   breaker: none — not spawned for a blocked fix
 ```
 
