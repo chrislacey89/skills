@@ -63,7 +63,7 @@ Without this step, you've done traditional engineering with AI assistance. The f
 
 On the in-PR default path the work under review is the open PR branch, so the commands below read it directly — a `git log` and a `git diff` of the branch against the base it will merge into, while it is still unmerged. On the post-merge fallback path, run them in a session that can still see the merged feature's history — once `/closeout` has pruned the branch and pulled base, that diff is empty and you must read the PR diff via `gh pr diff <n>` instead. Either way, review the recent work.
 
-Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. `sidecar.sh base-ref` answers with a ref, never a bare name, so every skill that measures a branch asks it rather than deriving the base itself.
+Resolve the base first. Do not hardcode `main` — this repo itself uses `prod`, and a *name* is not a *ref*: in a worktree workflow nobody checks the base branch out, so the local branch is frozen at whenever the checkout was made while `origin/<base>` moves on. Ask `sidecar.sh base-ref`; do not derive the base.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
