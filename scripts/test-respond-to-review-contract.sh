@@ -56,7 +56,9 @@ FF="$repo_root/fix-findings/SKILL.md"
 CO="$repo_root/closeout/SKILL.md"
 HELP="$repo_root/help/SKILL.md"
 MANIFEST="$repo_root/scripts/skill-references.manifest"
-for f in "$R2R" "$FF" "$CO" "$HELP" "$MANIFEST"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
+SO="$repo_root/SYSTEM-OVERVIEW.md"
+SB="$repo_root/docs/state-backend.md"
+for f in "$R2R" "$FF" "$CO" "$HELP" "$MANIFEST" "$SO" "$SB"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
@@ -842,6 +844,21 @@ check "/respond-to-review's routes point at the trigger rather than restate it" 
     "$(grep -cE 'CHANGES_REQUESTED|reviewDecision|unresolved review threads' <<<"$INVPOS")"
 check "/respond-to-review's routes name /closeout Step 2 and /help row 1" 2 \
     "$(grep -cE '^- from `/closeout` Step 2, which states the trigger;$|^- from `/help`, whose row 1 recommends it;$' <<<"$INVPOS")"
+# The surfaces that describe this skill's seams, each of which #608 left stale.
+check "/fix-findings' Invocation Position claims no count of its invokers" 0 \
+    "$(awk '/^## Invocation Position/ { on = 1; next } /^## / { on = 0 } on' "$FF" | grep -c 'in two ways')"
+check "SYSTEM-OVERVIEW's tree comment names /respond-to-review as a source" 1 \
+    "$(grep -E '^├── fix-findings/' "$SO" | grep -c '/respond-to-review')"
+SO_STATE="$(awk '/^## Where State Lives/ { on = 1; next } /^## / { on = 0 } on' "$SO")"
+check "Where State Lives names the sidecar's reviews/ and review-responses/" 1 \
+    "$(grep -E '^On Skill Kit' <<<"$SO_STATE" | grep -c '`reviews/`, and `review-responses/`')"
+check "Where State Lives has a row for this skill's record" 1 \
+    "$(grep -cE '^\| .*\| `<sidecar>/review-responses/pr-<n>\.md`' <<<"$SO_STATE")"
+check "state-backend's not-persisted rule ends the paragraph it governs" 1 \
+    "$(grep -E '^On the `sidecar` backend with no work item' "$SB" | grep -c 'Notes and a ledger are printed to the terminal')"
+check "and it no longer reads as a rule about this skill's record" 0 \
+    "$(grep -E '^`/respond-to-review`.s record is not in the table' "$SB" | grep -c 'Notes and a ledger')"
+
 check "/help row 1 recommends /respond-to-review on CHANGES_REQUESTED" 1 \
     "$(grep -E '^\| 1 \|' "$HELP" | grep -c 'CHANGES_REQUESTED.*/respond-to-review')"
 check "/help gathers reviewDecision, which row 1 reads" 1 \

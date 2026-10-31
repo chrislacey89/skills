@@ -36,7 +36,7 @@ is why a second agent attacks the fix rather than the fixer re-checking it.
 
 ## Invocation Position
 
-**Invoked helper, model-invocable but human-gated.** It fires in two ways: the
+**Invoked helper, model-invocable but human-gated.** It fires when the
 human picks **Fix a finding on this branch first** from `/pre-merge` Phase 4's
 next-step menu and then names the finding numbers, and `/pre-merge` invokes it
 with those numbers; or the human marks teammate review threads **fix** in `/respond-to-review`,
