@@ -401,7 +401,6 @@ export const canon: CanonWork[] = [
 			{ skill: "handoff", tier: "primary" },
 			{ skill: "improve-pipeline", tier: "secondary" },
 			{ skill: "prototype", tier: "secondary" },
-			{ skill: "respond-to-review", tier: "secondary" },
 			{ skill: "visual-recap", tier: "primary" },
 		],
 	},

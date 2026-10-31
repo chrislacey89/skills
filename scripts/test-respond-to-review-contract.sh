@@ -731,6 +731,53 @@ check "the record is written to sidecar.sh's review-responses path" 1 "$(grep -c
 check "the record is committed through sidecar.sh commit" 1 "$(grep -c '"\$SC" commit --' <<<"$WRITE")"
 
 # -----------------------------------------------------------------------------
+section "the record is written before the fixes are handed off (#609)"
+
+# Nothing returns control here after /fix-findings' menu, so a round is recorded
+# only if Step 4 runs first. A reader follows the steps in file order, so the
+# order is a fact about line numbers, in the headings and in the steps' bodies.
+# order_holds <file> — 1 when Step 4 writes the record, ahead of Step 5's
+# handoff, and says why.
+order_holds() {
+    rec="$(grep -n '^### Step 4\. Write the record' "$1" | cut -d: -f1)"
+    fix="$(grep -n '^### Step 5\. Hand the fixes' "$1" | cut -d: -f1)"
+    wr="$(grep -n '"\$SC" commit -- "\$REC"' "$1" | cut -d: -f1)"
+    inv="$(grep -n 'invoke `/fix-findings` with exactly those' "$1" | cut -d: -f1)"
+    if [ -n "$rec" ] && [ -n "$fix" ] && [ -n "$wr" ] && [ -n "$inv" ] \
+        && [ "$rec" -lt "$fix" ] && [ "$wr" -lt "$inv" ] \
+        && [ "$(step4 "$1" | grep -c 'Write it \*\*before\*\* Step 5')" -gt 0 ]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+# Step 4's record template holds `## Round` lines, so only the next step ends it.
+step4() { awk '/^### Step 4\. / { on = 1; next } /^### Step 5\. / { on = 0 } on' "$1"; }
+handoff() { awk '/^## Handoff/ { on = 1; next } /^## / { on = 0 } on' "$1"; }
+check "Step 4 is ahead of Step 5, in its heading and its write, and says why" 1 "$(order_holds "$R2R")"
+# Mutation: exchange the two heading lines. A breaker did this in #608 and the
+# suite stayed green.
+awk '/^### Step 4\. Write the record/ { a = $0 } /^### Step 5\. Hand the fixes/ { b = $0 } { lines[NR] = $0 } END {
+    for (i = 1; i <= NR; i++) {
+        if (lines[i] == a) print b; else if (lines[i] == b) print a; else print lines[i]
+    }
+}' "$R2R" > "$tmp/swap.md"
+check "M17: the mutation exchanged the two headings" 1 \
+    "$([ "$(grep -n '^### Step 5\. Hand' "$tmp/swap.md" | cut -d: -f1)" -lt "$(grep -n '^### Step 4\. Write' "$tmp/swap.md" | cut -d: -f1)" ] && echo 1 || echo 0)"
+check "M17: with the headings exchanged the order pin fails" 0 "$(order_holds "$tmp/swap.md")"
+sed -e 's/^### Step 4\. Write the record/### Step 5. Write the record/' -e 's/^### Step 5\. Hand the fixes/### Step 4. Hand the fixes/' "$R2R" > "$tmp/swap2.md"
+check "M18: with only the numbers exchanged the order pin fails" 0 "$(order_holds "$tmp/swap2.md")"
+sed 's/ Write it \*\*before\*\* Step 5: / /' "$R2R" > "$tmp/nosentence.md"
+check "M19: the mutation removed the sentence" 0 "$(grep -c 'Write it \*\*before\*\* Step 5' "$tmp/nosentence.md")"
+check "M19: without the before-Step-5 sentence the order pin fails" 0 "$(order_holds "$tmp/nosentence.md")"
+
+# A compound candidate is a fix thread, so /fix-findings runs and its menu is the
+# handoff. The moment this skill still holds the turn is when Step 4 writes.
+check "Step 4 names the compound candidate to the human when it writes the round" 1 \
+    "$(step4 "$R2R" | grep -c '^Compound candidate: <n>')"
+check "the handoff menu offers no /compound option" 0 "$(handoff "$R2R" | grep -c 'escaped defect')"
+
+# -----------------------------------------------------------------------------
 section "routes and bundles"
 
 section "Step 2's Bitbucket diff block (#612): the PR's own two branches, never an empty diff"
@@ -783,6 +830,18 @@ check "/fix-findings' Inputs name /respond-to-review as a source" 1 \
     "$(awk '/^## Inputs/ { on = 1; next } /^## / { on = 0 } on' "$FF" | grep -c '/respond-to-review' | awk '{print ($1 > 0)}')"
 check "/closeout Step 2 routes failed review to /respond-to-review" 1 \
     "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c '/respond-to-review' | awk '{print ($1 > 0)}')"
+# /closeout and /help read reviewDecision and no thread signal, so a route that
+# claims one is a trigger nothing reads (#609). /closeout Step 2 is where the
+# trigger is stated; this skill points at it rather than restating it.
+check "/closeout Step 2 claims no thread signal it does not read" 0 \
+    "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c 'threads are still open')"
+check "/closeout Step 2 states the trigger it does read" 1 \
+    "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c '`reviewDecision` is `CHANGES_REQUESTED` — the route back is `/respond-to-review`')"
+INVPOS="$(awk '/^## Invocation Position/ { on = 1; next } /^## / { on = 0 } on' "$R2R")"
+check "/respond-to-review's routes point at the trigger rather than restate it" 0 \
+    "$(grep -cE 'CHANGES_REQUESTED|reviewDecision|unresolved review threads' <<<"$INVPOS")"
+check "/respond-to-review's routes name /closeout Step 2 and /help row 1" 2 \
+    "$(grep -cE '^- from `/closeout` Step 2, which states the trigger;$|^- from `/help`, whose row 1 recommends it;$' <<<"$INVPOS")"
 check "/help row 1 recommends /respond-to-review on CHANGES_REQUESTED" 1 \
     "$(grep -E '^\| 1 \|' "$HELP" | grep -c 'CHANGES_REQUESTED.*/respond-to-review')"
 check "/help gathers reviewDecision, which row 1 reads" 1 \

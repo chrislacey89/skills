@@ -7,7 +7,6 @@ sources:
   secondary:
     - "Peer Review on Open-Source Software Projects — Peter C. Rigby"
     - "Looks Good to Me — Adrienne Braganza Tacke"
-    - "The Design of Everyday Things — Don Norman"
 ---
 
 # Respond to Review
@@ -46,9 +45,8 @@ author leans toward defending. The evidence check leans toward neither.
 **Side-route, HITL only.** It fires when a human reviewer exists, so solo work
 never reaches it. Enter it:
 
-- from `/closeout` Step 2, when the PR's `reviewDecision` is
-  `CHANGES_REQUESTED` or it has unresolved review threads;
-- from `/help`, which recommends it on the same signal;
+- from `/closeout` Step 2, which states the trigger;
+- from `/help`, whose row 1 recommends it;
 - by typing `/respond-to-review` or `/respond-to-review <pr-number>` (Step 1
   says which PR each form reads).
 
@@ -480,7 +478,13 @@ timestamps, and the five disposition words never contain one.
 **A compound candidate** is a thread that is `supported` and marked **fix**.
 A teammate found a real defect that the pack's own review let through, and that
 escaped class is exactly what `/compound` captures. Mark it in the record and
-name it in the handoff below. Do not run `/compound` from here.
+print one line per candidate once the round is written. This is the last point
+to name it: a candidate is a **fix** thread, so `/fix-findings` runs next and
+its menu is the handoff. Do not run `/compound` from here.
+
+```
+Compound candidate: <n> — <what the pack's own review missed>. Run /compound after the /pre-merge re-run.
+```
 
 **With no sidecar**, `path` fails and prints the resolver's reason. Print the
 round to the terminal, say it was not persisted, and offer `/init-pipeline` to
@@ -519,9 +523,8 @@ this skill adds none. Otherwise offer one `AskUserQuestion` (see
 [references/next-step-menu.md](references/next-step-menu.md)), recommended
 first: **→ Post the replies yourself, then `/closeout` once approved
 (recommended)**, **Show the reply drafts again**, **Stop here — the record is
-in the sidecar**. When the record names a compound candidate, add
-**`/compound` the escaped defect first**. The platform's free-text "Other" is
-the escape hatch. Do not add one.
+in the sidecar**. The platform's free-text "Other" is the escape hatch. Do not
+add one.
 
 Print the runtime handoff line:
 
