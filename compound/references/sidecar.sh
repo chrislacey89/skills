@@ -20,6 +20,7 @@
 #   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager> <cmd>   ("" declares none)
 #   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
 #   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
+#   sidecar.sh config set design <json {ref, note?}>   (one pointer the pack names and never fetches; "" declares none)
 #   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards, conventions)
 #   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
@@ -158,7 +159,12 @@
 # conventions is a JSON array of non-blank one-line strings. Past
 # CONVENTIONS_WARN_LINES it is written anyway and named on stderr, because every
 # sub-agent brief pastes all of it, and how much is too much is the operator's call.
-# A refused value writes nothing. The first verify or conventions write on a
+# design is one JSON object: a ref, a URL or repo-relative path, and optionally
+# a note, each non-blank one-line text, and no other keys. "" stores {}, which
+# declares none: config get design then prints {} where an unasked key prints
+# nothing, and config get design.ref prints nothing for both. No verb here
+# fetches the ref, and profile never reads the key, so it reaches no brief.
+# A refused value writes nothing. The first verify, conventions, or design write on a
 # schema-1 sidecar moves it to schema 2 in the same commit, dropping the ""
 # values init used to stub, because in schema 1 those were never answers.
 #
@@ -700,17 +706,18 @@ cmd_config() {
             jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
             ;;
         set)
-            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>>"
+            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>|design <json>>"
             case "$2" in
                 mode) config_set_mode "$3" ;;
                 base_ref) config_set_base_ref "$3" ;;
                 system) config_set_system "$3" ;;
                 verify.*) config_set_verify "${2#verify.}" "$3" ;;
                 conventions) config_set_conventions "$3" ;;
-                *) die_usage "config set: expected mode, base_ref, system, verify.<field>, or conventions, got: $2" ;;
+                design) config_set_design "$3" ;;
+                *) die_usage "config set: expected mode, base_ref, system, verify.<field>, conventions, or design, got: $2" ;;
             esac
             ;;
-        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>>>" ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>|design <json>>>" ;;
     esac
 }
 
@@ -807,6 +814,16 @@ CONVENTIONS_JQ="$ONE_LINE_JQ"'
       else empty end
   end'
 
+# jq: the design pointer's error; empty when it is valid.
+DESIGN_JQ="$ONE_LINE_JQ"'
+  def text: one_line and test("\\S");
+  if type != "object" then "design must be a JSON object with a ref"
+  elif has("ref") | not then "design has no ref"
+  elif .ref | text | not then "design ref must be non-empty one-line text"
+  elif has("note") and (.note | text | not) then "design note must be non-empty one-line text"
+  elif (keys - ["ref", "note"] | length) > 0 then "design has keys other than ref and note: \(keys - ["ref", "note"] | join(", "))"
+  else empty end'
+
 # jq: move a schema-1 sidecar to schema 2, dropping init's "" stubs.
 SCHEMA2_JQ='(if (.schema // 1) < 2 then
     (if (.verify | type) == "object" then .verify |= with_entries(select(.value != "")) else . end)
@@ -873,6 +890,16 @@ config_set_conventions() {
     if [ "$n" -gt "$CONVENTIONS_WARN_LINES" ]; then
         printf 'sidecar.sh: conventions has %s lines, past %s; it is written, and every sub-agent brief pastes all of it, so cut what the host repo already states\n' "$n" "$CONVENTIONS_WARN_LINES" >&2
     fi
+}
+
+config_set_design() {
+    local val='{}' errs
+    if [ -n "$1" ]; then
+        val="$(config_parse_json design "$1")" || exit 1
+        errs="$(printf '%s' "$val" | jq -r "$DESIGN_JQ")" || refuse "config set: could not check design"
+        [ -z "$errs" ] || refuse "config set: design refused, nothing written: $errs"
+    fi
+    config_set_top_key design "$val"
 }
 
 # The repo-facts block; the outcomes are in the header.

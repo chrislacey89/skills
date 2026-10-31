@@ -494,6 +494,23 @@ bash "$SC" config set conventions '["No new barrel files.","Match the error-hand
 
 Every sub-agent brief pastes these lines, so `config set` warns on stderr past 15 lines and still writes the value. Relay the warning and let the user decide whether to trim. `config set` refuses the whole list, writing nothing, when it is not a JSON array or a line is blank, is not a string, or spans lines. Relay the refusal as printed and ask again.
 
+**Q8 — the design reference** (`design`), one pointer to what the result should look like: a URL or a repo-relative path, plus an optional note. It has its own check, because `profile` never prints it:
+
+```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
+CUR="$(bash "$SC" config get design)" || { echo "design: config get failed; stop and relay it" >&2; exit 1; }
+if [ -n "$CUR" ]; then echo "design answered; not asking"; else echo "design unasked"; fi
+```
+
+When it prints `answered`, skip Q8. Otherwise ask. Nothing is detected, and the default is none. The pack never fetches this pointer and it goes into no sub-agent brief: `/execute` Step 5 and `/walk-commits` name it, and the human compares. Write the answer with one of:
+
+```bash
+bash "$SC" config set design '{"ref":"https://example.com/design/checkout","note":"checkout flow v3"}'
+bash "$SC" config set design ""   # the repo has none
+```
+
+`config set` refuses a value with no non-empty one-line `ref`, a blank or multi-line `note`, or any other key, and writes nothing. Relay the refusal as printed and ask again.
+
 ## Verification
 
 Before considering setup complete, check — against the sections § 2's per-path rule actually sent this run through, not against all eight. An auto-invoked Path C re-scaffold produces § 2's hook body, § 3's merge and § 6's append and nothing else, and Path D produces at most a refreshed marker-check span, § 8's sidecar, § 5's quality gate when the install was Path B, and with it the one-line rewrite § 5 ends with, so on either the pre-commit items below — and the quality-gate item, unless Path D ran § 5 — belong to the install that already ran and are not this run's to satisfy:
@@ -512,6 +529,7 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] No existing project settings were overwritten
 - [ ] Path A or Path D: `bash "$SC" resolve` exits 0 and prints the sidecar, and its `sidecar.json` carries the confirmed `mode`, `solutions.write`, and `solutions.in_tree_path`
 - [ ] Path A or Path D: `bash "$SC" config get base_ref` prints the branch the user confirmed, or the one a previous run recorded
+- [ ] Path A or Path D: `bash "$SC" config get design` prints what the user answered, or `{}` for none, or what a previous run recorded
 - [ ] `.claude/settings.json` is unchanged by § 8: take `shasum .claude/settings.json` right before § 8 starts and again after § 8, and the two match
 - [ ] Path B or an auto-invoked Path C: no sidecar was created (`bash "$SC" resolve` gives the same answer it gave before the run)
 

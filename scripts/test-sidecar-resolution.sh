@@ -923,6 +923,57 @@ prun "$PF/clone" config set conventions '["No new barrel files."]'
 check "a conventions write moves a schema-1 sidecar to schema 2" 2 "$(jq -r .schema "$PSJ")"
 check "that move drops the stub, so unasked stays unasked" '{"test":"pnpm run test"}' "$(jq -c .verify "$PSJ")"
 
+# design (#602): one pointer, written here and read only by /execute Step 5 and
+# /walk-commits. It stays out of profile, because profile goes into every brief.
+DES_REF="https://example.com/design/checkout-zzq"
+DESIGN='{"ref":"'"$DES_REF"'","note":"checkout flow qqv3"}'
+prun "$PF/clone" config get design
+check "an unasked design reads as empty" "0 " "$rc $out"
+prun "$PF/clone" config set design "$DESIGN"
+check "config set design with a ref and a note succeeds" 0 "$rc"
+check "design lands at the top level, as given" "$DESIGN" "$(jq -c .design "$PSJ")"
+check "the design write is committed" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+check "the design commit subject names the key" "sidecar: set design" "$(git -C "$PF_ROOT/pf" log -1 --format=%s)"
+prun "$PF/clone" profile
+check "profile still prints a block with design declared" 0 "$rc"
+lacks "profile never prints the design ref" "$DES_REF" "$out"
+lacks "profile never prints the design note" "qqv3" "$out"
+lacks "profile never names design at all" "design" "$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+prun "$PF/clone" config set design '{"ref":"docs/design/checkout.md"}'
+check "a repo-relative ref with no note is accepted" 0 "$rc"
+
+# Every refused value writes nothing and commits nothing.
+prun "$PF/clone" config set design "$DESIGN"
+cp "$PSJ" "$PF/des.json"
+before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
+for bad_d in '{}' '{"note":"x"}' '{"ref":""}' '{"ref":"   "}' '{"ref":42}' '{"ref":null}' '{"ref":"a\nb"}' \
+             '{"ref":"x","note":""}' '{"ref":"x","note":"  "}' '{"ref":"x","note":42}' '{"ref":"x","note":"a\nb"}' \
+             '{"ref":"x","url":"y"}' '[]' '"just a string"' 'null' 'not json' '{} {}'; do
+    prun "$PF/clone" config set design "$bad_d"
+    if [ "$rc" -ne 0 ] && cmp -s "$PSJ" "$PF/des.json" && [ "$(git -C "$PF_ROOT/pf" rev-parse HEAD)" = "$before" ]; then
+        ok "config set design refuses $bad_d and writes nothing"
+    else
+        bad "config set design refuses $bad_d and writes nothing" "rc=$rc, sidecar.json or HEAD changed"
+    fi
+done
+prun "$PF/clone" config set design '{"note":"x"}'
+contains "a design with no ref is refused by name" "design has no ref" "$err"
+
+# "" declares none, as it does for a verify field; an unasked key stays unasked.
+prun "$PF/clone" config set design ""
+check 'config set design "" succeeds' 0 "$rc"
+check 'config set design "" is committed' "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+prun "$PF/clone" config get design
+check "a design declared none reads as answered" "0 {}" "$rc $(jq -c . <<<"$out")"
+prun "$PF/clone" config get design.ref
+check "a design declared none has no ref" "0 " "$rc $out"
+
+pset '.schema = 1 | del(.design) | .verify = {typecheck: "", test: "pnpm run test"}'
+git -C "$PF_ROOT/pf" commit -q -am "fixture: schema-1 stub for design"
+prun "$PF/clone" config set design "$DESIGN"
+check "a design write moves a schema-1 sidecar to schema 2" 2 "$(jq -r .schema "$PSJ")"
+check "that move drops the stub too" '{"test":"pnpm run test"}' "$(jq -c .verify "$PSJ")"
+
 # Hand edits the verbs would refuse: profile cannot trust what it read, so it prints no block.
 for shape in '.conventions = "x"' '.conventions = null' '.conventions = [42]' '.conventions = ["a\nb"]' '.conventions = ["  "]' \
              '.verify.test = 42' '.verify = "x"' '.verify.hazards = "x"' '.verify.hazards = [{"command":"y"}]' \
@@ -1004,6 +1055,53 @@ ex1="$(awk '/^### 1\. Understand the Task/{f=1} /^### 2\./{f=0} f' "$repo_root/e
 contains "/execute Step 1 runs profile" 'bash "$SC" profile' "$ex1"
 # shellcheck disable=SC2016
 contains "/execute Step 1 follows the block's Conventions lines" 'lines under `Conventions`' "$ex1"
+
+# /init-pipeline's Q8 block, as written: unasked, answered, declared none, could not look.
+q8="$(fenced_with "$repo_root/init-pipeline/SKILL.md" 'config get design')"
+[ -n "$q8" ] || bad "/init-pipeline carries the Q8 design block" "no fenced block mentions config get design"
+q8="${q8//<this skill\'s directory>\/scripts\/sidecar.sh/$SC}"
+q8run() { q8out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q8" 2>&1)"; rc=$?; }
+cp "$PF/good.json" "$PSJ"
+q8run; check "Q8 on an unasked key asks" "0 design unasked" "$rc $q8out"
+pset ".design = $DESIGN"
+q8run; check "Q8 on a declared design does not ask" "0 design answered; not asking" "$rc $q8out"
+pset '.design = {}'
+q8run; check "Q8 on a design declared none does not ask" "0 design answered; not asking" "$rc $q8out"
+printf '{ not json\n' > "$PSJ"
+q8run; check "Q8 on an unreadable sidecar.json exits 1" 1 "$rc"
+lacks "Q8 on an unreadable sidecar.json does not ask" "design unasked" "$q8out"
+contains "/init-pipeline Q8 says the pointer is never fetched" "never fetches" "$ip"
+
+# The two readers' blocks, as written: the ref and note when declared, and silence
+# when not, including in a repo with no sidecar at all.
+for reader in execute walk-commits; do
+    rb="$(fenced_with "$repo_root/$reader/SKILL.md" 'config get design.ref')"
+    [ -n "$rb" ] || bad "/$reader carries the design block" "no fenced block mentions config get design.ref"
+    rb="${rb//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+    rbrun() { rbout="$(cd "$1" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$rb" 2>"$PF/rberr")"; rc=$?; rberr="$(cat "$PF/rberr")"; }
+    cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
+    rbrun "$PF/clone"; check "/$reader names a declared ref and note" "0 $DES_REF"$'\n'"checkout flow qqv3" "$rc $rbout"
+    pset '.design = {"ref":"docs/design/checkout.md"}'
+    rbrun "$PF/clone"; check "/$reader names a ref with no note, on one line" "0 docs/design/checkout.md" "$rc $rbout"
+    pset 'del(.design)'
+    rbrun "$PF/clone"; check "/$reader says nothing when design is absent" "0  " "$rc $rbout $rberr"
+    pset '.design = {}'
+    rbrun "$PF/clone"; check "/$reader says nothing when design is declared none" "0  " "$rc $rbout $rberr"
+    rbrun "$PF/nobase"; check "/$reader says nothing on a sidecar miss" "0  " "$rc $rbout $rberr"
+    pset '.design = "not an object"'
+    rbrun "$PF/clone"
+    check "/$reader prints no ref from a design it could not read" "" "$rbout"
+    if [ "$rc" -ne 0 ] && [ -n "$rberr" ]; then ok "/$reader fails loudly on a design it could not read"
+    else bad "/$reader fails loudly on a design it could not read" "rc=$rc err=$rberr"; fi
+done
+cp "$PF/good.json" "$PSJ"
+ex5="$(awk '/^### 5\. Manual Verification/{f=1} /^#### Behavior Review/{f=0} f' "$repo_root/execute/SKILL.md")"
+contains "/execute reads design at Step 5, before the checklist" "config get design.ref" "$ex5"
+wc1="$(awk '/^### 1\. Establish the range/{f=1} /^### 2\./{f=0} f' "$repo_root/walk-commits/SKILL.md")"
+contains "/walk-commits reads design in its overview" "config get design.ref" "$wc1"
+for reader in execute walk-commits; do
+    contains "/$reader says the pack never fetches the pointer" "Never fetch" "$(cat "$repo_root/$reader/SKILL.md")"
+done
 
 
 # -----------------------------------------------------------------------------

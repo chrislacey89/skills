@@ -684,6 +684,22 @@ Before handing off to `/pre-merge`, present the user with a verification checkli
 
 **Preparation:** Summarize what was built — list the commits made and key files changed. If the task originated from a GitHub issue with acceptance criteria, pull those criteria into the checklist so the user doesn't have to cross-reference.
 
+**Design reference.** The repo may declare one pointer to compare the result against. This block prints its ref, then its note if it has one:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+if bash "$SC" resolve >/dev/null 2>&1; then
+  bash "$SC" config get design.ref
+  bash "$SC" config get design.note
+fi
+```
+
+When it prints a ref, add this item to Behavior Review, with the printed values filled in, and leave the comparison to the user. Never fetch or open the pointer:
+
+`- [ ] Result compared against the design reference: <ref> (<note>)`
+
+When it prints nothing, none is declared: add no item and say nothing about it. If it fails on stderr, tell the user the reference could not be read, relay the error, and continue without the item.
+
 Present the checklist:
 
 #### Behavior Review
