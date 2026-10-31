@@ -69,6 +69,8 @@ one here and nowhere else.
 | Slice cap | 4 slices per run; slice 1 is always the walking skeleton |
 | Attempt cap | 2 verification attempts per slice |
 | Gap label | `lfg-gap` |
+| Ledger gap issues per run | at most 1, the roll-up (Close step 6); every row that became one of its items records its number |
+| No-change row shapes | defined once, in **Rolling up the ledger** below |
 | Ledger transition this skill may write | `open → filed` |
 | PR banner first line | `> **LFG proof of concept** — built unattended; not production-reviewed. Promote or discard by human decision.` |
 
@@ -270,6 +272,7 @@ For each slice, in order:
 2. Write the code that makes it pass.
 3. Run the tracer test. Passing means the runner exits 0.
 4. Commit the slice.
+5. Tick the slice's box in the PRD-lite's **Slices** checklist, with the guarded `mktemp` → fetch-with-exit-check → byte-count → edit → refuse-if-shorter shape `/pre-merge` Phase 5 uses for its ledger, reading `gh issue view <PRD-lite> --json body` and writing `gh issue edit <PRD-lite> --body-file`. Change that slice's `- [ ]` to `- [x]` and nothing else. Tick it here, after the commit, not in a sweep at Close: an error-path exit then still leaves a checklist that says which slices shipped. A slice stubbed at the attempt cap stays unticked, because its gap issue is the record that it did not ship.
 
 **Attempt cap.** A failed run in step 3 is one attempt. When a slice reaches the
 attempt cap without a passing run, stop working it. Reduce it to a stub that keeps the skeleton wired,
@@ -278,9 +281,10 @@ plateau stop rule at a smaller scale: attempts that do not advance end the slice
 rather than earning another try.
 
 **Filing a gap issue.** Use this for a slice past the slice cap, a slice stubbed
-at the attempt cap, and each `open` ledger row in step 7. The body follows
-`/execute`'s continuation-comment shape: what was done, what remains, the gotchas,
-and the exact error output when an error caused it. Link the PRD-lite issue. The
+at the attempt cap, and the one ledger roll-up in Close step 6. A slice's body
+follows `/execute`'s continuation-comment shape: what was done, what remains, the
+gotchas, and the exact error output when an error caused it. The roll-up's body
+is the checklist in **Rolling up the ledger**. Link the PRD-lite issue. The
 label reader is the user deciding what to promote. Create the label if it is
 missing (look up `gh label create --help` at runtime).
 
@@ -308,8 +312,8 @@ prove the path.
 3. **Open the PR** with the recap as its body (see **Recap**). The banner is the body's first line, and the body includes `Closes #<PRD-lite>` on the feature path.
 4. Invoke `/pre-merge --loop`, passing the PRD-lite issue number, or "none" on the tiny path. Loop-mode updates the existing PR, reviews it, writes its ledger, and stamps it.
 5. Read the PR body back. If the banner is no longer the first line, put it back with the guarded `mktemp` → fetch-with-exit-check → byte-count → edit → refuse-if-shorter → `gh pr edit --body-file` shape `/pre-merge` Phase 5 uses for its ledger.
-6. For each ledger row in state `open`, file a gap issue and set that row's state to `filed` with the issue number, using the same guarded write. That is the ledger transition in **Locked vocabulary**, and the only ledger write this skill makes. Rows marked `fixed`, `accepted`, or `dropped` are decisions for the user.
-7. Post one roll-up comment on the PRD-lite issue that lists every gap issue and the stop tally.
+6. **Roll up the ledger** (see **Rolling up the ledger**). Sort the rows in state `open` into checklist items and no-change rows, and file one gap issue whose body is the checklist. File none when no row is an item. Then, in one guarded write of the PR body, set every `open` row's state to `filed`: an item's row with the roll-up's number, a no-change row with the PRD-lite's number, where step 7 lists it (on the tiny path, the PR's own number, where the recap lists it). The same write fills in the recap's `gaps:` and `ledger:` lines. That is the ledger transition in **Locked vocabulary**, and the only ledger write this skill makes. Rows marked `fixed`, `accepted`, or `dropped` are decisions for the user. **Then check it finished:** read the PR body back and count the ledger rows still `open`. A non-zero count while the PR is open means this step has not finished, so resume it rather than going on.
+7. Post one roll-up comment on the PRD-lite issue that lists every gap issue, the stop tally, and an **Observations** list with one line per no-change row: its title and any file:line ref.
 8. Print the handoff (see **Handoff**). Render no next-step menu: nobody is present to answer it, so the printed line is the whole handoff.
 
 ## Exit paths
@@ -327,16 +331,59 @@ rm -f "$CLAUDE_PROJECT_DIR/.claude/.lfg-active"
 - **Stop path**: before asking the user any stop-class question. Recreate the marker with step 4's block when the run resumes.
 - **Error path**: when something outside the attempt cap ends the run, such as a failed tool, a lost dev server, or an `/init-pipeline` that does not return. Remove the marker first. Then leave a comment on the PRD-lite issue in `/execute`'s continuation shape, with the exact error. If slices were committed, run Close from step 2 so the partial work still reaches `/pre-merge --loop`.
 
+## Rolling up the ledger
+
+Close step 6 turns the ledger's `open` rows into one gap issue. Filing one
+issue per row produced 8 to 18 issues per PR, and about a third of them asked
+for no change (chrislacey89/skills#688). This section decides which rows become items, when two
+rows are one item, and what an item looks like.
+
+**No-change rows.** A row is a no-change row when it asks for no edit and its
+text has one of three shapes:
+
+1. **A size or raw-diff observation**: a count of lines, files, or commits, or a description of the diff's shape.
+2. **A note with no action**: the row itself says nothing is to be done ("note:", "no action", "for the record").
+3. **A "decide whether" with no concrete change**: the row poses a question and names no edit at any file:line.
+
+A "decide whether" that does name an edit, saying what to change and where, is
+an item. When unsure, make it an item: an item the user deletes costs less than
+a change nobody sees again. No-change rows go to the Observations list (Close
+step 7, or the recap on the tiny path), never into the checklist.
+
+**One item per defect.** Two rows become one item when their file:line refs
+overlap, meaning the same file and line ranges that intersect. Similar wording
+alone never merges two rows, and a row with no file:line ref merges with
+nothing. The ledger keeps both rows, because they record that two reviewers
+reached the same verdict (chrislacey89/skills#379). The merged item names both rows and carries
+each row's proposed change, so a wrong merge costs a longer item, not a lost
+finding.
+
+**Item shape.** One line per item, the title first:
+
+```markdown
+- [ ] <title> — `<path>:<line>`, `<path>:<line>` — <proposed change> (ledger: pass <p>, <dimension>; pass <p>, <dimension>) <any #n>
+```
+
+The title is the row's `Finding` cell. The proposed change is the one the row
+states, or one clause naming the fix when the row states only the defect.
+GitHub ticks a task-list box by itself when an issue the task references closes
+([GitHub docs](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/about-tasklists)),
+and a line that starts with the reference is the shape where that has happened.
+That tick would say the referenced issue closed, not that the item was done. So
+an item never starts with an issue reference, and any `#n` goes at the end of
+the line.
+
 ## Recap
 
 The PR body is the recap, and its reader is the user deciding whether to demo,
 promote, or discard. It carries, in this order:
 
-1. The banner first line, then a `cut:` line naming what the run left out and a `gaps:` line linking the gap issues.
+1. The banner first line, then a `cut:` line naming what the run left out and a `gaps:` line linking each slice's gap issue and the one ledger roll-up.
 2. **Decisions taken without you**, one line each, including every assumption resolved in research-lite.
 3. **Stop tally**, with each stop by class. A stop outside the stop classes is a defect in the run, so list it anyway.
-4. **Proof**, with each screenshot or transcript path and the command that produced it.
-5. On the feature path, `Closes #<PRD-lite>`.
+4. **Ledger tally**, a `ledger:` line with the rows by state and where the filed ones went, e.g. `ledger: 14 rows, 0 open, 14 filed (9 rows as 7 items in the roll-up, 5 observations)`. The ledger does not exist when the PR opens, so Close step 6 writes this line. On the tiny path it is followed by the Observations list that step 7 would otherwise post.
+5. **Proof**, with each screenshot or transcript path and the command that produced it.
+6. On the feature path, `Closes #<PRD-lite>`.
 
 The PR body becomes the squash commit's message, and GitHub reads closing
 keywords in commit messages too, quoted or negated
@@ -353,7 +400,8 @@ In every section, refer to an issue that must stay open without one, e.g.
 | "One more attempt will fix this slice." | The attempt cap exists because a run cannot tell progress from churn. Stub it, file it, and move on. |
 | "I'll leave the marker; `/pre-merge` runs right after." | The stamp must land on a branch with no marker. Remove it first on every path. |
 | "This slice is small, so I can fit a fifth." | The slice cap is the appetite. File the extra slice as a gap issue. |
-| "The finding is trivial, so I'll fix it now." | Loop-mode findings belong to the user. File each open row, and never fix it in-run. |
+| "The finding is trivial, so I'll fix it now." | Loop-mode findings belong to the user. Roll up each open row, and never fix it in-run. |
+| "Each row deserves its own issue." | One issue per row is the burst chrislacey89/skills#688 was filed to stop. File one roll-up; the user splits out whatever they promote. |
 
 ## Red Flags
 
@@ -361,13 +409,16 @@ In every section, refer to an issue that must stay open without one, e.g.
 - A tracer test that never ran, or a slice committed without a passing run or a gap issue.
 - `.claude/.lfg-active` present when `/pre-merge --loop` starts, or present after the run ends.
 - A ledger row this skill set to anything other than `filed`.
+- A handoff printed while the PR is open and its ledger still has a row in state `open`.
+- More than one ledger roll-up issue in a run, a checklist item that starts with an issue reference, or a no-change row filed as an item.
+- A shipped slice whose PRD-lite box is unticked, or a stubbed slice whose box is ticked.
 - A PR body whose first line is not the banner.
 - Per-slice issues, a `/tdd` invocation on the feature path, or a `/closeout`.
 
 ## Handoff
 
 - **Expected input:** an ask typed as `/lfg <ask>`, plus a user present for shape-lite on the feature path. GitHub backend only for now: on a repo where `backend slices` or `backend stamp` answers `sidecar`, the skill stops before writing anything and sends the user to `/execute`.
-- **Produces:** a stamped PR whose body is the recap (banner, decisions, gap issues, stop tally, proof paths); a PRD-lite issue on the feature path; gap issues carrying the gap label; `open` ledger rows moved to `filed`.
+- **Produces:** a stamped PR whose body is the recap (banner, decisions, gap issues, stop tally, ledger tally, proof paths); a PRD-lite issue on the feature path, its slice boxes ticked for the slices that shipped; a gap issue per cut or stubbed slice and at most one ledger roll-up issue, all carrying the gap label; `open` ledger rows moved to `filed`.
 - **May invoke:** `/init-pipeline` (Path B, or Path C on a stale hook), `/pre-merge --loop`.
 - **Returns control to:** the user, who demos the branch and then decides whether to promote or discard it.
 - **Comes next by default:** the user. To keep the code, settle the ledger and run `/closeout`. To discard it, close the PR.

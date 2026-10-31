@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.36.0 — /lfg files one roll-up gap issue per run, and its write-backs leave a trace (#688)
+
+`/lfg` Close step 6 filed one `lfg-gap` issue per `open` ledger row. On PRs #630, #645, #655, and #656 that came to 8 to 18 issues per PR, and about a third were "Decide whether…" or "Size note" rows that asked for no change. They were consolidated by hand into #683 to #686. The same step filed two issues for one defect when two reviewers both found it (#379). Two write-backs had no visible trace when skipped: the PRD-lite slice boxes were never ticked (#380), and one field run skipped step 6 with 29 rows `open` while its handoff read as complete (#384).
+
+### Changes
+
+- **One roll-up per run (#688)**: Close step 6 files at most one gap issue, a checklist with one item per defect, each carrying the row's title, file:line refs, proposed change, and ledger rows. Any `#n` goes at the end of an item, because GitHub ticks a task-list box when an issue the task references closes. The transition is still `open → filed`. Item rows record the roll-up's number.
+- **No-change rows skip the checklist (#688)**: a new § *Rolling up the ledger* names the three shapes (a size or raw-diff observation, a note with no action, a "decide whether" with no concrete change). Such rows go to an Observations list in the PRD-lite roll-up comment (in the recap on the tiny path), and their rows record that issue's number.
+- **Duplicates merge by file:line overlap (#379)**: rows citing overlapping file:line refs become one item that carries both rows' changes. Similar wording alone never merges two rows, and the ledger keeps both rows.
+- **The slice box is ticked as the slice ships (#380)**: build-loop step 5 ticks it after the commit, with the guarded body write. A stubbed slice stays unticked.
+- **A skipped step 6 shows (#384)**: step 6 now ends by recounting `open` rows and resumes on a non-zero count. The recap gains a `ledger:` tally line, and a Red Flag names a handoff printed while the PR is open with `open` rows.
+
 ## v1.35.0 — /respond-to-review: a teammate's review is checked before anything is fixed (#607)
 
 On a team, most PRs get a human review after `/pre-merge` has stamped them, and the pack had no route for it. The post-review edit lock refused implementation edits unless `/fix-findings` was running, and `/fix-findings` accepted only `/pre-merge`'s own findings, so the only way to act on a teammate's comment was to delete the lock by hand and fix in the session that wrote the code. Routing the comments straight into `/fix-findings` would have fixed every one of them, including the wrong ones, the preferences, and the out-of-scope requests. Some review comments need pushback.
