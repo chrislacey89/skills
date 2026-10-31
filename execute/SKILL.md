@@ -578,10 +578,11 @@ Infer surfaces from the module body as it existed before deletion (`git show <ba
 
 **Upstream shape sweep.** After the consumer-surface sweep above, list each export touched on a shared module in this slice (context fields, builder return-type fields, interface or type members, schema fields, exported map or record entries). For each such export, grep the post-delete tree for non-self-reference reads. Zero matches required to pass. Non-zero matches: confirm the readers are live and intentional. Zero matches: drop the export in the same PR — the migration window closes the moment the legacy consumer is deleted, and a retained-but-unread export widens the import contract so a future cleanup becomes a breaking change rather than a silent removal. Dead-export linters (`knip`, `ts-prune`, TypeScript `noUnusedLocals`) cover many shapes of this but not exported context, interface, or schema fields — those are read by the type itself and look live to the tool, so the targeted post-delete grep is doing work the linter cannot.
 
-**Removed-guard sweep (whenever the diff removes lines, including inside files that survive).** The module rung above fires on deleted files. It does not see a guard removed from a block that was edited in place: an `exit`, `return`, `throw`, a refusal, an `|| …` fallback, or a `case` or `if` arm that sends some inputs elsewhere. That happens most often in a dedup. A restated parse is replaced by a call to its one owner, and the parse turns out to have been the only check that a nonzero exit was the expected one. The *value* moved to the owner, but the guard did not move with it. List the candidates off the diff. Each block runs in its own shell, so paste the `BASE_REF` block above in front of this one:
+**Removed-guard sweep (whenever the diff removes lines, including inside files that survive).** The module rung above fires on deleted files. It does not see a guard removed from a block that was edited in place: an `exit`, `return`, `throw`, a refusal, an `|| …` fallback, or a `case` or `if` arm that sends some inputs elsewhere. That happens most often in a dedup. A restated parse is replaced by a call to its one owner, and the parse turns out to have been the only check that a nonzero exit was the expected one. The *value* moved to the owner, but the guard did not move with it. List the candidates off the diff:
 
 ```bash
-: "${BASE_REF:?paste the BASE_REF block above in front of this one}"
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
 git diff -U0 "$BASE_REF...HEAD" | grep -E '^-[^-]' | grep -E '(^|[^[:alnum:]_])(exit|return|throw|raise|die|case|if|elif|else)([^[:alnum:]_]|$)|\|\||&&'
 ```
 

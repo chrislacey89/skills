@@ -41,6 +41,7 @@ SC="<this skill's directory>/references/sidecar.sh"
 BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
 BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
 echo "base=$BASE_BRANCH ref=$BASE_REF"
+git log --oneline "$BASE_REF..HEAD"
 ```
 
 Do not hardcode `main` or `master` — not every repo uses them (Skill Kit's own repo uses `prod`, and many others use `develop`, `trunk`, or a team-specific name). `base-ref` answers with the sidecar's declared `base_ref` when there is one, and otherwise the remote's default. When it exits nonzero it has found no base: relay its stderr and ask the user for the base branch name before continuing.
@@ -48,9 +49,8 @@ Do not hardcode `main` or `master` — not every repo uses them (Skill Kit's own
 **Phase 1b — gather the snapshot (run in parallel, each call independent):**
 
 ```bash
-# Current branch and commits ahead of the detected base branch
+# Current branch; Phase 1a printed the commits ahead of the base
 git branch --show-current
-git log --oneline "$BASE_REF..HEAD"
 
 # Open PR for the current branch, if any
 gh pr list --head "$(git branch --show-current)" --state open --json number,title,url,reviewDecision
