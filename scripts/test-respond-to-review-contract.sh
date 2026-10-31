@@ -28,12 +28,20 @@
 #      other than api.bitbucket.org, and `unknown` for every short, failed, or
 #      unprovable read. Run under bash and zsh.
 #   2. Step 1's record read against planted records: the latest round wins per
-#      thread, and a marker in any other shape is not read.
+#      thread, and a marker in any other shape is not read. Then the same read
+#      against Step 4's own marker template, filled in: its disposition words
+#      are pinned to the five the reader relies on, because a renamed `open`
+#      would make every undecided thread read as settled.
 #   3. Step 1's Review-Thread log read against a scratch repo, and the trailer
 #      string agreeing with the one /fix-findings Step 1 tells its fixer to write.
-#   4. No fenced block in the skill posts, replies, resolves, or mutates (gh or
-#      curl), and
-#      the record goes through sidecar.sh rather than an inlined path.
+#   4. No fenced block in the skill matches a known way of posting, replying,
+#      resolving, or mutating (gh or curl), and the record goes through
+#      sidecar.sh rather than an inlined path. This is a list of known shapes,
+#      not a proof that the skill cannot write. It reads the text of fenced
+#      blocks only, so it cannot see a call behind a variable, eval, an alias,
+#      or a sourced script, a flag placed between `gh pr` and its verb, a `gh
+#      issue` verb outside its list, or an instruction in prose. Each shape it
+#      does name carries a planted case below.
 #   5. The routes and bundles the skill depends on exist.
 # Every detector is mutation-tested below.
 
@@ -625,32 +633,41 @@ check "M5: with a loose match the trailer is attributed to a body line, not the 
 # -----------------------------------------------------------------------------
 section "never posts, never mutates, never writes the record by hand"
 
+# fenced <file> — the file's fenced blocks, with backslash continuations joined
+# so a flag on a later line is seen.
+fenced() {
+    awk '/^ *```/ { on = !on; next } on' "$1" \
+        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }'
+}
 # posts <file> — print each forge-writing call in the file's fenced blocks.
-# Backslash continuations are joined first so a flag on a later line is seen.
-# Three shapes beyond the plain verbs: any `gh api` that is not a graphql call
-# yet carries a field flag (a field makes it a POST), any --method/-X write
-# (`--method=POST` included), and any `mutation` keyword whatever follows it.
-# The skill's own Step 1 fetch is `gh api graphql ... -f query='query(...)'`,
-# which the graphql exclusion keeps silent.
+# Shapes beyond the plain verbs: any `gh api` that is not a graphql call yet
+# carries a field flag (a field makes it a POST), any `gh api` carrying --input
+# (a body from a file, which is also a POST), any --method/-X write
+# (`--method=POST` included), any `mutation` keyword whatever follows it, and
+# any graphql call whose query is not inline in single quotes, because a query
+# from a file or a variable carries a mutation this check cannot read.
+# Only an endpoint of graphql directly after `gh api` is a graphql call. The
+# skill's own Step 1 fetch is `gh api graphql ... -f query='query(...)'`, which
+# that exclusion keeps silent. Each call is split onto its own line first, so a
+# graphql call cannot excuse a second call chained after it.
 posts() {
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
-        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment|addPullRequestReviewThreadReply' || true
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
-        | grep -E 'gh +api ' | grep -vE 'gh +api +([^ ]+ +)*graphql( |$)' \
+    fenced "$1" \
+        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge|ready|reopen|lock|unlock|create|revert|update-branch)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment|addPullRequestReviewThreadReply' || true
+    fenced "$1" | awk '{ gsub(/gh +api /, "\n&"); print }' | grep -E 'gh +api ' > "$tmp/gh-api-calls"
+    grep -vE 'gh +api +graphql( |$)' "$tmp/gh-api-calls" \
         | grep -E '(^| )(-f|-F|--field|--raw-field)([ =]|[^ -])' || true
+    grep -E '(^| )--input([ =]|$)' "$tmp/gh-api-calls" || true
+    grep -E 'gh +api +graphql( |$)' "$tmp/gh-api-calls" \
+        | grep -vE "(^| )(-f|--raw-field)[ =]query='" || true
     # curl, which the Bitbucket arm runs: a body flag on the command line, a
     # -X/--request that names any method but GET, or a request/data key in the
     # config it reads on stdin, makes a request a write. curl's config file
     # (man curl, -K/--config) takes `key = value`, `key=value`, `key: value` and
     # `key value`, quoted or not, so the key match accepts all four after a line
     # start or a printf \n; the quoted `key = "` form is also kept mid-line.
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+    fenced "$1" \
         | grep -nE '(^|[^[:alnum:]_])curl( |.* )(-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file)([ =]|$)|(^|[^[:alnum:]_-]|\\n)(request|data|data-[a-z]+|json|form|upload-file) *= *"|(^[[:space:]]*|\\n)(request|data|data-[a-z]+|json|form|form-[a-z]+|upload-file) *([=:]| ) *[^[:space:]=:]' || true
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+    fenced "$1" \
         | grep -nE '(^|[^[:alnum:]_])curl( |.* )(-[A-Za-z]*X|--request)([ =]|[A-Z])' \
         | grep -vE '(-[A-Za-z]*X|--request)[ =]*["'"'"']?GET(["'"'"'[:space:]]|$)' || true
 }
@@ -677,8 +694,34 @@ plant p-curl-eq 'curl --request=DELETE "$u"'
 plant p-curl-bare 'printf '"'"'%s\nrequest = POST\nurl = "%s"\n'"'"' "$bb_auth" "$1" | curl -sS -K -'
 plant p-curl-colon 'printf '"'"'%s\nrequest: POST\n'"'"' "$bb_auth" | curl -sS -K -'
 plant p-curl-json 'curl -sS --json @reply.json "$API/comments"'
-for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-del p-curl-eq p-curl-bare p-curl-colon p-curl-json; do
+plant p-input-last 'gh api repos/o/r/pulls/7/comments/1/replies --input reply.json'
+plant p-input-first 'gh api --input reply.json repos/o/r/pulls/7/comments/1/replies'
+plant p-input-eq 'gh api --input=reply.json repos/o/r/pulls/7/comments/1/replies'
+plant p-gql-file 'gh api graphql -F query=@m.graphql'
+plant p-gql-input 'gh api graphql --input m.json'
+plant p-gql-var 'gh api graphql -f query="$Q"'
+plant p-word 'gh api repos/o/r/issues/7/comments -f body="a note on graphql here"'
+plant p-word-first 'gh api -f body="graphql is fine" repos/o/r/issues/7/comments'
+plant p-chained 'gh api graphql -f query='"'"'query { viewer { login } }'"'"' && gh api repos/o/r/issues/7/comments -f body=done'
+plant p-ready 'gh pr ready 7'
+plant p-reopen 'gh pr reopen 7'
+plant p-lock 'gh pr lock 7'
+plant p-unlock 'gh pr unlock 7'
+plant p-create 'gh pr create --fill'
+plant p-revert 'gh pr revert 7'
+plant p-update 'gh pr update-branch 7'
+for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-del p-curl-eq p-curl-bare p-curl-colon p-curl-json \
+    p-input-last p-input-first p-input-eq p-gql-file p-gql-input p-gql-var p-word p-word-first p-chained \
+    p-ready p-reopen p-lock p-unlock p-create p-revert p-update; do
     check "M6: the detector fires on planted shape $c" 1 "$(posts "$tmp/$c.md" | grep -c . | awk '{print ($1 > 0)}')"
+done
+# A detector that fires on everything would pass every line above, so the
+# read-only shapes the skill may use have to stay silent.
+plant q-gql 'gh api graphql -F n="$PR" -f query='"'"'query { viewer { login } }'"'"''
+plant q-rest 'gh api repos/o/r/pulls/7'
+plant q-pr 'gh pr view 7 --json number && gh pr diff 7 && gh pr list --head feat'
+for c in q-gql q-rest q-pr; do
+    check "the detector stays silent on the read-only shape $c" "" "$(posts "$tmp/$c.md")"
 done
 
 check "no fenced block inlines a sidecar path" 0 \
