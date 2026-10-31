@@ -128,8 +128,12 @@ fixture() {
 runfetch() { GH_FIXTURE="$1" PATH="$tmp/bin:$PATH" bash "$tmp/fetch.sh" 2>/dev/null; }
 
 fixture "$tmp/ok.json" 4 3 2
+: > "$GH_STUB_CALLS"
 OUT="$(runfetch "$tmp/ok.json")"
 GH_OUT="$OUT"
+# The stub answers whatever it is asked, so a block that asked for the wrong PR
+# reads as a whole read here. Only the logged call shows what was asked.
+check "the one gh call asks for the PR the block was given" 1 "$(grep -c -e ' -F n=7 ' "$GH_STUB_CALLS")"
 check "a whole read prints JSON, not unknown" 1 "$(jq -e '.items | type == "array"' <<<"$OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
 check "it keeps exactly the unresolved, non-author threads and the non-empty, non-author reviews" \
     "PRRT_old PRRT_a PRR_cr" "$(jq -r '[.items[].id] | join(" ")' <<<"$OUT" 2>/dev/null)"
@@ -137,7 +141,12 @@ check "items are numbered 1..n in time order" "1 2 3" "$(jq -r '[.items[].n] | m
 check "an outdated thread is kept and says so" "true" "$(jq -r '.items[] | select(.id == "PRRT_old") | .outdated' <<<"$OUT" 2>/dev/null)"
 check "a bot's thread is kept" "copilot-pull-request-reviewer" "$(jq -r '.items[] | select(.id == "PRRT_old") | .comments[0].author' <<<"$OUT" 2>/dev/null)"
 check "a thread's replies are kept, the author's included" "teammate me" "$(jq -r '.items[] | select(.id == "PRRT_a") | [.comments[].author] | join(" ")' <<<"$OUT" 2>/dev/null)"
-check "last_at is the newest comment's time (what a re-run compares)" "2026-10-03T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRRT_a") | .last_at' <<<"$OUT" 2>/dev/null)"
+# In PRRT_a the author's reply is the newest comment, a day after the teammate's.
+# A reply the author posts must not move last_at: that is the human posting the
+# draft this skill wrote, and it would re-open a settled thread (#609).
+check "last_at is the newest comment by someone other than the PR's author (what a re-run compares)" "2026-10-02T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRRT_a") | .last_at' <<<"$OUT" 2>/dev/null)"
+check "that thread's newest comment really is the author's, so the two differ" "me 2026-10-03T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRRT_a") | .comments[-1] | "\(.author) \(.at)"' <<<"$OUT" 2>/dev/null)"
+check "a review's last_at is its own submission time" "2026-10-04T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRR_cr") | .last_at' <<<"$OUT" 2>/dev/null)"
 got_body="$(jq -r '.items[] | select(.id == "PRRT_a") | .comments[0].body' <<<"$OUT" 2>/dev/null)"
 check "a comment body survives byte for byte" "$TRICKY" "$got_body"
 check "the PR's head ref comes back (Step 1 compares it with the branch)" "feat" "$(jq -r '.head_ref' <<<"$OUT" 2>/dev/null)"
@@ -169,6 +178,19 @@ jq '.data.repository.pullRequest.reviewThreads.nodes[0].comments |= (.totalCount
 check "a thread with comments past the 50 bound prints unknown" unknown "$(runfetch "$tmp/over-comments.json")"
 jq '.data.repository.pullRequest.reviewThreads |= (.totalCount = 100 | .nodes = [range(100) as $i | .nodes[0] | .id = "PRRT_\($i)"])' "$tmp/ok-over.json" > "$tmp/at-bound.json"
 check "a list exactly at the bound is still read whole" 1 "$(runfetch "$tmp/at-bound.json" | jq -e '.items | length == 101' >/dev/null 2>&1 && echo 1 || echo 0)"
+
+# Mutation: the logged call is load-bearing. A block that asks for another PR
+# still gets the fixture back from the stub.
+sed 's/-F n="$PR"/-F n=70/' "$tmp/fetch.sh" > "$tmp/fetch-mut14.sh"
+check "M14: the mutation changed the PR the block asks for" 1 "$(grep -c -e '-F n=70' "$tmp/fetch-mut14.sh")"
+: > "$GH_STUB_CALLS"
+GH_FIXTURE="$tmp/ok.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut14.sh" >/dev/null 2>&1
+check "M14: a call for another PR fails the logged-call assertion" 0 "$(grep -c -e ' -F n=7 ' "$GH_STUB_CALLS")"
+# Mutation: last_at over every comment is the bug #609 names.
+sed 's/last_at: ([^|]*| select((.author.login \/\/ "") != $me)\]\[-1\].createdAt)/last_at: .comments.nodes[-1].createdAt/' "$tmp/fetch.sh" > "$tmp/fetch-mut15.sh"
+check "M15: the mutation took the author filter off last_at" 1 "$(grep -cF 'last_at: .comments.nodes[-1].createdAt' "$tmp/fetch-mut15.sh")"
+check "M15: without the filter the author's own reply moves last_at" "2026-10-03T00:00:00Z" \
+    "$(GH_FIXTURE="$tmp/ok.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut15.sh" 2>/dev/null | jq -r '.items[] | select(.id == "PRRT_a") | .last_at' 2>/dev/null)"
 
 # Mutation: the resolved filter is load-bearing — without it a settled thread
 # comes back as feedback, and the id assertion above must notice.
@@ -331,7 +353,7 @@ check "an inline thread carries path and the new-file line" "src/a.ts 4" "$(jq -
 check "a general comment carries null path and line, as a thread" "null null thread" \
     "$(jq -r '.items[] | select(.id == "4") | "\(.path) \(.line) \(.kind)"' <<<"$OUT" 2>/dev/null)"
 check "outdated is null, never guessed" "null" "$(jq -r '[.items[].outdated] | unique | map(tostring) | join(" ")' <<<"$OUT" 2>/dev/null)"
-check "last_at is the newest comment's time" "2026-10-05T00:00:00Z" "$(jq -r '.items[] | select(.id == "1") | .last_at' <<<"$OUT" 2>/dev/null)"
+check "last_at reaches a teammate's reply on a later page" "2026-10-05T00:00:00Z" "$(jq -r '.items[] | select(.id == "1") | .last_at' <<<"$OUT" 2>/dev/null)"
 check "a comment body survives byte for byte" "$TRICKY" "$(jq -r '.items[] | select(.id == "1") | .comments[0].body' <<<"$OUT" 2>/dev/null)"
 check "head is expanded to the full SHA when it resolves locally" "$BB_HEAD" "$(jq -r '.head' <<<"$OUT" 2>/dev/null)"
 check "head_ref is the PR's source branch" "feat" "$(jq -r '.head_ref' <<<"$OUT" 2>/dev/null)"
@@ -361,6 +383,33 @@ jq -n '
      (c(3; "other"; "2026-10-04T00:00:00Z") + {parent: {id: 1}})]}' > "$tmp/bb-delroot/page1.json"
 check "a thread whose teammate root was deleted is kept when the author replied first" "other:c3 me:c2" \
     "$(runbb "$tmp/bb-delroot" | jq -r '.items[] | [.comments[] | "\(.author):\(.body)"] | reverse | join(" ")' 2>/dev/null)"
+
+# The author's reply is the newest comment: last_at stays on the teammate's (#609).
+mkdir -p "$tmp/bb-lastat"
+cp "$tmp/bb-ok/pr.json" "$tmp/bb-lastat/pr.json"
+jq -n '
+  def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who}, content: {raw: ("c" + (id | tostring))}};
+  {size: 2, pagelen: 100, page: 1, values: [
+     c(1; "teammate"; "2026-10-02T00:00:00Z"),
+     (c(2; "me"; "2026-10-03T00:00:00Z") + {parent: {id: 1}})]}' > "$tmp/bb-lastat/page1.json"
+LASTAT="$(runbb "$tmp/bb-lastat")"
+check "last_at is the newest comment by someone other than the PR's author" "2026-10-02T00:00:00Z" "$(jq -r '.items[0].last_at' <<<"$LASTAT" 2>/dev/null)"
+check "that thread's newest comment really is the author's, so the two differ" "me 2026-10-03T00:00:00Z" "$(jq -r '.items[0].comments[-1] | "\(.author) \(.at)"' <<<"$LASTAT" 2>/dev/null)"
+sed 's/last_at: ([^|]*| select((.user.uuid \/\/ "") != $me)\]\[-1\].created_on \/\/ .r.created_on)/last_at: .cs[-1].created_on/' "$tmp/bb.sh" > "$tmp/bb-mut16.sh"
+check "M16: the mutation took the author filter off last_at" 1 "$(grep -cF 'last_at: .cs[-1].created_on' "$tmp/bb-mut16.sh")"
+check "M16: without the filter the author's own reply moves last_at" "2026-10-03T00:00:00Z" \
+    "$(mv "$tmp/bb.sh" "$tmp/bb.sh.real"; cp "$tmp/bb-mut16.sh" "$tmp/bb.sh"; r="$(runbb "$tmp/bb-lastat" | jq -r '.items[0].last_at' 2>/dev/null)"; mv "$tmp/bb.sh.real" "$tmp/bb.sh"; printf '%s' "$r")"
+# Only the author's reply is left under a teammate's deleted root, so no comment
+# qualifies. The record's marker needs a value, and it must not be the author's time.
+mkdir -p "$tmp/bb-noother"
+cp "$tmp/bb-ok/pr.json" "$tmp/bb-noother/pr.json"
+jq -n '
+  def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who}, content: {raw: ("c" + (id | tostring))}};
+  {size: 2, pagelen: 100, page: 1, values: [
+     (c(1; "teammate"; "2026-10-02T00:00:00Z") + {deleted: true}),
+     (c(2; "me"; "2026-10-03T00:00:00Z") + {parent: {id: 1}})]}' > "$tmp/bb-noother/page1.json"
+check "with only the author's reply left, last_at falls back to the deleted root's time" "2026-10-02T00:00:00Z" \
+    "$(runbb "$tmp/bb-noother" | jq -r '.items[0].last_at' 2>/dev/null)"
 
 # Every way the read can be short, failed, or unprovable prints unknown.
 bbcase() { rm -rf "$tmp/bb-c"; cp -R "$tmp/bb-ok" "$tmp/bb-c"; }

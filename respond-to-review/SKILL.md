@@ -126,7 +126,7 @@ THREADS_JQ='
         | select((.comments.nodes[0].author.login // "") != $me)
         | {kind: "thread", id, path, line, outdated: .isOutdated,
            url: .comments.nodes[0].url, at: .comments.nodes[0].createdAt,
-           last_at: .comments.nodes[-1].createdAt,
+           last_at: ([.comments.nodes[] | select((.author.login // "") != $me)][-1].createdAt),
            comments: [.comments.nodes[] | {author: (.author.login // "ghost"), body, url, at: .createdAt}]}]
        + [$p.reviews.nodes[]
         | select((.body // "") != "" and (.author.login // "") != $me)
@@ -169,6 +169,8 @@ It prints one JSON object, or the single word `unknown`.
   decides what a bot's comment is worth, not this block.
 - **Bounds.** It reads up to 100 threads, 100 reviews, and 50 comments per
   thread, and says `unknown` rather than silently truncating past them.
+- **`last_at` skips the PR's author.** It is the newest comment by anyone else,
+  so posting a reply this skill drafted does not re-open a settled thread.
 
 **Bitbucket Cloud arm.** It needs the PR number from the human, and a
 read-only token in `BITBUCKET_TOKEN`. A repository, project, or workspace access token
@@ -210,7 +212,8 @@ def rootid($by; $d):
         | select((.r.user.uuid // "") != $me)
         | {kind: "thread", id: (.r.id | tostring), path: (.r.inline.path // null),
            line: (.r.inline.to // null), outdated: null,
-           url: (.r.links.html.href // null), at: .cs[0].created_on, last_at: .cs[-1].created_on,
+           url: (.r.links.html.href // null), at: .cs[0].created_on,
+           last_at: ([.cs[] | select((.user.uuid // "") != $me)][-1].created_on // .r.created_on),
            comments: [.cs[] | {author: (.user.nickname // .user.display_name // "ghost"),
                                body: (.content.raw // ""), url: (.links.html.href // null), at: .created_on}]})
     | sort_by(.at)
@@ -291,7 +294,9 @@ It prints the same JSON object as the GitHub arm, or `unknown`.
   the PR's author started (compared by account `uuid`, read off the top-level
   comment even if that comment was since deleted), and comments that are
   `deleted` or `pending` (an unpublished draft). A thread with nothing left
-  after that is dropped.
+  after that is dropped. `last_at` skips the author the same way, by `uuid`,
+  and when only the author's replies are left under a deleted top-level comment
+  it is that comment's time.
 - **Two fields differ.** `outdated` is always `null`, because Bitbucket's
   comment schema has no outdated flag and the arm does not guess one. `head` is
   the full SHA when the abbreviated hash Bitbucket returns resolves in the
@@ -322,7 +327,7 @@ Each line is `<thread-id> <last-at> <disposition>` for the latest round that
 recorded that thread. An item whose `id` appears with the same `last_at`, and
 whose disposition is not `open`, is **settled**. Show it with its earlier
 disposition, and leave it out of the evidence check. An item that is new, or
-whose `last_at` moved because someone replied, gets the full check. On a miss
+whose `last_at` moved because a teammate replied, gets the full check. On a miss
 the resolver says why (no sidecar, typically). Carry on without a prior round,
 and Step 4 says what happens to the record.
 
