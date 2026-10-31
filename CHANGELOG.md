@@ -6,7 +6,7 @@
 
 ### Changes
 
-- **One roll-up per run (#688)**: Close step 6 files at most one gap issue, a checklist with one item per defect, each carrying the row's title, file:line refs, proposed change, and ledger rows. Any `#n` goes at the end of an item, because GitHub ticks a task-list box when an issue the task references closes. The transition is still `open → filed`. Item rows record the roll-up's number.
+- **One roll-up per run (#688)**: Close step 6 files at most one gap issue, a checklist with one item per defect, each carrying the row's title, file:line refs, proposed change, and ledger rows. An item line carries no `#n`. The transition is still `open → filed`. Item rows record the roll-up's number.
 - **No-change rows skip the checklist (#688)**: a new § *Rolling up the ledger* names the three shapes (a size or raw-diff observation, a note with no action, a "decide whether" with no concrete change). Such rows go to an Observations list in the PRD-lite roll-up comment (in the recap on the tiny path), and their rows record that issue's number.
 - **Duplicates merge by file:line overlap (#379)**: rows citing overlapping file:line refs become one item that carries both rows' changes. Similar wording alone never merges two rows, and the ledger keeps both rows.
 - **The slice box is ticked as the slice ships (#380)**: build-loop step 5 ticks it after the commit, with the guarded body write. A stubbed slice stays unticked.

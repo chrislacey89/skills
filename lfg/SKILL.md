@@ -364,17 +364,11 @@ finding.
 **Item shape.** One line per item, the title first:
 
 ```markdown
-- [ ] <title> — `<path>:<line>`, `<path>:<line>` — <proposed change> (ledger: pass <p>, <dimension>; pass <p>, <dimension>) <any #n>
+- [ ] <title> — `<path>:<line>`, `<path>:<line>` — <proposed change> (ledger: pass <p>, <dimension>; pass <p>, <dimension>)
 ```
 
 The title is the row's `Finding` cell. The proposed change is the one the row
 states, or one clause naming the fix when the row states only the defect.
-GitHub ticks a task-list box by itself when an issue the task references closes
-([GitHub docs](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/about-tasklists)),
-and a line that starts with the reference is the shape where that has happened.
-That tick would say the referenced issue closed, not that the item was done. So
-an item never starts with an issue reference, and any `#n` goes at the end of
-the line.
 
 ## Recap
 
@@ -413,7 +407,7 @@ In every section, refer to an issue that must stay open without one, e.g.
 - `.claude/.lfg-active` present when `/pre-merge --loop` starts, or present after the run ends.
 - A ledger row this skill set to anything other than `filed`.
 - A handoff printed while the PR is open and its ledger still has a row in state `open`.
-- A roll-up that breaks the issue cap in **Rolling up the ledger**, a checklist item that starts with an issue reference, or a no-change row filed as an item.
+- A roll-up that breaks the issue cap in **Rolling up the ledger** or a no-change row filed as an item.
 - A shipped slice whose PRD-lite box is unticked, or a stubbed slice whose box is ticked.
 - A PR body whose first line is not the banner.
 - Per-slice issues, a `/tdd` invocation on the feature path, or a `/closeout`.
