@@ -28,12 +28,20 @@
 #      other than api.bitbucket.org, and `unknown` for every short, failed, or
 #      unprovable read. Run under bash and zsh.
 #   2. Step 1's record read against planted records: the latest round wins per
-#      thread, and a marker in any other shape is not read.
+#      thread, and a marker in any other shape is not read. Then the same read
+#      against Step 4's own marker template, filled in: its disposition words
+#      are pinned to the five the reader relies on, because a renamed `open`
+#      would make every undecided thread read as settled.
 #   3. Step 1's Review-Thread log read against a scratch repo, and the trailer
 #      string agreeing with the one /fix-findings Step 1 tells its fixer to write.
-#   4. No fenced block in the skill posts, replies, resolves, or mutates (gh or
-#      curl), and
-#      the record goes through sidecar.sh rather than an inlined path.
+#   4. No fenced block in the skill matches a known way of posting, replying,
+#      resolving, or mutating (gh or curl), and the record goes through
+#      sidecar.sh rather than an inlined path. This is a list of known shapes,
+#      not a proof that the skill cannot write. It reads the text of fenced
+#      blocks only, so it cannot see a call behind a variable, eval, an alias,
+#      or a sourced script, a flag placed between `gh pr` and its verb, a `gh
+#      issue` verb outside its list, or an instruction in prose. Each shape it
+#      does name carries a planted case below.
 #   5. The routes and bundles the skill depends on exist.
 # Every detector is mutation-tested below.
 
@@ -48,7 +56,9 @@ FF="$repo_root/fix-findings/SKILL.md"
 CO="$repo_root/closeout/SKILL.md"
 HELP="$repo_root/help/SKILL.md"
 MANIFEST="$repo_root/scripts/skill-references.manifest"
-for f in "$R2R" "$FF" "$CO" "$HELP" "$MANIFEST"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
+SO="$repo_root/SYSTEM-OVERVIEW.md"
+SB="$repo_root/docs/state-backend.md"
+for f in "$R2R" "$FF" "$CO" "$HELP" "$MANIFEST" "$SO" "$SB"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
@@ -128,8 +138,12 @@ fixture() {
 runfetch() { GH_FIXTURE="$1" PATH="$tmp/bin:$PATH" bash "$tmp/fetch.sh" 2>/dev/null; }
 
 fixture "$tmp/ok.json" 4 3 2
+: > "$GH_STUB_CALLS"
 OUT="$(runfetch "$tmp/ok.json")"
 GH_OUT="$OUT"
+# The stub answers whatever it is asked, so a block that asked for the wrong PR
+# reads as a whole read here. Only the logged call shows what was asked.
+check "the one gh call asks for the PR the block was given" 1 "$(grep -c -e ' -F n=7 ' "$GH_STUB_CALLS")"
 check "a whole read prints JSON, not unknown" 1 "$(jq -e '.items | type == "array"' <<<"$OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
 check "it keeps exactly the unresolved, non-author threads and the non-empty, non-author reviews" \
     "PRRT_old PRRT_a PRR_cr" "$(jq -r '[.items[].id] | join(" ")' <<<"$OUT" 2>/dev/null)"
@@ -137,7 +151,12 @@ check "items are numbered 1..n in time order" "1 2 3" "$(jq -r '[.items[].n] | m
 check "an outdated thread is kept and says so" "true" "$(jq -r '.items[] | select(.id == "PRRT_old") | .outdated' <<<"$OUT" 2>/dev/null)"
 check "a bot's thread is kept" "copilot-pull-request-reviewer" "$(jq -r '.items[] | select(.id == "PRRT_old") | .comments[0].author' <<<"$OUT" 2>/dev/null)"
 check "a thread's replies are kept, the author's included" "teammate me" "$(jq -r '.items[] | select(.id == "PRRT_a") | [.comments[].author] | join(" ")' <<<"$OUT" 2>/dev/null)"
-check "last_at is the newest comment's time (what a re-run compares)" "2026-10-03T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRRT_a") | .last_at' <<<"$OUT" 2>/dev/null)"
+# In PRRT_a the author's reply is the newest comment, a day after the teammate's.
+# A reply the author posts must not move last_at: that is the human posting the
+# draft this skill wrote, and it would re-open a settled thread (#609).
+check "last_at is the newest comment by someone other than the PR's author (what a re-run compares)" "2026-10-02T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRRT_a") | .last_at' <<<"$OUT" 2>/dev/null)"
+check "that thread's newest comment really is the author's, so the two differ" "me 2026-10-03T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRRT_a") | .comments[-1] | "\(.author) \(.at)"' <<<"$OUT" 2>/dev/null)"
+check "a review's last_at is its own submission time" "2026-10-04T00:00:00Z" "$(jq -r '.items[] | select(.id == "PRR_cr") | .last_at' <<<"$OUT" 2>/dev/null)"
 got_body="$(jq -r '.items[] | select(.id == "PRRT_a") | .comments[0].body' <<<"$OUT" 2>/dev/null)"
 check "a comment body survives byte for byte" "$TRICKY" "$got_body"
 check "the PR's head ref comes back (Step 1 compares it with the branch)" "feat" "$(jq -r '.head_ref' <<<"$OUT" 2>/dev/null)"
@@ -169,6 +188,19 @@ jq '.data.repository.pullRequest.reviewThreads.nodes[0].comments |= (.totalCount
 check "a thread with comments past the 50 bound prints unknown" unknown "$(runfetch "$tmp/over-comments.json")"
 jq '.data.repository.pullRequest.reviewThreads |= (.totalCount = 100 | .nodes = [range(100) as $i | .nodes[0] | .id = "PRRT_\($i)"])' "$tmp/ok-over.json" > "$tmp/at-bound.json"
 check "a list exactly at the bound is still read whole" 1 "$(runfetch "$tmp/at-bound.json" | jq -e '.items | length == 101' >/dev/null 2>&1 && echo 1 || echo 0)"
+
+# Mutation: the logged call is load-bearing. A block that asks for another PR
+# still gets the fixture back from the stub.
+sed 's/-F n="$PR"/-F n=70/' "$tmp/fetch.sh" > "$tmp/fetch-mut14.sh"
+check "M14: the mutation changed the PR the block asks for" 1 "$(grep -c -e '-F n=70' "$tmp/fetch-mut14.sh")"
+: > "$GH_STUB_CALLS"
+GH_FIXTURE="$tmp/ok.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut14.sh" >/dev/null 2>&1
+check "M14: a call for another PR fails the logged-call assertion" 0 "$(grep -c -e ' -F n=7 ' "$GH_STUB_CALLS")"
+# Mutation: last_at over every comment is the bug #609 names.
+sed 's/last_at: ([^|]*| select((.author.login \/\/ "") != $me)\]\[-1\].createdAt)/last_at: .comments.nodes[-1].createdAt/' "$tmp/fetch.sh" > "$tmp/fetch-mut15.sh"
+check "M15: the mutation took the author filter off last_at" 1 "$(grep -cF 'last_at: .comments.nodes[-1].createdAt' "$tmp/fetch-mut15.sh")"
+check "M15: without the filter the author's own reply moves last_at" "2026-10-03T00:00:00Z" \
+    "$(GH_FIXTURE="$tmp/ok.json" PATH="$tmp/bin:$PATH" bash "$tmp/fetch-mut15.sh" 2>/dev/null | jq -r '.items[] | select(.id == "PRRT_a") | .last_at' 2>/dev/null)"
 
 # Mutation: the resolved filter is load-bearing — without it a settled thread
 # comes back as feedback, and the id assertion above must notice.
@@ -331,7 +363,7 @@ check "an inline thread carries path and the new-file line" "src/a.ts 4" "$(jq -
 check "a general comment carries null path and line, as a thread" "null null thread" \
     "$(jq -r '.items[] | select(.id == "4") | "\(.path) \(.line) \(.kind)"' <<<"$OUT" 2>/dev/null)"
 check "outdated is null, never guessed" "null" "$(jq -r '[.items[].outdated] | unique | map(tostring) | join(" ")' <<<"$OUT" 2>/dev/null)"
-check "last_at is the newest comment's time" "2026-10-05T00:00:00Z" "$(jq -r '.items[] | select(.id == "1") | .last_at' <<<"$OUT" 2>/dev/null)"
+check "last_at reaches a teammate's reply on a later page" "2026-10-05T00:00:00Z" "$(jq -r '.items[] | select(.id == "1") | .last_at' <<<"$OUT" 2>/dev/null)"
 check "a comment body survives byte for byte" "$TRICKY" "$(jq -r '.items[] | select(.id == "1") | .comments[0].body' <<<"$OUT" 2>/dev/null)"
 check "head is expanded to the full SHA when it resolves locally" "$BB_HEAD" "$(jq -r '.head' <<<"$OUT" 2>/dev/null)"
 check "head_ref is the PR's source branch" "feat" "$(jq -r '.head_ref' <<<"$OUT" 2>/dev/null)"
@@ -361,6 +393,33 @@ jq -n '
      (c(3; "other"; "2026-10-04T00:00:00Z") + {parent: {id: 1}})]}' > "$tmp/bb-delroot/page1.json"
 check "a thread whose teammate root was deleted is kept when the author replied first" "other:c3 me:c2" \
     "$(runbb "$tmp/bb-delroot" | jq -r '.items[] | [.comments[] | "\(.author):\(.body)"] | reverse | join(" ")' 2>/dev/null)"
+
+# The author's reply is the newest comment: last_at stays on the teammate's (#609).
+mkdir -p "$tmp/bb-lastat"
+cp "$tmp/bb-ok/pr.json" "$tmp/bb-lastat/pr.json"
+jq -n '
+  def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who}, content: {raw: ("c" + (id | tostring))}};
+  {size: 2, pagelen: 100, page: 1, values: [
+     c(1; "teammate"; "2026-10-02T00:00:00Z"),
+     (c(2; "me"; "2026-10-03T00:00:00Z") + {parent: {id: 1}})]}' > "$tmp/bb-lastat/page1.json"
+LASTAT="$(runbb "$tmp/bb-lastat")"
+check "last_at is the newest comment by someone other than the PR's author" "2026-10-02T00:00:00Z" "$(jq -r '.items[0].last_at' <<<"$LASTAT" 2>/dev/null)"
+check "that thread's newest comment really is the author's, so the two differ" "me 2026-10-03T00:00:00Z" "$(jq -r '.items[0].comments[-1] | "\(.author) \(.at)"' <<<"$LASTAT" 2>/dev/null)"
+sed 's/last_at: ([^|]*| select((.user.uuid \/\/ "") != $me)\]\[-1\].created_on \/\/ .r.created_on)/last_at: .cs[-1].created_on/' "$tmp/bb.sh" > "$tmp/bb-mut16.sh"
+check "M16: the mutation took the author filter off last_at" 1 "$(grep -cF 'last_at: .cs[-1].created_on' "$tmp/bb-mut16.sh")"
+check "M16: without the filter the author's own reply moves last_at" "2026-10-03T00:00:00Z" \
+    "$(mv "$tmp/bb.sh" "$tmp/bb.sh.real"; cp "$tmp/bb-mut16.sh" "$tmp/bb.sh"; r="$(runbb "$tmp/bb-lastat" | jq -r '.items[0].last_at' 2>/dev/null)"; mv "$tmp/bb.sh.real" "$tmp/bb.sh"; printf '%s' "$r")"
+# Only the author's reply is left under a teammate's deleted root, so no comment
+# qualifies. The record's marker needs a value, and it must not be the author's time.
+mkdir -p "$tmp/bb-noother"
+cp "$tmp/bb-ok/pr.json" "$tmp/bb-noother/pr.json"
+jq -n '
+  def c(id; who; t): {id: id, created_on: t, user: {uuid: ("{" + who + "}"), nickname: who}, content: {raw: ("c" + (id | tostring))}};
+  {size: 2, pagelen: 100, page: 1, values: [
+     (c(1; "teammate"; "2026-10-02T00:00:00Z") + {deleted: true}),
+     (c(2; "me"; "2026-10-03T00:00:00Z") + {parent: {id: 1}})]}' > "$tmp/bb-noother/page1.json"
+check "with only the author's reply left, last_at falls back to the deleted root's time" "2026-10-02T00:00:00Z" \
+    "$(runbb "$tmp/bb-noother" | jq -r '.items[0].last_at' 2>/dev/null)"
 
 # Every way the read can be short, failed, or unprovable prints unknown.
 bbcase() { rm -rf "$tmp/bb-c"; cp -R "$tmp/bb-ok" "$tmp/bb-c"; }
@@ -576,32 +635,41 @@ check "M5: with a loose match the trailer is attributed to a body line, not the 
 # -----------------------------------------------------------------------------
 section "never posts, never mutates, never writes the record by hand"
 
+# fenced <file> — the file's fenced blocks, with backslash continuations joined
+# so a flag on a later line is seen.
+fenced() {
+    awk '/^ *```/ { on = !on; next } on' "$1" \
+        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }'
+}
 # posts <file> — print each forge-writing call in the file's fenced blocks.
-# Backslash continuations are joined first so a flag on a later line is seen.
-# Three shapes beyond the plain verbs: any `gh api` that is not a graphql call
-# yet carries a field flag (a field makes it a POST), any --method/-X write
-# (`--method=POST` included), and any `mutation` keyword whatever follows it.
-# The skill's own Step 1 fetch is `gh api graphql ... -f query='query(...)'`,
-# which the graphql exclusion keeps silent.
+# Shapes beyond the plain verbs: any `gh api` that is not a graphql call yet
+# carries a field flag (a field makes it a POST), any `gh api` carrying --input
+# (a body from a file, which is also a POST), any --method/-X write
+# (`--method=POST` included), any `mutation` keyword whatever follows it, and
+# any graphql call whose query is not inline in single quotes, because a query
+# from a file or a variable carries a mutation this check cannot read.
+# Only an endpoint of graphql directly after `gh api` is a graphql call. The
+# skill's own Step 1 fetch is `gh api graphql ... -f query='query(...)'`, which
+# that exclusion keeps silent. Each call is split onto its own line first, so a
+# graphql call cannot excuse a second call chained after it.
 posts() {
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
-        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment|addPullRequestReviewThreadReply' || true
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
-        | grep -E 'gh +api ' | grep -vE 'gh +api +([^ ]+ +)*graphql( |$)' \
+    fenced "$1" \
+        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge|ready|reopen|lock|unlock|create|revert|update-branch)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment|addPullRequestReviewThreadReply' || true
+    fenced "$1" | awk '{ gsub(/gh +api /, "\n&"); print }' | grep -E 'gh +api ' > "$tmp/gh-api-calls"
+    grep -vE 'gh +api +graphql( |$)' "$tmp/gh-api-calls" \
         | grep -E '(^| )(-f|-F|--field|--raw-field)([ =]|[^ -])' || true
+    grep -E '(^| )--input([ =]|$)' "$tmp/gh-api-calls" || true
+    grep -E 'gh +api +graphql( |$)' "$tmp/gh-api-calls" \
+        | grep -vE "(^| )(-f|--raw-field)[ =]query='" || true
     # curl, which the Bitbucket arm runs: a body flag on the command line, a
     # -X/--request that names any method but GET, or a request/data key in the
     # config it reads on stdin, makes a request a write. curl's config file
     # (man curl, -K/--config) takes `key = value`, `key=value`, `key: value` and
     # `key value`, quoted or not, so the key match accepts all four after a line
     # start or a printf \n; the quoted `key = "` form is also kept mid-line.
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+    fenced "$1" \
         | grep -nE '(^|[^[:alnum:]_])curl( |.* )(-d|--data[a-z-]*|--json|-F|--form[a-z-]*|-T|--upload-file)([ =]|$)|(^|[^[:alnum:]_-]|\\n)(request|data|data-[a-z]+|json|form|upload-file) *= *"|(^[[:space:]]*|\\n)(request|data|data-[a-z]+|json|form|form-[a-z]+|upload-file) *([=:]| ) *[^[:space:]=:]' || true
-    awk '/^ *```/ { on = !on; next } on' "$1" \
-        | awk '{ if (sub(/\\$/, "")) { acc = acc $0 } else { print acc $0; acc = "" } }' \
+    fenced "$1" \
         | grep -nE '(^|[^[:alnum:]_])curl( |.* )(-[A-Za-z]*X|--request)([ =]|[A-Z])' \
         | grep -vE '(-[A-Za-z]*X|--request)[ =]*["'"'"']?GET(["'"'"'[:space:]]|$)' || true
 }
@@ -628,8 +696,34 @@ plant p-curl-eq 'curl --request=DELETE "$u"'
 plant p-curl-bare 'printf '"'"'%s\nrequest = POST\nurl = "%s"\n'"'"' "$bb_auth" "$1" | curl -sS -K -'
 plant p-curl-colon 'printf '"'"'%s\nrequest: POST\n'"'"' "$bb_auth" | curl -sS -K -'
 plant p-curl-json 'curl -sS --json @reply.json "$API/comments"'
-for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-del p-curl-eq p-curl-bare p-curl-colon p-curl-json; do
+plant p-input-last 'gh api repos/o/r/pulls/7/comments/1/replies --input reply.json'
+plant p-input-first 'gh api --input reply.json repos/o/r/pulls/7/comments/1/replies'
+plant p-input-eq 'gh api --input=reply.json repos/o/r/pulls/7/comments/1/replies'
+plant p-gql-file 'gh api graphql -F query=@m.graphql'
+plant p-gql-input 'gh api graphql --input m.json'
+plant p-gql-var 'gh api graphql -f query="$Q"'
+plant p-word 'gh api repos/o/r/issues/7/comments -f body="a note on graphql here"'
+plant p-word-first 'gh api -f body="graphql is fine" repos/o/r/issues/7/comments'
+plant p-chained 'gh api graphql -f query='"'"'query { viewer { login } }'"'"' && gh api repos/o/r/issues/7/comments -f body=done'
+plant p-ready 'gh pr ready 7'
+plant p-reopen 'gh pr reopen 7'
+plant p-lock 'gh pr lock 7'
+plant p-unlock 'gh pr unlock 7'
+plant p-create 'gh pr create --fill'
+plant p-revert 'gh pr revert 7'
+plant p-update 'gh pr update-branch 7'
+for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-del p-curl-eq p-curl-bare p-curl-colon p-curl-json \
+    p-input-last p-input-first p-input-eq p-gql-file p-gql-input p-gql-var p-word p-word-first p-chained \
+    p-ready p-reopen p-lock p-unlock p-create p-revert p-update; do
     check "M6: the detector fires on planted shape $c" 1 "$(posts "$tmp/$c.md" | grep -c . | awk '{print ($1 > 0)}')"
+done
+# A detector that fires on everything would pass every line above, so the
+# read-only shapes the skill may use have to stay silent.
+plant q-gql 'gh api graphql -F n="$PR" -f query='"'"'query { viewer { login } }'"'"''
+plant q-rest 'gh api repos/o/r/pulls/7'
+plant q-pr 'gh pr view 7 --json number && gh pr diff 7 && gh pr list --head feat'
+for c in q-gql q-rest q-pr; do
+    check "the detector stays silent on the read-only shape $c" "" "$(posts "$tmp/$c.md")"
 done
 
 check "no fenced block inlines a sidecar path" 0 \
@@ -637,6 +731,53 @@ check "no fenced block inlines a sidecar path" 0 \
 WRITE="$(block "$R2R" '"$SC" commit')"
 check "the record is written to sidecar.sh's review-responses path" 1 "$(grep -c 'path review-responses' <<<"$WRITE")"
 check "the record is committed through sidecar.sh commit" 1 "$(grep -c '"\$SC" commit --' <<<"$WRITE")"
+
+# -----------------------------------------------------------------------------
+section "the record is written before the fixes are handed off (#609)"
+
+# Nothing returns control here after /fix-findings' menu, so a round is recorded
+# only if Step 4 runs first. A reader follows the steps in file order, so the
+# order is a fact about line numbers, in the headings and in the steps' bodies.
+# order_holds <file> — 1 when Step 4 writes the record, ahead of Step 5's
+# handoff, and says why.
+order_holds() {
+    rec="$(grep -n '^### Step 4\. Write the record' "$1" | cut -d: -f1)"
+    fix="$(grep -n '^### Step 5\. Hand the fixes' "$1" | cut -d: -f1)"
+    wr="$(grep -n '"\$SC" commit -- "\$REC"' "$1" | cut -d: -f1)"
+    inv="$(grep -n 'invoke `/fix-findings` with exactly those' "$1" | cut -d: -f1)"
+    if [ -n "$rec" ] && [ -n "$fix" ] && [ -n "$wr" ] && [ -n "$inv" ] \
+        && [ "$rec" -lt "$fix" ] && [ "$wr" -lt "$inv" ] \
+        && [ "$(step4 "$1" | grep -c 'Write it \*\*before\*\* Step 5')" -gt 0 ]; then
+        echo 1
+    else
+        echo 0
+    fi
+}
+# Step 4's record template holds `## Round` lines, so only the next step ends it.
+step4() { awk '/^### Step 4\. / { on = 1; next } /^### Step 5\. / { on = 0 } on' "$1"; }
+handoff() { awk '/^## Handoff/ { on = 1; next } /^## / { on = 0 } on' "$1"; }
+check "Step 4 is ahead of Step 5, in its heading and its write, and says why" 1 "$(order_holds "$R2R")"
+# Mutation: exchange the two heading lines. A breaker did this in #608 and the
+# suite stayed green.
+awk '/^### Step 4\. Write the record/ { a = $0 } /^### Step 5\. Hand the fixes/ { b = $0 } { lines[NR] = $0 } END {
+    for (i = 1; i <= NR; i++) {
+        if (lines[i] == a) print b; else if (lines[i] == b) print a; else print lines[i]
+    }
+}' "$R2R" > "$tmp/swap.md"
+check "M17: the mutation exchanged the two headings" 1 \
+    "$([ "$(grep -n '^### Step 5\. Hand' "$tmp/swap.md" | cut -d: -f1)" -lt "$(grep -n '^### Step 4\. Write' "$tmp/swap.md" | cut -d: -f1)" ] && echo 1 || echo 0)"
+check "M17: with the headings exchanged the order pin fails" 0 "$(order_holds "$tmp/swap.md")"
+sed -e 's/^### Step 4\. Write the record/### Step 5. Write the record/' -e 's/^### Step 5\. Hand the fixes/### Step 4. Hand the fixes/' "$R2R" > "$tmp/swap2.md"
+check "M18: with only the numbers exchanged the order pin fails" 0 "$(order_holds "$tmp/swap2.md")"
+sed 's/ Write it \*\*before\*\* Step 5: / /' "$R2R" > "$tmp/nosentence.md"
+check "M19: the mutation removed the sentence" 0 "$(grep -c 'Write it \*\*before\*\* Step 5' "$tmp/nosentence.md")"
+check "M19: without the before-Step-5 sentence the order pin fails" 0 "$(order_holds "$tmp/nosentence.md")"
+
+# A compound candidate is a fix thread, so /fix-findings runs and its menu is the
+# handoff. The moment this skill still holds the turn is when Step 4 writes.
+check "Step 4 names the compound candidate to the human when it writes the round" 1 \
+    "$(step4 "$R2R" | grep -c '^Compound candidate: <n>')"
+check "the handoff menu offers no /compound option" 0 "$(handoff "$R2R" | grep -c 'escaped defect')"
 
 # -----------------------------------------------------------------------------
 section "routes and bundles"
@@ -691,6 +832,33 @@ check "/fix-findings' Inputs name /respond-to-review as a source" 1 \
     "$(awk '/^## Inputs/ { on = 1; next } /^## / { on = 0 } on' "$FF" | grep -c '/respond-to-review' | awk '{print ($1 > 0)}')"
 check "/closeout Step 2 routes failed review to /respond-to-review" 1 \
     "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c '/respond-to-review' | awk '{print ($1 > 0)}')"
+# /closeout and /help read reviewDecision and no thread signal, so a route that
+# claims one is a trigger nothing reads (#609). /closeout Step 2 is where the
+# trigger is stated; this skill points at it rather than restating it.
+check "/closeout Step 2 claims no thread signal it does not read" 0 \
+    "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c 'threads are still open')"
+check "/closeout Step 2 states the trigger it does read" 1 \
+    "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c '`reviewDecision` is `CHANGES_REQUESTED` — the route back is `/respond-to-review`')"
+INVPOS="$(awk '/^## Invocation Position/ { on = 1; next } /^## / { on = 0 } on' "$R2R")"
+check "/respond-to-review's routes point at the trigger rather than restate it" 0 \
+    "$(grep -cE 'CHANGES_REQUESTED|reviewDecision|unresolved review threads' <<<"$INVPOS")"
+check "/respond-to-review's routes name /closeout Step 2 and /help row 1" 2 \
+    "$(grep -cE '^- from `/closeout` Step 2, which states the trigger;$|^- from `/help`, whose row 1 recommends it;$' <<<"$INVPOS")"
+# The surfaces that describe this skill's seams, each of which #608 left stale.
+check "/fix-findings' Invocation Position claims no count of its invokers" 0 \
+    "$(awk '/^## Invocation Position/ { on = 1; next } /^## / { on = 0 } on' "$FF" | grep -c 'in two ways')"
+check "SYSTEM-OVERVIEW's tree comment names /respond-to-review as a source" 1 \
+    "$(grep -E '^├── fix-findings/' "$SO" | grep -c '/respond-to-review')"
+SO_STATE="$(awk '/^## Where State Lives/ { on = 1; next } /^## / { on = 0 } on' "$SO")"
+check "Where State Lives names the sidecar's reviews/ and review-responses/" 1 \
+    "$(grep -E '^On Skill Kit' <<<"$SO_STATE" | grep -c '`reviews/`, and `review-responses/`')"
+check "Where State Lives has a row for this skill's record" 1 \
+    "$(grep -cE '^\| .*\| `<sidecar>/review-responses/pr-<n>\.md`' <<<"$SO_STATE")"
+check "state-backend's not-persisted rule ends the paragraph it governs" 1 \
+    "$(grep -E '^On the `sidecar` backend with no work item' "$SB" | grep -c 'Notes and a ledger are printed to the terminal')"
+check "and it no longer reads as a rule about this skill's record" 0 \
+    "$(grep -E '^`/respond-to-review`.s record is not in the table' "$SB" | grep -c 'Notes and a ledger')"
+
 check "/help row 1 recommends /respond-to-review on CHANGES_REQUESTED" 1 \
     "$(grep -E '^\| 1 \|' "$HELP" | grep -c 'CHANGES_REQUESTED.*/respond-to-review')"
 check "/help gathers reviewDecision, which row 1 reads" 1 \
