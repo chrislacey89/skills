@@ -469,7 +469,7 @@ fi
 echo "detected.hook_manager=$HM"
 ```
 
-No `unasked=` line means every key is answered: skip Q5 and Q6. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The package.json check follows `/setup-ralph-loop`'s feedback-loop check and the lockfile check follows `/setup-pre-commit`'s; the hook-manager check is this block's own. A script is proposed only when a lockfile names the package manager to run it with. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
+No `unasked=` line means every key is answered: skip Q5, Q6, and Q7. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, and `conventions`, which is Q7, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The package.json check follows `/setup-ralph-loop`'s feedback-loop check and the lockfile check follows `/setup-pre-commit`'s; the hook-manager check is this block's own. A script is proposed only when a lockfile names the package manager to run it with. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
 
 ```bash
 bash "$SC" config set verify.<key> "<command the user confirmed>"
@@ -485,6 +485,14 @@ bash "$SC" config set verify.hazards '[{"reason":"resets the shared staging data
 ```
 
 `config set` refuses the whole list, writing nothing, when an entry has no non-empty one-line `reason`, carries a `command` that is not a non-empty one-line string, or has any other key. Relay the refusal as printed and ask again.
+
+**Q7 — conventions** (`conventions` on the `unasked=` line): short lines of house style the user wants followed here and cannot write into the repo. Ask for only rules the host repo's own CLAUDE.md/AGENTS.md doesn't already state, because sub-agents load those files anyway. Nothing is detected, and the default is none. Write the confirmed lines as one JSON array of strings, or `[]` for none:
+
+```bash
+bash "$SC" config set conventions '["No new barrel files.","Match the error-handling style in src/api/."]'
+```
+
+Every sub-agent brief pastes these lines, so `config set` warns on stderr past 15 lines and still writes the value. Relay the warning and let the user decide whether to trim. `config set` refuses the whole list, writing nothing, when it is not a JSON array or a line is blank, is not a string, or spans lines. Relay the refusal as printed and ask again.
 
 ## Verification
 

@@ -19,7 +19,8 @@
 #   sidecar.sh config set system <label>   (joins this project's group for related-solutions-dirs; "" leaves it)
 #   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager> <cmd>   ("" declares none)
 #   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
-#   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards)
+#   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
+#   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards, conventions)
 #   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
 #   sidecar.sh path <research|solutions|review-responses>
@@ -154,18 +155,22 @@
 # verify.hazards is a JSON array whose every entry has a non-empty one-line
 # reason and, optionally, a non-blank one-line command in Claude Code
 # permission-rule syntax (Bash(<pattern>)); no other keys. [] declares none.
-# A refused value writes nothing. The first verify write on a schema-1 sidecar
-# moves it to schema 2 in the same commit, dropping the "" values init used to
-# stub, because in schema 1 those were never answers.
+# conventions is a JSON array of non-blank one-line strings. Past
+# CONVENTIONS_WARN_LINES it is written anyway and named on stderr, because every
+# sub-agent brief pastes all of it, and how much is too much is the operator's call.
+# A refused value writes nothing. The first verify or conventions write on a
+# schema-1 sidecar moves it to schema 2 in the same commit, dropping the ""
+# values init used to stub, because in schema 1 those were never answers.
 #
-# profile. An absent verify key is unasked, and so is "" in a schema-1
+# profile. An absent key is unasked, and so is a verify key's "" in a schema-1
 # sidecar; on schema 2, "" and [] are declared none. The two never render the
-# same: a declared command prints under Verify, none prints as none, and an
-# unasked key is named on the Not declared line. Two outcomes: a block exits
-# 0, including on a sidecar miss, where every key is unasked and the Base ref
-# line is base-ref's fallback; could not look (no jq, base-ref failed, an
-# unreadable sidecar.json, a verify value of the wrong type, blank, or spanning lines)
-# exits 1 and prints no block.
+# same: a declared command prints under Verify, a convention prints verbatim
+# under Conventions, none prints as none, and an unasked key is named on the
+# Not declared line. Two outcomes: a block exits 0, including on a sidecar miss,
+# where every key is unasked and the Base ref line is base-ref's fallback;
+# could not look (no jq, base-ref failed, an unreadable sidecar.json, a verify
+# or conventions value of the wrong type, blank, or spanning lines) exits 1 and
+# prints no block.
 #
 # base-ref. A declared base_ref wins. A sidecar miss, or a sidecar with no
 # base_ref key, falls back to the derivation every skill used to inline:
@@ -695,16 +700,17 @@ cmd_config() {
             jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
             ;;
         set)
-            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>>"
+            [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>>"
             case "$2" in
                 mode) config_set_mode "$3" ;;
                 base_ref) config_set_base_ref "$3" ;;
                 system) config_set_system "$3" ;;
                 verify.*) config_set_verify "${2#verify.}" "$3" ;;
-                *) die_usage "config set: expected mode, base_ref, system, or verify.<field>, got: $2" ;;
+                conventions) config_set_conventions "$3" ;;
+                *) die_usage "config set: expected mode, base_ref, system, verify.<field>, or conventions, got: $2" ;;
             esac
             ;;
-        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>>>" ;;
+        *) die_usage "usage: sidecar.sh config <get <dotted.key>|set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>>>" ;;
     esac
 }
 
@@ -775,9 +781,11 @@ VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager)
 VERIFY_FIELDS="[$(printf '"%s",' "${VERIFY_FIELD_NAMES[@]}")"
 VERIFY_FIELDS="${VERIFY_FIELDS%,}]"
 
+ONE_LINE_JQ='def one_line: type == "string" and (test("[\n\r]") | not);'
+
 # jq: the hazard list's errors, one per line; empty when every entry is valid.
 # shellcheck disable=SC2016 # $h is a jq variable
-HAZARDS_JQ='def one_line: type == "string" and (test("[\n\r]") | not);
+HAZARDS_JQ="$ONE_LINE_JQ"'
   if type != "array" then "hazards must be a JSON array"
   else to_entries[] | .key as $i | .value as $h
     | if ($h | type) != "object" then "hazard \($i) is not an object"
@@ -787,6 +795,23 @@ HAZARDS_JQ='def one_line: type == "string" and (test("[\n\r]") | not);
       elif ($h | keys - ["reason", "command"] | length) > 0 then "hazard \($i) has keys other than reason and command: \($h | keys - ["reason", "command"] | join(", "))"
       else empty end
   end'
+
+# The convention lines a brief can carry before config set warns.
+CONVENTIONS_WARN_LINES=15
+
+# jq: the conventions list's errors, one per line; empty when every line is valid.
+CONVENTIONS_JQ="$ONE_LINE_JQ"'
+  if type != "array" then "conventions must be a JSON array of strings"
+  else to_entries[]
+    | if (.value | one_line | not) or (.value | test("^\\s*$")) then "convention \(.key) needs non-empty one-line text"
+      else empty end
+  end'
+
+# jq: move a schema-1 sidecar to schema 2, dropping init's "" stubs.
+SCHEMA2_JQ='(if (.schema // 1) < 2 then
+    (if (.verify | type) == "object" then .verify |= with_entries(select(.value != "")) else . end)
+    | .schema = 2
+  else . end)'
 
 config_set_verify() {
     local f="$1" v="$2" sc tmp errs val known n
@@ -807,11 +832,7 @@ config_set_verify() {
     sc="$(do_resolve)" || exit 1
     tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
     # shellcheck disable=SC2016 # $f and $v are jq variables
-    if jq --arg f "$f" --argjson v "$val" '
-        (if (.schema // 1) < 2 then
-            (if (.verify | type) == "object" then .verify |= with_entries(select(.value != "")) else . end)
-            | .schema = 2
-         else . end)
+    if jq --arg f "$f" --argjson v "$val" "$SCHEMA2_JQ"'
         | .verify = ((if (.verify | type) == "object" then .verify else {} end) + {($f): $v})' \
         < "$sc/sidecar.json" > "$tmp"; then
         mv "$tmp" "$sc/sidecar.json"
@@ -821,9 +842,42 @@ config_set_verify() {
     commit_paths "$sc" "sidecar: set verify.$f" sidecar.json || exit 1
 }
 
+# config_parse_json <key> <raw>: the single JSON value in raw, compact.
+config_parse_json() {
+    command -v jq >/dev/null 2>&1 || refuse "config set: jq is required and is not on PATH"
+    printf '%s' "$2" | jq -cs 'if length == 1 then .[0] else error("not one value") end' 2>/dev/null \
+        || refuse "config set: $1 is not one valid JSON value"
+}
+
+# config_set_top_key <key> <json>: write one validated top-level key and commit it.
+config_set_top_key() {
+    local k="$1" val="$2" sc tmp
+    sc="$(do_resolve)" || exit 1
+    tmp="$(mktemp "$sc/.sidecar.json.XXXXXX")" || refuse "config set: cannot write in $sc"
+    # shellcheck disable=SC2016 # $k and $v are jq variables
+    if jq --arg k "$k" --argjson v "$val" "$SCHEMA2_JQ"' | .[$k] = $v' < "$sc/sidecar.json" > "$tmp"; then
+        mv "$tmp" "$sc/sidecar.json"
+    else
+        rm -f "$tmp"; refuse "config set: could not update sidecar.json"
+    fi
+    commit_paths "$sc" "sidecar: set $k" sidecar.json || exit 1
+}
+
+config_set_conventions() {
+    local val errs n
+    val="$(config_parse_json conventions "$1")" || exit 1
+    errs="$(printf '%s' "$val" | jq -r "$CONVENTIONS_JQ")" || refuse "config set: could not check conventions"
+    [ -z "$errs" ] || refuse "config set: conventions refused, nothing written: ${errs//$'\n'/; }"
+    config_set_top_key conventions "$val"
+    n="$(printf '%s' "$val" | jq length)"
+    if [ "$n" -gt "$CONVENTIONS_WARN_LINES" ]; then
+        printf 'sidecar.sh: conventions has %s lines, past %s; it is written, and every sub-agent brief pastes all of it, so cut what the host repo already states\n' "$n" "$CONVENTIONS_WARN_LINES" >&2
+    fi
+}
+
 # The repo-facts block; the outcomes are in the header.
 # shellcheck disable=SC2016 # $s, $v, $f are jq variables
-PROFILE_JQ='def one_line: type == "string" and (test("[\n\r]") | not);
+PROFILE_JQ="$ONE_LINE_JQ"'
   if type != "object" then error("not an object") else . end
   | (.schema // 1) as $s
   | if ($s | type) != "number" then error("schema is not a number") else . end
@@ -837,12 +891,18 @@ PROFILE_JQ='def one_line: type == "string" and (test("[\n\r]") | not);
         else {f: $f, st: "cmd", c: $v[$f]} end] as $rows
   | (if ($v | has("hazards") | not) then null
      else ([$v.hazards | '"$HAZARDS_JQ"'] | if length > 0 then error(join("; ")) else $v.hazards end) end) as $hz
+  | (if has("conventions") | not then null
+     else . as $root | ([.conventions | '"$CONVENTIONS_JQ"'] | if length > 0 then error(join("; ")) else $root.conventions end) end) as $cv
   | ([$rows[] | select(.st != "unasked")] | if length > 0 then
         "Verify:", (.[] | "  \(.f): \(if .st == "none" then "none" else .c end)") else empty end),
     (if $hz == null then empty
      elif ($hz | length) == 0 then "Hazards (do not run; ask first): none"
      else "Hazards (do not run; ask first):", ($hz[] | "  - " + (if has("command") then .command + ": " else "" end) + .reason) end),
-    ([($rows[] | select(.st == "unasked") | .f), (if $hz == null then "hazards" else empty end)]
+    (if $cv == null then empty
+     elif ($cv | length) == 0 then "Conventions: none"
+     else "Conventions:", ($cv[] | "  - " + .) end),
+    ([($rows[] | select(.st == "unasked") | .f), (if $hz == null then "hazards" else empty end),
+      (if $cv == null then "conventions" else empty end)]
      | if length > 0 then "Not declared (ask before running anything not listed): " + join(", ") else empty end)'
 
 cmd_profile() {
@@ -865,7 +925,7 @@ cmd_profile() {
         body="$(jq -nr --argjson fields "$VERIFY_FIELDS" '{} | '"$PROFILE_JQ" 2>&1)"
     else
         body="$(jq -r --argjson fields "$VERIFY_FIELDS" "$PROFILE_JQ" "$src" 2>&1)"
-    fi || refuse "profile: cannot read verify from $src: $body"
+    fi || refuse "profile: cannot read the repo facts from $src: $body"
     printf "## Repo profile (from the operator's sidecar; follow it)\nBase ref: %s\n%s\n" "$base" "$body"
 }
 
