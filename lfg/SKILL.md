@@ -313,7 +313,7 @@ prove the path.
 3. **Open the PR** with the recap as its body (see **Recap**). The banner is the body's first line, and the body includes `Closes #<PRD-lite>` on the feature path.
 4. Invoke `/pre-merge --loop`, passing the PRD-lite issue number, or "none" on the tiny path. Loop-mode updates the existing PR, reviews it, writes its ledger, and stamps it.
 5. Read the PR body back. If the banner is no longer the first line, put it back with the guarded `mktemp` → fetch-with-exit-check → byte-count → edit → refuse-if-shorter → `gh pr edit --body-file` shape `/pre-merge` Phase 5 uses for its ledger.
-6. **Roll up the ledger** (see **Rolling up the ledger**). Sort the rows in state `open` into checklist items and no-change rows, and file the roll-up issue whose body is the checklist; note its number the moment it is filed. File none when no row is an item. Then, in one guarded write of the PR body, set every `open` row's state to `filed`, each with the number **Rolling up the ledger** assigns it. The same write fills in the recap's `gaps:` and `ledger:` lines. That is the ledger transition in **Locked vocabulary**, and the only ledger write this skill makes. Rows marked `fixed`, `accepted`, or `dropped` are decisions for the user. **Then check it finished:** read the PR body back and count the rows of its `## Review Disposition Ledger` table whose **State** cell is `open` (`/pre-merge`'s ledger defines the columns). The word `open` anywhere else in the body, such as the ledger's fixed prose line or an Evidence cell, is not a row. A non-zero count while the PR is open means the write did not land. Resume at the write only: the roll-up is already filed, so reuse its number (find it by its gap label and its link to the PRD-lite if you no longer hold it) and file nothing again. Retry the write until the roll-up write cap is spent. When the cap is spent with a row still `open`, take the **Error path** (see **Exit paths**): the continuation comment names the roll-up's number and the rows left unfiled, and the run goes on to step 7 rather than retrying.
+6. **Roll up the ledger** (see **Rolling up the ledger**). Sort the rows in state `open` into checklist items and no-change rows, and file the roll-up issue whose body is the checklist; note its number the moment it is filed. File none when no row is an item. Then, in one guarded write of the PR body, set every `open` row's state to `filed`, each with the number **Rolling up the ledger** assigns it. The same write fills in the recap's `gaps:` and `ledger:` lines. That is the ledger transition in **Locked vocabulary**, and the only ledger write this skill makes. Rows marked `fixed`, `accepted`, or `dropped` are decisions for the user. **Then check it finished:** read the PR body back and count the rows of its `## Review Disposition Ledger` table whose **State** cell is `open` (`/pre-merge`'s ledger defines the columns). The word `open` anywhere else in the body, such as the ledger's fixed prose line or an Evidence cell, is not a row. A non-zero count while the PR is open means the write did not land. Resume at the write only: the roll-up is already filed, so reuse its number (find it by its gap label and its link to the PRD-lite if you no longer hold it) and file nothing again. Retry the write until the roll-up write cap is spent. When the cap is spent with a row still `open`, take the **Error path** (see **Exit paths**): the continuation comment names the roll-up's number and the rows left unfiled. The run ends there: it does not retry, skips steps 7 and 8, and prints the **Open-rows handoff** in **Handoff**, because the write that would have filled in the PR body's `ledger:` line is the one that failed.
 7. Post one roll-up comment on the PRD-lite issue that lists every gap issue, the stop tally, and an **Observations** list with one line per no-change row: its title and any file:line ref.
 8. Print the handoff (see **Handoff**). Render no next-step menu: nobody is present to answer it, so the printed line is the whole handoff.
 
@@ -378,7 +378,7 @@ promote, or discard. It carries, in this order:
 1. The banner first line, then a `cut:` line naming what the run left out and a `gaps:` line linking each slice's gap issue and the one ledger roll-up.
 2. **Decisions taken without you**, one line each, including every assumption resolved in research-lite.
 3. **Stop tally**, with each stop by class. A stop outside the stop classes is a defect in the run, so list it anyway.
-4. **Ledger tally**, a `ledger:` line with the rows by state and where the filed ones went, e.g. `ledger: 14 rows, 0 open, 14 filed (9 rows as 7 items in the roll-up, 5 observations)`. The ledger does not exist when the PR opens, so Close step 6 writes this line. On the tiny path it is followed by the Observations list that step 7 would otherwise post.
+4. **Ledger tally**, a `ledger:` line with the rows by state and where the filed ones went, e.g. `ledger: 14 rows, 0 open, 14 filed (9 rows as 7 items in the roll-up, 5 observations)`. The ledger does not exist when the PR opens, so Close step 6 writes this line, and only when its write lands. When the roll-up write cap is spent, the PR body has no `ledger:` line, and the Error path's continuation comment and the Open-rows handoff are the record. On the tiny path it is followed by the Observations list that step 7 would otherwise post.
 5. **Proof**, with each screenshot or transcript path and the command that produced it.
 6. On the feature path, `Closes #<PRD-lite>`.
 
@@ -406,7 +406,7 @@ In every section, refer to an issue that must stay open without one, e.g.
 - A tracer test that never ran, or a slice committed without a passing run or a gap issue.
 - `.claude/.lfg-active` present when `/pre-merge --loop` starts, or present after the run ends.
 - A ledger row this skill set to anything other than `filed`.
-- A handoff printed while the PR is open and its ledger still has a row in state `open`.
+- A normal handoff printed while the PR is open and its ledger still has a row in state `open`. The **Open-rows handoff** in **Handoff**, which names those rows, is the one handoff allowed then.
 - A roll-up that breaks the issue cap in **Rolling up the ledger** or a no-change row filed as an item.
 - A shipped slice whose PRD-lite box is unticked, or a stubbed slice whose box is ticked.
 - A PR body whose first line is not the banner.
@@ -425,4 +425,13 @@ Print, substituting the real values:
 ```
 **Next session:** /closeout
 **Input:** PR #<n> on branch <branch-name> — an LFG proof of concept; read its banner and ledger before merging
+```
+
+**Open-rows handoff.** When Close step 6 ended the run on the Error path with a
+row still `open`, print this instead. It states the unfinished state plainly and
+points at the record, so it cannot be read as a finished run:
+
+```
+**Next session:** settle the open ledger rows, then /closeout
+**Input:** PR #<n> on branch <branch-name> — an LFG proof of concept; the ledger roll-up did not finish. <k> rows are still `open` in its Review Disposition Ledger and the PR body has no `ledger:` line. Roll-up issue: #<m>, or none filed. The continuation comment on the PRD-lite has the exact error
 ```
