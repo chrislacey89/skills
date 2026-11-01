@@ -10,7 +10,7 @@
 - **No-change rows skip the checklist (#688)**: a new § *Rolling up the ledger* names the three shapes (a size or raw-diff observation, a note with no action, a "decide whether" with no concrete change). Such rows go to an Observations list in the PRD-lite roll-up comment (in the recap on the tiny path), and their rows record that issue's number.
 - **Duplicates merge by file:line overlap (#379)**: rows citing overlapping file:line refs become one item that carries both rows' changes. Similar wording alone never merges two rows, and the ledger keeps both rows.
 - **The slice box is ticked as the slice ships (#380)**: build-loop step 5 ticks it after the commit, with the guarded body write. A stubbed slice stays unticked.
-- **A skipped step 6 shows (#384)**: step 6 now ends by recounting `open` rows and resumes on a non-zero count. The recap gains a `ledger:` tally line, and a Red Flag names a handoff printed while the PR is open with `open` rows.
+- **A skipped step 6 shows (#384)**: step 6 now ends by counting the ledger-table rows whose State cell is `open`. A non-zero count resumes at the write only and reuses the filed roll-up, and retries are bounded by the Locked-vocabulary Roll-up write cap. When the cap is spent the run ends on the Error path, which does not re-enter Close, and prints the Open-rows handoff. The recap gains a `ledger:` tally line, written only when the write lands, and a Red Flag forbids a normal handoff while the PR is open with `open` rows.
 
 ## v1.35.0 — /respond-to-review: a teammate's review is checked before anything is fixed (#607)
 
