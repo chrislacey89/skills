@@ -1709,7 +1709,7 @@ mkrepo "$SCREPO"
 # SC= points at a missing file is visible even when the block hides stderr and the
 # exit code (`2>/dev/null) || SIDE=""`, #430). The stub exits 0 on every verb.
 STUBDIR="$tmp/stubskill"; STUBLOG="$tmp/stub.log"; STUBSTORE="$tmp/stubstore"
-mkdir -p "$STUBDIR/references" "$STUBSTORE"
+mkdir -p "$STUBDIR/references" "$STUBDIR/scripts" "$STUBSTORE"
 cat > "$STUBDIR/references/sidecar.sh" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$STUBLOG"
@@ -1719,8 +1719,10 @@ case "${1:-}" in
 esac
 exit 0
 STUB
+# init-pipeline carries the canonical resolver at scripts/, not references/.
+cp "$STUBDIR/references/sidecar.sh" "$STUBDIR/scripts/sidecar.sh"
 export STUBLOG STUBSTORE
-for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1 research:research/SKILL.md:4 compound:compound/SKILL.md:3; do
+for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1 research:research/SKILL.md:4 compound:compound/SKILL.md:3 init-pipeline:init-pipeline/SKILL.md:10 walk-commits:walk-commits/SKILL.md:2; do
     skill="${entry%%:*}"; rest="${entry#*:}"; rel="${rest%%:*}"; min="${rest##*:}"
     skdir="$repo_root/$skill"
     blocks_using_sc "$repo_root/$rel" "$SCDIR" "$skill"
