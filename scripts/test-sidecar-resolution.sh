@@ -901,7 +901,7 @@ contains "sixteen convention lines draw a warning that counts them" "conventions
 check "the warned value is written whole" 16 "$(jq '.conventions | length' "$PSJ")"
 check "the warned value is committed" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
 warn_at="$(sed -n 's/^CONVENTIONS_WARN_LINES=\([0-9]*\)$/\1/p' "$SC")"
-check "the warning fires exactly past the threshold the script declares" 15 "$warn_at"
+check "the script declares its conventions warning threshold as 15" 15 "$warn_at"
 contains "/init-pipeline states the threshold the script warns at" "past $warn_at lines" "$(cat "$repo_root/init-pipeline/SKILL.md")"
 
 # Every refused list writes nothing and commits nothing.
