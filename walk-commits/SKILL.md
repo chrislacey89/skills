@@ -84,7 +84,7 @@ else
 fi
 ```
 
-When it prints a ref, end the overview with `Compare against: <ref> (<note>)`, so the merger knows what the result should match. Never fetch or open the pointer: the merger does the comparing. When it prints nothing, none is declared: say nothing about it. If it fails on stderr, tell the user the reference could not be read and go on.
+When it prints a ref, end the overview with `Compare against: <ref> (<note>)`, so the merger knows what the result should match; with no note, the block prints one line, and the sentence ends at the ref. Never fetch or open the pointer: the merger does the comparing. When it prints nothing, none is declared: say nothing about it. If it fails on stderr, tell the user the reference could not be read and go on.
 
 ### 2. Walk each commit
 

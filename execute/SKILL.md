@@ -704,6 +704,8 @@ When it prints a ref, add this item to Behavior Review, with the printed values 
 
 `- [ ] Result compared against the design reference: <ref> (<note>)`
 
+With no note, the block prints one line: drop ` (<note>)` and end the item at the ref.
+
 When it prints nothing, none is declared: add no item and say nothing about it. If it fails on stderr, tell the user the reference could not be read, relay the error, and continue without the item.
 
 Present the checklist:
