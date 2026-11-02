@@ -433,6 +433,15 @@ bash "$SC" resolve
 
 Exit 0 proceeds, and in an AFK iteration run Step 4's `profile` block now too, so its stop on an undeclared typecheck or test lands before any code is written rather than at Step 3's first commit. On exit 1 in an **AFK iteration, stop**: print the resolver's stderr as printed — on `SIDECAR MISS` that is the `init` command — and leave it for a human, because creating a sidecar is a human act and an iteration that reads half its context reads as complete when it is not. In a HITL run, show the same line to the user and continue read-only: the solutions grep below falls back to `docs/solutions/`, and a research path the PRD cites is still checked as written.
 
+**Read the repo's conventions.** House style the operator could not write into the host repo sits in the sidecar and reaches this session through the block Step 4 also runs:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" profile
+```
+
+Follow the lines under `Conventions` the way you follow the host repo's own CLAUDE.md or AGENTS.md, which they add to. `Conventions: none`, or `conventions` named on the `Not declared` line, leaves nothing to follow here and nothing to ask about. If `profile` exits nonzero, relay what it printed on stderr: an AFK iteration stops, as Step 4 describes, and a HITL run continues.
+
 **Read the research artifact for this feature.** The PRD's "Research Reference" section names where it lives — one of two locations depending on the project's `research.storage` mode:
 
 1. **Spike-issue mode** — the PRD references a closed `research`-labeled GitHub issue (`Refs #<spike-issue-number>`). Read it with:
@@ -674,6 +683,28 @@ If this unit of work is fixing a bug, apply these additional checks before commi
 Before handing off to `/pre-merge`, present the user with a verification checklist so they can confirm the work is ready.
 
 **Preparation:** Summarize what was built — list the commits made and key files changed. If the task originated from a GitHub issue with acceptance criteria, pull those criteria into the checklist so the user doesn't have to cross-reference.
+
+**Design reference.** The repo may declare one pointer to compare the result against. This block prints its ref, then its note if it has one:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+ERR="$(mktemp)" || exit 1
+if bash "$SC" resolve >/dev/null 2>"$ERR"; then
+  rm -f "$ERR"
+  bash "$SC" config get design.ref || exit 1
+  bash "$SC" config get design.note || exit 1
+elif grep -q 'SIDECAR MISS:' "$ERR"; then
+  rm -f "$ERR"
+else
+  cat "$ERR" >&2; rm -f "$ERR"; exit 1
+fi
+```
+
+When it prints a ref, add this item to Behavior Review, with the printed values filled in, and leave the comparison to the user. Never fetch or open the pointer:
+
+`- [ ] Result compared against the design reference: <ref> (<note>)`
+
+When it prints nothing, none is declared: add no item and say nothing about it. If it fails on stderr, tell the user the reference could not be read, relay the error, and continue without the item.
 
 Present the checklist:
 

@@ -778,7 +778,7 @@ git -C "$PF/up" branch develop
 git clone -q "$PF/up" "$PF/clone"
 git -C "$PF/clone" remote set-head origin develop >/dev/null
 PFH="## Repo profile (from the operator's sidecar; follow it)"
-ALL_UNASKED="Not declared (ask before running anything not listed): typecheck, test, lint, package_manager, hook_manager, hazards"
+ALL_UNASKED="Not declared (ask before running anything not listed): typecheck, test, lint, package_manager, hook_manager, hazards, conventions"
 
 prun "$PF/clone" profile
 check "a miss prints the all-unasked block, with base-ref's fallback" \
@@ -816,7 +816,7 @@ check "config set verify.lint to empty succeeds" 0 "$rc"
 prun "$PF/clone" profile
 contains "a declared-empty field on schema 2 renders as none" "  lint: none" "$out"
 contains "the unasked fields stay under Not declared" \
-    "Not declared (ask before running anything not listed): test, package_manager, hook_manager, hazards" "$out"
+    "Not declared (ask before running anything not listed): test, package_manager, hook_manager, hazards, conventions" "$out"
 lacks "a declared-empty field is not under Not declared" "lint, " "${out##*Not declared}"
 
 prun "$PF/clone" config set verify.test "pnpm run test"
@@ -833,7 +833,7 @@ Verify:
 Hazards (do not run; ask first):
   - Bash(pnpm test:e2e*): resets the shared staging database
   - never push to the staging branch
-Not declared (ask before running anything not listed): package_manager, hook_manager" "$rc $out"
+Not declared (ask before running anything not listed): package_manager, hook_manager, conventions" "$rc $out"
 
 # Every refused hazard list writes nothing and commits nothing.
 cp "$PSJ" "$PF/good.json"
@@ -868,13 +868,120 @@ prun "$PF/clone" profile
 contains "a declared-empty hazard list renders as none" "Hazards (do not run; ask first): none" "$out"
 lacks "a declared-empty hazard list is not under Not declared" "hazards" "${out##*Not declared}"
 
+# conventions (#602): an absent key is named on the Not declared line (the checks
+# above), a declared list prints verbatim, and [] prints as none.
+# shellcheck disable=SC2016  # literal backticks in the convention text
+CONV='["No new barrel files.","Match the \"Result\" style in src/api/: `ok()` and `err()`."]'
+prun "$PF/clone" config set conventions "$CONV"
+check "config set conventions with valid lines succeeds" 0 "$rc"
+check "conventions lands at the top level, as given" "$CONV" "$(jq -c .conventions "$PSJ")"
+check "the conventions write is committed" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+check "the conventions commit subject names the key" "sidecar: set conventions" "$(git -C "$PF_ROOT/pf" log -1 --format=%s)"
+prun "$PF/clone" profile
+# shellcheck disable=SC2016  # literal backticks in the convention text
+contains "profile renders conventions verbatim under their heading" 'Conventions:
+  - No new barrel files.
+  - Match the "Result" style in src/api/: `ok()` and `err()`.' "$out"
+lacks "declared conventions are not under Not declared" "conventions" "${out##*Not declared}"
+
+prun "$PF/clone" config set conventions '[]'
+check "config set conventions to [] succeeds" 0 "$rc"
+prun "$PF/clone" profile
+contains "declared-empty conventions render as none" "Conventions: none" "$out"
+lacks "declared-empty conventions are not under Not declared" "conventions" "${out##*Not declared}"
+
+# Past the line the briefs can carry, the value is still the operator's to set.
+fifteen="$(jq -cn '[range(15) | "rule \(.)"]')"; sixteen="$(jq -cn '[range(16) | "rule \(.)"]')"
+prun "$PF/clone" config set conventions "$fifteen"
+check "fifteen convention lines are accepted" 0 "$rc"
+check "fifteen convention lines draw no warning" "" "$err"
+prun "$PF/clone" config set conventions "$sixteen"
+check "sixteen convention lines are still accepted" 0 "$rc"
+contains "sixteen convention lines draw a warning that counts them" "conventions has 16 lines" "$err"
+check "the warned value is written whole" 16 "$(jq '.conventions | length' "$PSJ")"
+check "the warned value is committed" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+warn_at="$(sed -n 's/^CONVENTIONS_WARN_LINES=\([0-9]*\)$/\1/p' "$SC")"
+check "the warning fires exactly past the threshold the script declares" 15 "$warn_at"
+contains "/init-pipeline states the threshold the script warns at" "past $warn_at lines" "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# Every refused list writes nothing and commits nothing.
+cp "$PSJ" "$PF/conv.json"
+before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
+for bad_c in '"one string"' '{"a":1}' '[42]' '[""]' '["   "]' '["two\nlines"]' '["ok",null]' 'not json' '' '[] []'; do
+    prun "$PF/clone" config set conventions "$bad_c"
+    if [ "$rc" -ne 0 ] && cmp -s "$PSJ" "$PF/conv.json" && [ "$(git -C "$PF_ROOT/pf" rev-parse HEAD)" = "$before" ]; then
+        ok "config set conventions refuses [$bad_c] and writes nothing"
+    else
+        bad "config set conventions refuses [$bad_c] and writes nothing" "rc=$rc, sidecar.json or HEAD changed"
+    fi
+done
+
+# A schema-1 sidecar's "" stub was never an answer, whichever key is written first.
+pset '.schema = 1 | del(.conventions) | .verify = {typecheck: "", test: "pnpm run test"}'
+git -C "$PF_ROOT/pf" commit -q -am "fixture: schema-1 stub again"
+prun "$PF/clone" config set conventions '["No new barrel files."]'
+check "a conventions write moves a schema-1 sidecar to schema 2" 2 "$(jq -r .schema "$PSJ")"
+check "that move drops the stub, so unasked stays unasked" '{"test":"pnpm run test"}' "$(jq -c .verify "$PSJ")"
+
+# design (#602): one pointer, written here and read only by /execute Step 5 and
+# /walk-commits. It stays out of profile, because profile goes into every brief.
+DES_REF="https://example.com/design/checkout-zzq"
+DESIGN='{"ref":"'"$DES_REF"'","note":"checkout flow qqv3"}'
+prun "$PF/clone" config get design
+check "an unasked design reads as empty" "0 " "$rc $out"
+prun "$PF/clone" config set design "$DESIGN"
+check "config set design with a ref and a note succeeds" 0 "$rc"
+check "design lands at the top level, as given" "$DESIGN" "$(jq -c .design "$PSJ")"
+check "the design write is committed" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+check "the design commit subject names the key" "sidecar: set design" "$(git -C "$PF_ROOT/pf" log -1 --format=%s)"
+prun "$PF/clone" profile
+check "profile still prints a block with design declared" 0 "$rc"
+lacks "profile never prints the design ref" "$DES_REF" "$out"
+lacks "profile never prints the design note" "qqv3" "$out"
+lacks "profile never names design at all" "design" "$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')"
+prun "$PF/clone" config set design '{"ref":"docs/design/checkout.md"}'
+check "a repo-relative ref with no note is accepted" 0 "$rc"
+
+# Every refused value writes nothing and commits nothing.
+prun "$PF/clone" config set design "$DESIGN"
+cp "$PSJ" "$PF/des.json"
+before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
+for bad_d in '{}' '{"note":"x"}' '{"ref":""}' '{"ref":"   "}' '{"ref":42}' '{"ref":null}' '{"ref":"a\nb"}' \
+             '{"ref":"x","note":""}' '{"ref":"x","note":"  "}' '{"ref":"x","note":42}' '{"ref":"x","note":"a\nb"}' \
+             '{"ref":"x","url":"y"}' '[]' '"just a string"' 'null' 'not json' '{} {}'; do
+    prun "$PF/clone" config set design "$bad_d"
+    if [ "$rc" -ne 0 ] && cmp -s "$PSJ" "$PF/des.json" && [ "$(git -C "$PF_ROOT/pf" rev-parse HEAD)" = "$before" ]; then
+        ok "config set design refuses $bad_d and writes nothing"
+    else
+        bad "config set design refuses $bad_d and writes nothing" "rc=$rc, sidecar.json or HEAD changed"
+    fi
+done
+prun "$PF/clone" config set design '{"note":"x"}'
+contains "a design with no ref is refused by name" "design has no ref" "$err"
+
+# "" declares none, as it does for a verify field; an unasked key stays unasked.
+prun "$PF/clone" config set design ""
+check 'config set design "" succeeds' 0 "$rc"
+check 'config set design "" is committed' "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
+prun "$PF/clone" config get design
+check "a design declared none reads as answered" "0 {}" "$rc $(jq -c . <<<"$out")"
+prun "$PF/clone" config get design.ref
+check "a design declared none has no ref" "0 " "$rc $out"
+
+pset '.schema = 1 | del(.design) | .verify = {typecheck: "", test: "pnpm run test"}'
+git -C "$PF_ROOT/pf" commit -q -am "fixture: schema-1 stub for design"
+prun "$PF/clone" config set design "$DESIGN"
+check "a design write moves a schema-1 sidecar to schema 2" 2 "$(jq -r .schema "$PSJ")"
+check "that move drops the stub too" '{"test":"pnpm run test"}' "$(jq -c .verify "$PSJ")"
+
 # Hand edits the verbs would refuse: profile cannot trust what it read, so it prints no block.
-for shape in '.verify.test = 42' '.verify = "x"' '.verify.hazards = "x"' '.verify.hazards = [{"command":"y"}]' \
+for shape in '.conventions = "x"' '.conventions = null' '.conventions = [42]' '.conventions = ["a\nb"]' '.conventions = ["  "]' \
+             '.verify.test = 42' '.verify = "x"' '.verify.hazards = "x"' '.verify.hazards = [{"command":"y"}]' \
              '.verify.test = "a\nb"' '.verify.test = "  "' '.verify.hazards = [{"reason":"x","command":" "}]' '.schema = "2"'; do
     cp "$PF/good.json" "$PSJ"; pset "$shape"
     prun "$PF/clone" profile
     check "a hand-set $shape makes profile exit 1 and print no block" "1 " "$rc $out"
-    contains "a hand-set $shape is refused by profile's own read, not base-ref's" "profile: cannot read verify" "$err"
+    contains "a hand-set $shape is refused by profile's own read, not base-ref's" "profile: cannot read the repo facts" "$err"
 done
 # base-ref reads sidecar.json first, so an unparseable file stops there; this
 # case covers that refusal, and the shapes above cover profile's own read.
@@ -903,7 +1010,7 @@ cp "$PF/good.json" "$PSJ"; pset 'del(.verify.lint, .verify.hazards)'
 git -C "$PF_ROOT/pf" commit -q -am "fixture: two keys unasked"
 before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
-check "Q5 names exactly the unasked keys" "unasked=lint, package_manager, hook_manager, hazards" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
+check "Q5 names exactly the unasked keys" "unasked=lint, package_manager, hook_manager, hazards, conventions" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
 contains "Q5 proposes the lockfile's package manager" "detected.package_manager=pnpm" "$q5out"
 contains "Q5 proposes a package.json script through the package manager" "detected.test=pnpm run test" "$q5out"
 check "Q5 proposes nothing for lint when the script is absent" "detected.lint=" "$(printf '%s\n' "$q5out" | grep '^detected.lint=')"
@@ -911,7 +1018,7 @@ contains "Q5 proposes the hook manager" "detected.hook_manager=lefthook" "$q5out
 check "Q5 writes nothing to the sidecar before the user confirms" "$before" "$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
 check "Q5 leaves sidecar.json clean" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
 rm -f "$PF/clone/package.json" "$PF/clone/pnpm-lock.yaml" "$PF/clone/lefthook.yml"
-cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = ""'
+cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = "" | .conventions = []'
 git -C "$PF_ROOT/pf" commit -q -am "fixture: every key answered"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
 check "Q5 on a fully answered sidecar prints no unasked line" "" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
@@ -926,7 +1033,7 @@ printf '{ not json\n' > "$PSJ"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"; rc=$?
 check "Q5 on an unreadable sidecar.json exits 1" 1 "$rc"
 lacks "Q5 on an unreadable sidecar.json prints no unasked line" "unasked=" "$q5out"
-cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = ""'
+cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = "" | .conventions = []'
 
 # /execute Step 4 reads the declared commands from profile and hard-codes no pnpm line.
 ex4="$(awk '/^### 4\. Verify/{f=1} /^#### Tier 1/{f=0} f' "$repo_root/execute/SKILL.md")"
@@ -937,6 +1044,85 @@ lacks "/execute Step 4 hard-codes no pnpm command" "pnpm run" "$ex4"
 lacks "/execute Step 4 no longer runs an AFK iteration past an undeclared command" "run nothing for it" "$ex4"
 contains "/execute Step 4 stops an AFK iteration on an undeclared typecheck or test" "In an AFK iteration, **stop**" "$ex4"
 lacks "/execute's Review Notes template hard-codes no pnpm command" '| `pnpm run' "$(cat "$repo_root/execute/SKILL.md")"
+
+# /init-pipeline's Q7 and /execute Step 1 are conventions' writer and reader (#602).
+ip="$(cat "$repo_root/init-pipeline/SKILL.md")"
+contains "/init-pipeline Q7 asks only for what the host repo does not state" "only rules the host repo's own CLAUDE.md/AGENTS.md doesn't already state" "$ip"
+# shellcheck disable=SC2016
+contains "/init-pipeline Q5 hands conventions to Q7" 'and `conventions`, which is Q7' "$ip"
+ex1="$(awk '/^### 1\. Understand the Task/{f=1} /^### 2\./{f=0} f' "$repo_root/execute/SKILL.md")"
+# shellcheck disable=SC2016
+contains "/execute Step 1 runs profile" 'bash "$SC" profile' "$ex1"
+# shellcheck disable=SC2016
+contains "/execute Step 1 follows the block's Conventions lines" 'lines under `Conventions`' "$ex1"
+
+# /init-pipeline's Q8 block, as written: unasked, answered, declared none, could not look.
+q8="$(fenced_with "$repo_root/init-pipeline/SKILL.md" 'config get design')"
+[ -n "$q8" ] || bad "/init-pipeline carries the Q8 design block" "no fenced block mentions config get design"
+q8="${q8//<this skill\'s directory>\/scripts\/sidecar.sh/$SC}"
+q8run() { q8out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q8" 2>&1)"; rc=$?; }
+cp "$PF/good.json" "$PSJ"
+q8run; check "Q8 on an unasked key asks" "0 design unasked" "$rc $q8out"
+pset ".design = $DESIGN"
+q8run; check "Q8 on a declared design does not ask" "0 design answered; not asking" "$rc $q8out"
+pset '.design = {}'
+q8run; check "Q8 on a design declared none does not ask" "0 design answered; not asking" "$rc $q8out"
+printf '{ not json\n' > "$PSJ"
+q8run; check "Q8 on an unreadable sidecar.json exits 1" 1 "$rc"
+lacks "Q8 on an unreadable sidecar.json does not ask" "design unasked" "$q8out"
+contains "/init-pipeline Q8 says the pointer is never fetched" "never fetches" "$ip"
+
+# The two readers' blocks, as written: the ref and note when declared, and silence
+# when not, including in a repo with no sidecar at all.
+for reader in execute walk-commits; do
+    rb="$(fenced_with "$repo_root/$reader/SKILL.md" 'config get design.ref')"
+    [ -n "$rb" ] || bad "/$reader carries the design block" "no fenced block mentions config get design.ref"
+    rb="${rb//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+    rbrun() { rbout="$(cd "$1" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$rb" 2>"$PF/rberr")"; rc=$?; rberr="$(cat "$PF/rberr")"; }
+    cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
+    rbrun "$PF/clone"; check "/$reader names a declared ref and note" "0 $DES_REF"$'\n'"checkout flow qqv3" "$rc $rbout"
+    pset '.design = {"ref":"docs/design/checkout.md"}'
+    rbrun "$PF/clone"; check "/$reader names a ref with no note, on one line" "0 docs/design/checkout.md" "$rc $rbout"
+    pset 'del(.design)'
+    rbrun "$PF/clone"; check "/$reader says nothing when design is absent" "0  " "$rc $rbout $rberr"
+    pset '.design = {}'
+    rbrun "$PF/clone"; check "/$reader says nothing when design is declared none" "0  " "$rc $rbout $rberr"
+    rbrun "$PF/nobase"; check "/$reader says nothing on a sidecar miss" "0  " "$rc $rbout $rberr"
+    pset '.design = "not an object"'
+    rbrun "$PF/clone"
+    check "/$reader prints no ref from a design it could not read" "" "$rbout"
+    if [ "$rc" -ne 0 ] && [ -n "$rberr" ]; then ok "/$reader fails loudly on a design it could not read"
+    else bad "/$reader fails loudly on a design it could not read" "rc=$rc err=$rberr"; fi
+    # could-not-look is not "none declared": the block must fail loudly, not print nothing and exit 0.
+    printf '{ not json\n' > "$PSJ"
+    rbrun "$PF/clone"
+    check "/$reader prints no ref from a corrupt sidecar.json" "" "$rbout"
+    if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly on a corrupt sidecar.json"
+    else bad "/$reader fails loudly on a corrupt sidecar.json" "rc=$rc err=$rberr"; fi
+    cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
+    chmod 000 "$PSJ"
+    if [ -r "$PSJ" ]; then
+        bad "/$reader fails loudly on an unreadable sidecar.json" "the file is still readable (running as root?), so this arm proves nothing"
+    else
+        rbrun "$PF/clone"
+        check "/$reader prints no ref from an unreadable sidecar.json" "" "$rbout"
+        if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly on an unreadable sidecar.json"
+        else bad "/$reader fails loudly on an unreadable sidecar.json" "rc=$rc err=$rberr"; fi
+    fi
+    chmod 644 "$PSJ"; cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
+    rbout="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" PATH="$nojq" bash -c "$rb" 2>"$PF/rberr")"; rc=$?; rberr="$(cat "$PF/rberr")"
+    check "/$reader prints no ref with jq missing" "" "$rbout"
+    if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly with jq missing"
+    else bad "/$reader fails loudly with jq missing" "rc=$rc err=$rberr"; fi
+done
+cp "$PF/good.json" "$PSJ"
+ex5="$(awk '/^### 5\. Manual Verification/{f=1} /^#### Behavior Review/{f=0} f' "$repo_root/execute/SKILL.md")"
+contains "/execute reads design at Step 5, before the checklist" "config get design.ref" "$ex5"
+wc1="$(awk '/^### 1\. Establish the range/{f=1} /^### 2\./{f=0} f' "$repo_root/walk-commits/SKILL.md")"
+contains "/walk-commits reads design in its overview" "config get design.ref" "$wc1"
+for reader in execute walk-commits; do
+    contains "/$reader says the pack never fetches the pointer" "Never fetch" "$(cat "$repo_root/$reader/SKILL.md")"
+done
 
 
 # -----------------------------------------------------------------------------

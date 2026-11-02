@@ -469,7 +469,7 @@ fi
 echo "detected.hook_manager=$HM"
 ```
 
-No `unasked=` line means every key is answered: skip Q5 and Q6. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The package.json check follows `/setup-ralph-loop`'s feedback-loop check and the lockfile check follows `/setup-pre-commit`'s; the hook-manager check is this block's own. A script is proposed only when a lockfile names the package manager to run it with. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
+No `unasked=` line means every key is answered: skip Q5, Q6, and Q7. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, and `conventions`, which is Q7, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The package.json check follows `/setup-ralph-loop`'s feedback-loop check and the lockfile check follows `/setup-pre-commit`'s; the hook-manager check is this block's own. A script is proposed only when a lockfile names the package manager to run it with. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
 
 ```bash
 bash "$SC" config set verify.<key> "<command the user confirmed>"
@@ -485,6 +485,31 @@ bash "$SC" config set verify.hazards '[{"reason":"resets the shared staging data
 ```
 
 `config set` refuses the whole list, writing nothing, when an entry has no non-empty one-line `reason`, carries a `command` that is not a non-empty one-line string, or has any other key. Relay the refusal as printed and ask again.
+
+**Q7 — conventions** (`conventions` on the `unasked=` line): short lines of house style the user wants followed here and cannot write into the repo. Ask for only rules the host repo's own CLAUDE.md/AGENTS.md doesn't already state, because sub-agents load those files anyway. Nothing is detected, and the default is none. Write the confirmed lines as one JSON array of strings, or `[]` for none:
+
+```bash
+bash "$SC" config set conventions '["No new barrel files.","Match the error-handling style in src/api/."]'
+```
+
+Every sub-agent brief pastes these lines, so `config set` warns on stderr past 15 lines and still writes the value. Relay the warning and let the user decide whether to trim. `config set` refuses the whole list, writing nothing, when it is not a JSON array or a line is blank, is not a string, or spans lines. Relay the refusal as printed and ask again.
+
+**Q8 — the design reference** (`design`), one pointer to what the result should look like: a URL or a repo-relative path, plus an optional note. It has its own check, because `profile` never prints it:
+
+```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
+CUR="$(bash "$SC" config get design)" || { echo "design: config get failed; stop and relay it" >&2; exit 1; }
+if [ -n "$CUR" ]; then echo "design answered; not asking"; else echo "design unasked"; fi
+```
+
+When it prints `answered`, skip Q8. Otherwise ask. Nothing is detected, and the default is none. The pack never fetches this pointer and it goes into no sub-agent brief: `/execute` Step 5 and `/walk-commits` name it, and the human compares. Write the answer with one of:
+
+```bash
+bash "$SC" config set design '{"ref":"https://example.com/design/checkout","note":"checkout flow v3"}'
+bash "$SC" config set design ""   # the repo has none
+```
+
+`config set` refuses a value with no non-empty one-line `ref`, a blank or multi-line `note`, or any other key, and writes nothing. Relay the refusal as printed and ask again.
 
 ## Verification
 
@@ -504,6 +529,7 @@ Before considering setup complete, check — against the sections § 2's per-pat
 - [ ] No existing project settings were overwritten
 - [ ] Path A or Path D: `bash "$SC" resolve` exits 0 and prints the sidecar, and its `sidecar.json` carries the confirmed `mode`, `solutions.write`, and `solutions.in_tree_path`
 - [ ] Path A or Path D: `bash "$SC" config get base_ref` prints the branch the user confirmed, or the one a previous run recorded
+- [ ] Path A or Path D: `bash "$SC" config get design` prints what the user answered, or `{}` for none, or what a previous run recorded
 - [ ] `.claude/settings.json` is unchanged by § 8: take `shasum .claude/settings.json` right before § 8 starts and again after § 8, and the two match
 - [ ] Path B or an auto-invoked Path C: no sidecar was created (`bash "$SC" resolve` gives the same answer it gave before the run)
 

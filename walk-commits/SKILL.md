@@ -68,6 +68,24 @@ Then present an **overview before the first commit** (Spinellis: *overview first
 
   Naming the mode picks how each commit gets read. State which one this branch is and why.
 
+Then check whether the repo declares a design reference. This block prints its ref, then its note if it has one:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+ERR="$(mktemp)" || exit 1
+if bash "$SC" resolve >/dev/null 2>"$ERR"; then
+  rm -f "$ERR"
+  bash "$SC" config get design.ref || exit 1
+  bash "$SC" config get design.note || exit 1
+elif grep -q 'SIDECAR MISS:' "$ERR"; then
+  rm -f "$ERR"
+else
+  cat "$ERR" >&2; rm -f "$ERR"; exit 1
+fi
+```
+
+When it prints a ref, end the overview with `Compare against: <ref> (<note>)`, so the merger knows what the result should match. Never fetch or open the pointer: the merger does the comparing. When it prints nothing, none is declared: say nothing about it. If it fails on stderr, tell the user the reference could not be read and go on.
+
 ### 2. Walk each commit
 
 Loop over the commits **in order**. For the current commit, read it with `git show <hash>` and produce the per-commit card below. Keep it tight — no padding, no diff restatement.
