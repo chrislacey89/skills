@@ -38,7 +38,7 @@ npx skills@latest update   # pull latest versions
 
 ## What Skill Kit optimizes for
 
-- **GitHub-native state** — PRDs, slices, QA bugs, and lineage live in GitHub issues and PRs, not a sprawling local planning filesystem.
+- **GitHub-native state** — PRDs, slices, QA bugs, and lineage live in GitHub issues and PRs, not a sprawling local planning filesystem. On a guest repo, such as a client's, the pack's own headings and `#N` references stay off the issues and PRs: PRDs, slices, and the review stamp go to the project's private sidecar, a local git repository outside the working tree. [docs/state-backend.md](docs/state-backend.md) states which goes where.
 - **Explicit handoffs** — skills declare what they expect, what they produce, and what comes next.
 - **Verified research before PRD writing** — `/research` is a first-class step, not an optional extra.
 - **Compounded knowledge** — shipped lessons feed future work through `docs/solutions/`.
@@ -117,6 +117,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 
 - **[docs/using-this-pack.md](docs/using-this-pack.md)** — how to operate Skill Kit end-to-end
 - **[SYSTEM-OVERVIEW.md](SYSTEM-OVERVIEW.md)** — workflow philosophy, state model, and detailed pipeline rationale
+- **[docs/state-backend.md](docs/state-backend.md)** — where the pack's PRDs, slices, and review stamp live: GitHub or the project's sidecar
 - **[CLAUDE.md](CLAUDE.md)** — editing conventions for agents working on this repository itself
 - **[docs/skill-anatomy.md](docs/skill-anatomy.md)** — structure and quality bar for `SKILL.md` files
 
