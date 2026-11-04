@@ -121,6 +121,8 @@ pre-push:
       run: bash scripts/test-state-backend.sh
     guest-footprint-tests:
       run: bash scripts/test-guest-footprint.sh
+    closeout-work-close-tests:
+      run: bash scripts/test-closeout-work-close.sh
     github-pr-base-tests:
       run: bash scripts/test-github-pr-base.sh
     write-a-prd-sidecar-branch-tests:
