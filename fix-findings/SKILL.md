@@ -115,14 +115,30 @@ exist and stop. Do not guess at intent, and do not silently fix the neighbors.
       pre-existing failure, and a breaker cannot distinguish `killed` from
       "already broken."
 - [ ] A run id is fixed for this invocation, once, before any fixer starts:
-      `FIX_FINDINGS_RUN=$(date -u +%Y%m%dT%H%M%SZ)`. Every fixer commit in this
-      run ends with the line `Fix-Findings-Run: $FIX_FINDINGS_RUN`. That line is
-      how § Handoff counts the rounds already on the branch — from the tree,
-      not from anyone's memory of how many times this skill has run.
+      `FIX_FINDINGS_RUN=$(date -u +%Y%m%dT%H%M%SZ)`. Each fix commit is
+      recorded against it, and that record is how § Handoff counts the rounds
+      already on the branch, from durable state rather than from anyone's
+      memory of how many times this skill has run.
+- [ ] Where the record goes is known: the second block below prints it. On
+      `github`, every fixer commit in this run ends with the line
+      `Fix-Findings-Run: $FIX_FINDINGS_RUN`. On `sidecar`, the commit message
+      carries no pack text at all ([references/state-backend.md](references/state-backend.md)
+      § Commit messages), and the controller records each fix commit in the
+      sidecar after its fixer reports (Step 1). Anything else is a refusal:
+      relay it and stop.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 bash "$SC" profile
+```
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+case "$(bash "$SC" backend stamp)" in
+  github) echo "fix runs: trailer lines in each fix commit" ;;
+  sidecar) echo "fix runs: sidecar.sh fixrun record; no trailer lines in any commit" ;;
+  *) echo "fix-findings aborted: sidecar.sh backend stamp failed; not guessing where fix runs go" >&2; exit 1 ;;
+esac
 ```
 
 ### Step 1. Per finding, spawn a fresh fixer
@@ -179,11 +195,14 @@ The fixer's instructions, in order:
    this case.
 4. **Run the test command the profile names** and report the exit status verbatim.
 5. **Commit exactly one commit**, whose message says what the finding was and
-   what the fix does, and whose last line is `Fix-Findings-Run: <run id>` — the
-   id Step 0 fixed, passed in the brief verbatim. A fix for a teammate review
-   thread also carries `Review-Thread: <url>`, the thread's URL verbatim, on
-   the line just above it. That is how `/respond-to-review` finds the fix on a
-   later round, from the tree. One commit per fix — a fix
+   what the fix does. On the `github` backend its last line is
+   `Fix-Findings-Run: <run id>`, the id Step 0 fixed, passed in the brief
+   verbatim, and a fix for a teammate review thread
+   also carries `Review-Thread: <url>`, the thread's URL verbatim, on
+   the line just above it. That is how `/respond-to-review` finds the fix on a later round, from
+   the tree. On the `sidecar` backend the message names the change and its
+   reason and nothing else: no trailer lines, no `W-` id, no skill name. The
+   brief says which backend Step 0 found. One commit per fix — a fix
    squashed together with another is a fix nobody can read separately.
    **When the lines the finding anchors on came from one commit on this
    branch, and the branch is unshared, make it a fixup of that commit.** Find
@@ -282,11 +301,38 @@ The fixer's instructions, in order:
    away once the "fixup!" commit is squashed into <commit> by git rebase
    --autosquash"* ([git-commit](https://git-scm.com/docs/git-commit#Documentation/git-commit.txt---fixupamendrewordltcommitgt)).
    So a fold removes the `Fix-Findings-Run:` lines, and § Handoff's round
-   count starts again from zero after it. That is accepted: the fold is offered
-   only after a re-run has reviewed every fixup on the branch.
+   count starts again from zero after it. On the `sidecar` backend the fold
+   rewrites the SHAs the records name, and the count reads only records whose
+   commit is still on the branch, so it restarts the same way. That is
+   accepted: the fold is offered only after a re-run has reviewed every fixup
+   on the branch.
 
 The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
 evidence), or `blocked` (with what it needed and did not have). Nothing else.
+
+**On the `sidecar` backend, the controller records each `fixed` commit**
+before it spawns that finding's breaker. Use the SHA the fixer reported after
+its fold trial, since a demotion amends the commit:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+RUN="<the run id Step 0 fixed>"
+FIX_SHA="<the SHA the fixer reported>"
+THREAD="<the teammate review thread's URL, or empty for a /pre-merge finding>"
+case "$(bash "$SC" backend stamp)" in
+  github) echo "github backend: the commit's own trailer lines are the record" ;;
+  sidecar)
+    FULL=$(git rev-parse --verify -q "$FIX_SHA^{commit}") || { echo "fix run not recorded: $FIX_SHA is not a commit" >&2; exit 1; }
+    set -- fixrun record "$(git branch --show-current)" "$RUN" "$FULL"
+    [ -z "$THREAD" ] || set -- "$@" --thread "$THREAD"
+    bash "$SC" "$@" || { echo "fix run not recorded: sidecar.sh fixrun record failed" >&2; exit 1; } ;;
+  *) echo "fix run not recorded: sidecar.sh backend stamp failed" >&2; exit 1 ;;
+esac
+```
+
+A record that fails is reported with the finding, not retried silently: the
+fix stands, but § Handoff's count and `/respond-to-review`'s later round will
+not see it.
 A fold trial whose recommit failed is `blocked`: the report names the leftover
 `fixup!` commit by SHA and says its subject must be reworded by hand (or the
 commit amended once the hook or signer is fixed). A trial that printed `fold
@@ -680,17 +726,27 @@ stop.
 `AskUserQuestion` rather than leaving the user to retype a command (see
 [references/next-step-menu.md](references/next-step-menu.md)). Which option leads
 depends on how many rounds this branch has already had, and that number is read
-from the tree — the `Fix-Findings-Run:` line Step 1 writes — never recalled:
+from the record Step 1 leaves, never recalled: the `Fix-Findings-Run:` lines on
+the `github` backend, the sidecar's fix-run records on the `sidecar` backend.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 W="<the slice's W-<n> from § Inputs, or empty on the github backend>"
 RANGE="$(bash "$SC" range ${W:+"$W"})" || { echo "round count aborted: sidecar.sh range failed" >&2; exit 1; }
-ROUNDS=$(git log --format=%B "$RANGE" | sed -n 's/^Fix-Findings-Run: //p' | sort -u | wc -l | tr -d ' ')
+case "$(bash "$SC" backend stamp)" in
+  github)
+    ROUNDS=$(git log --format=%B "$RANGE" | sed -n 's/^Fix-Findings-Run: //p' | sort -u | wc -l | tr -d ' ') ;;
+  sidecar)
+    RUNS=$(bash "$SC" fixrun list "$(git branch --show-current)" --range "$RANGE") \
+      || { echo "round count aborted: sidecar.sh fixrun list failed" >&2; exit 1; }
+    ROUNDS=$(printf '%s\n' "$RUNS" | awk 'NF { print $2 }' | sort -u | wc -l | tr -d ' ') ;;
+  *) echo "round count aborted: sidecar.sh backend stamp failed" >&2; exit 1 ;;
+esac
 ```
 
 `range` is the slice's commits when its work item records a start still on
-this branch, and the range from `base-ref` otherwise. Step 1's blame range stays on
+this branch, and the range from `base-ref` otherwise. Both arms count only
+what is in that range. Step 1's blame range stays on
 `base-ref`, because a fixup may target an earlier slice's commit.
 
 **Below two rounds**, recommended option first: **→ Re-run `/pre-merge`

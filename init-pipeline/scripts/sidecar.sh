@@ -36,6 +36,9 @@
 #   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
 #   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
 #   sidecar.sh stamp clear <branch>
+#   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>]
+#   sidecar.sh fixrun list <branch> [--range <rev-range>]   (one "<sha> <run-id> <thread-url|->" line per record)
+#   sidecar.sh footprint <rev-range>   (prints each pack marker in the range's commit messages; exit 1 on any, 2 if unread; no sidecar needed)
 #   sidecar.sh work create --kind <prd|slice> [--parent W-n] [--blocked-by W-n,...] [--milestone <str>]
 #                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
 #   sidecar.sh work view <W-n> [--json]
@@ -58,6 +61,16 @@
 # JSON branch field, and prints nothing for a stamp it cannot parse or whose
 # reviewed_sha is not 40 lowercase hex. /pre-merge is the only skill that
 # writes one (scripts/test-review-currency-marker.sh).
+#
+# fixrun. <sidecar>/fix-runs/<slug>.jsonl holds one line per /fix-findings fix
+# commit on the sidecar backend, {branch, run, sha, thread?}, where the github
+# backend puts Fix-Findings-Run: and Review-Thread: lines in the commit itself.
+# list --range keeps only records whose commit is in the range, so a fold that
+# rewrites a SHA drops its record the way it drops the github trailer.
+#
+# footprint. Scans commit messages, not the sidecar: a fixup!/squash!/amend!
+# subject, a Fix-Findings-Run: or Review-Thread: line, a W-<n> id, or /<skill>
+# for any name in PACK_SKILLS. docs/state-backend.md states the rule it checks.
 #
 # work. <sidecar>/work/W-<n>.md is a PRD or slice on the sidecar backend: YAML
 # frontmatter between --- lines, the body, then "## Comment <ISO-8601>"
@@ -1406,6 +1419,99 @@ cmd_stamp() {
     esac
 }
 
+cmd_fixrun() {
+    local sub="${1:-}" branch run="" sha="" thread="" range="" in_range="" sc f line
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        record)
+            [ $# -ge 3 ] || die_usage "usage: sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>]"
+            branch="$1"; run="$2"; sha="$3"; shift 3
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --thread) [ $# -ge 2 ] || die_usage "fixrun record: --thread needs a value"; thread="$2"; shift 2 ;;
+                    *) die_usage "fixrun record: unknown argument: $1" ;;
+                esac
+            done
+            ;;
+        list)
+            [ $# -eq 1 ] || [ $# -eq 3 ] || die_usage "usage: sidecar.sh fixrun list <branch> [--range <rev-range>]"
+            branch="$1"
+            if [ $# -eq 3 ]; then
+                [ "$2" = --range ] || die_usage "fixrun list: unknown argument: $2"
+                range="$3"
+                [ -n "$range" ] || die_usage "fixrun list: --range needs a value"
+            fi
+            ;;
+        *) die_usage "usage: sidecar.sh fixrun <record|list> <branch> ..." ;;
+    esac
+    case "$branch" in ''|*$'\n'*) die_usage "fixrun $sub: the branch must be one non-empty line" ;; esac
+    if [ "$sub" = record ]; then
+        printf '%s' "$run" | grep -qxE '[0-9]{8}T[0-9]{6}Z' \
+            || refuse "fixrun record refused: the run id must be date -u +%Y%m%dT%H%M%SZ: $run"
+        printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}' \
+            || refuse "fixrun record refused: the SHA must be 40 lowercase hex characters (git rev-parse HEAD): $sha"
+        case "$thread" in *[[:space:]]*) refuse "fixrun record refused: the thread URL carries whitespace: $thread" ;; esac
+    fi
+    sc="$(do_resolve)" || exit 1
+    f="fix-runs/$(branch_slug "$branch").jsonl"
+    case "$sub" in
+        record)
+            mkdir -p "$sc/fix-runs" || refuse "fixrun record: cannot create $sc/fix-runs"
+            line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" \
+                '{branch: $b, run: $r, sha: $s} + (if $t == "" then {} else {thread: $t} end)')" \
+                || refuse "fixrun record: could not build the record"
+            printf '%s\n' "$line" >> "$sc/$f" || refuse "fixrun record: could not write $sc/$f"
+            commit_paths "$sc" "sidecar: fix run $run on $branch at ${sha:0:7}" "$f" || exit 1
+            ;;
+        list)
+            if [ -n "$range" ]; then
+                in_range="$(git rev-list "$range" --)" || refuse "fixrun list: git rev-list $range failed"
+            fi
+            [ -f "$sc/$f" ] || return 0
+            # A line that does not parse, or names another branch, is skipped:
+            # a reader counting rounds must not count what it cannot trust.
+            # With --range, a record whose commit is outside the range is skipped
+            # too: a fold or rebase rewrites the SHA, and the record drops out.
+            jq -Rr --arg b "$branch" --arg r "$in_range" --arg ranged "${range:+yes}" '
+                ($r | split("\n")) as $in
+                | fromjson? // empty
+                | select(type == "object" and .branch == $b)
+                | select((.sha // "") | test("^[0-9a-f]{40}$"))
+                | select((.run // "") | test("^[0-9]{8}T[0-9]{6}Z$"))
+                | select($ranged == "" or (.sha as $s | $in | index([$s]) != null))
+                | "\(.sha) \(.run) \(.thread // "-")"' "$sc/$f"
+            ;;
+    esac
+}
+
+# Every skill in the pack, by directory name. scripts/test-guest-footprint.sh
+# fails when a directory with a SKILL.md is missing from it.
+PACK_SKILLS="api-design-review closeout compound correct-course create-milestone design-an-interface excavate execute fix-findings git-guardrails-claude-code handoff help improve-codebase-architecture improve-pipeline init-pipeline lfg mermaid prd-to-issues pre-merge prototype qa re-pitch request-refactor-plan research respond-to-review setup-pre-commit setup-ralph-loop shape tdd triage-issue ts-audit ubiquitous-language visual-recap walk-commits write-a-prd"
+
+cmd_footprint() {
+    local range log names
+    [ $# -eq 1 ] && [ -n "$1" ] || die_usage "usage: sidecar.sh footprint <rev-range>"
+    range="$1"
+    in_repo || refuse "not inside a git repository"
+    # A unit-separator line between commits: no commit message can forge it by accident.
+    log="$(pgit log --format=$'\037%h%n%B' "$range" --)" \
+        || { printf 'sidecar.sh: footprint: git log %s failed; nothing was checked\n' "$range" >&2; exit 2; }
+    names="$(printf '%s' "$PACK_SKILLS" | tr ' ' '|')"
+    printf '%s\n' "$log" | awk -v names="$names" '
+        BEGIN { skill = "(^|[^A-Za-z0-9_./-])/(" names ")([^A-Za-z0-9_-]|$)"; found = 0 }
+        /^\037/ { sha = substr($0, 2); first = 1; next }
+        {
+            m = ""
+            if (first && $0 ~ /^(fixup|squash|amend)! /) m = "a " substr($0, 1, index($0, "!")) " subject"
+            else if ($0 ~ /^(Fix-Findings-Run|Review-Thread):/) m = "a " substr($0, 1, index($0, ":") - 1) " line"
+            else if ($0 ~ /(^|[^A-Za-z0-9_-])W-[0-9]+([^0-9]|$)/) m = "a W- work item id"
+            else if ($0 ~ skill) m = "a skill name"
+            first = 0
+            if (m != "") { print sha " " m ": " $0; found = 1 }
+        }
+        END { exit found }'
+}
+
 WORK_ID_RE='W-[0-9]+'
 WORK_COMMENT_RE='^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
 WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","reviewed_sha","start_sha","superseded_by","created"]'
@@ -1745,6 +1851,8 @@ case "$verb" in
     require) cmd_require "$@" ;;
     backend) cmd_backend "$@" ;;
     stamp)   cmd_stamp "$@" ;;
+    fixrun)  cmd_fixrun "$@" ;;
+    footprint) cmd_footprint "$@" ;;
     work)    cmd_work "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|work> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|fixrun|footprint|work> ..." ;;
 esac
