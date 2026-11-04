@@ -12,8 +12,9 @@
 # sidecar and a stubbed `gh` that answers the merged PR's URL. After it runs,
 # the item whose `pr` field holds that URL reads `state: closed`, and nothing
 # else changed. The refusals are run too: zero matches and two matches close
-# nothing, a github backend touches nothing, and the parent PRD is reported,
-# never closed.
+# nothing, a github backend touches nothing, and a pr recorded on a
+# PRD closes nothing: the parent PRD is reported, never closed, and its close
+# stays the user's confirm.
 #
 # Fixtures are built after unsetting the inherited git environment, with a
 # private global config (scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md).
@@ -60,8 +61,6 @@ section "the block"
 co_block="$(block "$CO" 'bash "$SC" work close "$W"')"
 [ -n "$co_block" ] || { bad "closeout/SKILL.md Step 3 carries the work-close block" "not found"; printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"; exit 1; }
 ok "closeout/SKILL.md Step 3 carries the work-close block"
-# shellcheck disable=SC2016  # the needle is the skill's literal text
-check "the block never closes the parent PRD" 0 "$(grep -c 'work close "\$PRD"' <<<"$co_block")"
 
 # The stub answers `gh pr view <n> --json url` with $GH_URL, and fails on any
 # other call: the block has no business editing, commenting, or closing on the forge.
@@ -142,14 +141,14 @@ mkproj guest
 A="$(mk --kind slice)"
 run_block
 check "no recorded pr: the block exits 1" 1 "$rc"
-check "no recorded pr: it says no item matched" 1 "$(grep -c "0 open items record $URL" "$tmp/stderr")"
+check "no recorded pr: it says no item matched" 1 "$(grep -c "0 open slices record $URL" "$tmp/stderr")"
 check "no recorded pr: the open item stays open" open "$(state "$A")"
 
 B="$(mk --kind slice)"
 (cd "$P" && bash "$SC" work set "$A" pr "$URL" && bash "$SC" work set "$B" pr "$URL") >/dev/null 2>&1
 run_block
 check "two claimants: the block exits 1" 1 "$rc"
-check "two claimants: it names both" 1 "$(grep -c "2 open items record $URL as their pr: $A $B" "$tmp/stderr")"
+check "two claimants: it names both" 1 "$(grep -c "2 open slices record $URL as their pr: $A $B" "$tmp/stderr")"
 check "two claimants: $A stays open" open "$(state "$A")"
 check "two claimants: $B stays open" open "$(state "$B")"
 
@@ -159,6 +158,29 @@ run_block
 check "a closed claimant is ignored: the open one closes" closed "$(state "$A")"
 
 # -----------------------------------------------------------------------------
+section "a pr recorded on the PRD closes nothing"
+
+# /pre-merge Phase 1 accepts a slice or its PRD, and Phase 2 records the PR on
+# whichever it was given. The block matches slices only, so a PRD that holds
+# the URL is named and left for the user's confirm (#699).
+mkproj guest
+PRD="$(mk --kind prd)"
+S1="$(mk --kind slice --parent "$PRD")"
+(cd "$P" && bash "$SC" work set "$PRD" decomposed_into "$S1" && bash "$SC" work set "$PRD" pr "$URL") >/dev/null 2>&1 \
+    || bad "fixture: record the pr on the PRD" "work set failed"
+run_block
+check "pr on the PRD: the block exits 1" 1 "$rc"
+check "pr on the PRD: the PRD stays open" open "$(state "$PRD")"
+check "pr on the PRD: the slice stays open" open "$(state "$S1")"
+check "pr on the PRD: it names the PRD and closes nothing" 1 "$(grep -c "work item NOT closed: $URL is recorded on PRD $PRD, not a slice" "$tmp/stderr")"
+
+(cd "$P" && bash "$SC" work set "$S1" pr "$URL") >/dev/null 2>&1
+run_block
+check "pr on the PRD and the slice: the block exits 0" 0 "$rc"
+check "pr on the PRD and the slice: the slice closes" closed "$(state "$S1")"
+check "pr on the PRD and the slice: the PRD stays open" open "$(state "$PRD")"
+
+# -----------------------------------------------------------------------------
 section "a github backend touches nothing"
 
 mkproj owned
@@ -166,7 +188,7 @@ check "fixture: backend slices answers github" github "$(cd "$P" && bash "$SC" b
 run_block
 check "github: the block exits 0" 0 "$rc"
 check "github: no gh call" "" "$(cat "$tmp/calls")"
-check "github: it says Closes #N did the work" 1 "$(grep -c 'Closes #N closed the slice issue' <<<"$out")"
+check "github: it says Closes #N did the work" 1 "$(grep -c 'Closes #N closed the issue the PR body names' <<<"$out")"
 
 # -----------------------------------------------------------------------------
 section "mutation: the check sees a block that closes nothing"
