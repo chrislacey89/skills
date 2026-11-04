@@ -38,7 +38,7 @@ Do not use `/closeout` when:
 
 - the PR is not yet created or still under review — run `/pre-merge` first
 - you want to capture a durable lesson — that is `/compound`, which by default has already ridden the PR before `/closeout` merges (post-merge `/compound` is the fallback); `/closeout` does not capture lessons
-- you want to close the PRD and slice issues or reconcile the research artifact's frontmatter — that is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9; `/closeout` performs the *git-hygiene* half and defers the *issue-closing and research-artifact-supersession* half to Step 9 rather than duplicating it
+- you want to close the PRD and slice issues or reconcile the research artifact's frontmatter — that is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9; `/closeout` performs the *git-hygiene* half and defers the *issue-closing and research-artifact-supersession* half to Step 9 rather than duplicating it. The one close it makes is the merged slice's work item on the `sidecar` backend (Step 3), because there no `Closes #N` line does it at merge
 - the change is not on a feature branch at all (you are on the base branch with nothing to merge) — there is nothing to close out
 
 It is HITL-confirmed and non-blocking: it operationalizes an already-optional tail. It never auto-merges — merge is outward-facing and hard to reverse, so it always confirms first.
@@ -233,6 +233,48 @@ esac
 
 On the sidecar backend the stamp is spent with the review, so it is cleared here too. The branch comes from the merged PR, not from `git branch --show-current`: `gh pr merge --delete-branch` deletes the local branch and, in a plain checkout, switches to the base first, so the current branch is by now the base. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
 
+**Then close the merged slice's work item.** On the `github` backend the `Closes #N` line `/pre-merge` wrote into the PR body closed the slice issue at merge. On the `sidecar` backend nothing does, and an item left `open` is offered again by `work list --unblocked` and keeps gating every slice that lists it in `blocked_by` ([references/state-backend.md](references/state-backend.md)). The item to close is the open one whose `pr` field holds the merged PR's URL, which `/pre-merge` Phase 2 recorded:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+case "$(bash "$SC" backend slices)" in
+  github) echo "work item: none, Closes #N closed the slice issue at merge" ;;
+  sidecar)
+    PR_URL="$(gh pr view <number> --json url -q .url)" && [ -n "$PR_URL" ] \
+      || { echo "work item NOT closed: cannot read the merged PR's URL" >&2; exit 1; }
+    IDS="$(bash "$SC" work list --state open)" \
+      || { echo "work item NOT closed: work list failed" >&2; exit 1; }
+    MATCH="" COUNT=0
+    while IFS= read -r id; do
+      [ -n "$id" ] || continue
+      PR="$(bash "$SC" work view "$id" --json | jq -er '.pr // ""')" \
+        || { echo "work item NOT closed: cannot read $id" >&2; exit 1; }
+      if [ "$PR" = "$PR_URL" ]; then MATCH="$MATCH $id"; COUNT=$((COUNT + 1)); W="$id"; fi
+    done <<<"$IDS"
+    if [ "$COUNT" -ne 1 ]; then
+      [ -n "$MATCH" ] || MATCH=" none"
+      echo "work item NOT closed: $COUNT open items record $PR_URL as their pr:$MATCH" >&2
+      exit 1
+    fi
+    bash "$SC" work close "$W" || { echo "work item NOT closed: work close $W failed" >&2; exit 1; }
+    echo "work item: closed $W"
+    PRD="$(bash "$SC" work view "$W" --json | jq -r '.parent // empty')"
+    [ -n "$PRD" ] || exit 0
+    SLICES="$(bash "$SC" work view "$PRD" --json | jq -r '(.decomposed_into // [])[]')" \
+      || { echo "parent $PRD: cannot read it; check its slices by hand" >&2; exit 1; }
+    [ -n "$SLICES" ] || { echo "parent $PRD: records no decomposition; check its slices by hand"; exit 0; }
+    OPEN=""
+    while IFS= read -r s; do
+      [ "$(bash "$SC" work view "$s" --json | jq -r '.state // empty')" = closed ] || OPEN="$OPEN $s"
+    done <<<"$SLICES"
+    if [ -z "$OPEN" ]; then echo "parent $PRD: every slice is closed"; else echo "parent $PRD: still open:$OPEN"; fi
+    ;;
+  *) echo "work item NOT closed: sidecar.sh backend slices failed" >&2; exit 1 ;;
+esac
+```
+
+A refusal closes nothing, and none of them blocks the rest of the closeout. Relay the line and let the user close the right item with `work close W-<n>`: zero matches usually means the PR was never recorded on an item, and more than one means two items claim the same PR. `parent <PRD>: every slice is closed` is not a close. Offer `work close <PRD>` as a confirm, after Step 9's research-artifact check, which stays the human's; never run it from this block.
+
 `.claude/.fix-findings-active` is not removed here — `/fix-findings` removes its
 own flag on every exit path, and a copy still present at merge means that run
 aborted without cleaning up. Say so rather than deleting it silently; it is the
@@ -316,7 +358,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 ### 9. Hand off
 
 - If a durable lesson emerged from this work and was **not** already captured on the PR (per the PR-attachable `/compound` model), invoke `/compound` now. If the lesson already rode the PR, say so and skip it. `/closeout` never captures lessons itself.
-- Closing the PRD and any remaining slice issues, and confirming the research artifact's frontmatter still reflects what shipped (superseding with a new dated artifact if a version bumped), is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9 — name it as the remaining tail work; do not perform research-artifact supersession from here.
+- Closing the PRD and any remaining slice issues, and confirming the research artifact's frontmatter still reflects what shipped (superseding with a new dated artifact if a version bumped), is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9 — name it as the remaining tail work (on the `sidecar` backend Step 3 has already closed the merged slice's work item, and the PRD is closed only on the user's confirm); do not perform research-artifact supersession from here.
 
 ## Common Rationalizations
 

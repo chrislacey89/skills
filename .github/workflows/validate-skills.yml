@@ -324,6 +324,11 @@ jobs:
       - name: Run guest footprint contract suite
         run: bash scripts/test-guest-footprint.sh
 
+      # /closeout Step 3's work-close block, extracted and run against a real
+      # sidecar and a stubbed gh: the merged slice's work item reads closed (#695).
+      - name: Run closeout work-close contract suite
+        run: bash scripts/test-closeout-work-close.sh
+
       # /pre-merge Phase 2's github-backend PR block, extracted and run against a
       # stubbed gh: the declared base must reach --base; a failing base-ref aborts (#604).
       - name: Run github PR base contract suite
