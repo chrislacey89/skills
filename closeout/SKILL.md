@@ -1,6 +1,6 @@
 ---
 name: closeout
-description: "Primary pipeline tail step after /pre-merge, when a reviewed PR is ready to land and you want the workspace back to a clean base. Use to merge, switch off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. Triggers on 'close out', 'merge and clean up', 'get back to a clean main/base', 'tear down the worktree'. Not for capturing lessons (that's /compound) or closing PRD/slice issues and research-artifact hygiene (that's the cleanup prose in SYSTEM-OVERVIEW Step 9)."
+description: "Primary pipeline tail step after /pre-merge, when a reviewed PR is ready to land and you want the workspace back to a clean base. Use to merge, switch off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. Triggers on 'close out', 'merge and clean up', 'get back to a clean main/base', 'tear down the worktree'. Not for capturing lessons (that's /compound), or closing the PRD and any other open slices and research-artifact hygiene (that's the cleanup prose in SYSTEM-OVERVIEW Step 9)."
 sources:
   primary:
     - "Thinking in Systems — Donella Meadows"
@@ -377,7 +377,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 | "Verifying the steps ran is the same as verifying it worked." | Meadows' "seeking the wrong goal" — measuring activity, not outcome. Step 8 checks the actual end state: on base, clean tree, PR merged, worktree gone, branch pruned. |
 | "There's a review on this PR, so the diff has been reviewed." | Only if nothing landed after it. `/pre-merge` stamps the SHA it reviewed; Step 2 compares that to the current head and shows `git diff --stat` of anything added since. A review of an earlier state is not a review of the release candidate (Continuous Delivery). |
 | "I'll force the worktree removal — there's just some leftover state." | Everything reviewed is already merged; leftover state is unexpected. Investigate it rather than `--force`-ing it away. |
-| "I'll close the PRD issue and refresh the research artifact while I'm here." | That is Step 9's job, not closeout's. Performing research-artifact supersession from here duplicates and risks contradicting the canonical cleanup prose. Name it as remaining work and hand off. |
+| "I'll close the PRD issue and refresh the research artifact while I'm here." | That is `SYSTEM-OVERVIEW.md` Step 9's job, not closeout's. On the `sidecar` backend Step 3 reports when every slice is closed, and the PRD close is offered as a confirm, never run. Performing research-artifact supersession from here duplicates and risks contradicting the canonical cleanup prose. Name it as remaining work and hand off. |
 | "I'll capture the lesson in `docs/solutions/` as part of closing out." | That is `/compound`. Under the PR-attachable model the lesson may already be on the PR; if it isn't, hand to `/compound` — don't fold knowledge capture into closeout. |
 
 ## Red Flags
@@ -388,7 +388,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 - A Stop hook or feedback loop suddenly reporting `MODULE_NOT_FOUND` / "cannot find module" for `biome`, `tsc`, or `vitest` right after a teardown — almost always a stranded cwd, not a real failure.
 - Reporting "cleanup done" without the Step 8 outcome checks actually passing.
 - `git worktree list` showing several stale feature worktrees — evidence the outflow loop is being skipped; this is the symptom closeout removes.
-- Closeout performing issue-closing or research-artifact supersession itself instead of deferring to Step 9.
+- Closeout closing the PRD, or any item other than the merged slice's work item on the `sidecar` backend, or performing research-artifact supersession, instead of deferring to `SYSTEM-OVERVIEW.md` Step 9.
 
 ## Verification
 
@@ -400,13 +400,14 @@ A run of `/closeout` is not complete until:
 - the shell was re-anchored to the base checkout *before* the worktree was removed
 - the feature worktree (if one existed) is gone from `git worktree list` and the merged branch is pruned — or, when isolation is host-owned (Step 0), teardown and pruning were correctly ceded to the host while the merge still ran
 - the base branch was pulled and the working tree is clean on the base branch
-- the end state was reported, and remaining tail work (`/compound` if a lesson is uncaptured, Step 9 issue-closing) was named in the handoff
+- on the `sidecar` backend, the merged slice's work item reads `closed`, or Step 3's refusal was relayed to the user; the parent PRD was not closed without the user's confirm
+- the end state was reported, and remaining tail work (`/compound` if a lesson is uncaptured, `SYSTEM-OVERVIEW.md` Step 9 issue-closing) was named in the handoff
 
 ## Handoff
 
 - **Expected input:** a reviewed, mergeable PR created by `/pre-merge`, on a feature branch (in a worktree or a plain checkout)
 - **Produces:** the PR merged, the worktree torn down, the merged branch pruned, the base branch pulled, and a verified clean end state — no filesystem state introduced
 - **May invoke:** `/compound` when a durable lesson emerged and was not already captured on the PR
-- **Comes next by default:** `/compound` (only when an uncaptured lesson is worth recording) and the `SYSTEM-OVERVIEW.md` Step 9 cleanup prose (close the PRD and slice issues, confirm research-artifact frontmatter). After that, the loop is closed — `/help` when you return to the repo.
+- **Comes next by default:** `/compound` (only when an uncaptured lesson is worth recording) and the `SYSTEM-OVERVIEW.md` Step 9 cleanup prose (close the PRD and any slices still open, confirm research-artifact frontmatter). After that, the loop is closed — `/help` when you return to the repo.
 
 **Next-step menu.** With the merge done and a clean base reached, offer the tail as a menu rather than leaving it to recall (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/compound` (capture a lesson from this change)** when an uncaptured lesson is worth recording, **Step 9 issue-closing still to do** when a PRD or slice issues remain, **Stopping here — clean base, nothing left open**, **`/help` (pick up the next piece of work)**. The last three are distinct destinations, not one state described three ways: Step 9's cleanup prose, ending the session, and asking what to start next. Each label leads with the act that distinguishes it, not with a shared word the reader has to scan past. Name Step 9 as remaining work; do not perform it from here. The platform's free-text "Other" option is the escape hatch — don't add one.
