@@ -25,3 +25,9 @@ plans/
 
 # Reserved for /setup-ralph-loop.
 .claude/.ralph-checked
+
+# The guardrail's sidecar resolver, copied beside it by /init-pipeline. Kept
+# local: a tracked copy would be a second, unsynced restatement of
+# init-pipeline/scripts/sidecar.sh (the census in test-sidecar-resolution.sh
+# refuses it). Absent, the guard reads the review stamp from the PR body.
+.claude/hooks/sidecar.sh
