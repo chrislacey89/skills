@@ -88,7 +88,7 @@ Gather the facts first (these are read-only):
 ```bash
 git branch --show-current                                   # the feature branch
 git rev-parse --show-toplevel                               # the current working tree (may be a worktree)
-git worktree list --porcelain | awk '/^worktree /{print $2; exit}'   # the BASE checkout (main working tree)
+git worktree list --porcelain | awk '/^worktree /{print $(2); exit}'   # the BASE checkout (main working tree)
 gh pr view --json number,title,url,state,mergeable,mergeStateStatus,reviewDecision 2>/dev/null
 ```
 
@@ -299,7 +299,7 @@ one signal that the lock has been standing open.
 **Otherwise** — a fresh `/closeout` session that did not itself call `EnterWorktree`, or a plain `git checkout -b` checkout with no worktree — re-anchor with a bare `cd` (`ExitWorktree` only operates on worktrees its own session entered, so it is a no-op here):
 
 ```bash
-cd "$(git worktree list --porcelain | awk '/^worktree /{print $2; exit}')"
+cd "$(git worktree list --porcelain | awk '/^worktree /{print $(2); exit}')"
 git rev-parse --show-toplevel    # confirm cwd is now the base checkout, not the worktree
 ```
 

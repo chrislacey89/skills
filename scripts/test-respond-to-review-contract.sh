@@ -627,8 +627,8 @@ check "the log read names the fix commit and its thread" \
     "$want_sha https://github.com/acme/app/pull/7#discussion_r1" \
     "$(awk -v s="$want_sha" '$1 == s' <<<"$got")"
 
-sed 's/length($0) == 47 \&\& \/\^commit\\.\[0-9a-f\]+\$\//\/^commit\\.\//' "$tmp/log.sh" > "$tmp/log-mut.sh"
-check "M5: the mutation loosened the commit match" 0 "$(grep -c 'length(\$0) == 47' "$tmp/log-mut.sh")"
+sed 's/length($(0)) == 47 \&\& \/\^commit\\.\[0-9a-f\]+\$\//\/^commit\\.\//' "$tmp/log.sh" > "$tmp/log-mut.sh"
+check "M5: the mutation loosened the commit match" 0 "$(grep -c 'length(\$(0)) == 47' "$tmp/log-mut.sh")"
 check "M5: with a loose match the trailer is attributed to a body line, not the commit" 1 \
     "$([ "$(cd "$g" && bash "$tmp/log-mut.sh" | awk -v s="$want_sha" '$1 == s')" = "" ] && echo 1 || echo 0)"
 

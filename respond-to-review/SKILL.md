@@ -231,7 +231,7 @@ bb_get() {
   else
     bb_auth="header = \"Authorization: Bearer $BITBUCKET_TOKEN\""
   fi
-  bb_code=$(printf '%s\nurl = "%s"\n' "$bb_auth" "$1" | curl -sS -o "$bb_out" -w '%{http_code}' -K -) || bb_code=000
+  bb_code=$(printf '%s\nurl = "%s"\n' "$bb_auth" "${1}" | curl -sS -o "$bb_out" -w '%{http_code}' -K -) || bb_code=000
   if [ "$bb_code" = 200 ]; then
     cat "$bb_out"
   else
@@ -313,8 +313,8 @@ lives). Its thread markers say which items an earlier round already settled:
 SC="<this skill's directory>/references/sidecar.sh"
 REC="$(bash "$SC" path review-responses)/pr-<pr-number>.md"
 [ -f "$REC" ] && awk '
-  match($0, /^<!-- thread: id=[^ ]+ last-at=[^ ]+ disposition=[^ ]+ -->$/) {
-    split(substr($0, 6, length($0) - 9), f, " ")
+  match($(0), /^<!-- thread: id=[^ ]+ last-at=[^ ]+ disposition=[^ ]+ -->$/) {
+    split(substr($(0), 6, length($(0)) - 9), f, " ")
     sub(/^id=/, "", f[2]); sub(/^last-at=/, "", f[3]); sub(/^disposition=/, "", f[4])
     seen[f[2]] = f[3] " " f[4]
   }
@@ -337,7 +337,7 @@ with a `Review-Thread: <url>` line:
 SC="<this skill's directory>/references/sidecar.sh"
 BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
 git log --format=commit.%H%n%B "$BASE_REF..HEAD" \
-  | awk 'length($0) == 47 && /^commit\.[0-9a-f]+$/ { sha = substr($0, 8, 7) } /^Review-Thread: / { print sha, $2 }'
+  | awk 'length($(0)) == 47 && /^commit\.[0-9a-f]+$/ { sha = substr($(0), 8, 7) } /^Review-Thread: / { print sha, $(2) }'
 ```
 
 ### Step 2. Check each claim in a fresh sub-agent
