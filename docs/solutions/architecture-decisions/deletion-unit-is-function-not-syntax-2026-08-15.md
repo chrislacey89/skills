@@ -1,7 +1,7 @@
 ---
 date: 2026-08-15
 category: architecture-decisions
-problem_type: a subtractive change reviewed at the granularity of the deleted syntax rather than the functions that syntax served — second occurrence appended 2026-10-19, in executable shell, where the second function was a guard; third appended 2026-10-20, a frontmatter flag whose second function was gating a lock's escape route
+problem_type: a subtractive change reviewed at the granularity of the deleted syntax rather than the functions that syntax served — second occurrence appended 2026-10-19, in executable shell, where the second function was a guard; third appended 2026-10-20, a frontmatter flag whose second function was gating a lock's escape route; fourth appended 2026-11-05, a /fix-findings pointer that replaced a clause carrying a flag
 components: [execute, pre-merge, improve-pipeline, research, write-a-prd, init-pipeline, fix-findings]
 technologies: [pipeline-design, prose-artifacts, code-review, subtractive-change]
 severity: medium
@@ -153,6 +153,19 @@ PR #484 replaced both copies with `DIR="$(bash "$SC" archive-dir)"`. So did PR #
 
 **Mechanism.** This is the third recording, and the preventing change belongs to the pack. Flag flips are gated by chrislacey89/skills#157, whose gate checks only that a *wrong* flag does not break an auto-invoke chain. That covers adding the flag and misses removing it. Added as a proposed gate item on #157 (comment 6281222695): before a skill becomes model-invocable, list what it does at load time and every hook message or skill text that names it as a way out, because each was safe only while a human had to type the command.
 
+## Fourth occurrence (2026-11-05): a prose-claim fix pointed away a flag
+
+**What was deleted.** On PR #708, a `/pre-merge` finding said the clause "give `-m` the message and trailer above" in `/fix-findings` told both backends to add a trailer the sidecar backend does not use. The fix was a `/fix-findings` fixer working under #358's closed action set for a claim: delete the sentence, or replace it with a pointer. It replaced the clause with "item 5 states the commit message for each backend". The controller read the word diff, saw only a reference added, and accepted it as `pointer`.
+
+**The function it did not price.** The clause also told the fixer to pass the message with `-m`. Without it, `git commit --fixup` commits only the `fixup!` subject, so the github `Fix-Findings-Run:` trailer is lost and the fold-trial demotion reads back an empty message. The pointer also sat inside item 5, so it pointed at itself. A second fix in the same round deleted a false claim that the brief carried the backend, which left item 5's backend branch with nothing telling the fixer which side applied. Both breakers returned `not-applicable`, which was the honest verdict, and the `/pre-merge` re-run caught both.
+
+**What this adds to the entry.**
+- *The deletion was a fix, and its rule was a function-blind check.* The action set exists to stop fix rounds from writing new text. Its controller check read the diff's shape (nothing added but a reference) and never what the removed words did.
+- *The seam word was there again:* "the message **and** trailer". The claim was false for one backend. The instruction was true for both.
+- *A code span marks the instruction.* A command, flag, or path in backticks is the part of a sentence that something executes. That is the cheap mechanical proxy for "this sentence does something".
+
+**Mechanism.** chrislacey89/skills#709 put it at the point of action. `/fix-findings`' controller now runs an instruction check before accepting a `deleted` or `pointer` fix. A deletion or pointer whose removed words include a backticked code span, or a pointer to its own item, gets the after-state `rejected: carries an instruction` and is reverted, and the fixer reports `blocked: carries an instruction` before committing one. `scripts/test-prose-fix-disposition.sh` runs the check's real block against an O2-shaped pointer (rejected) and a plain claim deletion (passed). No breaker is spawned on a prose after-state any more, since no executable check reads a sentence. The O1 shape (a deletion with no code span that drops a dependency) has no mechanism yet. Its recurrence is the evidence #709 named for a read-only dependency sweep.
+
 ## Planning / Calibration Notes
 
 - **What widened the work:** the blind review pass at `/pre-merge`, producing one Concern and one follow-up commit. Nothing widened at implementation time — the three cuts landed exactly as specified, all six contract suites stayed green throughout, and the mispricing was invisible to every check that ran before review.
@@ -178,6 +191,7 @@ PR #484 replaced both copies with `DIR="$(bash "$SC" archive-dir)"`. So did PR #
 ## Related
 
 - PR #232 — the three subtractions, the dangling-pointer fix, and the restoration commit
+- PR #708 and chrislacey89/skills#709 — the fourth occurrence (a prose-claim pointer removed a flag) and the controller's instruction check
 - PR #493 and its fix 02aa25e — the third occurrence (a removed flag gated the edit lock's escape route); chrislacey89/skills#157 — the flag-flip gate the mechanism extends
 - PR #484 (and the closed parallel PR #479), issues #470 and #481 — the second occurrence (dedup deleted a guard); chrislacey89/skills#487 — the pack-level mechanism
 - Issue #231 — the audit; see its "Recommended Changes" row 3 and the Mediator's Chesterton's-fence note
