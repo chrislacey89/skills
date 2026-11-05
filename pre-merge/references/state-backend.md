@@ -34,7 +34,7 @@ On the `sidecar` backend, a commit message names the change and its reason and n
 - a `W-<n>` work item id
 - a skill name written as `/<name>`
 
-`bash "$SC" footprint <rev-range>` prints each one it finds with the commit's short SHA, and exits 1 if there are any, 0 if there are none, and 2 if it could not read the range. `/pre-merge` Phase 2 runs it over the branch's whole range, as `sidecar.sh range` prints it with no work item, before it opens the PR or prints the text for one, and stops on anything but 0. `scripts/test-guest-footprint.sh` runs that block against planted commits, and pins the skill-name list to the pack's skill directories.
+`bash "$SC" footprint <rev-range>` prints each one it finds with the commit's short SHA, and exits 1 if there are any, 0 if there are none, and 2 if it could not read the range. `/pre-merge` Phase 2 runs it over the branch's whole range, as `sidecar.sh range` prints it with no work item, before it opens the PR or prints the text for one, and stops on anything but 0. The matcher cannot tell a pack skill from a client's own text (a `/help` route, a `W-9` form), so `--accept "<short sha> ..."` skips the commits the operator names; `/pre-merge` offers it only after the operator confirms the line is the client's own. `scripts/test-guest-footprint.sh` runs that block against planted commits, and pins the skill-name list to the pack's skill directories.
 
 On the `github` backend these lines are the pack's own repo convention and stay.
 

@@ -466,6 +466,26 @@ for s in 'fixup! Fix the report totals' 'squash! Fix the report totals' 'amend! 
     (cd "$P" && bash "$SC" footprint "$fp_base..HEAD" >/dev/null 2>&1); fp_rc=$?
     check "footprint exits 1 on a [${s%% *}] subject" 1 "$fp_rc"
 done
+# A client's own text collides with the matcher; --accept, naming the SHA, is the way past.
+for m in 'Add a /help page to the dashboard' 'Route GET /research/:id to the new handler' \
+         'Accept W-9 uploads in the vendor form' 'Bump node to v20 (see /qa)'; do
+    mkguest "commit footprint accept [$m]" init
+    fp_base="$(git -C "$P" rev-parse HEAD)"
+    commit_msg "$m"
+    other="$(git -C "$P" rev-parse --short HEAD)"
+    commit_msg "Fix the report totals" "Implements W-12"
+    flagged="$(git -C "$P" rev-parse --short HEAD)"
+    fp_out="$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" 2>/dev/null)"; fp_rc=$?
+    check "footprint flags the collision without --accept [$m]" 1 "$(grep -c "^$other " <<<"$fp_out")"
+    fp_out="$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" --accept "$other" 2>/dev/null)"; fp_rc=$?
+    check "--accept skips the false match [$m]" 0 "$(grep -c "^$other " <<<"$fp_out")"
+    check "--accept still names a different commit's marker [$m]" 1 "$(grep -c "^$flagged " <<<"$fp_out")"
+    check "--accept leaves exit 1 while a marker remains [$m]" 1 "$fp_rc"
+    (cd "$P" && bash "$SC" footprint "$fp_base..HEAD" --accept "$other $flagged" >/dev/null 2>&1); fp_rc=$?
+    check "--accept naming every flagged commit exits 0 [$m]" 0 "$fp_rc"
+done
+(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" --accept "not-a-sha" >/dev/null 2>&1); fp_rc=$?
+check "--accept refuses a value that is not short SHAs" 2 "$fp_rc"
 (cd "$P" && bash "$SC" footprint "nosuchref..HEAD" >/dev/null 2>&1); fp_rc=$?
 check "footprint on a range git cannot read exits 2, not 0" 2 "$fp_rc"
 

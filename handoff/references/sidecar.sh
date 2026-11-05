@@ -38,7 +38,7 @@
 #   sidecar.sh stamp clear <branch>
 #   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>]
 #   sidecar.sh fixrun list <branch> [--range <rev-range>]   (one "<sha> <run-id> <thread-url|->" line per record)
-#   sidecar.sh footprint <rev-range>   (prints each pack marker in the range's commit messages; exit 1 on any, 2 if unread; no sidecar needed)
+#   sidecar.sh footprint <rev-range> [--accept "<short sha> ..."]   (prints each pack marker in the range's commit messages; exit 1 on any, 2 if unread; no sidecar needed)
 #   sidecar.sh work create --kind <prd|slice> [--parent W-n] [--blocked-by W-n,...] [--milestone <str>]
 #                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
 #   sidecar.sh work view <W-n> [--json]
@@ -71,6 +71,8 @@
 # footprint. Scans commit messages, not the sidecar: a fixup!/squash!/amend!
 # subject, a Fix-Findings-Run: or Review-Thread: line, a W-<n> id, or /<skill>
 # for any name in PACK_SKILLS. docs/state-backend.md states the rule it checks.
+# --accept skips the commits whose short SHAs (as footprint printed them) the
+# operator confirmed are false matches, such as a client's /help route.
 #
 # work. <sidecar>/work/W-<n>.md is a PRD or slice on the sidecar backend: YAML
 # frontmatter between --- lines, the body, then "## Comment <ISO-8601>"
@@ -1489,16 +1491,20 @@ cmd_fixrun() {
 PACK_SKILLS="api-design-review closeout compound correct-course create-milestone design-an-interface excavate execute fix-findings git-guardrails-claude-code handoff help improve-codebase-architecture improve-pipeline init-pipeline lfg mermaid prd-to-issues pre-merge prototype qa re-pitch request-refactor-plan research respond-to-review setup-pre-commit setup-ralph-loop shape tdd triage-issue ts-audit ubiquitous-language visual-recap walk-commits write-a-prd"
 
 cmd_footprint() {
-    local range log names
-    if [ $# -ne 1 ] || [ -z "$1" ]; then die_usage "usage: sidecar.sh footprint <rev-range>"; fi
+    local range log names accept=""
+    if [ $# -eq 3 ] && [ "$2" = --accept ]; then accept="$3"; set -- "$1"; fi
+    if [ $# -ne 1 ] || [ -z "$1" ]; then die_usage "usage: sidecar.sh footprint <rev-range> [--accept \"<short sha> ...\"]"; fi
     range="$1"
+    # The matcher cannot tell a pack skill from a client's own /help route or W-9 form,
+    # so the operator can name the commits they confirmed are false matches.
+    case "$accept" in *[!0-9a-f\ ]*) die_usage "footprint: --accept takes short commit SHAs separated by spaces" ;; esac
     in_repo || refuse "not inside a git repository"
     # A unit-separator line between commits: no commit message can forge it by accident.
     log="$(pgit log --format=$'\037%h%n%B' "$range" --)" \
         || { printf 'sidecar.sh: footprint: git log %s failed; nothing was checked\n' "$range" >&2; exit 2; }
     names="$(printf '%s' "$PACK_SKILLS" | tr ' ' '|')"
-    printf '%s\n' "$log" | awk -v names="$names" '
-        BEGIN { skill = "(^|[^A-Za-z0-9_./-])/(" names ")([^A-Za-z0-9_-]|$)"; found = 0 }
+    printf '%s\n' "$log" | awk -v names="$names" -v accept="$accept" '
+        BEGIN { n = split(accept, acc, " "); skill = "(^|[^A-Za-z0-9_./-])/(" names ")([^A-Za-z0-9_-]|$)"; found = 0 }
         /^\037/ { sha = substr($0, 2); first = 1; next }
         {
             m = ""
@@ -1507,6 +1513,7 @@ cmd_footprint() {
             else if ($0 ~ /(^|[^A-Za-z0-9_-])W-[0-9]+([^0-9]|$)/) m = "a W- work item id"
             else if ($0 ~ skill) m = "a skill name"
             first = 0
+            for (i = 1; i <= n; i++) if (acc[i] == sha) m = ""
             if (m != "") { print sha " " m ": " $0; found = 1 }
         }
         END { exit found }'
