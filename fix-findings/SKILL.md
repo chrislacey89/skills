@@ -201,8 +201,7 @@ The fixer's instructions, in order:
    also carries `Review-Thread: <url>`, the thread's URL verbatim, on
    the line just above it. That is how `/respond-to-review` finds the fix on a later round, from
    the tree. On the `sidecar` backend the message follows
-   [references/state-backend.md](references/state-backend.md) § Commit messages. The
-   brief says which backend Step 0 found. One commit per fix — a fix
+   [references/state-backend.md](references/state-backend.md) § Commit messages. One commit per fix — a fix
    squashed together with another is a fix nobody can read separately.
    **When the lines the finding anchors on came from one commit on this
    branch, and the branch is unshared, make it a fixup of that commit.** Find
