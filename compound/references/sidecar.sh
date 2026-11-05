@@ -1490,7 +1490,7 @@ PACK_SKILLS="api-design-review closeout compound correct-course create-milestone
 
 cmd_footprint() {
     local range log names
-    [ $# -eq 1 ] && [ -n "$1" ] || die_usage "usage: sidecar.sh footprint <rev-range>"
+    if [ $# -ne 1 ] || [ -z "$1" ]; then die_usage "usage: sidecar.sh footprint <rev-range>"; fi
     range="$1"
     in_repo || refuse "not inside a git repository"
     # A unit-separator line between commits: no commit message can forge it by accident.
