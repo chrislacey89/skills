@@ -508,6 +508,120 @@ else
 fi
 
 # ============================================================================
+section "5. The controller's instruction check, run against planted fixes"
+# ============================================================================
+
+# INSTRUCTION_CHECK_HEAD is the first line of the fenced block in Step 1 that
+# this section runs. Written once; the extractor and its FATAL both read it.
+INSTRUCTION_CHECK_HEAD="# Did the words this fix removed include a code span? Then the sentence carried an instruction."
+
+# extract_instruction_check <file> — the body of the ```bash block whose first
+# line is $INSTRUCTION_CHECK_HEAD, fences excluded.
+extract_instruction_check() {
+    awk -v head="$INSTRUCTION_CHECK_HEAD" '
+        /^```bash$/ { infence = 1; first = 1; next }
+        infence && first { first = 0; if ($(0) == head) { taking = 1; print; next } }
+        infence && /^```$/ { if (taking) exit; infence = 0; next }
+        taking { print }
+    ' "$1"
+}
+
+check_block="$(extract_instruction_check "$fix_findings_skill")"
+[ -n "$check_block" ] || fatal "no \`\`\`bash block starting '$INSTRUCTION_CHECK_HEAD' found in $fix_findings_skill — the controller's instruction check is shaped differently than expected; report this rather than editing the subject file to fit."
+for placeholder in 'FIX_SHA="<the SHA the fixer reported>"' 'FILE="<the finding'"'"'s file>"'; do
+    grep -qxF -- "$placeholder" <<< "$check_block" || fatal "the instruction check no longer binds its input as: $placeholder"
+done
+
+# run_instruction_check <repo> <sha> <file> — the real block, its two
+# placeholder lines bound to the fixture, run with the fixture as cwd. Prints
+# stdout then "exit=<n>".
+run_instruction_check() {
+    local repo="$1" sha="$2" file="$3" script rc
+    script="$(printf '%s\n' "$check_block" \
+        | sed -e "s|^FIX_SHA=\"<the SHA the fixer reported>\"\$|FIX_SHA=\"$sha\"|" \
+              -e "s|^FILE=\"<the finding's file>\"\$|FILE=\"$file\"|")"
+    rc=0
+    (cd "$repo" && bash -c "$script" 2>/dev/null) || rc=$?
+    printf 'exit=%s\n' "$rc"
+}
+
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+fixture="$(mktemp -d)"
+trap 'rm -f "$exclude_list"; rm -rf "$plant_dir" "$fixture"' EXIT
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL="$fixture/gitconfig"
+git config --file "$GIT_CONFIG_GLOBAL" user.name "Disposition Tester"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "tester@example.com"
+git config --file "$GIT_CONFIG_GLOBAL" commit.gpgsign false
+repo="$fixture/repo"
+git init -q "$repo"
+
+# fixture_fix <before> <after> — commits <before> as doc.md, then <after>,
+# and prints the second commit's SHA.
+fixture_fix() {
+    printf '%s\n' "$1" > "$repo/doc.md"
+    git -C "$repo" add doc.md
+    git -C "$repo" commit -q -m before
+    printf '%s\n' "$2" > "$repo/doc.md"
+    git -C "$repo" commit -q -am fix
+    git -C "$repo" rev-parse HEAD
+}
+
+bt="$(printf '\140')"
+# PR #708's O2: a pointer replaced a clause that carried `-m`.
+o2_sha="$(fixture_fix \
+    "Commit with ${bt}git commit --fixup=<sha>${bt}; give ${bt}-m${bt} the message and trailer above. Then check the fold." \
+    "Commit with ${bt}git commit --fixup=<sha>${bt}; item 5 states the commit message for each backend. Then check the fold.")"
+o2_out="$(run_instruction_check "$repo" "$o2_sha" doc.md)"
+if grep -qxF 'instruction check: rejected: carries an instruction' <<< "$o2_out" && grep -qxF 'exit=0' <<< "$o2_out"; then
+    ok "a pointer whose removed words include a code span (PR #708's O2) is rejected: carries an instruction"
+else
+    bad "the O2-shaped pointer was not rejected" "$o2_out"
+fi
+
+# PR #708's O1: a false claim with no code span, deleted whole.
+o1_sha="$(fixture_fix \
+    "Intro line.
+
+The brief says which backend Step 0 found.
+
+Outro line." \
+    "Intro line.
+
+Outro line.")"
+o1_out="$(run_instruction_check "$repo" "$o1_sha" doc.md)"
+if grep -qxF 'instruction check: no code span removed' <<< "$o1_out" && grep -qxF 'exit=0' <<< "$o1_out"; then
+    ok "a plain claim deletion with no code span passes the instruction check"
+else
+    bad "a plain claim deletion was not passed" "$o1_out"
+fi
+
+# A pointer that ADDS a code span and removes none: only removed words count.
+ptr_sha="$(fixture_fix \
+    "Lead. The stamp has one writer. Tail." \
+    "Lead. See ${bt}docs/state-backend.md${bt}. Tail.")"
+ptr_out="$(run_instruction_check "$repo" "$ptr_sha" doc.md)"
+if grep -qxF 'instruction check: no code span removed' <<< "$ptr_out"; then
+    ok "a pointer that adds a code span but removes none passes"
+else
+    bad "a code span on the added side tripped the check" "$ptr_out"
+fi
+
+# Fails closed: an unresolvable SHA, and a fix that does not touch the file.
+bad_out="$(run_instruction_check "$repo" "0000000000000000000000000000000000000000" doc.md)"
+if ! grep -qxF 'exit=0' <<< "$bad_out" && ! grep -q '^instruction check: ' <<< "$bad_out"; then
+    ok "an unresolvable SHA aborts the check with no verdict"
+else
+    bad "an unresolvable SHA produced a verdict or exit 0" "$bad_out"
+fi
+miss_out="$(run_instruction_check "$repo" "$o2_sha" other.md)"
+if ! grep -qxF 'exit=0' <<< "$miss_out" && ! grep -q '^instruction check: ' <<< "$miss_out"; then
+    ok "a fix that changes nothing in the named file aborts the check with no verdict"
+else
+    bad "a fix outside the named file produced a verdict or exit 0" "$miss_out"
+fi
+
+# ============================================================================
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
