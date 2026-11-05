@@ -225,8 +225,8 @@ The fixer's instructions, in order:
    line and the branch passes `/pre-merge` Phase 2's unshared test, which is
    the `@{u}` line. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
-   Commit with `git commit --fixup=<that SHA>`, and give `-m` the message
-   and trailer above. Then check that the branch still folds:
+   Commit with `git commit --fixup=<that SHA>`; item 5 states the commit
+   message for each backend. Then check that the branch still folds:
 
    ```bash
    # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
