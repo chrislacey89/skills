@@ -183,6 +183,26 @@ This precondition **never hard-blocks**. `/closeout` is HITL and non-blocking by
 
 The git guardrail makes the same comparison at the merge itself; its refusal condition, where it reads the stamp, and the limits on that read are stated once, in `/git-guardrails-claude-code` ("What Gets Blocked Conditionally"). So the **Merge anyway** branch above needs the opt-out named in Step 3.
 
+**Commit messages, again, on the `sidecar` backend.** `/pre-merge` Phase 2 scanned the branch's commits before the PR opened. Commits that landed on the open PR after that (`/compound`'s in-PR commit, `/fix-findings` commits from `/respond-to-review`) were not scanned, and they reach the host with the squash or the PR's commit list. Scan the whole range again before the merge. The rule and the `--accept` escape are in [references/state-backend.md](references/state-backend.md) § Commit messages:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+case "$(bash "$SC" backend stamp)" in
+  github) echo "backend is github: pack text in commit messages is the repo's own convention; skipping the scan" ;;
+  sidecar)
+    FP_RANGE=$(bash "$SC" range) || { echo "closeout aborted: sidecar.sh range failed" >&2; exit 1; }
+    FP_ACCEPT=""   # short SHAs the operator confirmed are the client's own text (a /help route, a W-9 form); else empty
+    FP_RC=0
+    bash "$SC" footprint "$FP_RANGE" --accept "$FP_ACCEPT" >&2 || FP_RC=$?
+    case "$FP_RC" in
+      0) ;;
+      1) echo "closeout aborted: the commit messages above carry pack text the client would read. Reword them, then run this block again. If the operator confirms a line is the client's own text, put that commit's short SHA in FP_ACCEPT." >&2; exit 1 ;;
+      *) echo "closeout aborted: sidecar.sh footprint could not read the branch's commits" >&2; exit 1 ;;
+    esac ;;
+  *) echo "closeout aborted: sidecar.sh backend stamp failed; not guessing the github path" >&2; exit 1 ;;
+esac
+```
+
 ### 3. Merge the PR
 
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it, and **give the squash commit the PR body as its message**. Without `--body-file`, `gh` builds the squash message from the per-unit commit messages, so a reader who runs `git blame` months later lands on every fix-round message concatenated (bodies of 200–400 lines were measured across four repos on 2026-09-10) and never on the walkthrough `/pre-merge` Phase 2 wrote. That is also why authors put history in code comments: it was the only per-line record that survived the merge. `/execute` and `/compound` route incident history to the PR body on the promise that it lasts; this flag is what keeps the promise.

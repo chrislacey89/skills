@@ -381,9 +381,17 @@ bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
 git add <path/to/entry>   # docs/solutions/<category>/<filename>.md, or the file Phase 3 wrote under in_tree_path
 git add <path/to/mechanism>   # Phase 4's mechanism — omit when Phase 4 did not fire, or recorded that none could be built
 git add UBIQUITOUS_LANGUAGE.md   # Phase 1's Vocabulary check — omit when it wrote nothing
-git commit -m "docs: compound — <brief description of what was learned>"
+SC="<this skill's directory>/references/sidecar.sh"
+case "$(bash "$SC" backend stamp)" in
+  github) SUBJECT="docs: compound — <brief description of what was learned>" ;;
+  sidecar) SUBJECT="<plain subject naming what was learned>" ;;   # no "docs: compound" prefix: on a guest repo the subject reaches the client's PR
+  *) echo "compound aborted: sidecar.sh backend stamp failed; not guessing the github subject" >&2; exit 1 ;;
+esac
+git commit -m "$SUBJECT"
 git push        # in-PR path: push so the entry joins the open PR for review
 ```
+
+On the `sidecar` backend the subject names the lesson in plain words and carries no skill name, per [references/state-backend.md](references/state-backend.md) § Commit messages. Nothing reads the `docs: compound` prefix: `/closeout` Step 2 and `/pre-merge` judge this commit by its paths.
 
 An entry claiming a mechanism, committed while that mechanism sits unstaged, is the unenforced-claim shape Phase 4 exists to close.
 

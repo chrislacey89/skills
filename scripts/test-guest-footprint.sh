@@ -537,6 +537,47 @@ commit_msg "Fix the report totals" "The report summed refunds twice."
 run_pm W-1 "$SC" ""
 check "phase 2: a branch of plain commits opens its PR" 0 "$pm_rc"
 
+# Commits that land after /pre-merge Phase 2 (#585 C4): /compound's in-PR commit
+# takes a plain subject on the sidecar backend, and /closeout scans the whole
+# range again before it merges.
+CMP="$repo_root/compound/SKILL.md"
+# shellcheck disable=SC2016  # the needles are the skills' literal text
+{
+cmp_block="$(block "$CMP" 'git commit -m "$SUBJECT"')"
+cof_block="$(block "$CO" 'footprint "$FP_RANGE"')"
+}
+[ -n "$cmp_block" ] || bad "compound/SKILL.md in-PR path carries the subject block" "not found"
+[ -n "$cof_block" ] || bad "closeout/SKILL.md carries the pre-merge footprint block" "not found"
+run_late() {  # <block> — run in $P with the skill's sidecar.sh; exit in $late_rc
+    local b="${1//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+    b="${b//git commit -m/git commit -q --allow-empty -m}"
+    b="${b//git push/true}"
+    b="$(grep -v '^git add ' <<<"$b")"
+    (cd "$P" && bash -c "$b" >/dev/null 2>"$tmp/late-err"); late_rc=$?
+}
+mkguest "compound subject, sidecar" init
+run_late "$cmp_block"
+check "compound: the sidecar arm commits" 0 "$late_rc"
+check "compound: the sidecar arm's subject carries no 'docs: compound' prefix" 0 "$(git -C "$P" log -1 --format=%s | grep -c 'docs: compound')"
+mkguest "compound subject, github" noinit
+run_late "$cmp_block"
+check "compound: the github arm keeps the 'docs: compound' subject" 1 "$(git -C "$P" log -1 --format=%s | grep -c '^docs: compound')"
+run_late "${cmp_block//backend stamp/backend nosuchverb}"
+check "compound: an unknown backend answer aborts" 1 "$late_rc"
+mkguest "closeout rescan, plain" init
+commit_msg "Fix the report totals" "The report summed refunds twice."
+run_late "$cof_block"
+check "closeout rescan: plain commits pass" 0 "$late_rc"
+commit_msg "Capture the refund lesson" "Follows /compound Phase 5"
+run_late "$cof_block"
+check "closeout rescan: a late commit carrying a skill name stops the merge" 1 "$late_rc"
+mkguest "closeout rescan, github" noinit
+commit_msg "docs: compound — a lesson" "Implements W-1"
+run_late "$cof_block"
+check "closeout rescan: the github backend is not scanned" 0 "$late_rc"
+run_late "${cof_block//backend stamp/backend nosuchverb}"
+check "closeout rescan: an unknown backend answer aborts" 1 "$late_rc"
+
 # The skill names footprint looks for are the pack's own: every directory here
 # with a SKILL.md. A skill added without its name in the list fails here.
 pack_skills="$(for d in "$repo_root"/*/SKILL.md; do basename "$(dirname "$d")"; done | LC_ALL=C sort)"
