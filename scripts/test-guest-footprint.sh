@@ -437,6 +437,10 @@ check "fixrun list --range keeps only records whose commit is in the range" "$s2
     "$(cd "$P" && bash "$SC" fixrun list feat --range "$s1..HEAD")"
 check "fixrun list --range on a range git cannot read exits nonzero" 1 \
     "$(cd "$P" && if bash "$SC" fixrun list feat --range "nosuchref..HEAD" >/dev/null 2>&1; then echo 0; else echo 1; fi)"
+decoy="$tmp/decoy-gitdir"
+git init -q "$decoy"
+check "fixrun list --range ignores an inherited GIT_DIR pointing at another repo" "$s2 20261104T130000Z -" \
+    "$(cd "$P" && GIT_DIR="$decoy/.git" bash "$SC" fixrun list feat --range "$s1..HEAD")"
 
 # -----------------------------------------------------------------------------
 section "footprint: a guest branch's commit messages carry no pack text (#585)"

@@ -1468,7 +1468,7 @@ cmd_fixrun() {
             ;;
         list)
             if [ -n "$range" ]; then
-                in_range="$(git rev-list "$range" --)" || refuse "fixrun list: git rev-list $range failed"
+                in_range="$(pgit rev-list "$range" --)" || refuse "fixrun list: git rev-list $range failed"
             fi
             [ -f "$sc/$f" ] || return 0
             # A line that does not parse, or names another branch, is skipped:
