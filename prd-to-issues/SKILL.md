@@ -330,7 +330,7 @@ SC="<this skill's directory>/references/sidecar.sh"
 ID="W-<slice>"
 J="$(bash "$SC" work view "$ID" --json)" || exit 1
 FIELD="$(jq -r '(.blocked_by // [])[]' <<<"$J" | sort -u | paste -sd, -)"
-PROSE="$(jq -r '.body' <<<"$J" | awk '/^## /{on = ($0 ~ /^## Blocked by[[:space:]]*$/); next} on' | grep -oE 'W-[0-9]+' | sort -u | paste -sd, -)"
+PROSE="$(jq -r '.body' <<<"$J" | awk '/^## /{on = ($(0) ~ /^## Blocked by[[:space:]]*$/); next} on' | grep -oE 'W-[0-9]+' | sort -u | paste -sd, -)"
 if [ "$FIELD" = "$PROSE" ]; then
   echo "match $ID: [$FIELD]"
 else

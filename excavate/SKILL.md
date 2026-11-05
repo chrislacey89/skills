@@ -204,7 +204,7 @@ sees each copy as a separate revision:
 
 ```bash
 git log --since="$SINCE" --no-merges --reverse -p --format='commit %H' HEAD -- . "${NONDOMAIN[@]}" </dev/null \
-  | git patch-id --stable | awk 'seen[$1]++ { print $2 }' > "$WORK/dups.txt"
+  | git patch-id --stable | awk 'seen[$(1)]++ { print $(2) }' > "$WORK/dups.txt"
 wc -l < "$WORK/dups.txt" | tr -d ' '
 ```
 
@@ -278,9 +278,9 @@ exclusions cannot drift between them:
 git log --since="$SINCE" --no-merges --name-only --date=short --pretty=format:'@@%H%x09%aN%x09%ad%x09%s' -- . "${NONDOMAIN[@]}" </dev/null \
   | awk -v bots="$BOTS" -v max="$MAXFILES" '
 function flush(   i) { if (hdr != "") { print hdr; if (n <= max) for (i = 1; i <= n; i++) print f[i] } hdr = ""; n = 0 }
-/^@@/ { flush(); split($0, h, "\t"); skip = (h[2] ~ bots); if (!skip) hdr = $0; next }
+/^@@/ { flush(); split($(0), h, "\t"); skip = (h[2] ~ bots); if (!skip) hdr = $(0); next }
 skip  { next }
-NF    { f[++n] = $0 }
+NF    { f[++n] = $(0) }
 END   { flush() }' > "$WORK/log.txt"
 ```
 
@@ -297,7 +297,7 @@ The scrub list is built from the same log, in the same step, so it exists
 before anything downstream needs it:
 
 ```bash
-awk -F'\t' '/^@@/ && $2 != "" { print $2 }' "$WORK/log.txt" | sort -u > "$WORK/names.txt"
+awk -F'\t' '/^@@/ && $(2) != "" { print $(2) }' "$WORK/log.txt" | sort -u > "$WORK/names.txt"
 ```
 
 The log already dropped bot commits, so the file lists only human `%aN`
@@ -411,8 +411,8 @@ than `FNR == NR`, which silently swallows the second input when the first is
 empty):
 
 ```bash
-{ awk -F'\t' '{ print "L\t" $1 "\t" $2 }' "$WORK/loc.txt"; awk '{ c = $1; sub(/^ *[0-9]+ /, ""); print "F\t" c "\t" $0 }' "$WORK/freq.txt"; } \
-  | awk -F'\t' -v floor=50 '$1 == "L" { loc[$3] = $2; next } $1 == "F" { fq[$3] = $2 } END { for (p in fq) if ((p in loc) && loc[p] >= floor) printf "%d\t%d\t%s\n", fq[p], loc[p], p }' \
+{ awk -F'\t' '{ print "L\t" $(1) "\t" $(2) }' "$WORK/loc.txt"; awk '{ c = $(1); sub(/^ *[0-9]+ /, ""); print "F\t" c "\t" $(0) }' "$WORK/freq.txt"; } \
+  | awk -F'\t' -v floor=50 '$(1) == "L" { loc[$(3)] = $(2); next } $(1) == "F" { fq[$(3)] = $(2) } END { for (p in fq) if ((p in loc) && loc[p] >= floor) printf "%d\t%d\t%s\n", fq[p], loc[p], p }' \
   | sort -t"$(printf '\t')" -k1,1nr -k2,2nr > "$WORK/hotspots.txt"
 ```
 
@@ -422,7 +422,7 @@ the leader's. Beside the knee table print the baselines a bare count lacks,
 and report the measured share rather than calling it "80/20":
 
 ```bash
-awk -F'\t' -v knee=5 '{ r[NR] = $1; t += $1 } END { if (NR) { for (i = 1; i <= knee && i <= NR; i++) k += r[i]; printf "files %d\tmedian %d\tp90 %d\tknee share %.0f%% of %d revisions\n", NR, r[int((NR + 1) / 2)], r[int(NR * 0.1) + 1], 100 * k / t, t } }' "$WORK/hotspots.txt"
+awk -F'\t' -v knee=5 '{ r[NR] = $(1); t += $(1) } END { if (NR) { for (i = 1; i <= knee && i <= NR; i++) k += r[i]; printf "files %d\tmedian %d\tp90 %d\tknee share %.0f%% of %d revisions\n", NR, r[int((NR + 1) / 2)], r[int(NR * 0.1) + 1], 100 * k / t, t } }' "$WORK/hotspots.txt"
 ```
 
 Files below the LOC floor are listed separately as "churny but
@@ -433,13 +433,13 @@ small" (usually config), and large files with zero or one revision as
 `dups.txt` commits left out, then compare the top five:
 
 ```bash
-awk -v d="$WORK/dups.txt" 'BEGIN { while ((getline s < d) > 0) x[s] = 1 } /^@@/ { sha = substr($1, 3); next } NF && !(sha in x)' "$WORK/log.txt" \
+awk -v d="$WORK/dups.txt" 'BEGIN { while ((getline s < d) > 0) x[s] = 1 } /^@@/ { sha = substr($(1), 3); next } NF && !(sha in x)' "$WORK/log.txt" \
   | sort | uniq -c | sort -rn > "$WORK/freq-dedup.txt"
-{ awk -F'\t' '{ print "H\t" $2 "\t" $3 }' "$WORK/hotspots.txt"; awk '{ c = $1; sub(/^ *[0-9]+ /, ""); print "F\t" c "\t" $0 }' "$WORK/freq-dedup.txt"; } \
-  | awk -F'\t' '$1 == "H" { loc[$3] = $2; next } $1 == "F" { fq[$3] = $2 } END { for (p in loc) printf "%d\t%d\t%s\n", fq[p], loc[p], p }' \
+{ awk -F'\t' '{ print "H\t" $(2) "\t" $(3) }' "$WORK/hotspots.txt"; awk '{ c = $(1); sub(/^ *[0-9]+ /, ""); print "F\t" c "\t" $(0) }' "$WORK/freq-dedup.txt"; } \
+  | awk -F'\t' '$(1) == "H" { loc[$(3)] = $(2); next } $(1) == "F" { fq[$(3)] = $(2) } END { for (p in loc) printf "%d\t%d\t%s\n", fq[p], loc[p], p }' \
   | sort -t"$(printf '\t')" -k1,1nr -k2,2nr > "$WORK/hotspots-dedup.txt"
-awk -F'\t' 'FILENAME == ARGV[1] { w[$3] = $1; rw[$3] = FNR; if (FNR <= 5) o[++n] = $3; next }
-    { d[$3] = $1; if (FNR <= 5 && !(rw[$3] && rw[$3] <= 5)) o[++n] = $3 }
+awk -F'\t' 'FILENAME == ARGV[1] { w[$(3)] = $(1); rw[$(3)] = FNR; if (FNR <= 5) o[++n] = $(3); next }
+    { d[$(3)] = $(1); if (FNR <= 5 && !(rw[$(3)] && rw[$(3)] <= 5)) o[++n] = $(3) }
     END { print "top five without duplicates (revisions with copies counted -> copies left out):"
           for (i = 1; i <= n; i++) printf "%d -> %d\t%s\n", w[o[i]], d[o[i]], o[i] }' "$WORK/hotspots.txt" "$WORK/hotspots-dedup.txt"
 ```
@@ -471,7 +471,7 @@ log's:
 git rev-list --since="$SINCE" --no-merges -i -E --grep='fix|bug|regress|revert' HEAD </dev/null > "$WORK/fixshas.txt"
 awk -F'\t' -v shas="$WORK/fixshas.txt" '
 BEGIN { while ((getline s < shas) > 0) fix[s] = 1 }
-/^@@/ { sha = substr($1, 3); next }
+/^@@/ { sha = substr($(1), 3); next }
 NF && (sha in fix) { print }' "$WORK/log.txt" | sort | uniq -c | sort -rn > "$WORK/fix.txt"
 ```
 
@@ -500,13 +500,13 @@ function flush(   i, j, a, b, t) {
   n = 0
 }
 /^@@/ { flush(); next }
-NF    { f[++n] = $0 }
+NF    { f[++n] = $(0) }
 END   { flush(); for (k in pair) print pair[k] "\t" k }' "$WORK/log.txt" \
   | sort -t"$(printf '\t')" -k1,1nr > "$WORK/pairs.txt"
 ```
 
 ```bash
-awk -F'\t' '{ soc[$2] += $1; soc[$3] += $1 } END { for (f in soc) print soc[f] "\t" f }' "$WORK/pairs.txt" | sort -t"$(printf '\t')" -k1,1nr > "$WORK/soc.txt"
+awk -F'\t' '{ soc[$(2)] += $(1); soc[$(3)] += $(1) } END { for (f in soc) print soc[f] "\t" f }' "$WORK/pairs.txt" | sort -t"$(printf '\t')" -k1,1nr > "$WORK/soc.txt"
 ```
 
 For each hotspot's top partners, the degree is shared commits divided by the
@@ -530,7 +530,7 @@ if [ "$total" -ge 4 ]; then
   for q in 1 2 3 4; do
     r=$(sed -n "$(( (total * q + 3) / 4 ))p" "$WORK/revs.txt")
     [ -n "$r" ] || continue
-    git show "${r}:${FILE}" 2>/dev/null | awk -v q="$q" -v r="${r:0:9}" '{ loc++; match($0, /^[ \t]*/); ind += RLENGTH } END { printf "%s\t%s\t%d\t%d\n", q, r, loc, ind }'
+    git show "${r}:${FILE}" 2>/dev/null | awk -v q="$q" -v r="${r:0:9}" '{ loc++; match($(0), /^[ \t]*/); ind += RLENGTH } END { printf "%s\t%s\t%d\t%d\n", q, r, loc, ind }'
   done
 fi
 ```
@@ -546,11 +546,11 @@ than LOC is **Deteriorating**; both down is **Refactored**; both flat is
 splitting the shared log at its median commit date:
 
 ```bash
-MID=$(grep '^@@' "$WORK/log.txt" | cut -f3 | sort | awk '{ d[NR] = $0 } END { if (NR) print d[int((NR + 1) / 2)] }')
+MID=$(grep '^@@' "$WORK/log.txt" | cut -f3 | sort | awk '{ d[NR] = $(0) } END { if (NR) print d[int((NR + 1) / 2)] }')
 awk -F'\t' -v mid="$MID" '
 function flush(   i) { for (i = 1; i <= n; i++) cnt[half "\t" f[i]]++; n = 0 }
-/^@@/ { flush(); half = ($3 < mid) ? "first" : "second"; next }
-NF    { f[++n] = $0 }
+/^@@/ { flush(); half = ($(3) < mid) ? "first" : "second"; next }
+NF    { f[++n] = $(0) }
 END   { flush(); for (k in cnt) print cnt[k] "\t" k }' "$WORK/log.txt" | sort -t"$(printf '\t')" -k2,2 -k1,1nr > "$WORK/persist.txt"
 ```
 
@@ -611,7 +611,7 @@ each was last active there:
 
 ```bash
 git shortlog -sn --since="$SINCE" --no-merges HEAD -- <path> </dev/null | grep -Ev "$BOTS"
-git log --since="$SINCE" --no-merges --format='%aN%x09%cs' HEAD -- <path> </dev/null | awk -F'\t' '!seen[$1]++' | grep -Ev "$BOTS"
+git log --since="$SINCE" --no-merges --format='%aN%x09%cs' HEAD -- <path> </dev/null | awk -F'\t' '!seen[$(1)]++' | grep -Ev "$BOTS"
 ```
 
 `HEAD` and `</dev/null` are both required on the first line: with no revision

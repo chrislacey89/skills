@@ -156,12 +156,12 @@ Suggested shape:
 #!/bin/bash
 set -e
 
-if [ -z "$1" ]; then
-  echo "Usage: $0 <iterations>"
+if [ -z "${1}" ]; then
+  echo "Usage: ${0} <iterations>"
   exit 1
 fi
 
-for ((iteration=1; iteration<=$1; iteration++)); do
+for ((iteration=1; iteration<=${1}; iteration++)); do
   # Recompute each iteration — closing a blocker un-gates its dependents,
   # so the frontier grows as the loop makes progress.
   FRONTIER=$(gh issue list --state open --limit 100 --json number,blockedBy \

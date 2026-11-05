@@ -340,7 +340,7 @@ end'
 if ! SLICE_BODY=$(gh issue view "$N" --json body -q .body); then
   echo unknown
 else
-  PRD=$(printf '%s\n' "$SLICE_BODY" | awk '/^## Parent PRD[[:space:]]*$/ { on = 1; next } on && /^## / { exit } on && match($0, /#[0-9]+/) { print substr($0, RSTART + 1, RLENGTH - 1); exit }')
+  PRD=$(printf '%s\n' "$SLICE_BODY" | awk '/^## Parent PRD[[:space:]]*$/ { on = 1; next } on && /^## / { exit } on && match($(0), /#[0-9]+/) { print substr($(0), RSTART + 1, RLENGTH - 1); exit }')
   if [ -z "$PRD" ]; then
     echo no-parent-prd
   else
