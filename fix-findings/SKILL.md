@@ -200,8 +200,8 @@ The fixer's instructions, in order:
    verbatim, and a fix for a teammate review thread
    also carries `Review-Thread: <url>`, the thread's URL verbatim, on
    the line just above it. That is how `/respond-to-review` finds the fix on a later round, from
-   the tree. On the `sidecar` backend the message names the change and its
-   reason and nothing else: no trailer lines, no `W-` id, no skill name. The
+   the tree. On the `sidecar` backend the message follows
+   [references/state-backend.md](references/state-backend.md) § Commit messages. The
    brief says which backend Step 0 found. One commit per fix — a fix
    squashed together with another is a fix nobody can read separately.
    **When the lines the finding anchors on came from one commit on this
