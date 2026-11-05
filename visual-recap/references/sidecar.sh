@@ -4,8 +4,9 @@
 # A sidecar is a private git repository outside the project's tree, at
 # ${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}/<name>/, holding the pack's
 # per-project configuration (sidecar.json), the research archive (research/),
-# solutions entries (solutions/<category>/), and /respond-to-review's records
-# (review-responses/). This script is the only thing
+# solutions entries (solutions/<category>/), /fix-findings' run records
+# (fix-runs/), and /respond-to-review's records (review-responses/). This
+# script is the only thing
 # that computes a sidecar path or runs git against one; skills call it from
 # their bundled references/sidecar.sh and never inline either.
 #
