@@ -215,7 +215,7 @@ The fixer's instructions, in order:
    END="<the anchor's last line>"
    BASE_REF="$(bash "$SC" base-ref)" || { echo "fixup target aborted: sidecar.sh base-ref failed" >&2; exit 1; }
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
-     | awk '{ print $1 }' | sort -u)
+     | awk '{ print $(1) }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
    { git rev-parse -q --verify '@{u}' >/dev/null || [ -n "$(git ls-remote --heads origin "$(git branch --show-current)" 2>/dev/null)" ]; } && FIXUP_TARGET=
    printf 'FIXUP_TARGET=%s\n' "$FIXUP_TARGET"
@@ -231,7 +231,7 @@ The fixer's instructions, in order:
    ```bash
    # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
    SC="<this skill's directory>/references/sidecar.sh"
-   trial_abort() { echo "fold trial aborted: $1; the fixup! commit stays" >&2; exit 1; }
+   trial_abort() { echo "fold trial aborted: ${1}; the fixup! commit stays" >&2; exit 1; }
    BASE_REF="$(bash "$SC" base-ref)" || trial_abort "sidecar.sh base-ref failed"
    FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || trial_abort "no merge base with $BASE_REF"
    TRIAL_HEAD=$(git rev-parse HEAD) || trial_abort "cannot read HEAD"
@@ -738,7 +738,7 @@ case "$(bash "$SC" backend stamp)" in
   sidecar)
     RUNS=$(bash "$SC" fixrun list "$(git branch --show-current)" --range "$RANGE") \
       || { echo "round count aborted: sidecar.sh fixrun list failed" >&2; exit 1; }
-    ROUNDS=$(printf '%s\n' "$RUNS" | awk 'NF { print $2 }' | sort -u | wc -l | tr -d ' ') ;;
+    ROUNDS=$(printf '%s\n' "$RUNS" | awk 'NF { print $(2) }' | sort -u | wc -l | tr -d ' ') ;;
   *) echo "round count aborted: sidecar.sh backend stamp failed" >&2; exit 1 ;;
 esac
 ```

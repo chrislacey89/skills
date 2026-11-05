@@ -669,8 +669,8 @@ check "a failed backend lookup aborts the log read with a nonzero exit" 1 "$([ "
 check "a failed backend lookup reads no trailers" "" "$got_fail"
 check "a failed backend lookup is named on stderr" 1 "$(grep -c 'backend stamp failed' "$tmp/log-fail.err")"
 
-sed 's/length($0) == 47 \&\& \/\^commit\\.\[0-9a-f\]+\$\//\/^commit\\.\//' "$tmp/log.sh" > "$tmp/log-mut.sh"
-check "M5: the mutation loosened the commit match" 0 "$(grep -c 'length(\$0) == 47' "$tmp/log-mut.sh")"
+sed 's/length($(0)) == 47 \&\& \/\^commit\\.\[0-9a-f\]+\$\//\/^commit\\.\//' "$tmp/log.sh" > "$tmp/log-mut.sh"
+check "M5: the mutation loosened the commit match" 0 "$(grep -c 'length(\$(0)) == 47' "$tmp/log-mut.sh")"
 check "M5: with a loose match the trailer is attributed to a body line, not the commit" 1 \
     "$([ "$(cd "$g" && bash "$tmp/log-mut.sh" | awk -v s="$want_sha" '$1 == s')" = "" ] && echo 1 || echo 0)"
 
