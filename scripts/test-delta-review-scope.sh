@@ -727,6 +727,32 @@ case "$failed_out" in
     *) assert_eq "scope aborted ..." "$failed_out" "failed backend: the abort is named on stderr" ;;
 esac
 
+# The round-count block has the same hazard. `range` succeeds here (so the abort
+# under test is the block's own `*)` arm, not its RANGE guard) and `backend
+# stamp` fails. Folding `*)` into the github arm would count trailers over the
+# range: the branch holds Fix-Findings-Run lines, so that would print a count.
+section "failed backend: the round-count block aborts rather than counting trailers"
+failing_sc="$sandbox/failing-backend-sc.sh"
+cat > "$failing_sc" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = range ] && { git merge-base HEAD main; exit 0; }
+[ "$1 $2" = "backend stamp" ] && exit 1
+echo "stub sidecar: unexpected call: $*" >&2; exit 1
+STUB
+rounds_failed_block="${rounds_block//$sidecar_sh/$failing_sc}"
+[[ "$rounds_failed_block" == *"$failing_sc"* ]] || fatal "the failing-backend stub was not substituted into the round-count block"
+rounds_failed_out="$(cd "$repo" && bash -c "$rounds_failed_block"$'\n'"printf 'ROUNDS=[%s]' \"\${ROUNDS:-}\"" 2>&1)"
+rounds_failed_rc=$?
+assert_eq 1 "$rounds_failed_rc" "failed backend: the round-count block exits 1"
+case "$rounds_failed_out" in
+    *"ROUNDS=["*) assert_eq "no count" "$rounds_failed_out" "failed backend: the round-count block counted nothing" ;;
+    *) assert_eq ok ok "failed backend: the round-count block counted nothing" ;;
+esac
+case "$rounds_failed_out" in
+    *"round count aborted"*) assert_eq ok ok "failed backend: the abort is named on stderr" ;;
+    *) assert_eq "round count aborted ..." "$rounds_failed_out" "failed backend: the abort is named on stderr" ;;
+esac
+
 # --- 11. A history-only rewrite of the reviewed tree (#566) ------------------
 # The fold: review fixes are committed as `fixup!` commits, the re-run reviews
 # them and stamps the fixup head, and an autosquash folds each fix into the

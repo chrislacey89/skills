@@ -654,6 +654,21 @@ got="$(cd "$gs" && SKILL_KIT_SIDECAR_ROOT="$tmp/guest-sidecars" SKILL_KIT_RESEAR
 check "on the sidecar backend the read names the fix commit and its thread from the record, and nothing off the branch" \
     "${gs_sha:0:7} https://github.com/acme/guestapp/pull/9#discussion_r2" "$got"
 
+# A backend lookup that fails must abort, not fall through to the trailer read:
+# the fixture branch holds a Review-Thread trailer, so a `*)` folded into the
+# github arm would print a line here.
+cat > "$tmp/sc-fail.sh" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = base-ref ] && { echo basebr; exit 0; }
+exit 1
+STUB
+printf '%s' "$LOGREAD" | sed "s|^SC=\"<this skill's directory>/references/sidecar.sh\"$|SC=\"$tmp/sc-fail.sh\"|" > "$tmp/log-fail.sh"
+got_fail="$(cd "$g" && bash "$tmp/log-fail.sh" 2>"$tmp/log-fail.err")"
+fail_rc=$?
+check "a failed backend lookup aborts the log read with a nonzero exit" 1 "$([ "$fail_rc" -ne 0 ] && echo 1 || echo 0)"
+check "a failed backend lookup reads no trailers" "" "$got_fail"
+check "a failed backend lookup is named on stderr" 1 "$(grep -c 'backend stamp failed' "$tmp/log-fail.err")"
+
 sed 's/length($0) == 47 \&\& \/\^commit\\.\[0-9a-f\]+\$\//\/^commit\\.\//' "$tmp/log.sh" > "$tmp/log-mut.sh"
 check "M5: the mutation loosened the commit match" 0 "$(grep -c 'length(\$0) == 47' "$tmp/log-mut.sh")"
 check "M5: with a loose match the trailer is attributed to a body line, not the commit" 1 \
