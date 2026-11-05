@@ -202,6 +202,15 @@ case "$(bash "$SC" backend stamp)" in
   github) echo "backend is github: write the PR from the templates below, not this block"; exit 0 ;;
   *) echo "PR aborted: sidecar.sh backend stamp failed; not guessing the github templates" >&2; exit 1 ;;
 esac
+FP_RANGE=$(bash "$SC" range) || { echo "PR aborted: sidecar.sh range failed" >&2; exit 1; }
+FP_ACCEPT=""   # short SHAs the operator confirmed are false matches (a client route like /help, a form like W-9); else empty
+FP_RC=0
+bash "$SC" footprint "$FP_RANGE" --accept "$FP_ACCEPT" >&2 || FP_RC=$?
+case "$FP_RC" in
+  0) ;;
+  1) echo "PR aborted: the commit messages above carry pack text the client would read. Fold the fixup! commits and reword the rest, then run this block again. If the operator confirms a line is the client's own text (a /help route, a W-9 form), put that commit's short SHA in FP_ACCEPT and run it again." >&2; exit 1 ;;
+  *) echo "PR aborted: sidecar.sh footprint could not read the branch's commits" >&2; exit 1 ;;
+esac
 DESC_FILE=$(mktemp)
 # Write the plain description into "$DESC_FILE". Nothing below adds to it.
 BRANCH=$(git branch --show-current)

@@ -616,6 +616,7 @@ git -C "$g" commit -q --allow-empty -m "unrelated"
 cat > "$tmp/sc-base.sh" <<'STUB'
 #!/usr/bin/env bash
 [ "$1" = base-ref ] && { echo basebr; exit 0; }
+[ "$1 $2" = "backend stamp" ] && { echo github; exit 0; }
 echo "stub sidecar: unexpected call: $*" >&2; exit 1
 STUB
 printf '%s' "$LOGREAD" | sed "s|^SC=\"<this skill's directory>/references/sidecar.sh\"$|SC=\"$tmp/sc-base.sh\"|" > "$tmp/log.sh"
@@ -626,6 +627,47 @@ got="$(cd "$g" && bash "$tmp/log.sh")"
 check "the log read names the fix commit and its thread" \
     "$want_sha https://github.com/acme/app/pull/7#discussion_r1" \
     "$(awk -v s="$want_sha" '$1 == s' <<<"$got")"
+
+# On the sidecar backend (#585) the fix commit carries no trailer: the thread is
+# on the sidecar's fix-run record, and a record off the branch is not read.
+gs="$tmp/guestrepo"
+git init -q -b main "$gs"
+git -C "$gs" remote add origin https://github.com/acme/guestapp.git
+git -C "$gs" commit -q --allow-empty -m base
+git -C "$gs" checkout -q -b feat
+git -C "$gs" commit -q --allow-empty -m "Guard the empty list"
+gs_sha="$(git -C "$gs" rev-parse HEAD)"
+git -C "$gs" commit -q --allow-empty -m "unrelated"
+SIDECAR_SH="$repo_root/init-pipeline/scripts/sidecar.sh"
+(
+    cd "$gs" || exit 1
+    export SKILL_KIT_SIDECAR_ROOT="$tmp/guest-sidecars" SKILL_KIT_RESEARCH_ARCHIVE="$tmp/guest-archive"
+    bash "$SIDECAR_SH" init --name guestapp --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1
+    bash "$SIDECAR_SH" config set base_ref main >/dev/null 2>&1
+    bash "$SIDECAR_SH" fixrun record feat 20261104T000000Z "$gs_sha" --thread "https://github.com/acme/guestapp/pull/9#discussion_r2" >/dev/null 2>&1
+    bash "$SIDECAR_SH" fixrun record feat 20261104T000000Z 0123456789abcdef0123456789abcdef01234567 --thread "https://github.com/acme/guestapp/pull/9#discussion_r3" >/dev/null 2>&1
+)
+check "the guest fixture holds both fix-run records" 2 \
+    "$(cd "$gs" && SKILL_KIT_SIDECAR_ROOT="$tmp/guest-sidecars" SKILL_KIT_RESEARCH_ARCHIVE="$tmp/guest-archive" bash "$SIDECAR_SH" fixrun list feat | grep -c .)"
+printf '%s' "$LOGREAD" | sed "s|^SC=\"<this skill's directory>/references/sidecar.sh\"$|SC=\"$SIDECAR_SH\"|" > "$tmp/log-guest.sh"
+got="$(cd "$gs" && SKILL_KIT_SIDECAR_ROOT="$tmp/guest-sidecars" SKILL_KIT_RESEARCH_ARCHIVE="$tmp/guest-archive" bash "$tmp/log-guest.sh")"
+check "on the sidecar backend the read names the fix commit and its thread from the record, and nothing off the branch" \
+    "${gs_sha:0:7} https://github.com/acme/guestapp/pull/9#discussion_r2" "$got"
+
+# A backend lookup that fails must abort, not fall through to the trailer read:
+# the fixture branch holds a Review-Thread trailer, so a `*)` folded into the
+# github arm would print a line here.
+cat > "$tmp/sc-fail.sh" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = base-ref ] && { echo basebr; exit 0; }
+exit 1
+STUB
+printf '%s' "$LOGREAD" | sed "s|^SC=\"<this skill's directory>/references/sidecar.sh\"$|SC=\"$tmp/sc-fail.sh\"|" > "$tmp/log-fail.sh"
+got_fail="$(cd "$g" && bash "$tmp/log-fail.sh" 2>"$tmp/log-fail.err")"
+fail_rc=$?
+check "a failed backend lookup aborts the log read with a nonzero exit" 1 "$([ "$fail_rc" -ne 0 ] && echo 1 || echo 0)"
+check "a failed backend lookup reads no trailers" "" "$got_fail"
+check "a failed backend lookup is named on stderr" 1 "$(grep -c 'backend stamp failed' "$tmp/log-fail.err")"
 
 sed 's/length($(0)) == 47 \&\& \/\^commit\\.\[0-9a-f\]+\$\//\/^commit\\.\//' "$tmp/log.sh" > "$tmp/log-mut.sh"
 check "M5: the mutation loosened the commit match" 0 "$(grep -c 'length(\$(0)) == 47' "$tmp/log-mut.sh")"

@@ -140,19 +140,27 @@ scope_block="$(printf '%s\n' "$scope_block" | sed 's/^W="<[^"]*>"$/W="${SCOPE_W:
 [[ "$scope_block" == *'SCOPE_FROM="$REVIEWED_SHA"'* ]] \
     || fatal "scope block extracted from $premerge_skill does not assign SCOPE_FROM from the stamp"
 
-# The round-count line from /fix-findings' next-step menu.
-# shellcheck disable=SC2016  # the grep pattern is the skill's literal text — $(git log is markdown being matched, not a command substitution
-rounds_line="$(grep -m1 '^ROUNDS=\$(git log' "$fixfindings_skill" || true)"
-[[ -n "$rounds_line" ]] || fatal "no ROUNDS= line found in $fixfindings_skill"
-# shellcheck disable=SC2016  # the pattern is the skill's literal text
-[[ "$rounds_line" == *'git log --format=%B "$RANGE"'* ]] || fatal "the ROUNDS line in $fixfindings_skill no longer counts over \$RANGE"
-# shellcheck disable=SC2016
-range_line="$(grep -m1 '^RANGE="\$(bash "\$SC" range' "$fixfindings_skill" || true)"
-[[ -n "$range_line" ]] || fatal "no RANGE= line from sidecar.sh range found in $fixfindings_skill"
-grep -q '^W="<the slice' "$fixfindings_skill" || fatal "no W= placeholder for the slice found in $fixfindings_skill"
-# The three lines as the skill runs them, W taken from ROUNDS_W (empty: no work item).
+# The round-count block from /fix-findings' next-step menu, whole: the fence
+# that holds the RANGE line, through its closing fence. Its github arm counts
+# Fix-Findings-Run lines and its sidecar arm counts fixrun records (#585).
+rounds_block="$(awk '
+    /^```bash$/ { buf = ""; on = 1; next }
+    on && /^```$/ { on = 0; if (index(buf, "round count aborted: sidecar.sh range failed")) { printf "%s", buf; exit } next }
+    on { buf = buf $0 "\n" }
+' "$fixfindings_skill")"
+[[ -n "$rounds_block" ]] || fatal "no round-count block found in $fixfindings_skill"
+# shellcheck disable=SC2016  # the patterns are the skill's literal text
+{
+[[ "$rounds_block" == *'git log --format=%B "$RANGE"'* ]] || fatal "the github arm in $fixfindings_skill no longer counts over \$RANGE"
+[[ "$rounds_block" == *'fixrun list "$(git branch --show-current)" --range "$RANGE"'* ]] || fatal "the sidecar arm in $fixfindings_skill no longer counts fixrun records over \$RANGE"
+[[ "$rounds_block" == *'RANGE="$(bash "$SC" range ${W:+"$W"})"'* ]] || fatal "no RANGE= line from sidecar.sh range found in $fixfindings_skill"
+}
+rounds_block="${rounds_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+# W taken from ROUNDS_W (empty: no work item).
 # shellcheck disable=SC2016  # the ${...} is text for the extracted block to expand, not this shell
-rounds_block="SC=\"$sidecar_sh\""$'\n''W="${ROUNDS_W:-}"'$'\n'"$range_line"$'\n'"$rounds_line"
+rounds_block="$(printf '%s\n' "$rounds_block" | sed 's/^W="<the slice[^"]*>"$/W="${ROUNDS_W:-}"/')"
+# shellcheck disable=SC2016
+[[ "$rounds_block" == *'W="${ROUNDS_W:-}"'* ]] || fatal "the round-count block's W= placeholder was not substituted"
 
 # The fold block from Phase 4's handoff (#566): from its BASE_REF guard to the
 # `fi` that closes the abort arm. Run in section 11 rather than restated, so a
@@ -195,7 +203,7 @@ fold_trial_block="$(awk '
 fold_trial_block="${fold_trial_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
 [[ "$fold_trial_block" == *"$sidecar_sh"* ]] || fatal "fold-trial block's sidecar.sh placeholder was not substituted"
 
-printf 'scope block (%s lines) and rounds line extracted\n' "$(printf '%s\n' "$scope_block" | grep -c .)"
+printf 'scope block (%s lines) and rounds block extracted\n' "$(printf '%s\n' "$scope_block" | grep -c .)"
 
 # --- Fixture ------------------------------------------------------------------
 
@@ -640,9 +648,12 @@ before_count="$(git -C "$repo_slices" rev-list --count HEAD)"
     cd "$repo_slices" || exit 1
     printf 's1\n' > s1.txt && git add s1.txt && git commit -q -m 'slice 1'
     printf 's1fix\n' > s1fix.txt && git add s1fix.txt \
-        && git commit -q -m "$(printf 'fix: slice 1 finding\n\nFix-Findings-Run: 20261001T100000Z')"
+        && git commit -q -m 'fix: slice 1 finding'
 )
 assert_fixture_committed "$repo_slices" "two-slice fixture: slice 1" "$before_count" 2 s1.txt s1fix.txt
+# A guest repo is on the sidecar backend: the fix run is a sidecar record, not a trailer (#585).
+(cd "$repo_slices" && bash "$sidecar_sh" fixrun record feature 20261001T100000Z "$(git rev-parse HEAD)" >/dev/null 2>&1) \
+    || fatal "fixrun record for slice 1 failed"
 (cd "$repo_slices" && bash "$sidecar_sh" work set "$w2" start_sha "$(git rev-parse HEAD)" >/dev/null 2>&1) || fatal "start_sha for $w2 failed"
 w2_start="$(git -C "$repo_slices" rev-parse HEAD)"
 before_count="$(git -C "$repo_slices" rev-list --count HEAD)"
@@ -650,9 +661,11 @@ before_count="$(git -C "$repo_slices" rev-list --count HEAD)"
     cd "$repo_slices" || exit 1
     printf 's2\n' > s2.txt && git add s2.txt && git commit -q -m 'slice 2'
     printf 's2fix\n' > s2fix.txt && git add s2fix.txt \
-        && git commit -q -m "$(printf 'fix: slice 2 finding\n\nFix-Findings-Run: 20261002T100000Z')"
+        && git commit -q -m "$(printf 'fix: slice 2 finding\n\nFix-Findings-Run: 20261002T999999Z')"
 )
 assert_fixture_committed "$repo_slices" "two-slice fixture: slice 2" "$before_count" 2 s2.txt s2fix.txt
+(cd "$repo_slices" && bash "$sidecar_sh" fixrun record feature 20261002T100000Z "$(git rev-parse HEAD)" >/dev/null 2>&1) \
+    || fatal "fixrun record for slice 2 failed"
 (cd "$repo_slices" && bash "$sidecar_sh" stamp clear feature >/dev/null 2>&1)
 
 run_scope_slices() {
@@ -678,8 +691,14 @@ assert_eq "review scope: post-stamp delta, from $w2_stamp|s2b.txt" \
     "a stamped re-run still takes the post-stamp delta when a work item is named"
 
 run_rounds_slices() { (cd "$repo_slices" && ROUNDS_W="$1" bash -c "$rounds_block"$'\n'"printf '%s' \"\$ROUNDS\"" 2>/dev/null); }
-assert_eq "1" "$(run_rounds_slices "$w2")" "the second slice's round count ignores the first slice's Fix-Findings-Run line"
+assert_eq "1" "$(run_rounds_slices "$w2")" "the second slice's round count ignores the first slice's fix-run record"
 assert_eq "2" "$(run_rounds_slices "")" "with no work item the round count covers the branch, as before"
+# The slice-2 commit also carries a stray Fix-Findings-Run line with a third run
+# id. The sidecar arm reads records, never trailers, so it is not a third round.
+assert_eq "2" "$(run_rounds_slices "")" "on the sidecar backend a trailer line in a commit is not counted"
+(cd "$repo_slices" && bash "$sidecar_sh" fixrun record feature 20261003T100000Z 0123456789abcdef0123456789abcdef01234567 >/dev/null 2>&1) \
+    || fatal "fixrun record for an off-branch SHA failed"
+assert_eq "2" "$(run_rounds_slices "")" "a record whose commit is not on the branch (a fold rewrote it) is not counted"
 
 # --- 10. A failed backend -----------------------------------------------------
 
@@ -706,6 +725,32 @@ assert_eq "" "$(cat "$GH_STUB_ARGV_LOG")" "failed backend: the scope block never
 case "$failed_out" in
     *"scope aborted"*) assert_eq ok ok "failed backend: the abort is named on stderr" ;;
     *) assert_eq "scope aborted ..." "$failed_out" "failed backend: the abort is named on stderr" ;;
+esac
+
+# The round-count block has the same hazard. `range` succeeds here (so the abort
+# under test is the block's own `*)` arm, not its RANGE guard) and `backend
+# stamp` fails. Folding `*)` into the github arm would count trailers over the
+# range: the branch holds Fix-Findings-Run lines, so that would print a count.
+section "failed backend: the round-count block aborts rather than counting trailers"
+failing_sc="$sandbox/failing-backend-sc.sh"
+cat > "$failing_sc" <<'STUB'
+#!/usr/bin/env bash
+[ "$1" = range ] && { git merge-base HEAD main; exit 0; }
+[ "$1 $2" = "backend stamp" ] && exit 1
+echo "stub sidecar: unexpected call: $*" >&2; exit 1
+STUB
+rounds_failed_block="${rounds_block//$sidecar_sh/$failing_sc}"
+[[ "$rounds_failed_block" == *"$failing_sc"* ]] || fatal "the failing-backend stub was not substituted into the round-count block"
+rounds_failed_out="$(cd "$repo" && bash -c "$rounds_failed_block"$'\n'"printf 'ROUNDS=[%s]' \"\${ROUNDS:-}\"" 2>&1)"
+rounds_failed_rc=$?
+assert_eq 1 "$rounds_failed_rc" "failed backend: the round-count block exits 1"
+case "$rounds_failed_out" in
+    *"ROUNDS=["*) assert_eq "no count" "$rounds_failed_out" "failed backend: the round-count block counted nothing" ;;
+    *) assert_eq ok ok "failed backend: the round-count block counted nothing" ;;
+esac
+case "$rounds_failed_out" in
+    *"round count aborted"*) assert_eq ok ok "failed backend: the abort is named on stderr" ;;
+    *) assert_eq "round count aborted ..." "$rounds_failed_out" "failed backend: the abort is named on stderr" ;;
 esac
 
 # --- 11. A history-only rewrite of the reviewed tree (#566) ------------------

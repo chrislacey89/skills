@@ -329,15 +329,27 @@ whose `last_at` moved because a teammate replied, gets the full check. On a miss
 the resolver says why (no sidecar, typically). Carry on without a prior round,
 and Step 4 says what happens to the record.
 
-For threads disposed **fix** in an earlier round, read what landed from the
-tree, not from memory. `/fix-findings` ends each teammate-sourced fix commit
-with a `Review-Thread: <url>` line:
+For threads disposed **fix** in an earlier round, read what landed from
+durable state, not from memory. On the `github` backend `/fix-findings` ends
+each teammate-sourced fix commit with a `Review-Thread: <url>` line. On the
+`sidecar` backend the commit carries nothing, and the thread is on the
+sidecar's fix-run record for that commit. This block reads whichever applies
+and prints `<short-sha> <thread-url>` per fix:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
-git log --format=commit.%H%n%B "$BASE_REF..HEAD" \
-  | awk 'length($(0)) == 47 && /^commit\.[0-9a-f]+$/ { sha = substr($(0), 8, 7) } /^Review-Thread: / { print sha, $(2) }'
+case "$(bash "$SC" backend stamp)" in
+  github)
+    git log --format=commit.%H%n%B "$BASE_REF..HEAD" \
+      | awk 'length($(0)) == 47 && /^commit\.[0-9a-f]+$/ { sha = substr($(0), 8, 7) } /^Review-Thread: / { print sha, $(2) }' ;;
+  sidecar)
+    BRANCH_RANGE=$(bash "$SC" range) || { echo "range failed: not guessing a base" >&2; exit 1; }
+    RUNS=$(bash "$SC" fixrun list "$(git branch --show-current)" --range "$BRANCH_RANGE") \
+      || { echo "fixrun list failed: not reading fixes from memory" >&2; exit 1; }
+    printf '%s\n' "$RUNS" | awk '$(3) != "" && $(3) != "-" { print substr($(1), 1, 7), $(3) }' ;;
+  *) echo "backend stamp failed: not guessing where fixes are recorded" >&2; exit 1 ;;
+esac
 ```
 
 ### Step 2. Check each claim in a fresh sub-agent

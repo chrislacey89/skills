@@ -32,6 +32,14 @@
 # too: a guest sidecar, an owned GitLab sidecar, and a refusing backend must
 # stop it before any gh call; an owned GitHub sidecar and no sidecar proceed.
 #
+# Commit messages are the other half (#585). On the sidecar backend
+# /fix-findings records each fix run with `sidecar.sh fixrun` instead of a
+# trailer, and `sidecar.sh footprint` scans a range's commit messages for
+# fixup!/squash!/amend! subjects, Fix-Findings-Run:/Review-Thread: lines, W-
+# ids, and /<skill> names. Both verbs are run here, and so are the two blocks
+# that use them on a guest branch: /fix-findings' record block and the gate at
+# the top of /pre-merge Phase 2's sidecar block. Planted commits turn it red.
+#
 # The detector is itself mutation-tested below: the same blocks run with a
 # marker planted in the description must turn the check red.
 #
@@ -45,7 +53,8 @@ SC="$repo_root/init-pipeline/scripts/sidecar.sh"
 PM="$repo_root/pre-merge/SKILL.md"
 CO="$repo_root/closeout/SKILL.md"
 LFG="$repo_root/lfg/SKILL.md"
-for f in "$SC" "$PM" "$CO" "$LFG"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
+FF="$repo_root/fix-findings/SKILL.md"
+for f in "$SC" "$PM" "$CO" "$LFG" "$FF"; do [ -f "$f" ] || { printf 'FATAL %s is missing\n' "$f"; exit 1; }; done
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
@@ -238,7 +247,7 @@ NOBASE
 mkguest "empty base, refused" init
 PM_BASE="" run_pm W-1 "$tmp/no-base-ref-sc.sh" ""
 check "an empty BASE_BRANCH with base-ref refusing exits nonzero" 1 "$pm_rc"
-check "…and opens no PR" 0 "$(grep -c '^pr create' "$GH_STUB/calls")"
+check "…and opens no PR" 0 "$(grep -hs '^pr create' "$GH_STUB/calls" | grep -c .)"
 check "…and says base-ref failed" 1 "$(grep -c 'base-ref failed' "$tmp/stderr")"
 
 # -----------------------------------------------------------------------------
@@ -395,6 +404,189 @@ mkguest "lfg owned gitlab" init gitlab.com owned
 run_lfg "$SC"
 check "lfg on an owned GitLab sidecar refuses (forge.kind is not github)" 1 "$lfg_rc"
 check "lfg on an owned GitLab sidecar names the reason" 1 "$(grep -c 'backend is the sidecar' "$tmp/stderr")"
+
+# -----------------------------------------------------------------------------
+section "fixrun: a fix run is recorded in the sidecar, not in the commit (#585)"
+
+mkguest "fixrun" init
+s1="$(git -C "$P" rev-parse HEAD)"
+(cd "$P" && bash "$SC" fixrun record feat 20261104T120000Z "$s1" >/dev/null 2>"$tmp/stderr"); rc=$?
+check "fixrun record exits 0" 0 "$rc"
+(cd "$P" && bash "$SC" fixrun record feat 20261104T120000Z "$s1" --thread "https://github.com/acme/guest/pull/7#discussion_r1" >/dev/null 2>&1)
+check "fixrun list prints sha, run, and thread (or -) per record" \
+    "$s1 20261104T120000Z -
+$s1 20261104T120000Z https://github.com/acme/guest/pull/7#discussion_r1" \
+    "$(cd "$P" && bash "$SC" fixrun list feat)"
+check "fixrun list on a branch with no record prints nothing and exits 0" "|0" \
+    "$(cd "$P" && out="$(bash "$SC" fixrun list other)"; printf '%s|%s' "$out" "$?")"
+check "fixrun record commits inside the sidecar" "" "$(git -C "$(cd "$P" && bash "$SC" resolve)" status --porcelain)"
+check "fixrun record leaves the project tree untouched" "" "$(git -C "$P" status --porcelain)"
+for bad_args in "feat 20261104T120000Z abc123" "feat 2026-11-04 $s1" "feat 20261104T120000Z $s1 --thread x\ y"; do
+    (cd "$P" && eval "bash \"\$SC\" fixrun record $bad_args" >/dev/null 2>&1); rc=$?
+    check "fixrun record refuses [$bad_args]" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+done
+check "a refused record adds nothing" 2 "$(cd "$P" && bash "$SC" fixrun list feat | grep -c .)"
+fr_file="$(cd "$P" && bash "$SC" resolve)/fix-runs/feat.jsonl"
+printf 'not json\n{"branch":"other","run":"20261104T120000Z","sha":"%s"}\n' "$s1" >> "$fr_file"
+check "fixrun list skips a line that does not parse and one naming another branch" 2 \
+    "$(cd "$P" && bash "$SC" fixrun list feat | grep -c .)"
+git -C "$P" commit -q --allow-empty -m "Guard the empty list"
+s2="$(git -C "$P" rev-parse HEAD)"
+(cd "$P" && bash "$SC" fixrun record feat 20261104T130000Z "$s2" >/dev/null 2>&1)
+check "fixrun list --range keeps only records whose commit is in the range" "$s2 20261104T130000Z -" \
+    "$(cd "$P" && bash "$SC" fixrun list feat --range "$s1..HEAD")"
+check "fixrun list --range on a range git cannot read exits nonzero" 1 \
+    "$(cd "$P" && if bash "$SC" fixrun list feat --range "nosuchref..HEAD" >/dev/null 2>&1; then echo 0; else echo 1; fi)"
+decoy="$tmp/decoy-gitdir"
+git init -q "$decoy"
+check "fixrun list --range ignores an inherited GIT_DIR pointing at another repo" "$s2 20261104T130000Z -" \
+    "$(cd "$P" && GIT_DIR="$decoy/.git" bash "$SC" fixrun list feat --range "$s1..HEAD")"
+
+# -----------------------------------------------------------------------------
+section "footprint: a guest branch's commit messages carry no pack text (#585)"
+
+# commit_msg <subject> [body] — one empty commit on $P's feat branch.
+commit_msg() { git -C "$P" commit -q --allow-empty -m "$1" ${2:+-m "$2"}; }
+mkguest "commit footprint" init
+fp_base="$(git -C "$P" rev-parse HEAD)"
+commit_msg "Fix the report totals" "The report summed refunds twice, so each refund is now counted once."
+commit_msg "Keep src/execute.ts and the Q-1 form apart" "Paths like lib/tdd and words like re-execute are ordinary text."
+fp_out="$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" 2>&1)"; fp_rc=$?
+check "footprint is silent on plain commit messages" "" "$fp_out"
+check "footprint exits 0 on plain commit messages" 0 "$fp_rc"
+for m in 'Fix-Findings-Run: 20261104T120000Z' 'Review-Thread: https://github.com/acme/guest/pull/7#discussion_r1' \
+         'Implements W-12' 'Ran /fix-findings on it' 'Follows /execute Step 3'; do
+    mkguest "commit footprint [$m]" init
+    fp_base="$(git -C "$P" rev-parse HEAD)"
+    commit_msg "Fix the report totals" "$m"
+    fp_out="$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" 2>/dev/null)"; fp_rc=$?
+    check "footprint names the commit carrying [$m]" 1 "$(grep -c "^$(git -C "$P" rev-parse --short HEAD) " <<<"$fp_out")"
+    check "footprint exits 1 on [$m]" 1 "$fp_rc"
+done
+for s in 'fixup! Fix the report totals' 'squash! Fix the report totals' 'amend! Fix the report totals'; do
+    mkguest "commit footprint [$s]" init
+    fp_base="$(git -C "$P" rev-parse HEAD)"
+    commit_msg "$s"
+    (cd "$P" && bash "$SC" footprint "$fp_base..HEAD" >/dev/null 2>&1); fp_rc=$?
+    check "footprint exits 1 on a [${s%% *}] subject" 1 "$fp_rc"
+done
+# A client's own text collides with the matcher; --accept, naming the SHA, is the way past.
+for m in 'Add a /help page to the dashboard' 'Route GET /research/:id to the new handler' \
+         'Accept W-9 uploads in the vendor form' 'Bump node to v20 (see /qa)'; do
+    mkguest "commit footprint accept [$m]" init
+    fp_base="$(git -C "$P" rev-parse HEAD)"
+    commit_msg "$m"
+    other="$(git -C "$P" rev-parse --short HEAD)"
+    commit_msg "Fix the report totals" "Implements W-12"
+    flagged="$(git -C "$P" rev-parse --short HEAD)"
+    fp_out="$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" 2>/dev/null)"; fp_rc=$?
+    check "footprint flags the collision without --accept [$m]" 1 "$(grep -c "^$other " <<<"$fp_out")"
+    fp_out="$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" --accept "$other" 2>/dev/null)"; fp_rc=$?
+    check "--accept skips the false match [$m]" 0 "$(grep -c "^$other " <<<"$fp_out")"
+    check "--accept still names a different commit's marker [$m]" 1 "$(grep -c "^$flagged " <<<"$fp_out")"
+    check "--accept leaves exit 1 while a marker remains [$m]" 1 "$fp_rc"
+    (cd "$P" && bash "$SC" footprint "$fp_base..HEAD" --accept "$other $flagged" >/dev/null 2>&1); fp_rc=$?
+    check "--accept naming every flagged commit exits 0 [$m]" 0 "$fp_rc"
+done
+(cd "$P" && bash "$SC" footprint "$fp_base..HEAD" --accept "not-a-sha" >/dev/null 2>&1); fp_rc=$?
+check "--accept refuses a value that is not short SHAs" 2 "$fp_rc"
+(cd "$P" && bash "$SC" footprint "nosuchref..HEAD" >/dev/null 2>&1); fp_rc=$?
+check "footprint on a range git cannot read exits 2, not 0" 2 "$fp_rc"
+
+# /fix-findings' controller record block, on a guest branch whose fix commit
+# was written to Step 1's sidecar rule: the run lands in the sidecar, the
+# branch's commits stay clean, and the github arm records nothing.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+ff_block="$(block "$FF" 'fixrun record "$(git branch --show-current)" "$RUN"')"
+[ -n "$ff_block" ] || bad "fix-findings/SKILL.md Step 1 carries the fix-run record block" "not found"
+run_ff() {  # <sidecar.sh path> <sha> <thread> — the record block in $P; exit in $ff_rc
+    local b="${ff_block//<this skill\'s directory>\/references\/sidecar.sh/$1}"
+    b="${b//RUN=\"<the run id Step 0 fixed>\"/RUN=\"20261104T140000Z\"}"
+    b="${b//FIX_SHA=\"<the SHA the fixer reported>\"/FIX_SHA=\"$2\"}"
+    b="${b//THREAD=\"<the teammate review thread\'s URL, or empty for a \/pre-merge finding>\"/THREAD=\"$3\"}"
+    (cd "$P" && bash -c "$b" >/dev/null 2>"$tmp/stderr"); ff_rc=$?
+}
+mkguest "fix-findings record" init
+fp_base="$(git -C "$P" rev-parse HEAD)"
+commit_msg "Guard the empty refund list" "An empty list made the total NaN; it now sums to zero."
+run_ff "$SC" "$(git -C "$P" rev-parse --short HEAD)" "https://github.com/acme/guest/pull/7#discussion_r1"
+check "the record block exits 0 on a guest branch" 0 "$ff_rc"
+check "the fix run is in the sidecar, with its thread, under the full SHA" \
+    "$(git -C "$P" rev-parse HEAD) 20261104T140000Z https://github.com/acme/guest/pull/7#discussion_r1" \
+    "$(cd "$P" && bash "$SC" fixrun list feat)"
+check "the guest branch's commit messages carry no pack text" "" "$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD")"
+check "the project tree is untouched by the record" "" "$(git -C "$P" status --porcelain)"
+run_ff "$SC" "notasha" ""
+check "the record block refuses a SHA that is not a commit" 1 "$ff_rc"
+run_ff "$tmp/refusing-sc.sh" "$(git -C "$P" rev-parse HEAD)" ""
+check "the record block stops on a refused backend" 1 "$ff_rc"
+mkguest "fix-findings record, github" noinit
+run_ff "$SC" "$(git -C "$P" rev-parse HEAD)" ""
+check "on github the record block exits 0" 0 "$ff_rc"
+check "on github it writes no sidecar" 1 "$(cd "$P" && if bash "$SC" resolve >/dev/null 2>&1; then echo 0; else echo 1; fi)"
+
+# /pre-merge Phase 2's sidecar block runs footprint before it opens a PR or
+# prints the text for one, on both arms.
+for host in github.com gitlab.com; do
+    mkguest "phase 2, planted commit ($host)" init "$host"
+    commit_msg "Fix the report totals" "Implements W-1"
+    run_pm W-1 "$SC" ""
+    check "phase 2 ($host): a commit carrying W-1 stops the block" 1 "$pm_rc"
+    check "phase 2 ($host): …before any gh call" 0 "$(grep -hs . "$GH_STUB/calls" | grep -c .)"
+    check "phase 2 ($host): …and prints no PR text" "" "$pm_out"
+    check "phase 2 ($host): …and names the commit" 1 "$(grep -c "^$(git -C "$P" rev-parse --short HEAD) a W- work item id" "$tmp/stderr")"
+done
+mkguest "phase 2, plain commit" init
+commit_msg "Fix the report totals" "The report summed refunds twice."
+run_pm W-1 "$SC" ""
+check "phase 2: a branch of plain commits opens its PR" 0 "$pm_rc"
+
+# Commits that land after /pre-merge Phase 2 (#585 C4): /compound's in-PR commit
+# takes a plain subject on the sidecar backend, and /closeout scans the whole
+# range again before it merges.
+CMP="$repo_root/compound/SKILL.md"
+# shellcheck disable=SC2016  # the needles are the skills' literal text
+{
+cmp_block="$(block "$CMP" 'git commit -m "$SUBJECT"')"
+cof_block="$(block "$CO" 'footprint "$FP_RANGE"')"
+}
+[ -n "$cmp_block" ] || bad "compound/SKILL.md in-PR path carries the subject block" "not found"
+[ -n "$cof_block" ] || bad "closeout/SKILL.md carries the pre-merge footprint block" "not found"
+run_late() {  # <block> — run in $P with the skill's sidecar.sh; exit in $late_rc
+    local b="${1//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+    b="${b//git commit -m/git commit -q --allow-empty -m}"
+    b="${b//git push/true}"
+    b="$(grep -v '^git add ' <<<"$b")"
+    (cd "$P" && bash -c "$b" >/dev/null 2>"$tmp/late-err"); late_rc=$?
+}
+mkguest "compound subject, sidecar" init
+run_late "$cmp_block"
+check "compound: the sidecar arm commits" 0 "$late_rc"
+check "compound: the sidecar arm's subject carries no 'docs: compound' prefix" 0 "$(git -C "$P" log -1 --format=%s | grep -c 'docs: compound')"
+mkguest "compound subject, github" noinit
+run_late "$cmp_block"
+check "compound: the github arm keeps the 'docs: compound' subject" 1 "$(git -C "$P" log -1 --format=%s | grep -c '^docs: compound')"
+run_late "${cmp_block//backend stamp/backend nosuchverb}"
+check "compound: an unknown backend answer aborts" 1 "$late_rc"
+mkguest "closeout rescan, plain" init
+commit_msg "Fix the report totals" "The report summed refunds twice."
+run_late "$cof_block"
+check "closeout rescan: plain commits pass" 0 "$late_rc"
+commit_msg "Capture the refund lesson" "Follows /compound Phase 5"
+run_late "$cof_block"
+check "closeout rescan: a late commit carrying a skill name stops the merge" 1 "$late_rc"
+mkguest "closeout rescan, github" noinit
+commit_msg "docs: compound — a lesson" "Implements W-1"
+run_late "$cof_block"
+check "closeout rescan: the github backend is not scanned" 0 "$late_rc"
+run_late "${cof_block//backend stamp/backend nosuchverb}"
+check "closeout rescan: an unknown backend answer aborts" 1 "$late_rc"
+
+# The skill names footprint looks for are the pack's own: every directory here
+# with a SKILL.md. A skill added without its name in the list fails here.
+pack_skills="$(for d in "$repo_root"/*/SKILL.md; do basename "$(dirname "$d")"; done | LC_ALL=C sort)"
+listed_skills="$(sed -n 's/^PACK_SKILLS="\(.*\)"$/\1/p' "$SC" | tr ' ' '\n' | LC_ALL=C sort)"
+check "sidecar.sh's PACK_SKILLS lists every skill in the pack" "$pack_skills" "$listed_skills"
 
 # -----------------------------------------------------------------------------
 section "mutation: a marker planted in the description turns the check red"

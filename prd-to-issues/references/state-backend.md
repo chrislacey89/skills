@@ -25,6 +25,19 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 
 `forge.write` and `tracker.write` list the kinds of **pack-authored content** the pack may put on that host: pack headings, `#N` references (a `Closes #N` or `Fixes #N` among them, which close the client's issue at merge), `W-` IDs, a review-stamp block. They do not say whether an ordinary PR may exist. A guest repo on GitHub with `forge.write = []` still gets a PR from `/pre-merge`. It gets a plain human description, and the pack's own record of the review lives in the sidecar, as the table below says. Because the stamp needs no PR, `/pre-merge` opens the PR for an unpushed branch after the review instead of before it (its Phase 2). Review fixes can then be folded into the commits they correct before anyone else reads the history. `scripts/test-guest-footprint.sh` runs `/pre-merge`'s PR creation and `/closeout`'s merge on a guest repo and fails on any pack marker they hand the forge.
 
+## Commit messages
+
+On the `sidecar` backend, a commit message names the change and its reason and nothing else. The branch's commits reach the host however it merges: as the PR's commit list, as merge-commit history, or before a fold if the branch was pushed first. So the rule that keeps pack text out of the PR body covers the commits too. A commit on such a branch carries none of these:
+
+- a `fixup!`, `squash!`, or `amend!` subject, which must be folded before the PR opens
+- a `Fix-Findings-Run:` or `Review-Thread:` line
+- a `W-<n>` work item id
+- a skill name written as `/<name>`
+
+`bash "$SC" footprint <rev-range>` prints each one it finds with the commit's short SHA, and exits 1 if there are any, 0 if there are none, and 2 if it could not read the range. `/pre-merge` Phase 2 runs it over the branch's whole range, as `sidecar.sh range` prints it with no work item, before it opens the PR or prints the text for one, and stops on anything but 0. The matcher cannot tell a pack skill from a client's own text (a `/help` route, a `W-9` form), so `--accept "<short sha> ..."` skips the commits the operator names; `/pre-merge` offers it only after the operator confirms the line is the client's own. `scripts/test-guest-footprint.sh` runs that block against planted commits, and pins the skill-name list to the pack's skill directories.
+
+On the `github` backend these lines are the pack's own repo convention and stay.
+
 ## Where the review's records live
 
 `backend stamp` decides all four rows. A skill that reads or writes one of them looks it up here rather than assuming the PR.
@@ -37,6 +50,8 @@ bash "$SC" backend <prds|slices|stamp>   # prints github or sidecar
 | Loop-mode `## Review Disposition Ledger` | a block in the PR body | the newest comment on the work item whose first line is `## Review Disposition Ledger` |
 
 On the `sidecar` backend with no work item (the operator answered "none"), the last three rows have no home. Notes and a ledger are printed to the terminal and named as not persisted, and are never written into the PR instead.
+
+`/fix-findings` records each fix run the same way `backend stamp` routes the stamp. On `github`, each fix commit ends with a `Fix-Findings-Run: <run id>` line, plus a `Review-Thread: <url>` line for a teammate thread. On `sidecar`, the commit carries neither, and `sidecar.sh fixrun record <branch> <run id> <sha> [--thread <url>]` writes one line to `<sidecar>/fix-runs/<branch-slug>.jsonl`. `fixrun list <branch> --range <rev-range>` reads back only records whose commit is in the range, so a fold that rewrites a SHA drops its record the way it drops a trailer. `/fix-findings` § Handoff counts rounds from it, and `/respond-to-review` finds earlier fixes with it.
 
 `/respond-to-review`'s record is not in the table, because `backend stamp` does not decide it. It goes to `<sidecar>/review-responses/pr-<n>.md` on either backend, found through `sidecar.sh path review-responses` and committed with `sidecar.sh commit`. It is the author's private account of a teammate's review, never written to the PR, and its directory is separate from `reviews/` so it cannot collide with a stamp. With no sidecar it is printed to the terminal and named as not persisted.
 
