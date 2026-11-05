@@ -159,7 +159,9 @@ here; the same three parts apply:
   "$SC" profile` output from Step 0 verbatim, whose `test` line is this project's
   test command, and `/execute`'s `## Review Notes` when one exists, read where
   [references/state-backend.md](references/state-backend.md) § Where the
-  review's records live says it is.
+  review's records live says it is. Also the backend Step 0's second block
+  printed and the run id Step 0 fixed, both verbatim: item 5 below branches on
+  the first and writes the second.
 - **Reached for itself** — durable state, read at its source: the merged tree,
   `git log` and `git show`, the slice or PRD issue, `docs/solutions/`, the
   research artifact, installed types.
@@ -192,7 +194,11 @@ The fixer's instructions, in order:
    sentence with a reference to the one place the claim is canonically stated.
    Rewording the claim is not a fix; a reworded sentence is new text no review
    has read. A finding that an instruction produces the wrong behavior is not
-   this case.
+   this case. **A sentence whose words include a backticked code span (a
+   command, a flag, a path) carries an instruction as well as the claim**, and
+   neither deleting it nor pointing it elsewhere keeps the instruction. Report
+   **`blocked: carries an instruction`**, naming the code span, and make **no
+   commit**. Do not reword it to save the instruction.
 4. **Run the test command the profile names** and report the exit status verbatim.
 5. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does. On the `github` backend its last line is
@@ -225,8 +231,8 @@ The fixer's instructions, in order:
    line and the branch passes `/pre-merge` Phase 2's unshared test, which is
    the `@{u}` line. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
-   Commit with `git commit --fixup=<that SHA>`; item 5 states the commit
-   message for each backend. Then check that the branch still folds:
+   Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
+   message item 5 states for this backend. Then check that the branch still folds:
 
    ```bash
    # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
@@ -307,7 +313,8 @@ The fixer's instructions, in order:
    on the branch.
 
 The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
-evidence), or `blocked` (with what it needed and did not have). Nothing else.
+evidence), or `blocked` (with what it needed and did not have, or `blocked:
+carries an instruction` under item 3). Nothing else.
 
 **On the `sidecar` backend, the controller records each `fixed` commit**
 before it spawns that finding's breaker. Use the SHA the fixer reported after
@@ -344,11 +351,39 @@ site the finding anchored on:
 |---|---|---|
 | `deleted` | the fixer | nothing where the claim's sentence was |
 | `pointer → <target>` | the fixer | a reference to the canonical statement at `<target>`, which exists |
+| `rejected: carries an instruction` | the controller | a deletion or pointer whose removed words include a code span, or a pointer to its own item |
 | `rejected: reworded` | the controller | anything else |
 
-**The controller reads the after-state off the fix, not off the report.** Before
-spawning a breaker for a prose-claim finding, run `git show --word-diff
-"$FIX_SHA" -- <path>` on the anchored file and look at the site: a deletion
+**The controller reads the after-state off the fix, not off the report.** First
+run the instruction check on the anchored file. It looks only at the words the
+fix removed:
+
+```bash
+# Did the words this fix removed include a code span? Then the sentence carried an instruction.
+FIX_SHA="<the SHA the fixer reported>"
+FILE="<the finding's file>"
+DIFF=$(git show --format= --no-color --no-ext-diff --word-diff=porcelain "$FIX_SHA" -- "$FILE") && [ -n "$DIFF" ] \
+  || { echo "instruction check aborted: git show failed, or $FIX_SHA changes nothing in $FILE" >&2; exit 1; }
+REMOVED=$(printf '%s\n' "$DIFF" | grep '^-')
+if printf '%s\n' "$REMOVED" | grep -q '`'; then
+  echo "instruction check: rejected: carries an instruction"
+  printf '%s\n' "$REMOVED" | grep '`' >&2
+else
+  echo "instruction check: no code span removed"
+fi
+```
+
+In porcelain word-diff each removed run is its own line starting with `-`, so
+the `grep` keeps removed words (and the `--- a/` header, which holds no
+backtick unless the path does). A code span the fix *adds*, such as the path a pointer names, does not
+count. If the block prints `rejected: carries an instruction`, that is the
+after-state whatever shape the diff has. So is a `pointer` whose target is the
+numbered item or section the site sits in, because it points at itself; read
+that off the target, since no check here resolves it. If the block aborts, it
+gives no verdict, so read the removed words by hand.
+
+Then run `git show --word-diff "$FIX_SHA" -- <path>` on the anchored file and
+look at the site: a deletion
 removes the claim's whole sentence and adds no words, and a pointer adds only the
 reference. Removing words while the sentence survives (one member of a list, a
 qualifier, a clause) is a reword: what remains is a narrower claim no review has
@@ -356,7 +391,15 @@ read. If the site holds anything else, the after-state is `rejected: reworded`
 whatever the fixer reported. Revert
 the commit with `git revert --no-edit "$FIX_SHA"`, spawn no breaker, and leave
 the finding for § Handoff's menu — a reworded sentence left on the branch would
-be the next `/pre-merge` re-run's subject.
+be the next `/pre-merge` re-run's subject. Revert a `rejected: carries an
+instruction` fix the same way, and name it in the menu as an instruction fix:
+the sentence does something, so the finding goes back to the human to restate
+as the behavior that instruction produces.
+
+**No breaker runs on a `deleted` or `pointer` after-state.** A mutation is
+revealed only by a check that reads the mutated text, and no executable check
+reads a sentence, so the breaker's only possible verdict there is
+`not-applicable`. The report says so on the breaker line instead.
 
 ### Step 2. Spawn a fresh breaker against the fix
 
@@ -534,11 +577,11 @@ Finding 3 — fixed at a1b2c3d
 
 Finding 4 — fixed at d4e5f6a, deleted
   fixer:   `pnpm run test` → 0
-  breaker: not-applicable, against d4e5f6a — no executable check reads the deleted sentence
+  breaker: none — prose after-state, no executable reader
 
 Finding 5 — fixed at b7c8d9e, pointer → docs/architecture.md
   fixer:   `pnpm run test` → 0
-  breaker: not-applicable, against b7c8d9e — no executable check reads the replaced sentence
+  breaker: none — prose after-state, no executable reader
 
 Finding 6 — rejected: reworded at 9f8e7d6, reverted at 5c4b3a2
   controller: `git show --word-diff 9f8e7d6 -- src/retry.ts` → the site adds words that are not a reference
@@ -548,6 +591,10 @@ Finding 7 — blocked, leftover fixup! commit e1f2a3b
   fixer:   blocked — fold-trial block → 1, recommit refused by the commit-msg hook;
            reword e1f2a3b's subject by hand, or amend it once the hook is fixed
   breaker: none — not spawned for a blocked fix
+
+Finding 8 — rejected: carries an instruction at 3c4d5e6, reverted at 7a8b9c0
+  controller: instruction check on docs/release.md → removed `--dry-run`; restate as an instruction fix
+  breaker: none — not spawned for a rejected fix
 ```
 
 The archived SHA is on the breaker's line because it is the one thing that says
@@ -664,7 +711,8 @@ eight findings that is not a trade worth making.
 
 **A breaker runs only against a fix already committed, and nothing runs
 concurrently with a fixer editing the working tree.** Per finding: spawn the
-fixer and wait for its verdict; if `fixed`, spawn the breaker against
+fixer and wait for its verdict; if `fixed` (and not a `deleted` or `pointer`
+after-state, Step 1), spawn the breaker against
 `$FIX_SHA` and wait for its verdict; only then start the next finding's fixer.
 No two sub-agents are ever in flight together — not two fixers, not a fixer and
 a breaker, not two breakers.
@@ -705,7 +753,7 @@ stop.
   ledger, or the verbatim threads), on a clean branch that has been reviewed.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it
-  archived, and the command behind it; `refuted` reports for findings the
+  archived, and the command behind it, or the reason none was spawned; `refuted` reports for findings the
   tree did not confirm; a revert for any prose-claim fix Step 1 rejected; and,
   for a `blocked` fix that left a `fixup!` commit (Step 1), that commit's SHA
   with no breaker verdict. It produces no stamp, no PR edit, and no merge.
@@ -761,7 +809,9 @@ the remaining findings off as issues (recommended — `/qa` or
 The count changes the order, not the set: nothing is taken off the menu, and
 the human still chooses. Include a run-specific follow-up when the breaker
 returned `survived` or `not-run`: **Show the surviving mutation for finding
-N**. The platform's free-text "Other" option is the escape hatch — don't add
+N**. Include one when Step 1 rejected a fix as `carries an instruction`:
+**Restate finding N as an instruction fix**, naming the code span the fix
+would have removed. The platform's free-text "Other" option is the escape hatch — don't add
 one.
 
 Print the runtime handoff line either way:
