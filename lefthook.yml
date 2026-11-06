@@ -117,6 +117,8 @@ pre-push:
       run: bash scripts/test-respond-to-review-contract.sh
     excavate-entry-contract-tests:
       run: bash scripts/test-excavate-entry-contract.sh
+    hackathon-blocks-tests:
+      run: bash scripts/test-hackathon-blocks.sh
     sidecar-resolution-tests:
       run: bash scripts/test-sidecar-resolution.sh
     state-backend-tests:

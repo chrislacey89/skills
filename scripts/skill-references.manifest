@@ -35,6 +35,7 @@ docs/next-step-menu.md          closeout
 docs/next-step-menu.md          visual-recap
 docs/next-step-menu.md          walk-commits
 docs/next-step-menu.md          excavate
+docs/next-step-menu.md          hackathon
 docs/writing-for-humans.md      excavate
 docs/visual-rendering-core.md   visual-recap
 docs/visual-rendering-core.md   walk-commits
@@ -60,6 +61,7 @@ docs/state-backend.md      fix-findings
 docs/state-backend.md      lfg
 init-pipeline/scripts/sidecar.sh  compound
 init-pipeline/scripts/sidecar.sh  excavate
+init-pipeline/scripts/sidecar.sh  hackathon
 init-pipeline/scripts/sidecar.sh  help
 init-pipeline/scripts/sidecar.sh  lfg
 init-pipeline/scripts/sidecar.sh  research
