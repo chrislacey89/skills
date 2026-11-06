@@ -106,13 +106,20 @@ Two homes, split on purpose.
   exception covers those two files in an event repo and nothing else.
 
 Set up the sidecar in the directory that will become the event repo. Create it
-with `git init` and **no commits and no remote**, so the empty-until-start rule
-holds. The resolver is the bundled
+with `git init` and **no commits and nothing pushed**, so the empty-until-start
+rule holds. Ask the user for the event repo's remote URL (the empty repo they
+create on the forge) and record it with `git remote add`, which pushes nothing,
+**before** `init`: `init` reads the remotes once to set `forge.kind` and the
+write permissions, so a sidecar created with no remote records `none` and
+routes PRDs, slices, and the review stamp to the sidecar instead of GitHub. The
+resolver is the bundled
 [references/sidecar.sh](references/sidecar.sh), at its absolute installed path:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 git rev-parse --git-dir >/dev/null 2>&1 || git init -q
+# The URL the user gave for the event repo. Adds the remote only; pushes nothing.
+git remote get-url origin >/dev/null 2>&1 || git remote add origin "<event repo remote URL>"
 if git rev-parse --verify -q HEAD >/dev/null; then
   echo "note: this repo already has commits; if the event requires an empty repo until the start, stop and use a fresh directory" >&2
 fi
@@ -251,7 +258,7 @@ nothing in this phase moves the freeze or the submit-by time.
 
 **Kickoff block** (the first 20 minutes, after the start time and never before):
 
-1. Create the remote, push the empty repo, and add `PLAN.md` (the ladder plus
+1. Push the empty repo to the remote added in prep, and add `PLAN.md` (the ladder plus
    the clock plan) and `DECISIONS.md` (copied from the dossier's seeded log).
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
    runs the tests.
