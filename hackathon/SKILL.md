@@ -199,8 +199,10 @@ redo this phase against it before Phase 3.
    meets the comparison threshold in
    [references/next-step-menu.md](references/next-step-menu.md) § Show the
    comparison before you take the choice. Show the grid as a table first, then
-   ask the user to pick with an `AskUserQuestion` menu, top scorer first and
-   marked recommended.
+   ask the user to pick with an `AskUserQuestion` menu. The menu's option cap
+   (see the same reference) is smaller than the candidate count, so offer only
+   the top scorers that fit, top scorer first and marked recommended; the
+   free-text "Other" hatch takes a pick from the rest of the table.
 6. **Write the two lines everything else hangs on** into the dossier:
    - the **high-concept line** ("a known X, with Y"), and
    - the **peak moment**: the one thing the judge watches happen.
