@@ -356,7 +356,7 @@ nothing in this phase moves the freeze or the submit-by time.
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
    mkdir -p "$ROOT/.claude" && touch "$ROOT/.claude/.tdd-skipped"
    ```
-3. Run the tests, commit with CI green, and tick the rung in `PLAN.md`. Then
+3. Run the tests, commit with CI green. Do not tick the rung yet (step 5 does). Then
    remove the rung's classification marker, as `/execute` Step 6 does, so the
    next rung classifies afresh and the gate stays closed between rungs:
 
@@ -366,17 +366,17 @@ nothing in this phase moves the freeze or the submit-by time.
    ```
 4. Append to `DECISIONS.md` any decision the rung forced, with the rejected
    alternative.
-5. The demo-lane owner accepts the rung: they use it where a judge would, and
-   either tick it or name the gap. A rung the builder calls done and the
-   demo lane cannot use is not done.
-6. Record its end time.
+5. The demo-lane owner (you, when solo) accepts the rung: they use it where a
+   judge would, and either tick it in `PLAN.md` or name the gap. A rung is
+   done only when accepted, so a builder's green commit does not make it done.
+6. Record its end time when it is ticked.
 
 The lanes from Phase 2 run in parallel. The checkpoint re-plan below still runs
 on the whole ladder, and the demo-lane owner calls it.
 
 **Checkpoint** (at each checkpoint time; stop what you are doing):
 
-1. **Measure.** From the dossier, compute the median time per finished rung.
+1. **Measure.** From the dossier, compute the median time per accepted (ticked) rung.
    Leave rung 1 out once two later rungs exist, because it carries setup time.
 2. **Re-plan from measured pace, never from a fresh estimate.** Rungs that fit
    ≈ (freeze − now) ÷ median rung time. Keep that many of the remaining rungs in
