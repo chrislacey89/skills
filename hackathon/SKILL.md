@@ -159,15 +159,30 @@ research_dir="$(bash "$SC" path research)" || exit 1
 echo "dossier: $research_dir/hackathon-$(date +%F).md"
 ```
 
-Commit the dossier to the sidecar at the end of each phase:
+Commit the dossier to the sidecar at the end of each phase. Set the dossier's
+`phase:` first, to the phase that comes next (`choose` after Phase 0, `shape`
+after Phase 1, `build` after Phase 2, `done` after Phase 4), so a resume starts
+where the work stopped:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
 bash "$SC" commit -- "<dossier path>" -m "hackathon: <phase name>"
 ```
 
-**Resume.** With no argument, list `hackathon-*.md` in the research directory,
-read the newest, and continue from the `phase:` its frontmatter records.
+**Resume.** With no argument, find the newest dossier, read it, and continue
+from the `phase:` its frontmatter records:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+research_dir="$(bash "$SC" path research)" || exit 1
+newest="$(find "$research_dir" -maxdepth 1 -name 'hackathon-*.md' | sort | tail -n 1)"
+if [ -z "$newest" ]; then
+  echo "no dossier in $research_dir; start at Phase 0" >&2
+  exit 1
+fi
+echo "$newest"
+sed -n '2,/^---$/p' "$newest"
+```
 
 ## Process
 
