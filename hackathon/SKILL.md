@@ -272,8 +272,19 @@ nothing in this phase moves the freeze or the submit-by time.
 
 1. Record its start time in the dossier.
 2. Write the rung's tracer test first, then the code. Delegate to `/tdd` for
-   behavior-heavy logic.
-3. Run the tests, commit with CI green, and tick the rung in `PLAN.md`.
+   behavior-heavy logic; invoking it creates `.claude/.tdd-active`. Once
+   `/init-pipeline` has installed its hook, an implementation write is blocked
+   unless a classification marker exists, so a rung that is visual, layout,
+   styling, or copy only, and so does not go through `/tdd`, first runs
+   `mkdir -p .claude && touch .claude/.tdd-skipped`.
+3. Run the tests, commit with CI green, and tick the rung in `PLAN.md`. Then
+   remove the rung's classification marker, as `/execute` Step 6 does, so the
+   next rung classifies afresh and the gate stays closed between rungs:
+
+   ```bash
+   ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+   rm -f "$ROOT/.claude/.tdd-active" "$ROOT/.claude/.tdd-skipped" "$ROOT/.claude/.lfg-active"
+   ```
 4. Append to `DECISIONS.md` any decision the rung forced, with the rejected
    alternative.
 5. Record its end time.
