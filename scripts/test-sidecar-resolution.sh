@@ -901,7 +901,7 @@ contains "sixteen convention lines draw a warning that counts them" "conventions
 check "the warned value is written whole" 16 "$(jq '.conventions | length' "$PSJ")"
 check "the warned value is committed" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
 warn_at="$(sed -n 's/^CONVENTIONS_WARN_LINES=\([0-9]*\)$/\1/p' "$SC")"
-check "the warning fires exactly past the threshold the script declares" 15 "$warn_at"
+check "the script declares its conventions warning threshold as 15" 15 "$warn_at"
 contains "/init-pipeline states the threshold the script warns at" "past $warn_at lines" "$(cat "$repo_root/init-pipeline/SKILL.md")"
 
 # Every refused list writes nothing and commits nothing.
@@ -1099,6 +1099,7 @@ for reader in execute walk-commits; do
     check "/$reader prints no ref from a corrupt sidecar.json" "" "$rbout"
     if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly on a corrupt sidecar.json"
     else bad "/$reader fails loudly on a corrupt sidecar.json" "rc=$rc err=$rberr"; fi
+    contains "/$reader relays resolve's refusal on a corrupt sidecar.json" "cannot read $PSJ (jq exited" "$rberr"
     cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
     chmod 000 "$PSJ"
     if [ -r "$PSJ" ]; then
@@ -1108,12 +1109,14 @@ for reader in execute walk-commits; do
         check "/$reader prints no ref from an unreadable sidecar.json" "" "$rbout"
         if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly on an unreadable sidecar.json"
         else bad "/$reader fails loudly on an unreadable sidecar.json" "rc=$rc err=$rberr"; fi
+        contains "/$reader relays resolve's refusal on an unreadable sidecar.json" "cannot read $PSJ (jq exited" "$rberr"
     fi
     chmod 644 "$PSJ"; cp "$PF/good.json" "$PSJ"; pset ".design = $DESIGN"
     rbout="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" PATH="$nojq" bash -c "$rb" 2>"$PF/rberr")"; rc=$?; rberr="$(cat "$PF/rberr")"
     check "/$reader prints no ref with jq missing" "" "$rbout"
     if [ "$rc" -ne 0 ] && [ -n "$rberr" ] && ! grep -q 'SIDECAR MISS' <<<"$rberr"; then ok "/$reader fails loudly with jq missing"
     else bad "/$reader fails loudly with jq missing" "rc=$rc err=$rberr"; fi
+    contains "/$reader relays resolve's refusal with jq missing" "cannot read $PSJ (jq exited 127)" "$rberr"
 done
 cp "$PF/good.json" "$PSJ"
 ex5="$(awk '/^### 5\. Manual Verification/{f=1} /^#### Behavior Review/{f=0} f' "$repo_root/execute/SKILL.md")"
@@ -1706,7 +1709,7 @@ mkrepo "$SCREPO"
 # SC= points at a missing file is visible even when the block hides stderr and the
 # exit code (`2>/dev/null) || SIDE=""`, #430). The stub exits 0 on every verb.
 STUBDIR="$tmp/stubskill"; STUBLOG="$tmp/stub.log"; STUBSTORE="$tmp/stubstore"
-mkdir -p "$STUBDIR/references" "$STUBSTORE"
+mkdir -p "$STUBDIR/references" "$STUBDIR/scripts" "$STUBSTORE"
 cat > "$STUBDIR/references/sidecar.sh" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$STUBLOG"
@@ -1716,8 +1719,10 @@ case "${1:-}" in
 esac
 exit 0
 STUB
+# init-pipeline carries the canonical resolver at scripts/, not references/.
+cp "$STUBDIR/references/sidecar.sh" "$STUBDIR/scripts/sidecar.sh"
 export STUBLOG STUBSTORE
-for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1 research:research/SKILL.md:4 compound:compound/SKILL.md:3; do
+for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1 research:research/SKILL.md:4 compound:compound/SKILL.md:3 init-pipeline:init-pipeline/SKILL.md:10 walk-commits:walk-commits/SKILL.md:2; do
     skill="${entry%%:*}"; rest="${entry#*:}"; rel="${rest%%:*}"; min="${rest##*:}"
     skdir="$repo_root/$skill"
     blocks_using_sc "$repo_root/$rel" "$SCDIR" "$skill"

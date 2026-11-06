@@ -420,6 +420,7 @@ The default is `sidecar` whenever Q1 is `guest`, whatever path Q2 detected: a gu
 **Then create it**, with the miss line's suggested `--name`:
 
 ```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" init --name <suggested> --mode <Q1> --write <Q3> --in-tree-path <Q2>
 ```
 
@@ -440,6 +441,7 @@ echo "detected=${DETECTED:-none}"
 When it prints `answered`, skip Q4. Otherwise ask, offering the detected branch first (it is `origin/HEAD`'s branch, or the first of the usual base names that exists). On `detected=none` there is no default: the user names the branch. Write the answer with:
 
 ```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" config set base_ref <branch>
 ```
 
@@ -472,6 +474,7 @@ echo "detected.hook_manager=$HM"
 No `unasked=` line means every key is answered: skip Q5, Q6, and Q7. Otherwise ask each key on the `unasked=` line except `hazards`, which is Q6, and `conventions`, which is Q7, one per turn. Offer its `detected.` value first. A blank detected value has no default, and the user names the command. The user may also answer that the repo has none. The package.json check follows `/setup-ralph-loop`'s feedback-loop check and the lockfile check follows `/setup-pre-commit`'s; the hook-manager check is this block's own. A script is proposed only when a lockfile names the package manager to run it with. On a guest repo, those files belong to someone else, so a script name chosen to look safe is still only a proposal. Write each answer only after the user confirms it:
 
 ```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" config set verify.<key> "<command the user confirmed>"
 bash "$SC" config set verify.<key> ""   # the repo has none
 ```
@@ -481,6 +484,7 @@ bash "$SC" config set verify.<key> ""   # the repo has none
 **Q6 — hazards** (`hazards` on the `unasked=` line): commands an agent must not run, or actions it must not take, in this repo without asking first. Nothing is detected, and the default is none. Each hazard needs a `reason`. A hazard may also carry a `command` in Claude Code permission-rule syntax, such as `Bash(pnpm test:e2e*)` ([hooks reference](https://code.claude.com/docs/en/hooks)), so that a later hook can match it. This skill does not enforce hazards. Write the confirmed list as one JSON array, or `[]` for none:
 
 ```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" config set verify.hazards '[{"reason":"resets the shared staging database","command":"Bash(pnpm test:e2e*)"},{"reason":"never push to the staging branch"}]'
 ```
 
@@ -489,6 +493,7 @@ bash "$SC" config set verify.hazards '[{"reason":"resets the shared staging data
 **Q7 — conventions** (`conventions` on the `unasked=` line): short lines of house style the user wants followed here and cannot write into the repo. Ask for only rules the host repo's own CLAUDE.md/AGENTS.md doesn't already state, because sub-agents load those files anyway. Nothing is detected, and the default is none. Write the confirmed lines as one JSON array of strings, or `[]` for none:
 
 ```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" config set conventions '["No new barrel files.","Match the error-handling style in src/api/."]'
 ```
 
@@ -505,6 +510,7 @@ if [ -n "$CUR" ]; then echo "design answered; not asking"; else echo "design una
 When it prints `answered`, skip Q8. Otherwise ask. Nothing is detected, and the default is none. The pack never fetches this pointer and it goes into no sub-agent brief: `/execute` Step 5 and `/walk-commits` name it, and the human compares. Write the answer with one of:
 
 ```bash
+SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" config set design '{"ref":"https://example.com/design/checkout","note":"checkout flow v3"}'
 bash "$SC" config set design ""   # the repo has none
 ```
