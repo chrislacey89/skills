@@ -307,8 +307,9 @@ nothing in this phase moves the freeze or the submit-by time.
 
 **Kickoff block** (after the start time and never before):
 
-1. Push the empty repo to the remote added in prep, and add `PLAN.md` (the ladder plus
-   the clock plan) and `DECISIONS.md` (copied from the dossier's seeded log).
+1. Add `PLAN.md` (the ladder plus the clock plan) and `DECISIONS.md` (copied from the
+   dossier's seeded log), make the first commit, then push it to the remote added in
+   prep with `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
    runs the tests.
 3. Deploy a hello-world to the deploy target, so the slowest unknown is resolved
