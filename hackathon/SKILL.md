@@ -123,7 +123,38 @@ git remote get-url origin >/dev/null 2>&1 || git remote add origin "<event repo 
 if git rev-parse --verify -q HEAD >/dev/null; then
   echo "note: this repo already has commits; if the event requires an empty repo until the start, stop and use a fresh directory" >&2
 fi
-bash "$SC" resolve >/dev/null 2>&1 || bash "$SC" init --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+SC_ERR="$(mktemp)"
+if bash "$SC" resolve 2>"$SC_ERR"; then
+  echo "sidecar: resolved (a hit; do not run init)"
+elif grep -q '^SIDECAR MISS' "$SC_ERR"; then
+  cat "$SC_ERR" >&2
+  echo "sidecar: miss; ask the mode question below, then run init" >&2
+else
+  cat "$SC_ERR" >&2
+  echo "sidecar: resolve failed without a SIDECAR MISS line; stop and relay it as printed" >&2
+  rm -f "$SC_ERR"
+  exit 1
+fi
+rm -f "$SC_ERR"
+```
+
+Creating a sidecar is a human decision, so run `init` only on the `SIDECAR MISS`
+line above. On any other failure, stop and relay what the block printed, with no
+questions and no `init`. On a miss, ask **one question**: is the event repo
+`owned` (the user's own, so the pack may write issues and PRs on its forge) or
+`guest` (the organizer's or someone else's, so the pack writes nothing to its
+forge)? Recommend `guest` when the repo sits in an organizer's or sponsor's org.
+Then run `init` with the miss line's suggested `--name` and the answer:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" init --name <suggested name from the miss line> --mode <owned|guest> --write sidecar --in-tree-path none --no-migrate-archive
+```
+
+Relay an `init` refusal as printed. Then, on a hit or after `init`:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
 research_dir="$(bash "$SC" path research)" || exit 1
 echo "dossier: $research_dir/hackathon-$(date +%F).md"
 ```
