@@ -303,14 +303,7 @@ readiness.
 1. **Pre-demo checklist** (dossier template § Pre-demo). Run it DO-CONFIRM
    style: do the work, then read the list aloud and confirm each item (Gawande).
    Things fail at the worst moment, so the checklist assumes the live demo will
-   break:
-   - seeded demo data that shows the peak moment on the first try
-   - a recorded fallback video of the demo path, saved locally
-   - tests green, CI green, the deployed URL loading on a phone and on venue
-     wifi or a hotspot
-   - secrets out of the repo and the logs
-   - the README's top section: high-concept line, how to run it, and how it was
-     built
+   break; the template holds the one list.
 2. **Submission.** Fill the platform's write-up from the dossier and `PLAN.md`:
    the problem, the high-concept line, what shipped (the ticked rungs), how it
    was built (the factory), and what was cut. Submit by the submit-by time.
@@ -323,7 +316,7 @@ readiness.
    the hooks, CI, the tests, and the decision log. Drill both with the user, one
    question at a time.
 
-Set `phase: done` and commit the dossier.
+Before `phase: done`, tick the template's § Pre-handoff confirmations (submission filed, script rehearsed, Q&A drilled), then commit the dossier.
 
 ## Common Rationalizations
 

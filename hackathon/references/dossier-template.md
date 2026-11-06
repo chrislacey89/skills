@@ -104,6 +104,9 @@ Blind second scorer: <cells that met the Locked disagreement threshold, and how 
 - [ ] Deployed URL loads on a phone and on venue wifi or a hotspot
 - [ ] No secrets in the repo or the logs
 - [ ] README top: high-concept line, how to run, how it was built
+
+## Pre-handoff confirmations (after Phase 4 steps 2-4)
+
 - [ ] Submission filed before the submit-by time
 - [ ] Table script rehearsed at full length and at 15 seconds
 - [ ] Judge Q&A drilled from DECISIONS.md
