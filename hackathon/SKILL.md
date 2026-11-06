@@ -131,6 +131,7 @@ echo "dossier: $research_dir/hackathon-$(date +%F).md"
 Commit the dossier to the sidecar at the end of each phase:
 
 ```bash
+SC="<this skill's directory>/references/sidecar.sh"
 bash "$SC" commit -- "<dossier path>" -m "hackathon: <phase name>"
 ```
 
