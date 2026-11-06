@@ -22,6 +22,12 @@ brief: <URL or "pasted">
 | Allowed tools and models | | |
 | Required artifacts (repo, video, write-up) | | |
 
+## Team
+
+| Person | Writes code? | Lane (build / demo / both) | Accounts to log in |
+|---|---|---|---|
+| | | | |
+
 ## Open questions for the organizers
 
 - Does installed developer tooling (agent skills, hooks, CLIs) count as pre-built code?
@@ -60,6 +66,10 @@ Blind second scorer: <cells that met the Locked disagreement threshold, and how 
 - <keys, auth, deploy target, riskiest integration, data access>
 
 **Factory plan:** <hooks, CI, scan, logging, decision log>
+
+**Lane owners:** build: <name(s)> · demo: <name, or "solo: folded into checkpoints">
+
+Non-builder scorer column (Phase 1): <their scores, taken before they saw either grid>, or `none`
 
 ## Decision log (seed for DECISIONS.md)
 

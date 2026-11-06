@@ -208,6 +208,15 @@ list unless the rules state it.
 **Recheck before the build.** When a rules guide or judging guide arrives later,
 redo this phase against it before Phase 3.
 
+**Team.** Then ask, one question at a time, who is on the team and what each
+person will do on the day: who writes code, and who does not. Record each person
+in the dossier's **Team** table with the accounts they need logged in. A team is
+rarely all builders. A common shape is one developer driving agents plus a
+product, design, or domain person who writes no code, and that person is not a
+spare pair of hands. They are the one independent reader the build has, and
+Phases 1–4 give them work only a non-builder can do well (see **Lanes** in
+Phase 2).
+
 ### Phase 1. Choose the project
 
 1. **Reference class.** Look at what this event, or the same series, picked
@@ -240,7 +249,10 @@ redo this phase against it before Phase 3.
    profile, the candidate one-liners, and the anchor table, never this
    conversation. Have it score the same grid. Discuss only the cells where the
    two grids differ by the Locked disagreement threshold. That spread is the
-   noise in your own judgment.
+   noise in your own judgment. When the team includes a non-builder, have them
+   score the grid too, on their own and before seeing either grid. A person who
+   thinks like a user is the closest stand-in for a judge you have, and their
+   column is worth more than a third model.
 5. **Compare, then commit.** The Locked candidate count, scored on seven dimensions,
    meets the comparison threshold in
    [references/next-step-menu.md](references/next-step-menu.md) § Show the
@@ -282,6 +294,20 @@ re-deriving it. Fill the dossier:
   tests on every push, a dependency or secret scan, structured logging or a
   health endpoint, and the decision log. Pick what the event's criteria reward.
   If the brief names none, default to tests, CI, and logs.
+- **Lanes.** Split the day by lane, not by person, then give each lane an
+  owner from the **Team** table. Record the owners in the dossier.
+  - **Build lane** (whoever writes code, with agents): the rungs, the factory,
+    and the deploy. With several builders, give each a rung from the same
+    ladder, choosing rungs that touch different files where possible.
+  - **Demo lane** (a non-builder when there is one): owns the clock and calls
+    each checkpoint; accepts each rung by using it on the deployed URL against
+    its done-condition, not by reading code; seeds the demo data and rehearses
+    the peak moment; keeps `DECISIONS.md` current by asking "why that one?" as
+    decisions happen; drafts the submission write-up and table script during
+    the build instead of after the freeze; asks mentors and organizers the
+    **Open questions** on the floor.
+  - **Solo:** you hold both lanes. Put the demo-lane work into the checkpoint,
+    so it happens at fixed times instead of never.
 - **Seed the decision log.** Copy each decision made so far (project, stack,
   cuts), with the alternatives you rejected and why. Judges ask "why X over Y?",
   and the answer should already be written down.
@@ -334,11 +360,13 @@ nothing in this phase moves the freeze or the submit-by time.
    ```
 4. Append to `DECISIONS.md` any decision the rung forced, with the rejected
    alternative.
-5. Record its end time.
+5. The demo-lane owner accepts the rung: they use it where a judge would, and
+   either tick it or name the gap. A rung the builder calls done and the
+   demo lane cannot use is not done.
+6. Record its end time.
 
-With a team, give each person a rung from the same ladder, and give them rungs
-that touch different files where possible. The checkpoint re-plan below still
-runs on the whole ladder.
+The lanes from Phase 2 run in parallel. The checkpoint re-plan below still runs
+on the whole ladder, and the demo-lane owner calls it.
 
 **Checkpoint** (at each checkpoint time; stop what you are doing):
 
@@ -376,6 +404,10 @@ readiness.
    questions with a one-sentence answer each, plus a two-minute factory tour:
    the hooks, CI, the tests, and the decision log. Drill both with the user, one
    question at a time.
+5. **Who says what at the table.** With a non-builder on the team, they open:
+   the problem, the high-concept line, and the demo through the peak moment.
+   The builder takes the factory tour and the "how did you build it" questions.
+   Each "why X over Y?" goes to whoever made that decision in `DECISIONS.md`.
 
 Before `phase: done`, tick the template's § Pre-handoff confirmations (submission filed, script rehearsed, Q&A drilled), then commit the dossier.
 
@@ -402,7 +434,7 @@ Before `phase: done`, tick the template's § Pre-handoff confirmations (submissi
 
 ## Handoff
 
-- **Expected input:** the event brief (a URL or pasted text) and the user, present for both sittings; a local directory that will become the event repo.
+- **Expected input:** the event brief (a URL or pasted text) and the user, present for both sittings, plus who else is on the team and whether each writes code; a local directory that will become the event repo.
 - **Produces:** the sidecar dossier (event profile, scored candidates, ladder, rung timings, checkpoint re-plans); in the event repo, `PLAN.md`, `DECISIONS.md`, the pipeline hooks, and CI; a submitted entry; a rehearsed table script and judge Q&A.
 - **May invoke:** `/init-pipeline` (kickoff block), `/tdd` (rung loop), one blind-scorer sub-agent (Phase 1).
 - **Returns control to:** the user at the judging table.
