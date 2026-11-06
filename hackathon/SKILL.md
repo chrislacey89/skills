@@ -426,7 +426,7 @@ From here on, the only work is demo readiness.
    The builder takes the factory tour and the "how did you build it" questions.
    Each "why X over Y?" goes to whoever made that decision in `DECISIONS.md`.
 
-Before `phase: done`, tick the template's § Pre-handoff confirmations (submission filed, script rehearsed, Q&A drilled), then commit the dossier.
+Before `phase: done`, tick the template's § Pre-handoff confirmations, then commit the dossier.
 
 ## Common Rationalizations
 
