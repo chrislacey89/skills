@@ -348,8 +348,14 @@ nothing in this phase moves the freeze or the submit-by time.
    behavior-heavy logic; invoking it creates `.claude/.tdd-active`. Once
    `/init-pipeline` has installed its hook, an implementation write is blocked
    unless a classification marker exists, so a rung that is visual, layout,
-   styling, or copy only, and so does not go through `/tdd`, first runs
-   `mkdir -p .claude && touch .claude/.tdd-skipped`.
+   styling, or copy only, and so does not go through `/tdd`, first creates
+   the skip marker at the project root, where the hook looks, not in the
+   current directory:
+
+   ```bash
+   ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
+   mkdir -p "$ROOT/.claude" && touch "$ROOT/.claude/.tdd-skipped"
+   ```
 3. Run the tests, commit with CI green, and tick the rung in `PLAN.md`. Then
    remove the rung's classification marker, as `/execute` Step 6 does, so the
    next rung classifies afresh and the gate stays closed between rungs:
