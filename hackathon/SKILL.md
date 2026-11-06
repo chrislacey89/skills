@@ -112,7 +112,13 @@ create on the forge) and record it with `git remote add`, which pushes nothing,
 **before** `init`: `init` reads the remotes once to set `forge.kind` and the
 write permissions, so a sidecar created with no remote records `none` and
 routes PRDs, slices, and the review stamp to the sidecar instead of GitHub. The
-resolver is the bundled
+resolver has no command that re-derives `forge.kind` later (`config set mode`
+re-derives only the write permissions), so if the URL is not known yet, do not
+leave the remote off. Ask which forge host the event repo will use, put a
+placeholder on that host in the `<event repo remote URL>` slot below (for
+example `https://github.com/placeholder/event-repo.git`), and when the real URL
+arrives run `git remote set-url origin <real URL>`; the sidecar still resolves
+and `forge.kind` stays as recorded. The resolver is the bundled
 [references/sidecar.sh](references/sidecar.sh), at its absolute installed path:
 
 ```bash
