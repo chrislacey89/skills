@@ -161,8 +161,8 @@ echo "dossier: $research_dir/hackathon-$(date +%F).md"
 
 Commit the dossier to the sidecar at the end of each phase. Set the dossier's
 `phase:` first, to the phase that comes next (`choose` after Phase 0, `shape`
-after Phase 1, `build` after Phase 2, `done` after Phase 4), so a resume starts
-where the work stopped:
+after Phase 1, `build` after Phase 2, `demo` at the freeze, `done` after
+Phase 4), so a resume starts where the work stopped:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -170,7 +170,9 @@ bash "$SC" commit -- "<dossier path>" -m "hackathon: <phase name>"
 ```
 
 **Resume.** With no argument, find the newest dossier, read it, and continue
-from the `phase:` its frontmatter records:
+from the `phase:` its frontmatter records (`demo` resumes at Phase 4). A `build`
+resume skips the kickoff block when `PLAN.md` is already committed in the event
+repo:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -393,8 +395,8 @@ on the whole ladder, and the demo-lane owner calls it.
    changed ladder is a real fork, so confirm it with the user before going on.
 
 **Freeze.** At the freeze, stop adding rungs. Whatever is unfinished either
-works behind a flag or gets reverted. From here on, the only work is demo
-readiness.
+works behind a flag or gets reverted. Set `phase: demo` and commit the dossier.
+From here on, the only work is demo readiness.
 
 ### Phase 4. Freeze → demo
 

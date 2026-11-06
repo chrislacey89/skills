@@ -1,5 +1,5 @@
 ---
-phase: profile        # profile | choose | shape | build | done
+phase: profile        # profile | choose | shape | build | demo | done
 event: <event name>
 date: <YYYY-MM-DD of the event>
 brief: <URL or "pasted">
