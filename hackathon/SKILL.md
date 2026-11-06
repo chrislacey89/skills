@@ -356,7 +356,7 @@ nothing in this phase moves the freeze or the submit-by time.
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
    mkdir -p "$ROOT/.claude" && touch "$ROOT/.claude/.tdd-skipped"
    ```
-3. Run the tests, commit with CI green. Do not tick the rung yet (step 5 does). Then
+3. Run the tests, commit with CI green. Do not tick the rung yet (step 6 does). Then
    remove the rung's classification marker, as `/execute` Step 6 does, so the
    next rung classifies afresh and the gate stays closed between rungs:
 
@@ -364,12 +364,15 @@ nothing in this phase moves the freeze or the submit-by time.
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
    rm -f "$ROOT/.claude/.tdd-active" "$ROOT/.claude/.tdd-skipped" "$ROOT/.claude/.lfg-active"
    ```
-4. Append to `DECISIONS.md` any decision the rung forced, with the rejected
+4. Deploy the green commit to the deploy target, or confirm CI's deploy
+   shipped it, then give the demo-lane owner the URL. Acceptance below happens
+   on that URL, so a rung that is not deployed cannot be accepted.
+5. Append to `DECISIONS.md` any decision the rung forced, with the rejected
    alternative.
-5. The demo-lane owner (you, when solo) accepts the rung: they use it where a
+6. The demo-lane owner (you, when solo) accepts the rung: they use it where a
    judge would, and either tick it in `PLAN.md` or name the gap. A rung is
    done only when accepted, so a builder's green commit does not make it done.
-6. Record its end time when it is ticked.
+7. Record its end time when it is ticked.
 
 The lanes from Phase 2 run in parallel. The checkpoint re-plan below still runs
 on the whole ladder, and the demo-lane owner calls it.
