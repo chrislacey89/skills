@@ -39,7 +39,7 @@ brief: <URL or "pasted">
 
 Weights: <stated weights, or "equal; none stated">
 
-Blind second scorer: <cells that differed by 2 or more, and how each was settled>
+Blind second scorer: <cells that met the Locked disagreement threshold, and how each was settled>
 
 **Chosen:** #<n>
 **High-concept line:** <a known X, with Y>

@@ -194,7 +194,7 @@ redo this phase against it before Phase 3.
    conversation. Have it score the same grid. Discuss only the cells where the
    two grids differ by the Locked disagreement threshold. That spread is the
    noise in your own judgment.
-5. **Compare, then commit.** Five or more candidates scored on seven dimensions
+5. **Compare, then commit.** The Locked candidate count, scored on seven dimensions,
    meets the comparison threshold in
    [references/next-step-menu.md](references/next-step-menu.md) § Show the
    comparison before you take the choice. Show the grid as a table first, then
@@ -256,7 +256,7 @@ the next section so the user sees the day.
 Write the four kinds of times into `PLAN.md` and the dossier. Then hold them:
 nothing in this phase moves the freeze or the submit-by time.
 
-**Kickoff block** (the first 20 minutes, after the start time and never before):
+**Kickoff block** (after the start time and never before):
 
 1. Push the empty repo to the remote added in prep, and add `PLAN.md` (the ladder plus
    the clock plan) and `DECISIONS.md` (copied from the dossier's seeded log).
