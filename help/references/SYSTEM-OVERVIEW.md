@@ -284,6 +284,7 @@ The sidecar is on disk, but outside the working tree and its `.git`, so nothing 
 
 - No `.gsd/` directory
 - No `STATE.md`, `ROADMAP.md`, `CONTEXT.md`, `PLAN.md` per slice
+- One scoped exception: in a `/hackathon` event repo, `PLAN.md` and `DECISIONS.md` are committed on purpose, because that repo is the judged deliverable and judges read the decision log. The exception covers those two files in an event repo and nothing else
 - No `progress.txt` as durable task state
 - No `docs/brainstorms/`, `docs/specs/` (research lives outside the repo, at the path `/research` Phase 5c writes, not under `docs/`)
 - No monolithic AGENTS.md consuming 36K tokens

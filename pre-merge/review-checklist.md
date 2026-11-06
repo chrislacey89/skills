@@ -62,6 +62,7 @@ In **reviewer-mode** (`/pre-merge --pr <number>`), findings here become PR comme
 
 **Violation patterns:**
 - New state files: `.gsd/`, `STATE.md`, `PLAN.md`, `CONTEXT.md`, `ROADMAP.md`, `SUMMARY.md`, `continue.md`, `UAT.md`
+  - Not a violation: `PLAN.md` and `DECISIONS.md` in a `/hackathon` event repo (the scoped exception in § What is NOT in the project tree of the principle's source)
 - New state directories: `docs/brainstorms/`, `docs/specs/`
 - Any new persistent markdown file that tracks state outside of GitHub issues or `docs/solutions/`
 
