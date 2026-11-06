@@ -79,6 +79,7 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 | [request-refactor-plan](request-refactor-plan/) | Plan refactors with tiny commits |
 | [ts-audit](ts-audit/) | Audit TypeScript code against 9 bundled TypeScript library references |
 | [lfg](lfg/) | Take an ask to a proof of concept: short shaping conversation, then unattended build of tracer-bullet slices to a stamped PR with a recap and gap issues. User-invoked only, never merges, never stamps. Send `/lfg` as its own message — typed as the first message of a fresh Conductor workspace it is not parsed as a command, and the run proceeds without the skill |
+| [hackathon](hackathon/) | Plan, build, and demo one project inside a judged hackathon's build window: an event profile that marks every unstated rule `not stated`, candidates scored dimension by dimension with a blind second scorer, an over-full scope ladder re-planned from measured rung pace at fixed clock checkpoints, a production-grade build with a visible factory, and a table demo with judge Q&A drilled from a decision log. User-invoked only. Send `/hackathon` as its own message |
 
 ### Tooling & Setup
 

@@ -30,8 +30,9 @@ Expand is a call someone else makes).
 **Side-route, user-invoked only.** It fires when a human types `/lfg <ask>`;
 `disable-model-invocation: true` keeps its description out of every other
 session's context. Use it when a demo window is closing, such
-as a hackathon or a spike you want to show someone, and the full pipeline's
-human gates would cost more than the build.
+as a spike you want to show someone, and the full pipeline's
+human gates would cost more than the build. For a judged hackathon day, use
+`/hackathon`, which adds project selection, clock checkpoints, and the demo.
 
 **Send it as its own message, not as the first message of a fresh workspace.**
 A slash command is recognized only at the start of a message, and a host that

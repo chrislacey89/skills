@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.37.0 — New side-route /hackathon for a judged, time-boxed build day
+
+A judged hackathon asks three questions the pipeline did not answer. The most useful project is not the winning one, because judges rate many tables in a row and remember the peak and the ending. An agent-assisted build does not move at the human rates an estimate borrows. And many events judge the process (tests, security, observability, explained decisions) as well as the product. `/lfg` covered an unjudged proof of concept, and its own Invocation Position named a hackathon as a use, but it has no project selection, no clock, and no demo.
+
+### Changes
+
+- **New side-route `/hackathon`**: user-invoked only, run in two sittings. Prep builds an event profile that marks every unstated field `not stated`, scores 5–8 candidates dimension by dimension on an anchored 1–5 scale (with familiar surprise, peak moment, and 60-second legibility among the dimensions), runs a blind second scorer as a sub-agent, and shapes an over-full scope ladder whose rung 1 is a tracer bullet. The build day re-plans at fixed 90-minute checkpoints from the measured median rung time, never from a fresh estimate, and holds a freeze 75 minutes before the deadline. The demo phase runs a DO-CONFIRM pre-demo checklist, a 60-second table script that ends on the peak moment, and judge Q&A drilled from `DECISIONS.md`.
+- **State is split**: prep goes to one sidecar dossier (`research/hackathon-<date>.md`), because events require an empty repo until the start. `PLAN.md` and `DECISIONS.md` go into the event repo from kickoff, a scoped exception to the no-project-tree rule stated in the skill and in `CLAUDE.md`.
+- **`/lfg` points judged hackathons at `/hackathon`**: its Invocation Position no longer names a hackathon as an `/lfg` use.
+- Inventory surfaces updated (README, SYSTEM-OVERVIEW role list and Handoff Table, CLAUDE.md, site catalog); the canon regenerated for Hit Makers.
+
 ## v1.36.0 — /lfg files one roll-up gap issue per run, and its write-backs leave a trace (#688)
 
 `/lfg` Close step 6 filed one `lfg-gap` issue per `open` ledger row. On PRs #630, #645, #655, and #656 that came to 8 to 18 issues per PR, and about a third were "Decide whether…" or "Size note" rows that asked for no change. They were consolidated by hand into #683 to #686. The same step filed two issues for one defect when two reviewers both found it (#379). Two write-backs had no visible trace when skipped: the PRD-lite slice boxes were never ticked (#380), and one field run skipped step 6 with 29 rows `open` while its handoff read as complete (#384).

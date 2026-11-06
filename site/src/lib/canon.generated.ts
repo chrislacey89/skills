@@ -217,6 +217,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "Hit Makers — Derek Thompson",
+		title: "Hit Makers",
+		author: "Derek Thompson",
+		type: "book",
+		citations: [
+			{ skill: "hackathon", tier: "primary" },
+		],
+	},
+	{
 		full: "Improving Factuality and Reasoning in Language Models through Multiagent Debate — Du et al. (2023)",
 		title: "Improving Factuality and Reasoning in Language Models through Multiagent Debate",
 		author: "Du et al. (2023)",
@@ -270,6 +279,7 @@ export const canon: CanonWork[] = [
 		author: "Daniel Kahneman, Olivier Sibony & Cass Sunstein",
 		type: "book",
 		citations: [
+			{ skill: "hackathon", tier: "secondary" },
 			{ skill: "pre-merge", tier: "secondary" },
 		],
 	},
@@ -322,6 +332,7 @@ export const canon: CanonWork[] = [
 		type: "book",
 		citations: [
 			{ skill: "create-milestone", tier: "primary" },
+			{ skill: "hackathon", tier: "primary" },
 			{ skill: "lfg", tier: "secondary" },
 			{ skill: "write-a-prd", tier: "primary" },
 		],
@@ -385,6 +396,7 @@ export const canon: CanonWork[] = [
 			{ skill: "closeout", tier: "secondary" },
 			{ skill: "compound", tier: "secondary" },
 			{ skill: "execute", tier: "secondary" },
+			{ skill: "hackathon", tier: "secondary" },
 			{ skill: "pre-merge", tier: "secondary" },
 			{ skill: "research", tier: "secondary" },
 			{ skill: "shape", tier: "secondary" },
@@ -438,6 +450,7 @@ export const canon: CanonWork[] = [
 		author: "Andrew Hunt & David Thomas",
 		type: "book",
 		citations: [
+			{ skill: "hackathon", tier: "secondary" },
 			{ skill: "lfg", tier: "primary" },
 			{ skill: "prd-to-issues", tier: "primary" },
 			{ skill: "prototype", tier: "secondary" },

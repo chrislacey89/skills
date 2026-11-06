@@ -1489,7 +1489,7 @@ cmd_fixrun() {
 
 # Every skill in the pack, by directory name. scripts/test-guest-footprint.sh
 # fails when a directory with a SKILL.md is missing from it.
-PACK_SKILLS="api-design-review closeout compound correct-course create-milestone design-an-interface excavate execute fix-findings git-guardrails-claude-code handoff help improve-codebase-architecture improve-pipeline init-pipeline lfg mermaid prd-to-issues pre-merge prototype qa re-pitch request-refactor-plan research respond-to-review setup-pre-commit setup-ralph-loop shape tdd triage-issue ts-audit ubiquitous-language visual-recap walk-commits write-a-prd"
+PACK_SKILLS="api-design-review closeout compound correct-course create-milestone design-an-interface excavate execute fix-findings git-guardrails-claude-code handoff hackathon help improve-codebase-architecture improve-pipeline init-pipeline lfg mermaid prd-to-issues pre-merge prototype qa re-pitch request-refactor-plan research respond-to-review setup-pre-commit setup-ralph-loop shape tdd triage-issue ts-audit ubiquitous-language visual-recap walk-commits write-a-prd"
 
 cmd_footprint() {
     local range log names accept=""
