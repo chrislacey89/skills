@@ -63,7 +63,7 @@ Blind second scorer: <cells that met the Locked disagreement threshold, and how 
 - <part> → <what to do instead>
 
 **Slow-dependency work (kickoff block / rung 1):**
-- <keys, auth, deploy target, riskiest integration, data access>
+- <keys, auth, deploy target (final hostname), riskiest integration, data access>
 
 **Factory plan:** <hooks, CI, scan, logging, decision log>
 
