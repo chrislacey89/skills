@@ -295,8 +295,8 @@ re-deriving it. Fill the dossier:
   likely to swallow an hour, along with what you will do instead.
 - **Slow-dependency work goes first.** Move to the kickoff block and rung 1
   everything an agent cannot speed up: API keys and quotas, OAuth and auth, the
-  deploy target, the riskiest third-party integration, and data access. These
-  fail slowly, and they fail late if left late.
+  deploy target (its final hostname), the riskiest third-party integration, and
+  data access. These fail slowly, and they fail late if left late.
 - **Factory plan.** Decide which process artifacts to stand up at kickoff and
   show at the table: the pipeline hooks from `/init-pipeline`, CI running the
   tests on every push, a dependency or secret scan, structured logging or a
