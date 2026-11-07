@@ -373,12 +373,22 @@ nothing in this phase moves the freeze or the submit-by time.
 3. Run the tests, commit, and push. Then watch every CI run for the pushed
    commit until each finishes ([`gh run watch`](https://cli.github.com/manual/gh_run_watch)).
    A repo with a deploy workflow gets more than one run per push, and watching
-   only the newest can report the deploy's green while CI is red. No output
-   from the loop means no run has registered yet; run the block again:
+   only the newest can report the deploy's green while CI is red. A run can take
+   a few seconds to register, so the block polls for up to two minutes. It exits
+   2 when `gh run list` fails and 3 when no run appears: neither is a CI result,
+   so neither is green, and 3 means CI has no run for this commit (check that
+   the push landed and that a workflow triggers on it):
 
    ```bash
+   SHA="$(git rev-parse HEAD)"; IDS=
+   for _ in $(seq 12); do
+     IDS="$(gh run list --commit "$SHA" --json databaseId -q '.[].databaseId')" || exit 2
+     test -n "$IDS" && break
+     sleep 10
+   done
+   test -n "$IDS" || { echo "no CI run for $SHA" >&2; exit 3; }
    FAIL=
-   for id in $(gh run list --commit "$(git rev-parse HEAD)" --json databaseId -q '.[].databaseId'); do
+   for id in $IDS; do
      gh run watch "$id" --exit-status || FAIL=1
    done
    test -z "$FAIL"
