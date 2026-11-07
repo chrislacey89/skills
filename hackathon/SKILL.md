@@ -348,10 +348,10 @@ nothing in this phase moves the freeze or the submit-by time.
    dossier's seeded log), make the first commit, then push it to the remote added in
    prep with `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
-   calls the project's own scripts, the same commands the hooks run, as
-   `bash "$SC" profile` prints them under `Verify` once `/init-pipeline` has
-   declared them. Never inline a different command in CI: a CI step wider than
-   the hook fails on files every local commit passed.
+   runs the commands in `lefthook.yml`, the one source for what the hooks run,
+   with the staged-files placeholder replaced by the whole repo. Never write a
+   different command into CI: a CI step that checks other files than the hook
+   fails on files every local commit passed.
 3. Deploy a hello-world to the deploy target, so the slowest unknown is resolved
    first.
 
