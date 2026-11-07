@@ -348,7 +348,10 @@ nothing in this phase moves the freeze or the submit-by time.
    dossier's seeded log), make the first commit, then push it to the remote added in
    prep with `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
-   runs the tests.
+   calls the project's own scripts, the same commands the hooks run, as
+   `bash "$SC" profile` prints them under `Verify` once `/init-pipeline` has
+   declared them. Never inline a different command in CI: a CI step wider than
+   the hook fails on files every local commit passed.
 3. Deploy a hello-world to the deploy target, so the slowest unknown is resolved
    first.
 
@@ -367,7 +370,17 @@ nothing in this phase moves the freeze or the submit-by time.
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
    mkdir -p "$ROOT/.claude" && touch "$ROOT/.claude/.tdd-skipped"
    ```
-3. Run the tests, commit with CI green. Do not tick the rung yet (step 6 does). Then
+3. Run the tests, commit, and push. Then watch the CI run for the pushed commit
+   until it finishes ([`gh run watch`](https://cli.github.com/manual/gh_run_watch)).
+   An empty `RUN` means the run has not registered yet; run the two lines again:
+
+   ```bash
+   RUN=$(gh run list --commit "$(git rev-parse HEAD)" -L 1 --json databaseId -q '.[0].databaseId')
+   gh run watch "$RUN" --exit-status
+   ```
+
+   On red, do not deploy and do not start the next rung: fixing the run is
+   this rung's work. Do not tick the rung yet (step 6 does). Then
    remove the rung's classification marker, as `/execute` Step 6 does, so the
    next rung classifies afresh and the gate stays closed between rungs:
 

@@ -122,8 +122,7 @@ pre-commit:
   parallel: true
   commands:
     format-and-lint:
-      glob: "*.{js,ts,jsx,tsx,json,css}"
-      run: npx @biomejs/biome check --write --staged {staged_files}
+      run: npx @biomejs/biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
       stage_fixed: true
     typecheck:
       run: {package_manager} run typecheck
@@ -207,7 +206,7 @@ Merge these into the config rather than appending a second `pre-commit:` key. Th
 - Replace `{package_manager}` with the detected package manager (pnpm, npm, yarn, bun). The one exception is the `dependency-audit` line under yarn 2 and later, where the command is [`yarn npm audit`](https://yarnpkg.com/cli/npm/audit), not `yarn audit`; check `yarn --version` before writing it (yarn 1 keeps [`yarn audit`](https://classic.yarnpkg.com/en/docs/cli/audit))
 - If the repo has no `typecheck` script in package.json, omit that command and tell the user
 - If the repo has no `test` script in package.json, omit that command and tell the user
-- Adjust `glob` patterns to match the project's file types
+- Adjust `glob` patterns to match the project's file types. The Biome command carries no `glob`: `--files-ignore-unknown=true` lets Biome's own config decide which staged files it handles, including file types later releases add, and `--no-errors-on-unmatched` keeps a commit with none of them from failing ([Biome: Git hooks](https://biomejs.dev/recipes/git-hooks/)). A glob here goes stale the day Biome starts formatting a new language
 
 ### 6. Create Formatter Config (if missing)
 
