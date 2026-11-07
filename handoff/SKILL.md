@@ -7,6 +7,8 @@ sources:
   secondary:
     - "Smart Brevity — Jim VandeHei, Mike Allen, Roy Schwartz"
     - "On Writing Well — William Zinsser"
+    - "Made to Stick — Chip Heath, Dan Heath"
+    - "The Checklist Manifesto — Atul Gawande"
 ---
 
 # Handoff
@@ -36,9 +38,9 @@ Do not use `/handoff` when:
 
 ### 1. Confirm the next-session focus
 
-If the user passed an argument to `/handoff`, treat it as the description of what the next session is for. Skip ahead to Step 2.
+If the user passed an argument to `/handoff` that names a next action (a skill to run, a feature to build, a bug to chase), treat it as the description of what the next session is for. Skip ahead to Step 2.
 
-If no argument was passed, ask one question — what the next session will be used for — and wait for the answer. Do not present a list of questions.
+If no argument was passed, or the argument names no next action ("the work so far", "everything we did"), ask one question — what the next session will be used for — and wait for the answer. Do not present a list of questions.
 
 ### 2. Read existing state — do not duplicate it
 
@@ -90,11 +92,31 @@ Order:
 
 6. **Suggested skills** — one or two `/<skill-name>` references the fresh session is likely to want, with a one-line reason each. Optional; skip when the next move is obvious from the Next session block.
 
-Revise once before saving. Apply the bar in `docs/writing-for-humans.md`: strip clutter, cut warm-up, prefer active verbs and concrete nouns, ensure the lede earns the next sentence. The dogfooding test: would you, returning cold in six months, understand what was done and what's next? If not, revise.
+Revise once before saving. Apply the bar in `docs/writing-for-humans.md`: strip clutter, cut warm-up, prefer active verbs and concrete nouns, ensure the lede earns the next sentence.
 
-### 5. Print the path and exit
+Then confirm three things about the content. Each can be checked; none asks whether the doc reads well to you, which is the question the writer is least able to answer (Step 5 asks someone else).
 
-Print the `mktemp` path and a one-line preview of the lede. The user picks the path up and pastes it into a fresh session. `/handoff` does nothing else — it does not auto-invoke another skill, it does not modify any other artifact, it does not commit anything.
+- **Mutable external state was re-checked during this run.** A claim about a deploy, a secret, a database row, a live URL, or a test result was checked in this run, or the doc marks it "unverified". A fact recalled from earlier in the session is not checked.
+- **No pointer leads into session scratch.** Apart from the doc itself, nothing the doc points to lives under a session scratchpad or `$TMPDIR` path, because the next session may not have it. Move the content into the doc, or into a durable home, or drop the pointer.
+- **Every open decision is marked.** An approach the doc suggests is either marked "checked feasible", with what was checked, or "unverified".
+
+### 5. Cold read (DO-CONFIRM)
+
+A handoff's reader lacks the writer's context by construction, and the writer is the one person who cannot see what is missing from it. So before printing the path, spawn one fresh, read-only sub-agent and give it only the doc's path. Ask it:
+
+- Could you start the **Next session** step from this doc and the files it points to, without asking the user anything? If not, what would you have to ask?
+- Separate **facts only the writing session holds** (an approach already ruled out, a value never written down, a step that was run) from **planning the next skill will do on its own** (which functions to add, which migration to write). List only the first kind; the second stays out, because the doc carries pointers, not plans.
+- Open each file, issue, or PR the doc points to. Where one contradicts the doc, or is stale against it, say which and how.
+
+Fix the doc for each fact the reader lists. Do not run a second cold read; one pass is the check.
+
+A pointed-to durable artifact that the reader found stale (a plan file, a dossier, an issue body) is not this skill's to edit. List each under a **Stale pointers** heading in the doc, naming the skill that owns it, and repeat the list in Step 6's message.
+
+Skip the cold read only with a one-line reason written into the doc, for example `Cold read skipped: the next step is read-only review of PR #N.` A skip with no reason in the doc is a skipped check, not a decision.
+
+### 6. Print the path and exit
+
+Print the `mktemp` path, a one-line preview of the lede, and any stale pointers from Step 5. The user picks the path up and pastes it into a fresh session. `/handoff` does nothing else — it does not auto-invoke another skill, it does not modify any other artifact (stale ones are listed, not edited), it does not commit anything.
 
 ## Common Rationalizations
 
@@ -105,6 +127,7 @@ Print the `mktemp` path and a one-line preview of the lede. The user picks the p
 | "The handoff doc should include the full PRD text so the next session has everything." | No. The next session can run `gh issue view <n>` from the doc's reference. Duplicating the PRD makes the doc go stale the moment the issue is edited and bloats context for no benefit. |
 | "I'm mid-`/execute` and the work is unfinished — I'll write a handoff doc instead of leaving an issue comment." | `/execute` already prescribes leaving an issue comment with what was done, what remains, and the exact error output. That comment is the durable record. A handoff doc can carry session-level pointers on top of it, but it does not replace the comment. |
 | "The argument the user passed is vague, so I'll skip the focus question." | Ask one question. A vague handoff doc earns less reader trust than a short one with a clear focus. |
+| "I already verified it myself, so the cold read adds nothing." | A writer can re-check git state and every live fact, judge the doc ready, and still leave gaps a cold reader finds in one pass. You checked what you knew to check. The cold reader finds what you didn't know was missing. |
 | "I'll commit the handoff doc to the repo so it survives." | Don't. Surviving the session is not the goal — compacting it is. If the content needs to survive, the right vessel is an issue comment, a PRD body update, or a `docs/solutions/` entry. |
 
 ## Red Flags
@@ -115,6 +138,8 @@ Print the `mktemp` path and a one-line preview of the lede. The user picks the p
 - The doc is being produced at the natural close of a primary pipeline skill, parallel to that skill's existing `**Next session:**` line.
 - The doc is longer than the source conversation deserves — a one-question Q&A becoming a multi-section handoff is the wrong shape.
 - The next-session focus is missing or generic ("continue the work") rather than a specific instruction or skill.
+- The path is about to be printed with no cold read run and no skip reason in the doc.
+- The agent is about to edit a stale plan file, dossier, or issue body the cold read found, instead of listing it under **Stale pointers**.
 
 ## Verification
 
@@ -124,12 +149,14 @@ A run of `/handoff` is not complete until:
 - the body references durable artifacts by path, URL, or issue number — not by quoted content
 - the body includes a `**Next session:**` block in the conventional shape
 - every process the session left running was stopped or is listed in the doc
+- the Step 4 checks hold: mutable external state re-checked or marked "unverified", no pointer into session scratch, every open decision marked
+- the Step 5 cold read ran and its facts were fixed in the doc, or the doc states why it was skipped
 - the path was printed to the user
 - the doc was not staged, committed, or moved inside the repo
 
 ## Handoff
 
 - **Expected input:** a long-running or exploratory session that does not sit on a primary pipeline boundary, plus (optionally) an argument describing the next session's focus
-- **Produces:** a transient handoff doc at a `mktemp` path, referencing durable state rather than copying it
+- **Produces:** a transient handoff doc at a `mktemp` path, referencing durable state rather than copying it, checked by one cold read before the path is printed
 - **Comes next by default:** a fresh session opened by the user, using the doc as its entry point — the fresh session may invoke any skill (often `/execute`, `/qa`, or `/help`) or continue ad-hoc, depending on the captured focus
-- **Does not invoke:** any other skill — `/handoff` is a pure side-route producing a transient artifact
+- **Does not invoke:** any other skill — `/handoff` is a pure side-route producing a transient artifact. Its one sub-agent, the Step 5 cold reader, is part of its own procedure

@@ -341,7 +341,10 @@ nothing in this phase moves the freeze or the submit-by time.
 
 **Kickoff block** (after the start time and never before):
 
-1. Add `PLAN.md` (the ladder plus the clock plan) and `DECISIONS.md` (copied from the
+1. If the build actually starts at a time other than the event profile's start
+   time, recompute the kickoff block's end and the checkpoints from the actual
+   start, in `PLAN.md` and the dossier alike. The freeze and the submit-by time
+   come from the deadline, so they stay. Add `PLAN.md` (the ladder plus the clock plan) and `DECISIONS.md` (copied from the
    dossier's seeded log), make the first commit, then push it to the remote added in
    prep with `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
