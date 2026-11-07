@@ -385,9 +385,11 @@ nothing in this phase moves the freeze or the submit-by time.
    ```
 
    On red, do not deploy and do not start the next rung: fixing the run is
-   this rung's work. Do not tick the rung yet (step 6 does). Then
-   remove the rung's classification marker, as `/execute` Step 6 does, so the
-   next rung classifies afresh and the gate stays closed between rungs:
+   this rung's work: leave the classification marker in place, go back to
+   step 2 to fix it, and repeat this step. Do not tick the rung yet (step 6
+   does). Once every run is green, remove the rung's classification marker, as
+   `/execute` Step 6 does, so the next rung classifies afresh and the gate
+   stays closed between rungs:
 
    ```bash
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
