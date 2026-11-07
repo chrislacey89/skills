@@ -265,6 +265,15 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "Made to Stick — Chip Heath, Dan Heath",
+		title: "Made to Stick",
+		author: "Chip Heath, Dan Heath",
+		type: "book",
+		citations: [
+			{ skill: "handoff", tier: "secondary" },
+		],
+	},
+	{
 		full: "Mocking Techniques in Vitest — Epic Web Dev",
 		title: "Mocking Techniques in Vitest",
 		author: "Epic Web Dev",
@@ -397,6 +406,7 @@ export const canon: CanonWork[] = [
 			{ skill: "compound", tier: "secondary" },
 			{ skill: "execute", tier: "secondary" },
 			{ skill: "hackathon", tier: "secondary" },
+			{ skill: "handoff", tier: "secondary" },
 			{ skill: "pre-merge", tier: "secondary" },
 			{ skill: "research", tier: "secondary" },
 			{ skill: "shape", tier: "secondary" },
