@@ -370,13 +370,18 @@ nothing in this phase moves the freeze or the submit-by time.
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
    mkdir -p "$ROOT/.claude" && touch "$ROOT/.claude/.tdd-skipped"
    ```
-3. Run the tests, commit, and push. Then watch the CI run for the pushed commit
-   until it finishes ([`gh run watch`](https://cli.github.com/manual/gh_run_watch)).
-   An empty `RUN` means the run has not registered yet; run the two lines again:
+3. Run the tests, commit, and push. Then watch every CI run for the pushed
+   commit until each finishes ([`gh run watch`](https://cli.github.com/manual/gh_run_watch)).
+   A repo with a deploy workflow gets more than one run per push, and watching
+   only the newest can report the deploy's green while CI is red. No output
+   from the loop means no run has registered yet; run the block again:
 
    ```bash
-   RUN=$(gh run list --commit "$(git rev-parse HEAD)" -L 1 --json databaseId -q '.[0].databaseId')
-   gh run watch "$RUN" --exit-status
+   FAIL=
+   for id in $(gh run list --commit "$(git rev-parse HEAD)" --json databaseId -q '.[].databaseId'); do
+     gh run watch "$id" --exit-status || FAIL=1
+   done
+   test -z "$FAIL"
    ```
 
    On red, do not deploy and do not start the next rung: fixing the run is
