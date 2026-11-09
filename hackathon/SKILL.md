@@ -348,7 +348,10 @@ nothing in this phase moves the freeze or the submit-by time.
    dossier's seeded log), make the first commit, then push it to the remote added in
    prep with `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
-   runs the tests.
+   runs the commands in `lefthook.yml`, the one source for what the hooks run,
+   with the staged-files placeholder replaced by the whole repo. Never write a
+   different command into CI: a CI step that checks other files than the hook
+   fails on files every local commit passed.
 3. Deploy a hello-world to the deploy target, so the slowest unknown is resolved
    first.
 
@@ -367,9 +370,36 @@ nothing in this phase moves the freeze or the submit-by time.
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
    mkdir -p "$ROOT/.claude" && touch "$ROOT/.claude/.tdd-skipped"
    ```
-3. Run the tests, commit with CI green. Do not tick the rung yet (step 6 does). Then
-   remove the rung's classification marker, as `/execute` Step 6 does, so the
-   next rung classifies afresh and the gate stays closed between rungs:
+3. Run the tests, commit, and push. Then watch every CI run for the pushed
+   commit until each finishes ([`gh run watch`](https://cli.github.com/manual/gh_run_watch)).
+   A repo with a deploy workflow gets more than one run per push, and watching
+   only the newest can report the deploy's green while CI is red. A run can take
+   a few seconds to register, so the block polls for up to two minutes. It exits
+   2 when `gh run list` fails and 3 when no run appears: neither is a CI result,
+   so neither is green, and 3 means CI has no run for this commit (check that
+   the push landed and that a workflow triggers on it):
+
+   ```bash
+   SHA="$(git rev-parse HEAD)"; IDS=
+   for _ in $(seq 12); do
+     IDS="$(gh run list --commit "$SHA" --json databaseId -q '.[].databaseId')" || exit 2
+     test -n "$IDS" && break
+     sleep 10
+   done
+   test -n "$IDS" || { echo "no CI run for $SHA" >&2; exit 3; }
+   FAIL=
+   for id in $IDS; do
+     gh run watch "$id" --exit-status || FAIL=1
+   done
+   test -z "$FAIL"
+   ```
+
+   On red, do not deploy and do not start the next rung: fixing the run is
+   this rung's work: leave the classification marker in place, go back to
+   step 2 to fix it, and repeat this step. Do not tick the rung yet (step 6
+   does). Once every run is green, remove the rung's classification marker, as
+   `/execute` Step 6 does, so the next rung classifies afresh and the gate
+   stays closed between rungs:
 
    ```bash
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
