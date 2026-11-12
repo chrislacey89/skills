@@ -48,6 +48,7 @@
 #   sidecar.sh work comment <W-n> --body-file <f>
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--unblocked] [--state <open|closed|all>]
+#   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
 # GitHub when forge.write contains "issues", the stamp when it contains "prs",
@@ -104,6 +105,20 @@
 # both. A hit prints the physical path (pwd -P: symlinked folders resolved) of
 # the file found; a miss prints "MISSING: <path> (referenced by <referrer>)" on
 # stderr and exits 1.
+#
+# trace. Reads, never writes: no file, no commit (chrislacey89/skills#727). An
+# argument shaped like a work id is a work item, anything else a file. A work
+# item's edges come from every work file, parsed by the work verbs' own reader,
+# so an edge stored on one side (parent, blocked_by, superseded_by) is also
+# printed from the other. Its research comes from the body's "## Research
+# Reference" section (/write-a-prd writes it) and its "- **Research:**" line
+# (the slot /prd-to-issues gives a slice), and from the parent PRD's when a
+# slice has neither: nothing else records that link. A lesson's citations come
+# from its "## Related" section and its "Sibling docs:" list, resolved as
+# require resolves them, then from the lesson's own store root
+# (<category>/<name>.md), then from the project's top level. A neighbor that is
+# missing is printed as missing and never fails the call: exit 1 means the
+# subject itself is missing (or its store cannot be read).
 #
 # Exit codes: 0 success, 1 miss or refusal, 2 usage.
 #
@@ -1285,6 +1300,20 @@ cmd_require() {
         esac
     done
     if ! { [ -n "$path" ] && [ -n "$from" ]; }; then die_usage "usage: sidecar.sh require <path> --from <referrer>"; fi
+    local hit
+    if ! hit="$(resolve_cited "$path" "$from")"; then
+        printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
+        exit 1
+    fi
+    printf '%s\n' "$hit"
+}
+
+# resolve_cited <path> <referrer>: require's lookup, shared with trace. Prints
+# the physical path of the first candidate that exists, or returns 1; the order
+# is the header's "require resolution order", and the duplicate-category
+# warning goes to stderr here so both callers print it.
+resolve_cited() {
+    local path="$1" from="$2"
     # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
     local probe="$path"
     # shellcheck disable=SC2088  # the literal ~ is the point
@@ -1313,10 +1342,7 @@ cmd_require() {
                fi ;;
         esac
     fi
-    if [ ! -e "$probe" ]; then
-        printf 'MISSING: %s (referenced by %s)\n' "$path" "$from" >&2
-        exit 1
-    fi
+    [ -e "$probe" ] || return 1
     # A hit may be beside the referrer or in a sibling category, not where the
     # caller would guess, so print where it was found and let the caller open that.
     printf '%s/%s\n' "$(cd "$(dirname "$probe")" && pwd -P)" "$(basename "$probe")"
@@ -1840,6 +1866,255 @@ work_list() {
         | .[].id'
 }
 
+# trace's text extraction, appended to WORK_JQ. section($h) is the lines after
+# a line exactly $h up to the next "## " line, or null when $h is absent.
+# md_refs is every backtick token and markdown link target on the input lines
+# that ends in .md (with an optional #anchor), web URLs excluded.
+# shellcheck disable=SC2016  # $-names are jq variables
+TRACE_JQ='
+def section($h):
+  split("\n") as $l
+  | ([range(0; $l | length) | select($l[.] == $h)] | .[0]) as $s
+  | if $s == null then null
+    else ($l[$s + 1:]) as $r
+      | ([range(0; $r | length) | select($r[.] | startswith("## "))] | .[0] // ($r | length)) as $e
+      | $r[:$e] end;
+def md_refs:
+  [.[] | match("`([^`]+)`|\\]\\(([^) ]+)[^)]*\\)"; "g") | .captures | map(select(.string != null)) | .[0].string
+   | select(test("\\.md(#[^ ]*)?$")) | select(test("^https?://") | not)];
+def lesson_lines:
+  split("\n")
+  | reduce .[] as $x ({mode: null, out: []};
+      if $x == "## Related" then .mode = "rel"
+      elif .mode == "rel" then (if ($x | startswith("## ")) then .mode = null else .out += [$x] end)
+      elif ($x | contains("Sibling docs:")) then .mode = "sib" | .out += [$x]
+      elif .mode == "sib" then
+        (if ($x | test("^[ \t]*$")) or ($x | startswith("#")) then .mode = null
+         elif ($x | test("^[ \t]|^ *[-*]")) then .out += [$x]
+         else .mode = null end)
+      else . end)
+  | .out;
+'
+
+# abs_path <existing path>: its physical absolute path.
+abs_path() { printf '%s/%s\n' "$(cd "$(dirname "$1")" && pwd -P)" "$(basename "$1")"; }
+
+cmd_trace() {
+    local subject="" json=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) json=1 ;;
+            -*) die_usage "trace: unknown argument: $1" ;;
+            *) [ -z "$subject" ] || die_usage "usage: sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]"; subject="$1" ;;
+        esac
+        shift
+    done
+    [ -n "$subject" ] || die_usage "usage: sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]"
+    command -v jq >/dev/null 2>&1 || refuse "trace: jq is required and is not on PATH"
+    if is_work_id "$subject"; then trace_work "$subject" "$json"; else trace_lesson "$subject" "$json"; fi
+}
+
+# trace_research <cited> <via>: one research entry as JSON. newer is every
+# <slug>-YYYY-MM-DD.md beside the resolved file with the same slug and a later
+# date, ascending: /research supersedes an entry with a new dated file.
+trace_research() {
+    local cited="$1" via="$2" probe res="" newer="" re base slug date cand cb
+    probe="$cited"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
+    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
+    if [ -f "$probe" ]; then
+        res="$(abs_path "$probe")"
+        re='^(.+)-([0-9]{4}-[0-9]{2}-[0-9]{2})\.md$'
+        base="$(basename "$res")"
+        if [[ "$base" =~ $re ]]; then
+            slug="${BASH_REMATCH[1]}"; date="${BASH_REMATCH[2]}"
+            for cand in "$(dirname "$res")/$slug"-*.md; do
+                [ -f "$cand" ] || continue
+                cb="$(basename "$cand")"
+                [[ "$cb" =~ $re ]] || continue
+                [ "${BASH_REMATCH[1]}" = "$slug" ] || continue
+                [[ "${BASH_REMATCH[2]}" > "$date" ]] || continue
+                newer="${newer:+$newer$'\n'}$cand"
+            done
+        fi
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    jq -nc --arg c "$cited" --arg r "$res" --arg v "$via" --arg nw "$newer" \
+        '{cited: $c, resolved: (if $r == "" then null else $r end),
+          via: (if $v == "" then null else $v end),
+          newer: ($nw | split("\n") | map(select(length > 0)) | sort)}'
+}
+
+trace_work() {
+    local id="$1" json="$2" sc dir f one all="" base cited via research="" rr="null" pr out
+    sc="$(do_resolve)" || exit 1
+    sc="$(cd "$sc" && pwd -P)"
+    dir="$sc/work"
+    [ -f "$dir/$id.md" ] || refuse "trace: no such work item: $id"
+    for f in "$dir"/W-*.md; do
+        [ -f "$f" ] || continue
+        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm + {body, comments: comments}" "$f")" \
+            || refuse "trace: $f does not parse"
+        all="$all$one"$'\n'
+    done
+    # The graph, from every item at once; research paths are resolved below,
+    # because jq cannot test whether a file exists.
+    # shellcheck disable=SC2016  # $-names are jq variables
+    base="$(printf '%s' "$all" | jq -sc --arg id "$id" "$TRACE_JQ"'
+        def idn: .id | ltrimstr("W-") | tonumber;
+        def note($h): [.comments[] | select((.body | split("\n") | .[0]) == $h)] | last | if . == null then null else .at end;
+        . as $all
+        | (map({key: .id, value: .}) | from_entries) as $by
+        | def ref($i): {id: $i, state: ($by[$i].state // "missing")};
+        def research_lines:
+          (section("## Research Reference") // [])
+          + [split("\n")[] | select(test("^[-*] \\*\\*Research:\\*\\*"))]
+          | map(select(test("\\S")));
+        $by[$id] as $it
+        | ((($it.body // "") | research_lines) as $own
+           | if ($own | length) == 0 and $it.kind == "slice" and $it.parent != null
+             then {lines: (($by[$it.parent].body // "") | research_lines), via: $it.parent}
+             else {lines: $own, via: null} end) as $rs
+        | {kind: "work", id: $id,
+           item: ($it | del(.body, .comments)),
+           parent: (if $it.parent == null then null else ref($it.parent) end),
+           children: [$all[] | select(.parent == $id)] | sort_by(idn) | map({id, kind, state, pr: (.pr // null)}),
+           decomposed_into: [($it.decomposed_into // [])[] | ref(.)],
+           blocked_by: [($it.blocked_by // [])[] | ref(.)],
+           blocks: [$all[] | select(any((.blocked_by // [])[]; . == $id))] | sort_by(idn) | map({id, state}),
+           superseded_by: (if $it.superseded_by == null then null else ref($it.superseded_by) end),
+           supersedes: [$all[] | select(.superseded_by == $id)] | sort_by(idn) | map({id, state}),
+           research_cited: ($rs.lines | md_refs | reduce .[] as $x ([]; if any(.[]; . == $x) then . else . + [$x] end)),
+           via: $rs.via,
+           spike_issues: [$rs.lines[] | match("Refs #([0-9]+)"; "g") | .captures[0].string | tonumber],
+           review_notes: ($it | note("## Review Notes")),
+           disposition_ledger: ($it | note("## Review Disposition Ledger"))}')" \
+        || refuse "trace: could not read the work store in $dir"
+    via="$(printf '%s' "$base" | jq -r '.via // empty')"
+    cited="$(printf '%s' "$base" | jq -r '.research_cited[]')"
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        research="$research$(trace_research "$f" "$via")"$'\n'
+    done <<<"$cited"
+    # The pr field is a URL; GitHub and Bitbucket both end it in the number.
+    pr="$(printf '%s' "$base" | jq -r '.item.pr // empty')"
+    if [[ "$pr" =~ /([0-9]+)/?$ ]] && [ -f "$sc/review-responses/pr-${BASH_REMATCH[1]}.md" ]; then
+        rr="$(jq -n --arg p "$sc/review-responses/pr-${BASH_REMATCH[1]}.md" '$p')"
+    fi
+    out="$(printf '%s' "$research" | jq -sc --argjson b "$base" --argjson rr "$rr" '
+        . as $r
+        | $b | {kind, id, item, parent, children, decomposed_into, blocked_by, blocks,
+                superseded_by, supersedes, research: $r, spike_issues,
+                review_responses: $rr, review_notes, disposition_ledger}')" \
+        || refuse "trace: could not assemble the trace for $id"
+    if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
+    printf '%s\n' "$out" | jq -r '
+        def w: "\(.id) (\(.state))";
+        "\(.id)  \(.item.kind)  \(.item.state)",
+        (if .parent then "  parent  \(.parent | w)" else empty end),
+        (.children[] | "  child  \(w)"),
+        (.decomposed_into[] | "  decomposed into  \(w)"),
+        (.blocked_by[] | "  blocked by  \(w)"),
+        (.blocks[] | "  blocks  \(w)"),
+        (if .superseded_by then "  superseded by  \(.superseded_by | w)" else empty end),
+        (.supersedes[] | "  supersedes  \(w)"),
+        (if .item.pr then "  pr  \(.item.pr)" else empty end),
+        (.research[] | (if .via then " (via \(.via))" else "" end) as $v
+                     | (if .resolved then "  research  \(.resolved)\($v)" else "  research  MISSING: \(.cited)\($v)" end),
+                       (.newer[] | "  newer research  \(.)")),
+        (.spike_issues[] | "  spike issue  #\(.)"),
+        (if .review_responses then "  review responses  \(.review_responses)" else empty end),
+        (if .review_notes then "  review notes  \(.review_notes)" else empty end),
+        (if .disposition_ledger then "  disposition ledger  \(.disposition_ledger)" else empty end)'
+}
+
+# lesson_cites <lesson> <top> <dirs>: one tab-separated line per citation in
+# file order, "C|O <cited> <resolved>" (inside a solutions dir or not) or
+# "M <cited>". <top> is the project's top level ("" outside a repo); <dirs> is
+# the physical solutions dirs, one per line. When require's lookup misses, two
+# more forms lessons use are tried: <category>/<name>.md from the lesson's own
+# store root, then a path from <top>.
+lesson_cites() {
+    local lesson="$1" top="$2" dirs="$3" toks tok hit d where b
+    toks="$(jq -Rsr "$TRACE_JQ"'lesson_lines | md_refs | .[]' "$lesson")" || return 0
+    while IFS= read -r tok; do
+        [ -n "$tok" ] || continue
+        if ! hit="$(resolve_cited "$tok" "$lesson")"; then
+            hit=""
+            # shellcheck disable=SC2088  # the literal ~ is the point
+            case "$tok" in
+                /*|"~/"*) ;;
+                *) for b in "$(dirname "$(dirname "$lesson")")" "$top"; do
+                       [ -n "$b" ] || continue
+                       if [ -e "$b/$tok" ]; then hit="$(abs_path "$b/$tok")"; break
+                       elif [ -e "$b/${tok%%#*}" ]; then hit="$(abs_path "$b/${tok%%#*}")"; break; fi
+                   done ;;
+            esac
+        fi
+        if [ -z "$hit" ]; then printf 'M\t%s\n' "$tok"; continue; fi
+        [ "$hit" != "$lesson" ] || continue
+        where=O
+        while IFS= read -r d; do
+            [ -n "$d" ] || continue
+            case "$hit" in "$d"/*) where=C ;; esac
+        done <<<"$dirs"
+        printf '%s\t%s\t%s\n' "$where" "$tok" "$hit"
+    done <<<"$toks"
+}
+
+trace_lesson() {
+    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out
+    [ -f "$file" ] || refuse "trace: no such work item or file: $file"
+    self="$(abs_path "$file")"
+    # solutions-dirs names in-tree dirs relative to the cwd, so it is asked from
+    # the project's top level: a trace run from a subdirectory must still see an
+    # in-tree lesson as a lesson. A dir that does not exist holds no lesson to
+    # cite or be cited by. Outside a repo there is no sidecar to ask, and its
+    # refusal would only be noise here.
+    raw="docs/solutions"
+    if in_repo; then
+        top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || top=""
+        raw="$(cd "${top:-.}" && cmd_solutions_dirs)"
+    fi
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        case "$d" in /*) ;; *) d="${top:-$PWD}/$d" ;; esac
+        [ -d "$d" ] || continue
+        dirs="${dirs:+$dirs$'\n'}$(cd "$d" && pwd -P)"
+    done <<<"$raw"
+    lines="$(lesson_cites "$self" "$top" "$dirs")"
+    # cited_by: a cheap grep on the basename, then the same extraction and
+    # resolution as above, so a mention outside Related never counts.
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        while IFS= read -r cand; do
+            [ -n "$cand" ] || continue
+            [ "$cand" != "$self" ] || continue
+            if lesson_cites "$cand" "$top" "$dirs" 2>/dev/null | cut -f3 | grep -qxF -- "$self"; then
+                by="${by:+$by$'\n'}$cand"
+            fi
+        done <<<"$(find "$d" -type f -name '*.md' -exec grep -lF -- "$(basename "$self")" {} + 2>/dev/null)"
+    done <<<"$dirs"
+    # shellcheck disable=SC2016  # $-names are jq variables
+    out="$(printf '%s\n' "$lines" | jq -Rnc --arg path "$self" --arg by "$by" '
+        [inputs | select(length > 0) | split("\t")] as $r
+        | def firsts(f): reduce .[] as $x ([]; if any(.[]; f == ($x | f)) then . else . + [$x] end);
+        {kind: "lesson", path: $path,
+         cites: ([$r[] | select(.[0] == "C") | {cited: .[1], resolved: .[2]}] | firsts(.resolved)),
+         other: ([$r[] | select(.[0] == "O") | {cited: .[1], resolved: .[2]}] | firsts(.resolved)),
+         missing: ([$r[] | select(.[0] == "M") | .[1]] | firsts(.)),
+         cited_by: ($by | split("\n") | map(select(length > 0)) | unique)}')" \
+        || refuse "trace: could not assemble the trace for $self"
+    if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
+    printf '%s\n' "$out" | jq -r '
+        "lesson  \(.path)",
+        (.cites[] | "  cites  \(.resolved)"),
+        (.other[] | "  also cites  \(.resolved)"),
+        (.missing[] | "  MISSING: \(.)"),
+        (.cited_by[] | "  cited by  \(.)")'
+}
+
 verb="${1:-}"
 [ $# -gt 0 ] && shift
 case "$verb" in
@@ -1862,5 +2137,6 @@ case "$verb" in
     fixrun)  cmd_fixrun "$@" ;;
     footprint) cmd_footprint "$@" ;;
     work)    cmd_work "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|fixrun|footprint|work> ..." ;;
+    trace)   cmd_trace "$@" ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|fixrun|footprint|work|trace> ..." ;;
 esac

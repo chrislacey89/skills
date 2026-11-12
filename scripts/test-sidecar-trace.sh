@@ -1,0 +1,369 @@
+#!/usr/bin/env bash
+# test-sidecar-trace.sh — runs the real init-pipeline/scripts/sidecar.sh
+# `trace` verb against scratch repos and against this repo's own lessons
+# (chrislacey89/skills#727).
+#
+# THE DRIFT CLASS. trace derives edges from text other skills write: the
+# "## Research Reference" section /write-a-prd puts in a PRD body, the
+# "- **Research:**" slot /prd-to-issues gives a slice, the
+# "## Review Notes" and "## Review Disposition Ledger" comments, a lesson's
+# "## Related" section and "Sibling docs:" list. A reader built on another
+# writer's text goes silently empty when that text changes: no error, no
+# missing edge reported, just fewer neighbors. So the research section below
+# extracts its template lines from write-a-prd/SKILL.md itself and fails loudly
+# when they are gone, and the corpus section traces every lesson in
+# docs/solutions/ and requires the total citation count to be above zero, so
+# an extraction that returns nothing cannot pass.
+#
+# THE READ-ONLY CONTRACT. trace never writes a file and never commits: after
+# every call the fixture project's tree is clean and the sidecar's HEAD has
+# not moved. A neighbor that is missing is reported, never an error; exit 1 is
+# kept for a subject that is missing.
+#
+# THE SHARED LOOKUP. trace resolves a lesson's citations with the helper that
+# `require` uses, so the last section re-asserts require's hit and miss output.
+#
+# Fixtures are built after unsetting the inherited git environment, with a
+# private global config, so a hook's GIT_DIR or the runner's identity cannot
+# leak in (scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md). Every
+# fixture root commit carries its own path, so two fixtures made in the same
+# second are not one project (scripts/test-fixture-root-collision.sh).
+
+# shellcheck disable=SC2016  # backticks in fixture markdown are literal text
+set -u
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
+SC="$repo_root/init-pipeline/scripts/sidecar.sh"
+PRD_SKILL="$repo_root/write-a-prd/SKILL.md"
+SLICE_SKILL="$repo_root/prd-to-issues/SKILL.md"
+[ -f "$SC" ] || { printf 'FATAL %s is missing\n' "$SC"; exit 1; }
+[ -f "$PRD_SKILL" ] || { printf 'FATAL %s is missing\n' "$PRD_SKILL"; exit 1; }
+[ -f "$SLICE_SKILL" ] || { printf 'FATAL %s is missing\n' "$SLICE_SKILL"; exit 1; }
+
+tmp="$(mktemp -d)"
+tmp="$(cd "$tmp" && pwd -P)"
+trap 'chmod -R u+rwx "$tmp" 2>/dev/null; rm -rf "$tmp"' EXIT
+
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL="$tmp/gitconfig"
+git config --file "$GIT_CONFIG_GLOBAL" user.name "Trace Tester"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "tester@example.com"
+git config --file "$GIT_CONFIG_GLOBAL" init.defaultBranch main
+export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars"
+export SKILL_KIT_RESEARCH_ARCHIVE="$tmp/archive"
+
+pass=0
+fail=0
+ok()  { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
+bad() { printf '  FAIL %s\n' "$1"; printf '       %s\n' "$2"; fail=$((fail + 1)); }
+section() { printf '\n=== %s ===\n' "$1"; }
+check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi; }
+fatal() { printf 'FATAL %s\n' "$1"; printf '\n---\n%d passed, %d failed\n' "$pass" "$((fail + 1))"; exit 1; }
+
+# runo <dir> <args...> — run sidecar.sh from <dir>; stdout in $out, exit in $rc,
+# stderr in $err. "$BASH" so a /bin/bash run of this suite runs the script
+# under the same bash.
+runo() {
+    local d="$1"; shift
+    out="$(cd "$d" && "$BASH" "$SC" "$@" 2>"$tmp/stderr")"; rc=$?
+    err="$(cat "$tmp/stderr")"
+}
+# jqo <filter> — apply a jq filter to the last $out.
+jqo() { printf '%s' "$out" | jq -c "$1"; }
+
+n=0
+# mkproj — a scratch project with its own root commit, in $P.
+mkproj() {
+    n=$((n + 1))
+    P="$tmp/proj$n"
+    git init -q "$P"
+    git -C "$P" commit -q --allow-empty -m "root $P"
+}
+
+# -----------------------------------------------------------------------------
+section "usage and exits"
+
+mkproj
+nosc="$P"
+runo "$nosc" trace
+check "no argument exits 2" 2 "$rc"
+runo "$nosc" trace W-1 --bogus
+check "an unknown flag exits 2" 2 "$rc"
+runo "$nosc" trace W-1
+check "a work id with no sidecar exits 1" 1 "$rc"
+runo "$nosc" trace no-such-file.md
+check "a file that does not exist exits 1" 1 "$rc"
+
+mkproj
+runo "$P" init --name trace --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+S="$out"
+TP="$P"
+[ -d "$S" ] || fatal "init did not create a sidecar: $err"
+runo "$P" trace W-99
+check "a work id the store does not hold exits 1" 1 "$rc"
+
+# -----------------------------------------------------------------------------
+section "work edges, both directions"
+
+printf '## Problem\n\nA thing.\n' > "$tmp/body.md"
+runo "$P" work create --kind prd --body-file "$tmp/body.md"; prd="$out"
+runo "$P" work create --kind slice --parent "$prd" --body-file "$tmp/body.md"; s1="$out"
+runo "$P" work create --kind slice --parent "$prd" --body-file "$tmp/body.md"; s2="$out"
+runo "$P" work create --kind slice --parent "$prd" --blocked-by "$s2" --body-file "$tmp/body.md"; s3="$out"
+runo "$P" work set "$prd" decomposed_into "$s1,$s2,$s3"
+runo "$P" work close "$s1" --superseded-by "$s3"
+
+runo "$P" trace "$prd" --json
+check "trace --json exits 0" 0 "$rc"
+check "kind and id" '["work","'"$prd"'"]' "$(jqo '[.kind, .id]')"
+check "item carries the frontmatter" '"prd"' "$(jqo '.item.kind')"
+check "item carries no body or comments" '[false,false]' "$(jqo '.item | [has("body"), has("comments")]')"
+check "children, in id order, with kind, state and pr" \
+    '[{"id":"'"$s1"'","kind":"slice","state":"closed","pr":null},{"id":"'"$s2"'","kind":"slice","state":"open","pr":null},{"id":"'"$s3"'","kind":"slice","state":"open","pr":null}]' \
+    "$(jqo '.children')"
+check "decomposed_into, with states" \
+    '[{"id":"'"$s1"'","state":"closed"},{"id":"'"$s2"'","state":"open"},{"id":"'"$s3"'","state":"open"}]' \
+    "$(jqo '.decomposed_into')"
+check "a prd has no parent" null "$(jqo '.parent')"
+
+runo "$P" trace "$s3" --json
+check "parent, with state" '{"id":"'"$prd"'","state":"open"}' "$(jqo '.parent')"
+check "blocked_by, with state" '[{"id":"'"$s2"'","state":"open"}]' "$(jqo '.blocked_by')"
+check "supersedes" '[{"id":"'"$s1"'","state":"closed"}]' "$(jqo '.supersedes')"
+runo "$P" trace "$s2" --json
+check "blocks, read from the other item's blocked_by" '[{"id":"'"$s3"'","state":"open"}]' "$(jqo '.blocks')"
+runo "$P" trace "$s1" --json
+check "superseded_by, with state" '{"id":"'"$s3"'","state":"open"}' "$(jqo '.superseded_by')"
+
+# A hand-written blocker id that names no file is a missing neighbor, not an error.
+sed -i.bak "s/^blocked_by: .*/blocked_by: [$s2, W-77]/" "$S/work/$s3.md" && rm -f "$S/work/$s3.md.bak"
+runo "$P" trace "$s3" --json
+check "a blocker with no file exits 0" 0 "$rc"
+check "a blocker with no file is state missing" '{"id":"W-77","state":"missing"}' "$(jqo '.blocked_by[1]')"
+runo "$P" trace "$s3"
+case "$out" in *"  blocked by  W-77 (missing)"*) ok "text mode names the missing blocker" ;; *) bad "text mode names the missing blocker" "$out" ;; esac
+git -C "$S" checkout -q -- "work/$s3.md"
+
+# -----------------------------------------------------------------------------
+section "review_responses"
+
+runo "$P" work set "$s2" pr "https://github.com/acme/trace/pull/56"
+runo "$P" trace "$s2" --json
+check "no record for the pr yet: null" null "$(jqo '.review_responses')"
+mkdir -p "$S/review-responses"
+printf 'record\n' > "$S/review-responses/pr-56.md"
+runo "$P" trace "$s2" --json
+check "a GitHub pr URL finds review-responses/pr-56.md" "\"$S/review-responses/pr-56.md\"" "$(jqo '.review_responses')"
+check "children report a set pr" '"https://github.com/acme/trace/pull/56"' "$(runo "$P" trace "$prd" --json; jqo ".children[] | select(.id == \"$s2\") | .pr")"
+runo "$P" work set "$s3" pr "https://bitbucket.org/acme/trace/pull-requests/7/"
+printf 'record\n' > "$S/review-responses/pr-7.md"
+runo "$P" trace "$s3" --json
+check "a Bitbucket pr URL (trailing /) finds pr-7.md" "\"$S/review-responses/pr-7.md\"" "$(jqo '.review_responses')"
+
+# -----------------------------------------------------------------------------
+section "review notes and disposition ledger"
+
+printf '## Review Notes\n\nfirst\n' > "$tmp/n1.md"
+printf '## Review Disposition Ledger\n\n| # | decision |\n' > "$tmp/l1.md"
+printf '## Review Notes\n\nsecond\n' > "$tmp/n2.md"
+printf 'a plain comment\n' > "$tmp/plain.md"
+runo "$P" trace "$s2" --json
+check "no comments: review_notes null" null "$(jqo '.review_notes')"
+runo "$P" work comment "$s2" --body-file "$tmp/n1.md"
+sleep 1
+runo "$P" work comment "$s2" --body-file "$tmp/l1.md"
+sleep 1
+runo "$P" work comment "$s2" --body-file "$tmp/n2.md"
+runo "$P" work comment "$s2" --body-file "$tmp/plain.md"
+runo "$P" work view "$s2" --json
+ats="$(jqo '[.comments[].at]')"
+runo "$P" trace "$s2" --json
+check "review_notes is the newest Review Notes comment" "$(printf '%s' "$ats" | jq -c '.[2]')" "$(jqo '.review_notes')"
+check "disposition_ledger is the ledger comment" "$(printf '%s' "$ats" | jq -c '.[1]')" "$(jqo '.disposition_ledger')"
+
+# -----------------------------------------------------------------------------
+section "research, pinned to /write-a-prd's template"
+
+archive_line="$(grep -F 'documented at `<absolute path to the research entry>`' "$PRD_SKILL" | head -n 1)"
+[ -n "$archive_line" ] || fatal "write-a-prd/SKILL.md has no archive-mode line 'documented at \`<absolute path to the research entry>\`': trace's research reader has lost its writer"
+spike_line="$(grep -F 'Refs #<spike-issue-number>' "$PRD_SKILL" | head -n 1)"
+[ -n "$spike_line" ] || fatal "write-a-prd/SKILL.md has no spike-issue line 'Refs #<spike-issue-number>': trace's spike reader has lost its writer"
+grep -qx '## Research Reference' "$PRD_SKILL" || fatal "write-a-prd/SKILL.md has no '## Research Reference' heading"
+
+R="$S/research"
+mkdir -p "$R"
+for f in tracer-2026-01-01 tracer-2026-03-01 tracer-2026-02-01 tracer-2025-12-01 tracer-x-2026-04-01; do printf 'r\n' > "$R/$f.md"; done
+entry="$R/tracer-2026-02-01.md"
+{
+    printf '## Problem\n\nA thing.\n\n## Research Reference\n\n'
+    printf '%s\n' "${archive_line/<absolute path to the research entry>/$entry}"
+    printf '%s\n' "${spike_line/<spike-issue-number>/314}"
+    printf '\nAlso `%s`.\n\n## Lessons from Past Solutions\n\n`%s`\n' "$tmp/gone-2026-01-01.md" "$R/tracer-2026-01-01.md"
+} > "$tmp/rprd.md"
+runo "$P" work create --kind prd --body-file "$tmp/rprd.md"; rprd="$out"
+runo "$P" work create --kind slice --parent "$rprd" --body-file "$tmp/body.md"; rs="$out"
+
+runo "$P" trace "$rprd" --json
+check "research exits 0 with an unresolved path" 0 "$rc"
+check "the template's path resolves" "\"$entry\"" "$(jqo '.research[0].resolved')"
+check "cited is the path as written" "\"$entry\"" "$(jqo '.research[0].cited')"
+check "a prd's own research has no via" null "$(jqo '.research[0].via')"
+check "newer lists the later same-slug entry only" "[\"$R/tracer-2026-03-01.md\"]" "$(jqo '.research[0].newer')"
+check "a path that does not exist resolves to null" null "$(jqo '.research[1].resolved')"
+check "the section ends at the next ## heading" 2 "$(jqo '.research | length')"
+check "spike_issues from the template's Refs line" '[314]' "$(jqo '.spike_issues')"
+runo "$P" trace "$rprd"
+case "$out" in *"  research  MISSING: $tmp/gone-2026-01-01.md"*) ok "text mode prints MISSING: for an unresolved path" ;; *) bad "text mode prints MISSING: for an unresolved path" "$out" ;; esac
+runo "$P" trace "$rs" --json
+check "a slice with no section reports the parent's research" "\"$entry\"" "$(jqo '.research[0].resolved')"
+check "and names the parent in via" "\"$rprd\"" "$(jqo '.research[0].via')"
+runo "$P" trace "$rs"
+case "$out" in *"  research  $entry (via $rprd)"*) ok "text mode names the parent the research came through" ;; *) bad "text mode names the parent the research came through" "$out" ;; esac
+runo "$P" trace "$rs" --json
+check "and the parent's spike issues" '[314]' "$(jqo '.spike_issues')"
+runo "$P" trace "$s2" --json
+check "no section anywhere: research is empty" '[]' "$(jqo '.research')"
+check "no section anywhere: spike_issues is empty" '[]' "$(jqo '.spike_issues')"
+
+# A slice's own Context slot, pinned to /prd-to-issues' issue template: the
+# slot's label is read from the template line, never restated here.
+slot_line="$(grep -E '^- \*\*Research:\*\* ' "$SLICE_SKILL" | head -n 1)"
+[ -n "$slot_line" ] || fatal "prd-to-issues/SKILL.md has no '- **Research:**' template line: trace's slice reader has lost its writer"
+slot_label="${slot_line%%\`*}"
+{
+    printf '## What to Build\n\nA thing.\n\n### Context\n\n'
+    printf '%s`%s`\n' "$slot_label" "$R/tracer-2026-01-01.md"
+} > "$tmp/slot.md"
+runo "$P" work create --kind slice --parent "$rprd" --body-file "$tmp/slot.md"; slot="$out"
+runo "$P" trace "$slot" --json
+check "a slice's own Research slot is read" "\"$R/tracer-2026-01-01.md\"" "$(jqo '.research[0].resolved')"
+check "and wins over the parent's section: no via, one entry" '[null,1]' "$(jqo '[.research[0].via, (.research | length)]')"
+printf '## What to Build\n\nA thing.\n\n### Context\n\n%s\n' "${slot_line/<spike-issue-number>/271}" > "$tmp/slot2.md"
+runo "$P" work create --kind slice --parent "$rprd" --body-file "$tmp/slot2.md"; slot2="$out"
+runo "$P" trace "$slot2" --json
+check "the template's own Refs form yields the spike issue" '[271]' "$(jqo '.spike_issues')"
+
+# -----------------------------------------------------------------------------
+section "lesson edges"
+
+L="$S/solutions"
+mkdir -p "$L/patterns" "$L/testing"
+printf '# Project rules\n' > "$P/CLAUDE.md"
+cat > "$L/patterns/alpha-2026-01-01.md" <<'EOF'
+# Alpha
+
+- **Sibling docs:**
+  - `bravo-2026-01-02.md` — a bare name in a sibling category
+
+## Related
+
+- `../testing/charlie-2026-01-03.md` — relative to this folder
+- See [delta](../testing/delta-2026-01-04.md#why) for the anchor case
+- `nope-2026-01-09.md` — cites nothing that exists
+- `CLAUDE.md` — not a lesson
+- [web](https://example.com/x.md)
+
+## Shelf Life
+
+`../testing/echo-2026-01-05.md` is outside Related and not a citation.
+EOF
+printf '# Bravo\n\n## Related\n\n- `../patterns/alpha-2026-01-01.md`\n' > "$L/testing/bravo-2026-01-02.md"
+printf '# Charlie\n\n## Related\n\n- [alpha](../patterns/alpha-2026-01-01.md)\n' > "$L/testing/charlie-2026-01-03.md"
+printf '# Delta\n\nProse names alpha-2026-01-01.md outside Related.\n' > "$L/testing/delta-2026-01-04.md"
+printf '# Echo\n' > "$L/testing/echo-2026-01-05.md"
+
+mkdir -p "$P/docs/solutions/devops" "$P/sub"
+printf '# Foxtrot\n\n## Related\n\n- `bravo-2026-01-02.md` — lives in the sidecar, a different store\n' > "$P/docs/solutions/devops/foxtrot-2026-01-06.md"
+printf '# Golf\n\n## Related\n\n- `docs/solutions/devops/foxtrot-2026-01-06.md`\n' > "$P/docs/solutions/devops/golf-2026-01-07.md"
+git -C "$P" add -A && git -C "$P" commit -q -m "fixture lessons"
+
+runo "$P" trace "$L/patterns/alpha-2026-01-01.md" --json
+check "lesson trace exits 0 with a missing citation" 0 "$rc"
+check "kind and path" "[\"lesson\",\"$L/patterns/alpha-2026-01-01.md\"]" "$(jqo '[.kind, .path]')"
+check "cites: sibling-docs bare name, ../ path, markdown link, in file order" \
+    "[\"$L/testing/bravo-2026-01-02.md\",\"$L/testing/charlie-2026-01-03.md\",\"$L/testing/delta-2026-01-04.md\"]" \
+    "$(jqo '[.cites[].resolved]')"
+check "cites keeps the path as written" '"../testing/delta-2026-01-04.md#why"' "$(jqo '.cites[2].cited')"
+check "other: a resolved file outside every solutions dir" "[\"$P/CLAUDE.md\"]" "$(jqo '[.other[].resolved]')"
+check "missing: the citation that resolves nowhere" '["nope-2026-01-09.md"]' "$(jqo '.missing')"
+check "cited_by: the lessons whose citations resolve here, not a prose mention" \
+    "[\"$L/testing/bravo-2026-01-02.md\",\"$L/testing/charlie-2026-01-03.md\"]" "$(jqo '.cited_by')"
+runo "$P" trace "$L/patterns/alpha-2026-01-01.md"
+check "lesson text mode first line" "lesson  $L/patterns/alpha-2026-01-01.md" "$(printf '%s\n' "$out" | head -n 1)"
+case "$out" in *"  MISSING: nope-2026-01-09.md"*) ok "lesson text mode prints MISSING:" ;; *) bad "lesson text mode prints MISSING:" "$out" ;; esac
+
+runo "$P" trace docs/solutions/devops/foxtrot-2026-01-06.md --json
+check "an in-tree bare name does not reach the sidecar store" '["bravo-2026-01-02.md"]' "$(jqo '.missing')"
+runo "$P/sub" trace ../docs/solutions/devops/golf-2026-01-07.md --json
+check "from a subdirectory, a docs/solutions/ path resolves via the top level, as a lesson" \
+    "[\"$P/docs/solutions/devops/foxtrot-2026-01-06.md\"]" "$(jqo '[.cites[].resolved]')"
+check "from a subdirectory, nothing is missing" '[]' "$(jqo '.missing')"
+runo "$P/sub" trace ../docs/solutions/devops/foxtrot-2026-01-06.md --json
+check "from a subdirectory, cited_by still finds the in-tree lesson" \
+    "[\"$P/docs/solutions/devops/golf-2026-01-07.md\"]" "$(jqo '.cited_by')"
+
+# <category>/<name>.md, written from the store root, is a form lessons use and
+# require's lookup does not cover.
+printf '# Hotel\n\n## Related\n\n- `testing/echo-2026-01-05.md` — from the store root\n' > "$L/patterns/hotel-2026-01-08.md"
+runo "$P" trace "$L/patterns/hotel-2026-01-08.md" --json
+check "a <category>/<name>.md citation resolves from the lesson's store root" \
+    "[\"$L/testing/echo-2026-01-05.md\"]" "$(jqo '[.cites[].resolved]')"
+check "and is not reported missing" '[]' "$(jqo '.missing')"
+
+# A lesson trace needs no sidecar.
+mkproj
+mkdir -p "$P/docs/solutions/a"
+printf '# H\n\n## Related\n\n- `i-2026-01-01.md`\n' > "$P/docs/solutions/a/h-2026-01-01.md"
+printf '# I\n' > "$P/docs/solutions/a/i-2026-01-01.md"
+runo "$P" trace docs/solutions/a/h-2026-01-01.md --json
+check "lesson trace with no sidecar exits 0" 0 "$rc"
+check "lesson trace with no sidecar resolves in docs/solutions" "[\"$P/docs/solutions/a/i-2026-01-01.md\"]" "$(jqo '[.cites[].resolved]')"
+case "$err" in *"SIDECAR MISS"*) bad "no SIDECAR MISS on a lesson trace" "$err" ;; *) ok "no SIDECAR MISS on a lesson trace" ;; esac
+
+# -----------------------------------------------------------------------------
+section "the real corpus: this repo's docs/solutions"
+
+mkdir -p "$tmp/empty-sidecars"
+total=0 runs=0 nonzero="" dangling=""
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    runs=$((runs + 1))
+    o="$(cd "$repo_root" && SKILL_KIT_SIDECAR_ROOT="$tmp/empty-sidecars" "$BASH" "$SC" trace "$f" --json 2>/dev/null)" \
+        || { nonzero="$nonzero $f"; continue; }
+    total=$((total + $(printf '%s' "$o" | jq '.cites | length')))
+    m="$(printf '%s' "$o" | jq -c '.missing')"
+    [ "$m" = "[]" ] || dangling="$dangling"$'\n'"       $f: $m"
+done <<<"$(cd "$repo_root" && find docs/solutions -type f -name '*.md' | LC_ALL=C sort)"
+[ "$runs" -gt 0 ] || fatal "found no docs/solutions/**/*.md under $repo_root"
+check "every lesson traces with exit 0 ($runs files)" "" "$nonzero"
+if [ "$total" -gt 0 ]; then ok "the corpus yields citations ($total cites)"; else bad "the corpus yields citations" "0 cites across $runs files: the extraction found nothing"; fi
+if [ -z "$dangling" ]; then ok "no lesson has a citation that resolves nowhere"; else bad "no lesson has a citation that resolves nowhere" "${dangling#?}"; fi
+
+# -----------------------------------------------------------------------------
+section "read-only"
+
+P="$TP"
+head_before="$(git -C "$S" rev-parse HEAD)"
+for args in "$prd" "$prd --json" "$s2" "$s3 --json" "$rprd" "$rs --json" "$L/patterns/alpha-2026-01-01.md" "$L/testing/bravo-2026-01-02.md --json"; do
+    # shellcheck disable=SC2086  # word-splitting the argument pair is the point
+    (IFS=' '; cd "$P" && "$BASH" "$SC" trace $args >/dev/null 2>&1)
+done
+check "trace leaves the fixture project clean" "" "$(git -C "$P" status --porcelain)"
+check "trace makes no sidecar commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
+check "trace leaves the work store unmodified" "" "$(git -C "$S" status --porcelain -- work)"
+runo "$P" trace "$s2"
+check "text mode first line is <id>  <kind>  <state>" "$s2  slice  open" "$(printf '%s\n' "$out" | head -n 1)"
+
+# -----------------------------------------------------------------------------
+section "require is unchanged by the shared lookup"
+
+runo "$P" require ../testing/charlie-2026-01-03.md --from "$L/patterns/alpha-2026-01-01.md"
+check "require hit exits 0" 0 "$rc"
+check "require hit prints the absolute path" "$L/testing/charlie-2026-01-03.md" "$out"
+runo "$P" require nope-2026-01-09.md --from "$L/patterns/alpha-2026-01-01.md"
+check "require miss exits 1" 1 "$rc"
+check "require miss prints MISSING on stderr" "MISSING: nope-2026-01-09.md (referenced by $L/patterns/alpha-2026-01-01.md)" "$err"
+check "require miss prints nothing on stdout" "" "$out"
+
+printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

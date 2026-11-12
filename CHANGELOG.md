@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.38.0 — `sidecar.sh trace` reads a record's neighbors in both directions (#727)
+
+A sidecar keeps one project's state in separate stores, and only work items linked to each other. No verb answered "what is connected to W-3": the two queries that followed a link were `work list --parent` and `--unblocked`, and a skill that needed any other neighbor wrote its own loop over `work view`. Lessons cite related lessons in a `## Related` section, and nothing read those citations or found the lessons that cite a given one.
+
+### Changes
+
+- **New read-only verb `sidecar.sh trace <W-n | lesson file> [--json]`**: for a work item it prints the items its fields name and the items that name it (parent and children, blockers and dependents, superseded in both directions), the research file its body cites, its `review-responses` record, and the dates of its newest Review Notes and ledger comments. For a lesson it prints the lessons it cites and the lessons that cite it, and needs no sidecar. It writes nothing, and a missing neighbor is printed as missing instead of failing the call.
+- **Edges are derived from text the pack already writes, not stored**: the research path comes from `/write-a-prd`'s `## Research Reference` section and `/prd-to-issues`' `**Research:**` slot. No schema, skill, or stored record changes in this release.
+- **`require`'s lookup is now a shared helper**: `trace` resolves a lesson's citations with it, then tries two forms lessons use that `require` does not cover (`<category>/<name>.md` from the store root, and a path from the project's top level). `require`'s output and exit codes are unchanged.
+- **New suite `scripts/test-sidecar-trace.sh`**: it reads the template lines it depends on from the two writer skills and fails when one is gone, and it traces every entry in this repo's `docs/solutions/`, requiring citations to be found and none to be missing.
+
 ## v1.37.0 — New side-route /hackathon for a judged, time-boxed build day
 
 A judged hackathon asks three questions the pipeline did not answer. The most useful project is not the winning one, because judges rate many tables in a row and remember the peak and the ending. An agent-assisted build does not move at the human rates an estimate borrows. And many events judge the process (tests, security, observability, explained decisions) as well as the product. `/lfg` covered an unjudged proof of concept, and its own Invocation Position named a hackathon as a use, but it has no project selection, no clock, and no demo.
