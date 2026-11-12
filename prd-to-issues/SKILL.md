@@ -144,8 +144,11 @@ The boundary map prevents the most common multi-slice failure: slices that are e
 - Does it include loading/empty/partial states (for UI slices)?
 - Does it account for edge cases named in the PRD's Rabbit Holes section?
 - Does the Produces list include all type exports that downstream slices consume?
+- Does each Produces entry that writes existing storage list that field's current readers?
 
 If a forgotten deliverable surfaces, either add it to the current slice's Produces or create a new slice for it. Don't leave it as an implicit assumption — unscoped work is invisible to Ralph.
+
+**Existing readers.** Code already in the tree that reads a field this slice writes is not a slice, so it appears in no Produces or Consumes, and the orthogonality test above never sees it. For each Produces entry that writes a field, column, key or document property the tree already has, search for the field's current readers and record the result under that entry: `Readers (<search command>): path:line, path:line`, or `Readers: none found (<search command>)`. Keep the command in the line either way; `/pre-merge` re-runs it on the merged tree. Run the search even when §2 was skipped. Record locations only, not what each reader takes the field to mean. The decomposer cannot check that, and a cold reader would trust it as checked. If a listed reader visibly expects a different value, add its fix to this slice's Produces or split it into its own slice. This check shares a sunset with the existing-readers trigger in `/pre-merge`'s review checklist (Readers that now disagree), which states it.
 
 **Consumes plausibility check:** For each `Consumes` entry that references an already-closed upstream slice — not a sibling slice still being planned in this PRD — verify the claimed symbol exists at the declared path *before* finalizing this slice's boundary map. This catches upstream boundary-map drift during planning instead of execution.
 
@@ -355,6 +358,7 @@ What this slice creates that downstream slices depend on:
 
 - `path/to/file.ts` → `functionName()`, `TypeName` (interface)
 - `path/to/api/route.ts` → `POST /api/endpoint` (returns `ResponseType`)
+- `path/to/sync.ts` → writes existing field `accounts.ownerName` — Readers (`rg -n ownerName src`): `src/ui/AccountCard.tsx:31`, `src/export/csv.ts:88`
 
 ### Consumes
 
