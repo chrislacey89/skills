@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.40.0 — A work item lists the lessons it taught (#727)
+
+On the sidecar backend nothing connected a lesson to the slice that taught it. `/compound` wrote the lesson and recorded nothing on the work item, so `sidecar.sh trace` could show a slice's research, review, and fix runs but not what the slice had taught.
+
+### Changes
+
+- **New work-item field `lessons`**, a list of lesson paths, written by a new verb `work lesson <W-n> <lesson-path>`. It adds a path once, commits in the sidecar, and works on a closed item. A lesson in the project's tree is stored relative to the top level, so the record outlives a removed worktree. A path with a comma, a space, or a bracket is refused, because the list format splits on commas.
+- **`/compound` records the lesson on its work item** in a new block after the entry is committed, separate from its sidecar-write block. It takes the work item its caller named, or else the only work item on the current branch, open or closed. When there is none or more than one, it records nothing, exits 0, and says so in the report.
+- **`sidecar.sh trace W-n` prints the item's lessons**, and for a PRD each slice's lessons under it. A lesson file that is gone prints as `MISSING:`. **`trace <lesson file>` prints the work items that taught it**, when there is a sidecar to ask, and still needs none.
+
 ## v1.39.0 — A work item records its branch, its last reviewed commit, and its fix runs (#727)
 
 On the sidecar backend a review left no record once its PR merged: the stamp was the only record, and `/closeout` clears it. `reviewed_sha` existed as a work-item field and no skill wrote it. A fix run was keyed by branch, and several slices can share a branch, so a fix run could not be attributed to a slice. Nothing recorded which branch a work item was being built on.
