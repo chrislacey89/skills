@@ -93,6 +93,7 @@ An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest re
 | Comment | `gh issue comment <n> --body-file f` | `work comment W-n --body-file f` |
 | Record a decomposition | a `Decomposed into: #…` comment | `work set W-n decomposed_into W-2,W-3` |
 | Maturity, state, PR, branch, reviewed SHA | labels, `gh issue close`, the PR body and its head branch | `work set W-n <maturity\|state\|pr\|branch\|reviewed_sha> <value>` |
+| Record a lesson | nothing; `/compound` skips it | `work lesson W-n <lesson-path>` (adds the path once; works on a closed item) |
 | Close | `gh issue close <n>` | `work close W-n [--superseded-by W-m]` |
 | List | `gh issue list …` | `work list [--kind] [--parent W-n] [--branch <name>] [--unblocked] [--state open\|closed\|all]` (ids, one per line; open by default) |
 
@@ -106,7 +107,9 @@ Three rules differ from the GitHub side:
 
 A work item's `branch` is the branch it is being built on. `/execute` writes it when the slice starts and `/pre-merge` Phase 2 writes it again before the PR. `work list --branch <name>` prints the items on a branch, and it can print more than one: slices can share a long-lived branch, and a branch name is reused after a merge. A caller that needs one item checks that it got exactly one.
 
-`sidecar.sh trace W-n [--json]` reads one work item's neighbors in both directions and writes nothing. It prints the items the item's fields name and the items that name it, the research file its body cites (a slice with none gets its parent PRD's), its `review-responses` record, and the dates of its newest `## Review Notes` and `## Review Disposition Ledger` comments. It also prints the item's branch, the head `/pre-merge` last stamped for it, and its fix runs: the records that name it with `--work`, and, listed apart as branch-level, the records on its branch that name no work item. A neighbor that is missing is printed as missing and does not fail the call. `sidecar.sh trace <lesson file>` does the same for a lesson's citations and needs no sidecar, so it works on either backend. `scripts/test-sidecar-trace.sh` pins the output, and reads the text it depends on from `/write-a-prd`'s and `/prd-to-issues`' templates.
+A work item's `lessons` lists the lessons it taught. `/compound` adds each one with `work lesson` after the entry is committed. A path inside the project's tree is stored relative to its top level, and any other path is stored absolute. The list format splits on commas, so a path with a comma, a space, or a bracket is refused.
+
+`sidecar.sh trace W-n [--json]` reads one work item's neighbors in both directions and writes nothing. It prints the items the item's fields name and the items that name it, the research file its body cites (a slice with none gets its parent PRD's), its `review-responses` record, and the dates of its newest `## Review Notes` and `## Review Disposition Ledger` comments. It also prints the item's branch, the head `/pre-merge` last stamped for it, and its fix runs: the records that name it with `--work`, and, listed apart as branch-level, the records on its branch that name no work item. It prints the item's lessons, and for a PRD each slice's lessons under that slice. A neighbor that is missing is printed as missing and does not fail the call. `sidecar.sh trace <lesson file>` does the same for a lesson's citations and needs no sidecar, so it works on either backend; when there is a sidecar it also prints the work items that list the lesson. `scripts/test-sidecar-trace.sh` pins the output, and reads the text it depends on from `/write-a-prd`'s and `/prd-to-issues`' templates.
 
 ## Branch slugs
 

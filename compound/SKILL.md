@@ -373,7 +373,7 @@ bash "$SC" require "$ENTRY" --from "/compound Phase 5" || exit 1
 bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
 ```
 
-`commit` never pushes. Phase 4's mechanism and Phase 1's glossary edit, if any, live in the project and go through the in-PR path on their own; the sidecar holds the lesson only. Then go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
+`commit` never pushes. Phase 4's mechanism and Phase 1's glossary edit, if any, live in the project and go through the in-PR path on their own; the sidecar holds the lesson only. Then record the lesson on its work item, below, and go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
 
 **In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR. Committing does not review it — the hand-back below is what makes it reviewed and merged with the code that taught it:
 
@@ -405,6 +405,8 @@ gh issue view -R chrislacey89/skills <n> --json number,title,state
 
 A non-zero exit means the entry cites an issue that is not there — do not commit it. This is weaker than a contract test and deliberately so: the citation lives in a downstream repo's `docs/solutions/` file, which this repo's CI cannot read, so there is nothing for a `scripts/test-*.sh` to assert against. What the suite *can* pin is that this command is still here, and `scripts/test-q4-mechanism-names.sh` does — the check runs where the claim is made, and the pin stops the check itself from being quietly dropped.
 
+After the commit, record the lesson on its work item, below.
+
 **Then hand to a `/pre-merge` re-run — that push just moved the head past the review stamp.** `/pre-merge` Phase 4 recorded the SHA its review actually covered, and the commit above lands after it. `/compound` cannot fix that itself: `/pre-merge` is the stamp's only writer — pinned by `scripts/test-review-currency-marker.sh` — and a skill that stamped its own commit would certify as reviewed the one commit nothing independent read. So the in-PR path's terminal step is a review, not a merge.
 
 Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the post-stamp delta — this commit — as its subject, and re-stamps at the new head (its Phase 1 step 4). `/closeout` follows from `/pre-merge`'s own next-step menu; **the in-PR path never hands to `/closeout` directly.**
@@ -413,11 +415,53 @@ Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the po
 
 **The re-run terminates here; it does not bounce back.** Its subject is the entry that captured the lesson, so no *uncaptured* lesson can emerge from reading it — `/pre-merge` Phase 4's closing recommendation is conditioned on that and does not re-offer `/compound`. There is one re-run per in-PR capture, and its exit is `/closeout`.
 
-**Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
+**Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path. After the commit, record the lesson on its work item, below.
+
+**Record the lesson on its work item.** On the `sidecar` backend, the slice that taught the lesson keeps a list of its lessons, and `sidecar.sh trace` reads it in both directions. Run this block after the entry is committed, on any of the three paths. `LESSON` is the entry's path: `$ENTRY` on the sidecar branch, the in-tree path otherwise. `W` is the work item your caller named, if any. Without one, the block takes the only work item recorded on the current branch, and when there is none or more than one, or the current branch is the base branch (where `/closeout` runs this skill from, and an old slice may once have built), it records nothing and says so. The block exits 0 on a skip, so a lesson that is already committed is never reported as failed:
+
+<!-- work-lesson: compound -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the entry's path>"
+W="<the work item your caller named, or empty>"
+BK="$(bash "$SC" backend slices)" || { echo "work item: not recorded, sidecar.sh backend slices failed" >&2; exit 1; }
+if [ "$BK" != sidecar ]; then
+  echo "work item: n/a, slices are tracked on the forge"
+  exit 0
+fi
+B=""
+if [ -z "$W" ]; then
+  B="$(git branch --show-current)"
+  if [ -n "$B" ]; then
+    BASE="$(bash "$SC" base-ref --name)" || BASE=""
+    if [ -z "$BASE" ]; then
+      echo "work item: not recorded, the base branch is unknown, so branch $B cannot be trusted to name a slice"
+      exit 0
+    fi
+    if [ "$B" = "$BASE" ]; then
+      echo "work item: not recorded, on the base branch $B, where no slice is in flight"
+      exit 0
+    fi
+  fi
+  M=""
+  [ -z "$B" ] || M="$(bash "$SC" work list --branch "$B" --state all)" || M=""
+  if [ -n "$M" ] && [ "$(printf '%s\n' "$M" | wc -l | tr -d ' ')" -eq 1 ]; then W="$M"; fi
+fi
+if [ -z "$W" ]; then
+  WHERE="branch $B"
+  [ -n "$B" ] || WHERE="a detached HEAD"
+  echo "work item: not recorded, no single work item on $WHERE"
+  exit 0
+fi
+bash "$SC" work lesson "$W" "$LESSON" || exit 1
+echo "work item: $W"
+```
+
+The list counts closed items too, because the slice may already be closed when `/compound` runs on its own branch. `work lesson` adds a path once, so running the block again changes nothing.
 
 ### Phase 6: Report
 
-Tell the user what was captured, then print the closing block that matches the path you took.
+Tell the user what was captured, then print the closing block that matches the path you took. On the `sidecar` backend, add the `work item:` line Phase 5's work-item block printed below the `Mechanism:` line.
 
 **In-PR path (default)** — the lesson now rides the open PR, one commit past the stamp `/pre-merge` Phase 4 wrote. Hand off to the re-run that reviews it and moves the stamp; `/closeout` merges after that, from `/pre-merge`'s menu:
 
