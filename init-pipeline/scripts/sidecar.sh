@@ -1570,7 +1570,7 @@ cmd_footprint() {
 
 WORK_ID_RE='W-[0-9]+'
 WORK_COMMENT_RE='^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
-WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","branch","reviewed_sha","start_sha","superseded_by","created"]'
+WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","branch","reviewed_sha","start_sha","lessons","superseded_by","created"]'
 
 # jq definitions shared by every work verb. parse_work reads a whole work file
 # (jq -Rs) into {fm, body, tail}: tail is the comment sections, kept as raw
@@ -1672,12 +1672,61 @@ cmd_work() {
     local sub="${1:-}"
     [ $# -gt 0 ] && shift
     case "$sub" in
-        create|view|edit|set|comment|close|list) ;;
-        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list> ..." ;;
+        create|view|edit|set|comment|close|list|lesson) ;;
+        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list|lesson> ..." ;;
     esac
     WORK_SC="$(do_resolve)" || exit 1
     WORK_DIR="$WORK_SC/work"
     "work_$sub" "$@"
+}
+
+# lesson_norm <file>: the form `work lesson` stores for an existing file. A
+# lesson in the project's tree is stored relative to its top level, which is
+# what survives a worktree's removal; a lesson anywhere else (the sidecar's own
+# solutions store) is stored as its physical absolute path.
+lesson_norm() {
+    local abs top
+    abs="$(abs_path "$1")"
+    if in_repo; then
+        top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || top=""
+        case "$abs" in "$top"/*) abs="${abs#"$top"/}" ;; esac
+    fi
+    printf '%s' "$abs"
+}
+
+# lesson_resolve <stored>: the physical absolute path a stored lesson path
+# names, or nothing. An absolute path is taken as is; a relative one is tried
+# from this checkout's top level, then from the main checkout, so a lesson
+# committed on a branch is found from the worktree or from main.
+lesson_resolve() {
+    local stored="$1" b
+    case "$stored" in
+        /*) [ -f "$stored" ] && abs_path "$stored"; return 0 ;;
+    esac
+    if in_repo; then
+        for b in "$(pgit rev-parse --show-toplevel 2>/dev/null)" "$(main_checkout 2>/dev/null)"; do
+            [ -n "$b" ] || continue
+            if [ -f "$b/$stored" ]; then abs_path "$b/$stored"; return 0; fi
+        done
+    fi
+    return 0
+}
+
+work_lesson() {
+    local id="${1:-}" path="${2:-}" norm
+    [ $# -eq 2 ] || die_usage "usage: sidecar.sh work lesson <W-n> <lesson-path>"
+    work_existing "$id"
+    case "$path" in
+        *,*|*" "*|*"["*|*"]"*|*$'\n'*) refuse "work lesson refused: the path may not contain a comma, a space, a bracket, or a newline: $path" ;;
+    esac
+    [ -f "$path" ] || refuse "work lesson refused: not a file: $path"
+    norm="$(lesson_norm "$path")"
+    if work_jq -Rse "$WORK_JQ parse_work | any((.fm.lessons // [])[]; . == \$p)" --arg p "$norm" "$WORK_DIR/$id.md" >/dev/null 2>&1; then
+        printf 'work lesson: %s already lists %s\n' "$id" "$norm"
+        return 0
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work lesson $id" '.fm.lessons = ((.fm.lessons // []) + [$p])' --arg p "$norm"
 }
 
 work_create() {

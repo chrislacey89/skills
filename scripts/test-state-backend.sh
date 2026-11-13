@@ -949,5 +949,94 @@ for sh in $gate_shells; do
 done
 clean "the start block leaves the project clean" "$P"
 
+# -----------------------------------------------------------------------------
+section "work lesson: record a lesson path on a work item"
+
+# The list parser splits on commas, so a path that could not round-trip is
+# refused. A path in the project's tree is stored from its top level, which is
+# what survives a worktree's removal; one outside it is stored absolute.
+mkproj https://github.com/acme/lessons.git
+runo "$P" init --name lessons --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+LS="$out"
+LP="$P"
+printf '## Problem\n\nA thing.\n' > "$tmp/lbody.md"
+runo "$LP" work create --kind slice --body-file "$tmp/lbody.md"; lw="$out"
+mkdir -p "$LP/docs/solutions/testing" "$LP/docs/solutions/patterns" "$tmp/outside"
+printf '# Lesson\n' > "$LP/docs/solutions/testing/x-2026-01-01.md"
+printf '# Out\n' > "$tmp/outside/out-2026-01-01.md"
+printf '# Sp\n' > "$LP/docs/solutions/testing/has space.md"
+printf '# Cm\n' > "$LP/docs/solutions/testing/a,b.md"
+printf '# Br\n' > "$LP/docs/solutions/testing/a[1].md"
+printf '# Y\n' > "$LP/docs/solutions/patterns/y-2026-01-02.md"
+git -C "$LP" add -A && git -C "$LP" commit -q -m "fixture lessons"
+
+runo "$LP" work lesson
+check "usage: no arguments exits 2" 2 "$rc"
+runo "$LP" work lesson "$lw"
+check "usage: one argument exits 2" 2 "$rc"
+runo "$LP" work lesson "$lw" a b
+check "usage: three arguments exits 2" 2 "$rc"
+check "usage: the message names the verb" 1 "$(grep -c 'usage: sidecar.sh work lesson <W-n> <lesson-path>' <<<"$err")"
+runo "$LP" work lesson notanid docs/solutions/testing/x-2026-01-01.md
+check "a bad id exits 2" 2 "$rc"
+runo "$LP" work lesson W-9999 docs/solutions/testing/x-2026-01-01.md
+check "an item that does not exist is refused" 1 "$rc"
+
+lcommits="$(git -C "$LS" rev-list --count HEAD)"
+for bad_path in "docs/solutions/testing/a,b.md" "docs/solutions/testing/has space.md" "docs/solutions/testing/a[1].md" "docs/solutions/testing/missing.md" "docs/solutions/testing"; do
+    runo "$LP" work lesson "$lw" "$bad_path"
+    check "refused: $bad_path (exit 1)" 1 "$rc"
+    check "refused: $bad_path (names the verb)" 1 "$(grep -c '^sidecar.sh: work lesson refused:' <<<"$err")"
+done
+runo "$LP" work lesson "$lw" "$(printf 'docs/solutions/testing/n\nl.md')"
+check "refused: a newline in the path" 1 "$rc"
+check "refusals commit nothing" "$lcommits" "$(git -C "$LS" rev-list --count HEAD)"
+check "refusals leave no lessons field" "" "$(cd "$LP" && bash "$SC" work view "$lw" --json | jq -r '.lessons // empty')"
+
+runo "$LP" work lesson "$lw" docs/solutions/testing/x-2026-01-01.md
+check "first add exits 0" 0 "$rc"
+check "first add commits one sidecar commit" "$((lcommits + 1))" "$(git -C "$LS" rev-list --count HEAD)"
+check "first add's commit subject" "sidecar: work lesson $lw" "$(git -C "$LS" log -1 --format=%s)"
+check "first add commits only the item's file" "work/$lw.md" "$(git -C "$LS" show --name-only --format= HEAD)"
+check "work view --json shows the lessons array" '["docs/solutions/testing/x-2026-01-01.md"]' "$(cd "$LP" && bash "$SC" work view "$lw" --json | jq -c .lessons)"
+check "the frontmatter line is a bracketed list" 1 "$(grep -c '^lessons: \[docs/solutions/testing/x-2026-01-01.md\]$' "$LS/work/$lw.md")"
+check "the field sits after start_sha and before created in the order list" "ok" \
+    "$(awk '/^lessons:/{l=NR} /^created:/{c=NR} END{print (l && c && l < c) ? "ok" : "no"}' "$LS/work/$lw.md")"
+
+lcommits="$(git -C "$LS" rev-list --count HEAD)"
+runo "$LP" work lesson "$lw" docs/solutions/testing/x-2026-01-01.md
+check "a repeat add exits 0" 0 "$rc"
+check "a repeat add says it already lists the path" "work lesson: $lw already lists docs/solutions/testing/x-2026-01-01.md" "$out"
+check "a repeat add makes no commit" "$lcommits" "$(git -C "$LS" rev-list --count HEAD)"
+
+# From a subdirectory with a relative path, the stored form is top-level relative.
+runo "$LP/docs/solutions/patterns" work lesson "$lw" y-2026-01-02.md
+check "a relative path from a subdirectory exits 0" 0 "$rc"
+runo "$LP/docs/solutions/patterns" work lesson "$lw" ../testing/x-2026-01-01.md
+check "the same lesson by another relative spelling is a repeat" "work lesson: $lw already lists docs/solutions/testing/x-2026-01-01.md" "$out"
+check "the subdirectory add stored the top-level relative path" \
+    '["docs/solutions/testing/x-2026-01-01.md","docs/solutions/patterns/y-2026-01-02.md"]' \
+    "$(cd "$LP" && bash "$SC" work view "$lw" --json | jq -c .lessons)"
+
+runo "$LP" work lesson "$lw" "$tmp/outside/out-2026-01-01.md"
+check "an out-of-tree absolute path exits 0" 0 "$rc"
+check "an out-of-tree path is stored absolute" "$tmp/outside/out-2026-01-01.md" "$(cd "$LP" && bash "$SC" work view "$lw" --json | jq -r '.lessons[2]')"
+clean "work lesson leaves the project clean" "$LP"
+check "work lesson leaves the sidecar clean" "" "$(git -C "$LS" status --porcelain)"
+
+# A closed item still takes a lesson (compound can run after /closeout) and a
+# branch; neither reopens it.
+runo "$LP" work create --kind slice --body-file "$tmp/lbody.md"; lc="$out"
+runo "$LP" work close "$lc"
+check "the fixture item is closed" closed "$(cd "$LP" && bash "$SC" work view "$lc" --json | jq -r .state)"
+runo "$LP" work lesson "$lc" docs/solutions/testing/x-2026-01-01.md
+check "work lesson on a closed item exits 0" 0 "$rc"
+runo "$LP" work set "$lc" branch some-branch
+check "work set branch on a closed item exits 0" 0 "$rc"
+check "the closed item stays closed" closed "$(cd "$LP" && bash "$SC" work view "$lc" --json | jq -r .state)"
+check "the closed item holds the lesson" '["docs/solutions/testing/x-2026-01-01.md"]' "$(cd "$LP" && bash "$SC" work view "$lc" --json | jq -c .lessons)"
+runo "$LP" work set "$lc" lessons x
+check "work set does not take the lessons field" 2 "$rc"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
