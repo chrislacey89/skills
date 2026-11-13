@@ -1716,11 +1716,15 @@ work_lesson() {
     local id="${1:-}" path="${2:-}" norm
     [ $# -eq 2 ] || die_usage "usage: sidecar.sh work lesson <W-n> <lesson-path>"
     work_existing "$id"
-    case "$path" in
-        *,*|*" "*|*"["*|*"]"*|*$'\n'*) refuse "work lesson refused: the path may not contain a comma, a space, a bracket, or a newline: $path" ;;
-    esac
     [ -f "$path" ] || refuse "work lesson refused: not a file: $path"
+    # The refusal tests the stored form, not the argument: the list is
+    # comma-separated, so what is written must be free of those characters,
+    # and an argument's spelling (a symlink, a `..`, an absolute path) can
+    # differ from what lesson_norm stores.
     norm="$(lesson_norm "$path")"
+    case "$norm" in
+        *,*|*" "*|*"["*|*"]"*|*$'\n'*) refuse "work lesson refused: the path may not contain a comma, a space, a bracket, or a newline: $norm" ;;
+    esac
     if work_jq -Rse "$WORK_JQ parse_work | any((.fm.lessons // [])[]; . == \$p)" --arg p "$norm" "$WORK_DIR/$id.md" >/dev/null 2>&1; then
         printf 'work lesson: %s already lists %s\n' "$id" "$norm"
         return 0

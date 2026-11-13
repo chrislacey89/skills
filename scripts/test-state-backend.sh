@@ -993,6 +993,20 @@ check "refused: a newline in the path" 1 "$rc"
 check "refusals commit nothing" "$lcommits" "$(git -C "$LS" rev-list --count HEAD)"
 check "refusals leave no lessons field" "" "$(cd "$LP" && bash "$SC" work view "$lw" --json | jq -r '.lessons // empty')"
 
+# The refusal tests the stored form, so each fixture's argument and stored form differ.
+mkdir -p "$tmp/com,ma" && ln -s "$tmp/com,ma" "$tmp/nocomma"
+printf '# Sym\n' > "$tmp/com,ma/sym-2026-01-01.md"
+runo "$LP" work lesson "$lw" "$tmp/nocomma/sym-2026-01-01.md"
+check "refused: a clean path whose stored physical form has a comma (exit 1)" 1 "$rc"
+check "that refusal commits nothing" "$lcommits" "$(git -C "$LS" rev-list --count HEAD)"
+check "that refusal leaves no lessons field" "" "$(cd "$LP" && bash "$SC" work view "$lw" --json | jq -r '.lessons // empty')"
+runo "$LP" work create --kind slice --body-file "$tmp/lbody.md"; ls_item="$out"
+ln -s "$LP" "$tmp/has space"
+runo "$LP" work lesson "$ls_item" "$tmp/has space/docs/solutions/patterns/y-2026-01-02.md"
+check "an in-tree path reached through a spaced symlink exits 0" 0 "$rc"
+check "that path is stored top-level relative" '["docs/solutions/patterns/y-2026-01-02.md"]' "$(cd "$LP" && bash "$SC" work view "$ls_item" --json | jq -c .lessons)"
+lcommits="$(git -C "$LS" rev-list --count HEAD)"
+
 runo "$LP" work lesson "$lw" docs/solutions/testing/x-2026-01-01.md
 check "first add exits 0" 0 "$rc"
 check "first add commits one sidecar commit" "$((lcommits + 1))" "$(git -C "$LS" rev-list --count HEAD)"
