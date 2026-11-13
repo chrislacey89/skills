@@ -616,7 +616,6 @@ check "list --kind slice --parent" "$s1
 $s2" "$out"
 runo "$P" work list --unblocked --kind slice
 check "list --unblocked holds back a slice with an open blocker" "$s1" "$out"
-runo "$P" work close "$s1"
 runo "$P" work set "$s2" branch feat/x-1
 runo "$P" work set "$s1" branch feat/other
 runo "$P" work list --branch feat/x-1
@@ -631,6 +630,8 @@ runo "$P" work list --branch feat/x-1 --kind slice
 check "list --branch composes with --kind" "$s2" "$out"
 runo "$P" work list --branch feat/x-1 --parent "$prd"
 check "list --branch composes with --parent" "$s2" "$out"
+runo "$P" work list --branch feat/other
+check "list --branch finds an open item on another branch" "$s1" "$out"
 runo "$P" work close "$s1"
 check "close exits 0" 0 "$rc"
 runo "$P" work list --branch feat/other
