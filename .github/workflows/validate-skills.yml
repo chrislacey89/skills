@@ -63,12 +63,32 @@ jobs:
           # Version comes from .shellcheck-version, the single source both this
           # job and lefthook read. Deliberately not restated here — see
           # scripts/check-shellcheck-version.sh for the incident behind the pin.
+          #
+          # Installed from the upstream release for that version, not from apt.
+          # The apt package follows the runner image: when ubuntu-latest moved to
+          # 26.04 it began shipping a newer shellcheck than the pin, and this job
+          # went red on prod with no change in the repo. The release asset is
+          # the same one scripts/shellcheck-pinned.sh downloads for pre-push.
           want="$(tr -d '[:space:]' < .shellcheck-version)"
-          sudo apt-get update && sudo apt-get install -y shellcheck
+          dest="$RUNNER_TEMP/shellcheck-pinned"
+          mkdir -p "$dest"
+          curl -fsSL --retry 3 --max-time 60 \
+            "https://github.com/koalaman/shellcheck/releases/download/v$want/shellcheck-v$want.linux.$(uname -m).tar.xz" \
+            -o "$dest/sc.tar.xz"
+          tar -xf "$dest/sc.tar.xz" -C "$dest" --strip-components=1 "shellcheck-v$want/shellcheck"
+          rm -f "$dest/sc.tar.xz"
+          echo "$dest" >> "$GITHUB_PATH"
+
+      # A separate step, so it reads the PATH the lint step will use: the runner
+      # image carries its own shellcheck, and a download that landed behind it
+      # would lint with the wrong version and pass.
+      - name: Confirm the pinned shellcheck is the one on PATH
+        run: |
+          want="$(tr -d '[:space:]' < .shellcheck-version)"
           got="$(shellcheck --version | awk -F': ' '/^version:/ {print $2}')"
           if [ "$got" != "$want" ]; then
-            echo "::error::.shellcheck-version pins $want but the runner installed $got." \
-                 "Update .shellcheck-version deliberately, or pin the install."
+            echo "::error::.shellcheck-version pins $want but \`shellcheck\` on PATH is $got" \
+                 "($(command -v shellcheck)). The install step above did not take effect."
             exit 1
           fi
 
