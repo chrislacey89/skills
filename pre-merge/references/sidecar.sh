@@ -1857,7 +1857,7 @@ work_list() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --kind)   [ $# -ge 2 ] || die_usage "work list: --kind needs a value"; kind="$2"; shift 2 ;;
-            --branch) [ $# -ge 2 ] && [ -n "$2" ] || die_usage "work list: --branch needs a value"; branch="$2"; shift 2 ;;
+            --branch) { [ $# -ge 2 ] && [ -n "$2" ]; } || die_usage "work list: --branch needs a value"; branch="$2"; shift 2 ;;
             --parent) [ $# -ge 2 ] || die_usage "work list: --parent needs a value"; parent="$2"; shift 2 ;;
             --state)  [ $# -ge 2 ] || die_usage "work list: --state needs a value"; state="$2"; shift 2 ;;
             --unblocked) unblocked=1; shift ;;
