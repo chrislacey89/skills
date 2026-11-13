@@ -262,6 +262,15 @@ check "with no work item, W-1's pr field stays empty" "" "$(cd "$P" && bash "$SC
 check "with no work item, the PR body carries no pack marker" "" "$(footprint "$GH_STUB/pr-body")"
 check "with no work item, the squash body carries no pack marker" "" "$(footprint "$GH_STUB/merge-body")"
 
+# A work item that does not exist: the branch write fails, and a history field
+# must never block opening the PR.
+run_chain "missing item" W-99 ""
+# The block still stops at the pr write (it exits 1 there by design), so what
+# this pins is that the branch write's failure is not what stops it.
+check "with a work item that does not exist, it says the branch is not recorded" 1 "$(grep -c 'branch feat is not recorded on W-99' "$tmp/stderr")"
+check "with a work item that does not exist, the PR is still created" 1 "$(grep -c '^pr create' "$GH_STUB/calls")"
+check "with a work item that does not exist, it runs on to the pr write" 1 "$(grep -c 'PR opened, but .* is not recorded on W-99' "$tmp/stderr")"
+
 # -----------------------------------------------------------------------------
 section "the backend decides: github skips the block, a refusal stops it"
 
