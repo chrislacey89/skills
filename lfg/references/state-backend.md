@@ -102,6 +102,8 @@ Three rules differ from the GitHub side:
 
 `work list --unblocked` prints items that are open and whose `blocked_by` ids are all closed. An id that does not exist counts as open.
 
+`sidecar.sh trace W-n [--json]` reads one work item's neighbors in both directions and writes nothing. It prints the items the item's fields name and the items that name it, the research file its body cites (a slice with none gets its parent PRD's), its `review-responses` record, and the dates of its newest `## Review Notes` and `## Review Disposition Ledger` comments. A neighbor that is missing is printed as missing and does not fail the call. `sidecar.sh trace <lesson file>` does the same for a lesson's citations and needs no sidecar, so it works on either backend. `scripts/test-sidecar-trace.sh` pins the output, and reads the text it depends on from `/write-a-prd`'s and `/prd-to-issues`' templates.
+
 ## Branch slugs
 
 A branch name is not a safe file name: `feat/x` has a separator, and a branch can carry any UTF-8. The slug keeps `a`–`z`, `0`–`9`, `.`, `_`, and `-`, and writes every other byte as `%XX` in uppercase hex. `feat/x` becomes `feat%2Fx`, and `Feat` becomes `%46eat`.

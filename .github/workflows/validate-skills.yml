@@ -328,6 +328,13 @@ jobs:
       - name: Run state backend contract suite
         run: bash scripts/test-state-backend.sh
 
+      # `sidecar.sh trace` reads edges out of text other skills write (the PRD
+      # Research Reference section, review comments, a lesson's Related list).
+      # This runs it against scratch sidecars, pins its research reader to
+      # write-a-prd's template, and traces every docs/solutions lesson (#727).
+      - name: Run sidecar trace suite
+        run: bash scripts/test-sidecar-trace.sh
+
       # /pre-merge Phase 2's sidecar PR block and /closeout Step 3's merge,
       # extracted and run against a stubbed gh on a guest repo: neither may pass
       # the forge a pack marker (#526).
