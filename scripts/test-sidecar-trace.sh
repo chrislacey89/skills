@@ -355,6 +355,91 @@ runo "$P" trace "$s2"
 check "text mode first line is <id>  <kind>  <state>" "$s2  slice  open" "$(printf '%s\n' "$out" | head -n 1)"
 
 # -----------------------------------------------------------------------------
+section "branch, last reviewed commit, and fix runs"
+
+P="$TP"
+sha1="0123456789abcdef0123456789abcdef01234567"
+sha2="fedcba9876543210fedcba9876543210fedcba98"
+runo "$P" work create --kind slice --parent "$prd" --body-file "$tmp/body.md"; fa="$out"
+runo "$P" work create --kind slice --parent "$prd" --body-file "$tmp/body.md"; fb="$out"
+
+# Before any fix run exists there is no fix-runs/ directory at all.
+runo "$P" work set "$fa" branch feat-a
+runo "$P" trace "$fa" --json
+check "no fix-runs directory: trace exits 0" 0 "$rc"
+check "no fix-runs directory: both lists are empty" '[[],[]]' "$(jqo '[.fix_runs, .branch_fix_runs]')"
+
+runo "$P" work set "$fa" pr "https://github.com/acme/guestwork/pull/12"
+runo "$P" work set "$fa" reviewed_sha "$sha1"
+runo "$P" trace "$fa"
+check "text: branch and last reviewed follow the pr line" \
+    "  pr  https://github.com/acme/guestwork/pull/12
+  branch  feat-a
+  last reviewed  $sha1" "$(printf '%s\n' "$out" | grep -A2 '^  pr  ')"
+runo "$P" trace "$fb"
+check "text: no branch or last reviewed line when the item has neither" 0 "$(printf '%s\n' "$out" | grep -cE '^  (branch|last reviewed)  ')"
+runo "$P" trace "$fa" --json
+check "json: item carries branch and reviewed_sha" "[\"feat-a\",\"$sha1\"]" "$(jqo '[.item.branch, .item.reviewed_sha]')"
+
+# Attributed fix runs. The later run is recorded first, in the other branch's
+# file, so the sort is doing the ordering and the branch is the record's own.
+r1="20260101T000000Z"; r2="20260102T000000Z"; r3="20260103T000000Z"; r4="20260104T000000Z"; r5="20260105T000000Z"
+runo "$P" fixrun record feat-b "$r3" "$sha2" --work "$fa" --thread "https://example.com/t/9"
+runo "$P" fixrun record feat-a "$r1" "$sha1" --work "$fa"
+runo "$P" trace "$fa" --json
+check "fix_runs: attributed records from any branch file, run ascending, thread null when absent" \
+    '[{"run":"'"$r1"'","sha":"'"$sha1"'","branch":"feat-a","thread":null},{"run":"'"$r3"'","sha":"'"$sha2"'","branch":"feat-b","thread":"https://example.com/t/9"}]' \
+    "$(jqo '.fix_runs')"
+runo "$P" trace "$fa"
+check "text: one fix run line each, thread appended when there is one" \
+    "  fix run  $r1 $sha1 on feat-a
+  fix run  $r3 $sha2 on feat-b thread https://example.com/t/9" "$(printf '%s\n' "$out" | grep '^  fix run  ')"
+runo "$P" fixrun record feat-a "$r4" "$sha1" --work "$fb"
+runo "$P" trace "$fb" --json
+check "fix_runs works for an item with no branch field" '["'"$r4"'"]' "$(jqo '[.fix_runs[].run]')"
+check "an item with no branch has no branch-level fix runs" '[]' "$(jqo '.branch_fix_runs')"
+
+# Branch-level fix runs: the branch's own records that name no item. A run
+# attributed to another item, or recorded on another branch, is not shown.
+runo "$P" fixrun record feat-a "$r2" "$sha2"
+runo "$P" fixrun record feat-b "$r5" "$sha2" --thread "https://example.com/t/5"
+runo "$P" trace "$fa" --json
+check "branch_fix_runs: unattributed records of the item's branch only" \
+    '[{"run":"'"$r2"'","sha":"'"$sha2"'","branch":"feat-a","thread":null}]' "$(jqo '.branch_fix_runs')"
+check "an unattributed run is never placed in fix_runs" '["'"$r1"'","'"$r3"'"]' "$(jqo '[.fix_runs[].run]')"
+runo "$P" trace "$fa"
+check "text: a branch-level fix run line" "  branch-level fix run  $r2 $sha2 on feat-a" "$(printf '%s\n' "$out" | grep '^  branch-level fix run  ')"
+
+# A record naming a different item is in neither list, even in this item's
+# branch file; lines that cannot be trusted are skipped without a word.
+FA="$S/fix-runs/feat-a.jsonl"
+{
+    printf 'this is not json\n'
+    printf '{"branch":"feat-a","run":"%s","sha":"abc1234","work":"%s"}\n' "$r5" "$fa"
+    printf '{"branch":"feat-a","run":"yesterday","sha":"%s","work":"%s"}\n' "$sha1" "$fa"
+    printf '{"branch":"feat-a","run":"%s","sha":"abc1234"}\n' "$r5"
+    printf '{"branch":"feat-a","run":"%s","sha":12345,"work":"%s"}\n' "$r5" "$fa"
+    printf '{"branch":"feat-aa","run":"%s","sha":"%s"}\n' "$r5" "$sha1"
+} >> "$FA"
+runo "$P" trace "$fa" --json
+check "untrusted lines and another branch's records are skipped: exit 0" 0 "$rc"
+check "untrusted lines are skipped in fix_runs" '["'"$r1"'","'"$r3"'"]' "$(jqo '[.fix_runs[].run]')"
+check "untrusted lines and a same-slug-prefix branch are skipped in branch_fix_runs" '["'"$r2"'"]' "$(jqo '[.branch_fix_runs[].run]')"
+check "a run naming a different item is in neither list" 0 "$(jqo '[.fix_runs[], .branch_fix_runs[] | select(.run == "'"$r4"'")] | length')"
+runo "$P" trace "$fb" --json
+check "the other item still holds its own run" '["'"$r4"'"]' "$(jqo '[.fix_runs[].run]')"
+
+# Read-only with fix runs present.
+head_before="$(git -C "$S" rev-parse HEAD)"
+status_before="$(git -C "$S" status --porcelain)"
+(cd "$P" && "$BASH" "$SC" trace "$fa" >/dev/null 2>&1)
+(cd "$P" && "$BASH" "$SC" trace "$fa" --json >/dev/null 2>&1)
+check "trace with fix runs makes no sidecar commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
+check "trace with fix runs changes no file in the sidecar" "$status_before" "$(git -C "$S" status --porcelain)"
+clean_fr="$(git -C "$P" status --porcelain)"
+check "trace with fix runs leaves the project clean" "" "$clean_fr"
+
+# -----------------------------------------------------------------------------
 section "require is unchanged by the shared lookup"
 
 runo "$P" require ../testing/charlie-2026-01-03.md --from "$L/patterns/alpha-2026-01-01.md"

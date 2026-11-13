@@ -581,6 +581,24 @@ runo "$P" work view "$prd" --json
 check "set reviewed_sha" "$sha_a" "$(printf '%s' "$out" | jq -r .reviewed_sha)"
 runo "$P" work set "$prd" reviewed_sha abc1234
 check "set refuses a reviewed_sha that is not 40 hex" 1 "$rc"
+head_before="$(git -C "$S" rev-parse HEAD)"
+runo "$P" work set "$prd" branch feat/x-1
+check "set branch exits 0" 0 "$rc"
+runo "$P" work view "$prd" --json
+check "set branch" feat/x-1 "$(printf '%s' "$out" | jq -r .branch)"
+check "the branch line is a JSON string" 1 "$(grep -cxF 'branch: "feat/x-1"' "$W/$prd.md")"
+check "the branch line sits directly after the pr line" 1 \
+    "$(grep -A1 '^pr:' "$W/$prd.md" | grep -cxF 'branch: "feat/x-1"')"
+check "set branch commits in the sidecar" "sidecar: work set $prd branch" "$(git -C "$S" log -1 --format=%s)"
+check "set branch moves the sidecar head" 1 "$([ "$head_before" != "$(git -C "$S" rev-parse HEAD)" ] && echo 1 || echo 0)"
+before="$(cat "$W/$prd.md")"
+runo "$P" work set "$prd" branch ""
+check "set branch refuses an empty value as a usage error" 2 "$rc"
+check "a refused branch set leaves the file byte-identical" "$before" "$(cat "$W/$prd.md")"
+head_before="$(git -C "$S" rev-parse HEAD)"
+runo "$P" work set "$prd" branch feat/x-1
+check "setting the same branch again exits 0" 0 "$rc"
+check "setting the same branch again makes no commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
 runo "$P" work set "$prd" state finished
 check "set refuses an unknown state" 2 "$rc"
 runo "$P" work set "$prd" milestone other
@@ -599,7 +617,30 @@ $s2" "$out"
 runo "$P" work list --unblocked --kind slice
 check "list --unblocked holds back a slice with an open blocker" "$s1" "$out"
 runo "$P" work close "$s1"
+runo "$P" work set "$s2" branch feat/x-1
+runo "$P" work set "$s1" branch feat/other
+runo "$P" work list --branch feat/x-1
+check "list --branch lists every item on the branch, in id order" "$prd
+$s2" "$out"
+runo "$P" work list --branch feat/none
+check "list --branch prints nothing for a branch no item holds" "" "$out"
+check "list --branch exits 0 for a branch no item holds" 0 "$rc"
+runo "$P" work list --branch feat/x
+check "list --branch matches the name exactly" "" "$out"
+runo "$P" work list --branch feat/x-1 --kind slice
+check "list --branch composes with --kind" "$s2" "$out"
+runo "$P" work list --branch feat/x-1 --parent "$prd"
+check "list --branch composes with --parent" "$s2" "$out"
+runo "$P" work close "$s1"
 check "close exits 0" 0 "$rc"
+runo "$P" work list --branch feat/other
+check "list --branch hides a closed item by default" "" "$out"
+runo "$P" work list --branch feat/other --state all
+check "list --branch --state all shows a closed item" "$s1" "$out"
+runo "$P" work list --branch
+check "list --branch with no value is a usage error" 2 "$rc"
+runo "$P" work list --branch ""
+check "list --branch with an empty value is a usage error" 2 "$rc"
 runo "$P" work list --unblocked --kind slice
 check "closing the blocker unblocks the slice" "$s2" "$out"
 runo "$P" work list --state closed
@@ -637,6 +678,39 @@ rm -f "$W/W-98.md"
 
 check "work verbs leave the sidecar clean" "" "$(git -C "$S" status --porcelain)"
 clean "work verbs leave the project clean" "$P"
+
+# -----------------------------------------------------------------------------
+section "fixrun: a record may name the work item it fixes"
+
+# $P, $S and $W are the work section's sidecar, so $prd (W-1) exists in it.
+FR="$S/fix-runs/feat-x.jsonl"
+run1="20260101T000000Z"; run2="20260102T000000Z"; run3="20260103T000000Z"
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work "$prd"
+check "record --work exits 0" 0 "$rc"
+check "record --work stores the work id" "$prd" "$(tail -n 1 "$FR" | jq -r .work)"
+runo "$P" fixrun record feat-x "$run2" "$sha_a"
+check "a record without --work has no work key" true "$(tail -n 1 "$FR" | jq 'has("work") | not')"
+runo "$P" fixrun record feat-x "$run3" "$sha_a" --thread "https://example.com/t/1" --work "$prd"
+check "--thread then --work: both are stored" "$prd https://example.com/t/1" "$(tail -n 1 "$FR" | jq -r '"\(.work) \(.thread)"')"
+runo "$P" fixrun record feat-x "$run3" "$sha_a" --work "$prd" --thread "https://example.com/t/2"
+check "--work then --thread: both are stored" "$prd https://example.com/t/2" "$(tail -n 1 "$FR" | jq -r '"\(.work) \(.thread)"')"
+runo "$P" fixrun list feat-x
+check "list prints three fields for a record that carries work" "$sha_a $run3 https://example.com/t/2" "$(printf '%s\n' "$out" | tail -n 1)"
+check "list prints three fields for a record that carries work and no thread" "$sha_a $run1 -" "$(printf '%s\n' "$out" | head -n 1)"
+lines_before="$(wc -l < "$FR" | tr -d ' ')"
+head_before="$(git -C "$S" rev-parse HEAD)"
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work 3
+check "--work 3 is a usage error" 2 "$rc"
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work W-
+check "--work W- is a usage error" 2 "$rc"
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work
+check "--work with no value is a usage error" 2 "$rc"
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work W-99
+check "--work naming a missing item is a refusal" 1 "$rc"
+case "$err" in *"fixrun record refused: --work names W-99, which does not exist"*) named=1 ;; *) named=0 ;; esac
+check "the refusal names the item" 1 "$named"
+check "refused records write no line" "$lines_before" "$(wc -l < "$FR" | tr -d ' ')"
+check "refused records make no commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
 
 # -----------------------------------------------------------------------------
 section "work: concurrent creates claim distinct ids"
@@ -831,6 +905,34 @@ wb W-2 'sed -i.bak "/two/d" "$BODY_FILE"'
 check "a shorter body is refused and named" 1 "$(grep -c 'writeback refused' <<<"$err")"
 check "a refused writeback commits nothing" "$commits_before" "$(git -C "$S" rev-list --count HEAD)"
 clean "the writeback leaves the project clean" "$P"
+
+# -----------------------------------------------------------------------------
+section "/execute on a work item: the start block records the branch on every run"
+
+# start_sha is written once and kept. The branch is written on every run, so
+# an item whose start is already recorded still gets it.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+start_block="$(skill_block "$EXEC" 'work set "$W" start_sha')"
+[ -n "$start_block" ] || bad "execute/SKILL.md carries the start block" "not found"
+start() { (cd "$P" && bash -c "${start_block//W=\"W-<n>\"/W=\"$1\"}" >/dev/null 2>"$tmp/stderr"); rc=$?; }
+field() { (cd "$P" && bash "$SC" work view "$1" --json | jq -r ".$2 // empty"); }
+
+git -C "$P" checkout -q -b slice-one
+start W-2
+check "the start block exits 0" 0 "$rc"
+first_start="$(field W-2 start_sha)"
+check "the first run records start_sha" "$(git -C "$P" rev-parse HEAD)" "$first_start"
+check "the first run records the branch" slice-one "$(field W-2 branch)"
+git -C "$P" commit -q --allow-empty -m "slice work"
+git -C "$P" checkout -q -b slice-one-moved
+start W-2
+check "a later run keeps the recorded start_sha" "$first_start" "$(field W-2 start_sha)"
+check "a later run records the branch for an item whose start is already recorded" slice-one-moved "$(field W-2 branch)"
+git -C "$P" checkout -q --detach
+start W-2
+check "on a detached HEAD the start block exits 0" 0 "$rc"
+check "on a detached HEAD the recorded branch is kept" slice-one-moved "$(field W-2 branch)"
+clean "the start block leaves the project clean" "$P"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -37,17 +37,17 @@
 #   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
 #   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
 #   sidecar.sh stamp clear <branch>
-#   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>]
+#   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>] [--work <W-n>]
 #   sidecar.sh fixrun list <branch> [--range <rev-range>]   (one "<sha> <run-id> <thread-url|->" line per record)
 #   sidecar.sh footprint <rev-range> [--accept "<short sha> ..."]   (prints each pack marker in the range's commit messages; exit 1 on any, 2 if unread; no sidecar needed)
 #   sidecar.sh work create --kind <prd|slice> [--parent W-n] [--blocked-by W-n,...] [--milestone <str>]
 #                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
 #   sidecar.sh work view <W-n> [--json]
 #   sidecar.sh work edit <W-n> --body-file <f>   (refuses a body shorter than the one it replaces)
-#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha|start_sha> <value>
+#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|branch|reviewed_sha|start_sha> <value>
 #   sidecar.sh work comment <W-n> --body-file <f>
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
-#   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--unblocked] [--state <open|closed|all>]
+#   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|closed|all>]
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
@@ -65,8 +65,11 @@
 # writes one (scripts/test-review-currency-marker.sh).
 #
 # fixrun. <sidecar>/fix-runs/<slug>.jsonl holds one line per /fix-findings fix
-# commit on the sidecar backend, {branch, run, sha, thread?}, where the github
-# backend puts Fix-Findings-Run: and Review-Thread: lines in the commit itself.
+# commit on the sidecar backend, {branch, run, sha, thread?, work?}, where the
+# github backend puts Fix-Findings-Run: and Review-Thread: lines in the commit
+# itself. work is the id of the item the fix serves, when the caller knows it; a
+# branch does not identify one, so a record without it is the branch's alone.
+# list prints the same three fields whether or not a record carries work.
 # list --range keeps only records whose commit is in the range, so a fold that
 # rewrites a SHA drops its record the way it drops the github trailer.
 #
@@ -80,7 +83,7 @@
 # frontmatter between --- lines, the body, then "## Comment <ISO-8601>"
 # sections, which `work comment` alone appends. Frontmatter is written one
 # "key: value" per line in a fixed order: ids, enums, and dates plain, lists
-# as [W-1, W-2], free strings (milestone, pr) as JSON strings, so the reader
+# as [W-1, W-2], free strings (milestone, pr, branch) as JSON strings, so the reader
 # below can parse what the writer writes without a YAML library. A new id is
 # max(existing)+1, claimed by hard-linking a finished temp file to W-<n>.md,
 # which fails if another writer got there first; the loser takes the next
@@ -113,9 +116,12 @@
 # printed from the other. Its research comes from the body's "## Research
 # Reference" section (/write-a-prd writes it) and its "- **Research:**" line
 # (the slot /prd-to-issues gives a slice), and from the parent PRD's when a
-# slice has neither: nothing else records that link. A lesson's citations come
-# from its "## Related" section and its "Sibling docs:" list, resolved as
-# require resolves them, then from the lesson's own store root
+# slice has neither: nothing else records that link. Its fix runs come from
+# fix-runs/: every trusted record whose work names it, from any branch's file
+# (fix_runs), and the trusted records of its own branch's file that name no item
+# (branch_fix_runs), kept apart because a branch does not identify one item. A
+# lesson's citations come from its "## Related" section and its "Sibling docs:"
+# list, resolved as require resolves them, then from the lesson's own store root
 # (<category>/<name>.md), then from the project's top level. A neighbor that is
 # missing is printed as missing and never fails the call: exit 1 means the
 # subject itself is missing (or its store cannot be read).
@@ -1448,19 +1454,34 @@ cmd_stamp() {
     esac
 }
 
+# fixrun_record: a fix-runs line as a trusted record, or nothing. A reader
+# counting rounds must not count a line it cannot parse, one whose sha is not a
+# full commit id, or one whose run id is not a timestamp; fixrun list and trace
+# both read through this definition, so the rule is stated once.
+# shellcheck disable=SC2016  # $-names are jq variables
+FIXRUN_JQ='
+def fixrun_record:
+  fromjson? // empty
+  | select(type == "object")
+  | select(.sha | strings | test("^[0-9a-f]{40}$"))
+  | select(.run | strings | test("^[0-9]{8}T[0-9]{6}Z$"));
+'
+
 cmd_fixrun() {
-    local sub="${1:-}" branch run="" sha="" thread="" range="" in_range="" sc f line
+    local sub="${1:-}" branch run="" sha="" thread="" work="" range="" in_range="" sc f line
     [ $# -gt 0 ] && shift
     case "$sub" in
         record)
-            [ $# -ge 3 ] || die_usage "usage: sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>]"
+            [ $# -ge 3 ] || die_usage "usage: sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>] [--work <W-n>]"
             branch="$1"; run="$2"; sha="$3"; shift 3
             while [ $# -gt 0 ]; do
                 case "$1" in
                     --thread) [ $# -ge 2 ] || die_usage "fixrun record: --thread needs a value"; thread="$2"; shift 2 ;;
+                    --work) [ $# -ge 2 ] || die_usage "fixrun record: --work needs a value"; work="$2"; shift 2 ;;
                     *) die_usage "fixrun record: unknown argument: $1" ;;
                 esac
             done
+            [ -z "$work" ] || is_work_id "$work" || die_usage "fixrun record: --work must be an id like W-3: $work"
             ;;
         list)
             [ $# -eq 1 ] || [ $# -eq 3 ] || die_usage "usage: sidecar.sh fixrun list <branch> [--range <rev-range>]"
@@ -1485,9 +1506,12 @@ cmd_fixrun() {
     f="fix-runs/$(branch_slug "$branch").jsonl"
     case "$sub" in
         record)
+            # cmd_work sets WORK_DIR; this verb does not go through it.
+            [ -z "$work" ] || [ -f "$sc/work/$work.md" ] || refuse "fixrun record refused: --work names $work, which does not exist"
             mkdir -p "$sc/fix-runs" || refuse "fixrun record: cannot create $sc/fix-runs"
-            line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" \
-                '{branch: $b, run: $r, sha: $s} + (if $t == "" then {} else {thread: $t} end)')" \
+            line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" --arg w "$work" \
+                '{branch: $b, run: $r, sha: $s} + (if $t == "" then {} else {thread: $t} end)
+                 + (if $w == "" then {} else {work: $w} end)')" \
                 || refuse "fixrun record: could not build the record"
             printf '%s\n' "$line" >> "$sc/$f" || refuse "fixrun record: could not write $sc/$f"
             commit_paths "$sc" "sidecar: fix run $run on $branch at ${sha:0:7}" "$f" || exit 1
@@ -1501,12 +1525,10 @@ cmd_fixrun() {
             # a reader counting rounds must not count what it cannot trust.
             # With --range, a record whose commit is outside the range is skipped
             # too: a fold or rebase rewrites the SHA, and the record drops out.
-            jq -Rr --arg b "$branch" --arg r "$in_range" --arg ranged "${range:+yes}" '
+            jq -Rr --arg b "$branch" --arg r "$in_range" --arg ranged "${range:+yes}" "$FIXRUN_JQ"'
                 ($r | split("\n")) as $in
-                | fromjson? // empty
-                | select(type == "object" and .branch == $b)
-                | select((.sha // "") | test("^[0-9a-f]{40}$"))
-                | select((.run // "") | test("^[0-9]{8}T[0-9]{6}Z$"))
+                | fixrun_record
+                | select(.branch == $b)
                 | select($ranged == "" or (.sha as $s | $in | index([$s]) != null))
                 | "\(.sha) \(.run) \(.thread // "-")"' "$sc/$f"
             ;;
@@ -1548,7 +1570,7 @@ cmd_footprint() {
 
 WORK_ID_RE='W-[0-9]+'
 WORK_COMMENT_RE='^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
-WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","reviewed_sha","start_sha","superseded_by","created"]'
+WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","branch","reviewed_sha","start_sha","superseded_by","created"]'
 
 # jq definitions shared by every work verb. parse_work reads a whole work file
 # (jq -Rs) into {fm, body, tail}: tail is the comment sections, kept as raw
@@ -1584,7 +1606,7 @@ def comments:
   | map({at, body: (.lines | join("\n") | sub("^\n+"; "") | trim_end)});
 def fm_line($k; $v):
   "\($k): " + ($v | if type == "array" then "[" + join(", ") + "]"
-                   elif ($k == "milestone" or $k == "pr" or type != "string") then tojson
+                   elif ($k == "milestone" or $k == "pr" or $k == "branch" or type != "string") then tojson
                    else . end);
 def render_work:
   . as $w
@@ -1763,7 +1785,7 @@ work_edit() {
 
 work_set() {
     local id="${1:-}" field="${2:-}" value="${3-}" kind
-    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|reviewed_sha|start_sha> <value>"
+    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|branch|reviewed_sha|start_sha> <value>"
     work_existing "$id"
     case "$value" in *$'\n'*) die_usage "work set: the value must be one line" ;; esac
     kind="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.kind" "$WORK_DIR/$id.md")" || refuse "work set: $WORK_DIR/$id.md does not parse"
@@ -1776,9 +1798,10 @@ work_set() {
             [ "$kind" = prd ] || refuse "work set: decomposed_into is for prds; $id is a $kind"
             value="$(work_ids_csv decomposed_into "$value")" || exit $? ;;
         pr) [ -n "$value" ] || die_usage "work set: pr needs a value" ;;
+        branch) [ -n "$value" ] || die_usage "work set: branch needs a value" ;;
         reviewed_sha|start_sha)
             printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: $field must be 40 lowercase hex characters: $value" ;;
-        *) die_usage "work set: field must be state, maturity, decomposed_into, pr, reviewed_sha, or start_sha" ;;
+        *) die_usage "work set: field must be state, maturity, decomposed_into, pr, branch, reviewed_sha, or start_sha" ;;
     esac
     if [ "$field" = decomposed_into ]; then
         # Replaced, never appended to: the reader always sees the latest decomposition.
@@ -1830,10 +1853,11 @@ work_close() {
 }
 
 work_list() {
-    local kind="" parent="" unblocked=0 state=open f all one
+    local kind="" parent="" branch="" unblocked=0 state=open f all one
     while [ $# -gt 0 ]; do
         case "$1" in
             --kind)   [ $# -ge 2 ] || die_usage "work list: --kind needs a value"; kind="$2"; shift 2 ;;
+            --branch) [ $# -ge 2 ] && [ -n "$2" ] || die_usage "work list: --branch needs a value"; branch="$2"; shift 2 ;;
             --parent) [ $# -ge 2 ] || die_usage "work list: --parent needs a value"; parent="$2"; shift 2 ;;
             --state)  [ $# -ge 2 ] || die_usage "work list: --state needs a value"; state="$2"; shift 2 ;;
             --unblocked) unblocked=1; shift ;;
@@ -1854,12 +1878,13 @@ work_list() {
     done
     # An --unblocked item is open and every blocked_by id is closed; an id
     # missing from the store counts as open, so a typo never unblocks.
-    printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg s "$state" --argjson u "$unblocked" '
+    printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg br "$branch" --arg s "$state" --argjson u "$unblocked" '
         map(select(. != null)) as $items
         | ($items | map({key: .id, value: .state}) | from_entries) as $st
         | $items
         | map(select(($k == "" or .kind == $k)
                  and ($p == "" or .parent == $p)
+                 and ($br == "" or .branch == $br)
                  and (if $u == 1 then .state == "open" and ((.blocked_by // []) | all(. as $b | $st[$b] == "closed"))
                       elif $s == "all" then true else .state == $s end)))
         | sort_by(.id | ltrimstr("W-") | tonumber)
@@ -1948,6 +1973,7 @@ trace_research() {
 
 trace_work() {
     local id="$1" json="$2" sc dir f one all="" base cited via research="" rr="null" pr out
+    local fixruns="" branchruns="" branch rec fr bfr
     sc="$(do_resolve)" || exit 1
     sc="$(cd "$sc" && pwd -P)"
     dir="$sc/work"
@@ -2002,11 +2028,32 @@ trace_work() {
     if [[ "$pr" =~ /([0-9]+)/?$ ]] && [ -f "$sc/review-responses/pr-${BASH_REMATCH[1]}.md" ]; then
         rr="$(jq -n --arg p "$sc/review-responses/pr-${BASH_REMATCH[1]}.md" '$p')"
     fi
-    out="$(printf '%s' "$research" | jq -sc --argjson b "$base" --argjson rr "$rr" '
+    # Fix runs: every trusted record naming this item, in any branch's file
+    # (branch names get reused and items move), and the branch's own records
+    # that name no item, which a branch alone cannot attribute to this one.
+    for f in "$sc"/fix-runs/*.jsonl; do
+        [ -f "$f" ] || continue
+        rec="$(jq -Rc "$FIXRUN_JQ"'fixrun_record' "$f")" || continue
+        [ -z "$rec" ] || fixruns="$fixruns$rec"$'\n'
+    done
+    branch="$(printf '%s' "$base" | jq -r '.item.branch // empty')"
+    if [ -n "$branch" ] && [ -f "$sc/fix-runs/$(branch_slug "$branch").jsonl" ]; then
+        branchruns="$(jq -Rc "$FIXRUN_JQ"'fixrun_record' "$sc/fix-runs/$(branch_slug "$branch").jsonl")" || branchruns=""
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    fr="$(printf '%s' "$fixruns" | jq -sc --arg id "$id" '
+        map(select(.work == $id)) | sort_by(.run) | map({run, sha, branch, thread: (.thread // null)})')" \
+        || refuse "trace: could not read the fix runs in $sc/fix-runs"
+    # shellcheck disable=SC2016  # $-names are jq variables
+    bfr="$(printf '%s' "$branchruns" | jq -sc --arg br "$branch" '
+        map(select(.branch == $br and (has("work") | not))) | sort_by(.run) | map({run, sha, branch, thread: (.thread // null)})')" \
+        || refuse "trace: could not read the fix runs in $sc/fix-runs"
+    out="$(printf '%s' "$research" | jq -sc --argjson b "$base" --argjson rr "$rr" --argjson fr "$fr" --argjson bfr "$bfr" '
         . as $r
         | $b | {kind, id, item, parent, children, decomposed_into, blocked_by, blocks,
                 superseded_by, supersedes, research: $r, spike_issues,
-                review_responses: $rr, review_notes, disposition_ledger}')" \
+                review_responses: $rr, review_notes, disposition_ledger,
+                fix_runs: $fr, branch_fix_runs: $bfr}')" \
         || refuse "trace: could not assemble the trace for $id"
     if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
     printf '%s\n' "$out" | jq -r '
@@ -2020,13 +2067,17 @@ trace_work() {
         (if .superseded_by then "  superseded by  \(.superseded_by | w)" else empty end),
         (.supersedes[] | "  supersedes  \(w)"),
         (if .item.pr then "  pr  \(.item.pr)" else empty end),
+        (if .item.branch then "  branch  \(.item.branch)" else empty end),
+        (if .item.reviewed_sha then "  last reviewed  \(.item.reviewed_sha)" else empty end),
         (.research[] | (if .via then " (via \(.via))" else "" end) as $v
                      | (if .resolved then "  research  \(.resolved)\($v)" else "  research  MISSING: \(.cited)\($v)" end),
                        (.newer[] | "  newer research  \(.)")),
         (.spike_issues[] | "  spike issue  #\(.)"),
         (if .review_responses then "  review responses  \(.review_responses)" else empty end),
         (if .review_notes then "  review notes  \(.review_notes)" else empty end),
-        (if .disposition_ledger then "  disposition ledger  \(.disposition_ledger)" else empty end)'
+        (if .disposition_ledger then "  disposition ledger  \(.disposition_ledger)" else empty end),
+        (.fix_runs[] | "  fix run  \(.run) \(.sha) on \(.branch)" + (if .thread then " thread \(.thread)" else "" end)),
+        (.branch_fix_runs[] | "  branch-level fix run  \(.run) \(.sha) on \(.branch)" + (if .thread then " thread \(.thread)" else "" end))'
 }
 
 # lesson_cites <lesson> <top> <dirs>: one tab-separated line per citation in

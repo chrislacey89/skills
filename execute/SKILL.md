@@ -224,9 +224,13 @@ if [ -z "$(jq -r '.start_sha // empty' <<<"$J")" ]; then
 else
   echo "start_sha already recorded on $W: $(jq -r .start_sha <<<"$J")"
 fi
+B="$(git branch --show-current)"
+[ -z "$B" ] || bash "$SC" work set "$W" branch "$B"
 ```
 
-On the `github` backend there is no work item to hold it, and `range` reviews from the base.
+The last two lines record the checked-out branch as the item's `branch`, on every run and not only the first, so an item already in flight gets it and an item that moved to another branch is corrected. `sidecar.sh trace` and `work list --branch` read it. The field says where the item is being built, and it does not identify the item: several slices can share a branch, and a branch name is reused after a merge.
+
+On the `github` backend there is no work item to hold either field, and `range` reviews from the base.
 
 Skip this gate for one-off tasks not tied to a GitHub issue or a work item.
 
