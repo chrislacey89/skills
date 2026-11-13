@@ -405,6 +405,8 @@ gh issue view -R chrislacey89/skills <n> --json number,title,state
 
 A non-zero exit means the entry cites an issue that is not there — do not commit it. This is weaker than a contract test and deliberately so: the citation lives in a downstream repo's `docs/solutions/` file, which this repo's CI cannot read, so there is nothing for a `scripts/test-*.sh` to assert against. What the suite *can* pin is that this command is still here, and `scripts/test-q4-mechanism-names.sh` does — the check runs where the claim is made, and the pin stops the check itself from being quietly dropped.
 
+After the commit, record the lesson on its work item, below.
+
 **Then hand to a `/pre-merge` re-run — that push just moved the head past the review stamp.** `/pre-merge` Phase 4 recorded the SHA its review actually covered, and the commit above lands after it. `/compound` cannot fix that itself: `/pre-merge` is the stamp's only writer — pinned by `scripts/test-review-currency-marker.sh` — and a skill that stamped its own commit would certify as reviewed the one commit nothing independent read. So the in-PR path's terminal step is a review, not a merge.
 
 Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the post-stamp delta — this commit — as its subject, and re-stamps at the new head (its Phase 1 step 4). `/closeout` follows from `/pre-merge`'s own next-step menu; **the in-PR path never hands to `/closeout` directly.**
@@ -413,7 +415,7 @@ Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the po
 
 **The re-run terminates here; it does not bounce back.** Its subject is the entry that captured the lesson, so no *uncaptured* lesson can emerge from reading it — `/pre-merge` Phase 4's closing recommendation is conditioned on that and does not re-offer `/compound`. There is one re-run per in-PR capture, and its exit is `/closeout`.
 
-**Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
+**Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path. After the commit, record the lesson on its work item, below.
 
 **Record the lesson on its work item.** On the `sidecar` backend, the slice that taught the lesson keeps a list of its lessons, and `sidecar.sh trace` reads it in both directions. Run this block after the entry is committed, on any of the three paths. `LESSON` is the entry's path: `$ENTRY` on the sidecar branch, the in-tree path otherwise. `W` is the work item your caller named, if any. Without one, the block takes the only work item recorded on the current branch, and when there is none or more than one, or the current branch is the base branch (where `/closeout` runs this skill from, and an old slice may once have built), it records nothing and says so. The block exits 0 on a skip, so a lesson that is already committed is never reported as failed:
 
