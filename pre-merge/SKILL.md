@@ -214,6 +214,7 @@ esac
 DESC_FILE=$(mktemp)
 # Write the plain description into "$DESC_FILE". Nothing below adds to it.
 BRANCH=$(git branch --show-current)
+[ -z "$W" ] || bash "$SC" work set "$W" branch "$BRANCH" || echo "branch $BRANCH is not recorded on $W" >&2
 KIND=$(bash "$SC" config get forge.kind) \
   || { echo "PR aborted: sidecar.sh config get forge.kind failed" >&2; rm -f "$DESC_FILE"; exit 1; }
 if [ "$KIND" != github ]; then
@@ -495,6 +496,7 @@ Write it only after the findings above have been presented — the stamp asserts
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"            # the work item Phase 1 step 2 read; empty when step 1's answer was "none"
 REVIEWED_SHA=$(git rev-parse HEAD)
 BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 2 was given; an earlier block's shell variable does not reach this one
 # This block runs in its own shell, so Phase 1's $BASE_REF is not set here: a stacked base is
@@ -511,6 +513,10 @@ fi
 if ! bash "$SC" stamp write "$(git branch --show-current)" "$REVIEWED_SHA" --base-ref "$BASE_REF"; then
   echo "stamp aborted: sidecar stamp write failed" >&2; exit 1
 fi
+# A copy for the work item's history, which outlives the stamp /closeout clears.
+# Nothing reads it to judge whether a review is current, so a failed write here
+# does not undo the stamp.
+[ -z "$W" ] || bash "$SC" work set "$W" reviewed_sha "$REVIEWED_SHA" || echo "stamped, but $REVIEWED_SHA is not recorded on $W" >&2
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"

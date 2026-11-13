@@ -89,9 +89,12 @@ human to dispose of findings, so there is no valid input.
 - **A branch with a review behind it** — a `/pre-merge` review, or a
   teammate's review on its open PR. Working tree clean.
 - **The slice's work item id** (`W-<n>`), on the sidecar backend: the one
-  `/pre-merge` Phase 1 step 2 named. § Handoff's round count reads it, so a
-  branch carrying several slices counts only this slice's rounds. On the
-  `github` backend there is none, and the count covers the branch.
+  `/pre-merge` Phase 1 step 2 named, or the one `/respond-to-review` Step 5
+  hands over for a teammate's threads. § Handoff's round count reads it, so a
+  branch carrying several slices counts only this slice's rounds, and Step 1
+  writes it into each fix-run record, so a fix is attributed to its slice and
+  not to every slice on the branch. On the `github` backend there is none, and
+  the count covers the branch.
 
 If a number the human gave does not correspond to a finding, say which numbers
 exist and stop. Do not guess at intent, and do not silently fix the neighbors.
@@ -325,12 +328,14 @@ SC="<this skill's directory>/references/sidecar.sh"
 RUN="<the run id Step 0 fixed>"
 FIX_SHA="<the SHA the fixer reported>"
 THREAD="<the teammate review thread's URL, or empty for a /pre-merge finding>"
+W="<the slice's W-<n> from § Inputs, or empty when there is none>"
 case "$(bash "$SC" backend stamp)" in
   github) echo "github backend: the commit's own trailer lines are the record" ;;
   sidecar)
     FULL=$(git rev-parse --verify -q "$FIX_SHA^{commit}") || { echo "fix run not recorded: $FIX_SHA is not a commit" >&2; exit 1; }
     set -- fixrun record "$(git branch --show-current)" "$RUN" "$FULL"
     [ -z "$THREAD" ] || set -- "$@" --thread "$THREAD"
+    [ -z "$W" ] || set -- "$@" --work "$W"
     bash "$SC" "$@" || { echo "fix run not recorded: sidecar.sh fixrun record failed" >&2; exit 1; } ;;
   *) echo "fix run not recorded: sidecar.sh backend stamp failed" >&2; exit 1 ;;
 esac

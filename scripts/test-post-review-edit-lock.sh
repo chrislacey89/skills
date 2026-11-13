@@ -899,10 +899,12 @@ git config --file "$sc_gitconfig" user.email "lock@example.invalid"
 
 sidecar_block_status=0
 sidecar_stacked_base=""
+sidecar_stamp_w=""
 run_sidecar_stamp_block() {
     rm -f "$stamprepo/$stamp_rel"
     sidecar_block_status=0
     local blk="${sidecar_stamp_block//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"$sidecar_stacked_base\"}"
+    blk="${blk//W=\"W-<n>\"/W=\"$sidecar_stamp_w\"}"
     ( cd "$stamprepo" \
         && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" \
            SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" CLAUDE_PROJECT_DIR="$stamprepo" \
@@ -950,6 +952,32 @@ run_sidecar_stamp_block
 sidecar_stacked_recorded="$(jq -r '.base_ref // empty' "$sc_root"/lock/reviews/*.json 2>/dev/null | head -n1 || true)"
 assert_eq "slice-1-branch" "$sidecar_stacked_recorded" "a filled stacked base is what the stamp records"
 sidecar_stacked_base=""
+rm -f "$stamprepo/$stamp_rel"
+
+# With a work item, the block copies the reviewed head onto it. The copy is the
+# item's history and gates nothing, so a work item that cannot be written leaves
+# the stamp and the flag standing.
+stamp_sc() { ( cd "$stamprepo" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" bash "$sidecar_sh" "$@" ); }
+printf '## Parent PRD\n\nnone\n' > "$scratch/stamp-slice.md"
+stamp_w="$(stamp_sc work create --kind slice --body-file "$scratch/stamp-slice.md" 2>/dev/null || true)"
+assert_eq "W-1" "$stamp_w" "a work item exists in the stamp scratch sidecar"
+sidecar_stamp_w="W-1"
+run_sidecar_stamp_block
+assert_eq 0 "$sidecar_block_status" "with a work item, the sidecar stamp block exits 0"
+assert_eq "$(git -C "$stamprepo" rev-parse HEAD)" "$(stamp_sc work view W-1 --json 2>/dev/null | jq -r '.reviewed_sha // empty')" \
+    "…and the work item's reviewed_sha is the head it stamped"
+rm -f "$stamprepo/$stamp_rel" "$sc_root"/lock/reviews/*.json
+sidecar_stamp_w="W-99"
+run_sidecar_stamp_block
+assert_eq 0 "$sidecar_block_status" "a work item that does not exist does not fail the sidecar stamp block"
+assert_eq "$(git -C "$stamprepo" rev-parse HEAD)" "$(stamp_sc stamp read "$(git -C "$stamprepo" branch --show-current)" 2>/dev/null)" \
+    "…and the stamp is still written"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "flag written" "flag written" "…and so is the flag"
+else
+    assert_eq "flag written" "no flag" "…and so is the flag"
+fi
+sidecar_stamp_w=""
 rm -f "$stamprepo/$stamp_rel"
 
 # -----------------------------------------------------------------------------

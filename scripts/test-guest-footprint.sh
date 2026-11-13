@@ -213,6 +213,8 @@ check "Phase 2's block keeps a stacked-PR BASE_BRANCH override as --base" 1 "$(g
 check "Step 3's merge block exits 0" 0 "$co_rc"
 check "the work item's pr field holds the PR URL" "https://github.com/acme/guest/pull/7" \
     "$(cd "$P" && bash "$SC" work view W-1 --json | jq -r .pr)"
+check "the work item's branch field holds the branch the PR was opened from" feat \
+    "$(cd "$P" && bash "$SC" work view W-1 --json | jq -r .branch)"
 check "the PR body carries no pack marker" "" "$(footprint "$GH_STUB/pr-body")"
 check "the squash body carries no pack marker" "" "$(footprint "$GH_STUB/merge-body")"
 check "the squash body is the PR's own description" "$(cat "$GH_STUB/pr-body")" "$(cat "$GH_STUB/merge-body")"
@@ -259,6 +261,15 @@ check "with no work item, it says the PR is recorded nowhere" 1 "$(grep -c 'reco
 check "with no work item, W-1's pr field stays empty" "" "$(cd "$P" && bash "$SC" work view W-1 --json | jq -r '.pr // empty')"
 check "with no work item, the PR body carries no pack marker" "" "$(footprint "$GH_STUB/pr-body")"
 check "with no work item, the squash body carries no pack marker" "" "$(footprint "$GH_STUB/merge-body")"
+
+# A work item that does not exist: the branch write fails, and a history field
+# must never block opening the PR.
+run_chain "missing item" W-99 ""
+# The block still stops at the pr write (it exits 1 there by design), so what
+# this pins is that the branch write's failure is not what stops it.
+check "with a work item that does not exist, it says the branch is not recorded" 1 "$(grep -c 'branch feat is not recorded on W-99' "$tmp/stderr")"
+check "with a work item that does not exist, the PR is still created" 1 "$(grep -c '^pr create' "$GH_STUB/calls")"
+check "with a work item that does not exist, it runs on to the pr write" 1 "$(grep -c 'PR opened, but .* is not recorded on W-99' "$tmp/stderr")"
 
 # -----------------------------------------------------------------------------
 section "the backend decides: github skips the block, a refusal stops it"
@@ -499,13 +510,16 @@ check "footprint on a range git cannot read exits 2, not 0" 2 "$fp_rc"
 # shellcheck disable=SC2016  # the needle is the skill's literal text
 ff_block="$(block "$FF" 'fixrun record "$(git branch --show-current)" "$RUN"')"
 [ -n "$ff_block" ] || bad "fix-findings/SKILL.md Step 1 carries the fix-run record block" "not found"
-run_ff() {  # <sidecar.sh path> <sha> <thread> — the record block in $P; exit in $ff_rc
+run_ff() {  # <sidecar.sh path> <sha> <thread> [work item] — the record block in $P; exit in $ff_rc
     local b="${ff_block//<this skill\'s directory>\/references\/sidecar.sh/$1}"
     b="${b//RUN=\"<the run id Step 0 fixed>\"/RUN=\"20261104T140000Z\"}"
     b="${b//FIX_SHA=\"<the SHA the fixer reported>\"/FIX_SHA=\"$2\"}"
     b="${b//THREAD=\"<the teammate review thread\'s URL, or empty for a \/pre-merge finding>\"/THREAD=\"$3\"}"
+    b="${b//W=\"<the slice\'s W-<n> from § Inputs, or empty when there is none>\"/W=\"${4:-}\"}"
     (cd "$P" && bash -c "$b" >/dev/null 2>"$tmp/stderr"); ff_rc=$?
 }
+# last_fixrun <jq filter> — the filter's output on the newest record line in $P's sidecar.
+last_fixrun() { tail -n 1 "$(cd "$P" && bash "$SC" resolve)/fix-runs/feat.jsonl" | jq -r "$1"; }
 mkguest "fix-findings record" init
 fp_base="$(git -C "$P" rev-parse HEAD)"
 commit_msg "Guard the empty refund list" "An empty list made the total NaN; it now sums to zero."
@@ -516,6 +530,16 @@ check "the fix run is in the sidecar, with its thread, under the full SHA" \
     "$(cd "$P" && bash "$SC" fixrun list feat)"
 check "the guest branch's commit messages carry no pack text" "" "$(cd "$P" && bash "$SC" footprint "$fp_base..HEAD")"
 check "the project tree is untouched by the record" "" "$(git -C "$P" status --porcelain)"
+check "with no work item the record names none" false "$(last_fixrun 'has("work")')"
+run_ff "$SC" "$(git -C "$P" rev-parse HEAD)" "" W-1
+check "the record block exits 0 with a work item" 0 "$ff_rc"
+check "the record names the work item the fix belongs to" W-1 "$(last_fixrun '.work')"
+check "fixrun list prints the same three fields for a record that names a work item" \
+    "$(git -C "$P" rev-parse HEAD) 20261104T140000Z -" \
+    "$(cd "$P" && bash "$SC" fixrun list feat | tail -n 1)"
+run_ff "$SC" "$(git -C "$P" rev-parse HEAD)" "" W-99
+check "the record block stops on a work item that does not exist" 1 "$ff_rc"
+check "a refused work item adds no record" 2 "$(cd "$P" && bash "$SC" fixrun list feat | grep -c .)"
 run_ff "$SC" "notasha" ""
 check "the record block refuses a SHA that is not a commit" 1 "$ff_rc"
 run_ff "$tmp/refusing-sc.sh" "$(git -C "$P" rev-parse HEAD)" ""
