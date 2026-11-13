@@ -268,6 +268,19 @@ sidecar_writers="$(grep -lE '(sidecar\.sh"?|"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?)[
 assert_eq "pre-merge/SKILL.md" "$sidecar_writers" \
     "sidecar.sh stamp write is invoked in pre-merge/SKILL.md and no other SKILL.md"
 
+# A work item's reviewed_sha is a copy of the stamped head that outlives the
+# stamp. It is the item's history: a skill that read it could be judging review
+# currency from a record no merge gate maintains. So the field has one writer
+# among the skill bodies and no reader, and every line that names it is that
+# write.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+reviewed_sha_other="$(grep -nE 'reviewed_sha' -- */SKILL.md | grep -vF 'work set "$W" reviewed_sha "$REVIEWED_SHA"' || true)"
+assert_eq "" "$reviewed_sha_other" \
+    "no SKILL.md names a work item's reviewed_sha except to write it"
+reviewed_sha_writers="$(grep -lE 'reviewed_sha' -- */SKILL.md | sort || true)"
+assert_eq "pre-merge/SKILL.md" "$reviewed_sha_writers" \
+    "a work item's reviewed_sha is written in pre-merge/SKILL.md and no other SKILL.md"
+
 # -----------------------------------------------------------------------------
 
 section "the step that re-stamps names a mode /pre-merge actually defines"
