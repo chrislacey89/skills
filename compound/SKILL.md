@@ -435,7 +435,9 @@ if [ -z "$W" ]; then
   if [ -n "$M" ] && [ "$(printf '%s\n' "$M" | wc -l | tr -d ' ')" -eq 1 ]; then W="$M"; fi
 fi
 if [ -z "$W" ]; then
-  echo "work item: not recorded, no single work item on ${B:-a detached HEAD}"
+  WHERE="branch $B"
+  [ -n "$B" ] || WHERE="a detached HEAD"
+  echo "work item: not recorded, no single work item on $WHERE"
   exit 0
 fi
 bash "$SC" work lesson "$W" "$LESSON" || exit 1
