@@ -138,6 +138,55 @@ Read the resolver's stderr as well as the block's stdout. Three outcomes matter:
 
 "Last merge compounded" prints `unknown` when `$BASE_REF` is empty in this call (each parallel call gets a fresh shell, so Phase 1a's variable has to be written into the block); row 11 does not fire on `unknown`. It otherwise compares the newest entry in either location against the landing *before* the last one on the base branch (`--first-parent`, so a squash commit and a merge commit each count once). An entry for the last merge is written before that merge lands, on the PR or straight into the sidecar, so measuring from the last landing itself would flag every sidecar-compounded merge as uncompounded. The in-tree side reads commit dates on the base branch rather than file mtimes, which a fresh clone resets.
 
+**Work items, in the same parallel batch.** When `sidecar.sh backend slices` answers `sidecar`, the project's PRDs and slices are work items in the sidecar's `work/` store, not GitHub issues, and the two `gh issue list` calls above cannot see them. On a guest repo they read the client's tracker instead. This block reads the work store, and `sidecar.sh trace` for each open PRD and for the current branch's work item. It feeds rows 1, 3, 4, and 5 below:
+
+<!-- sidecar-read: help-work -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+BK="$(bash "$SC" backend slices)" || { echo "work items: unavailable, sidecar.sh backend slices failed"; exit 0; }
+if [ "$BK" != sidecar ]; then
+  echo "work items: n/a, slices are tracked on the forge"
+  exit 0
+fi
+PRDS="$(bash "$SC" work list --kind prd --state open)" || { echo "work items: unreadable"; exit 0; }
+OPEN="$(bash "$SC" work list --kind slice --state open)" || { echo "work items: unreadable"; exit 0; }
+UNB="$(bash "$SC" work list --kind slice --unblocked)" || { echo "work items: unreadable"; exit 0; }
+L="$(printf '%s\n' "$PRDS" | paste -sd ' ' -)"
+echo "open PRDs: ${L:-none}"
+L="$(printf '%s\n' "$OPEN" | paste -sd ' ' -)"
+echo "open slices: ${L:-none}"
+L="$(printf '%s\n' "$UNB" | paste -sd ' ' -)"
+echo "unblocked slices: ${L:-none}"
+while IFS= read -r P; do
+  [ -n "$P" ] || continue
+  bash "$SC" trace "$P" </dev/null || echo "trace $P: unreadable"
+done <<<"$PRDS"
+B="$(git branch --show-current)"
+BASE="$(bash "$SC" base-ref --name)" || BASE=""
+if [ -z "$B" ]; then
+  echo "branch work item: none, HEAD is detached"
+elif [ -z "$BASE" ]; then
+  echo "branch work item: not looked up, the base branch is unknown"
+elif [ "$B" = "$BASE" ]; then
+  echo "branch work item: none, on the base branch $B"
+else
+  M="$(bash "$SC" work list --branch "$B" --state all)" || M=""
+  case "$(printf '%s' "$M" | grep -c .)" in
+    0) echo "branch work item: none recorded on $B" ;;
+    1) echo "branch work item: $M"; bash "$SC" trace "$M" || echo "trace $M: unreadable" ;;
+    *) echo "branch work items: several on $B: $(printf '%s\n' "$M" | paste -sd ' ' -)" ;;
+  esac
+fi
+```
+
+Every failure prints a line and exits 0, so it narrows the snapshot without cancelling the rest of the batch (the gotcha below). Read its lines this way:
+
+- **`work items: n/a`** — the `github` backend. Rows 3–5 read the `gh issue list` results, as written.
+- **`work items: unavailable`** or **`unreadable`** — the sidecar could not be asked. Report the work-item signals as unavailable in "Where you are". Do not fall back to the `gh issue list` results for rows 3–5: on a project whose slices live in the sidecar, they show a different tracker's issues.
+- **`open PRDs:`, `open slices:`, `unblocked slices:`** — on the `sidecar` backend these replace the `gh issue list` results for rows 3–5. `unblocked slices` is `work list --unblocked`: an open slice whose every `blocked_by` id is closed, with an id the store does not hold counted as open.
+- **A trace per open PRD** — its first line is `W-<n>  prd  open`, and each `child` line is one of its slices with its state, followed by the lessons that slice taught. These decide rows 3–5.
+- **`branch work item:`** — the work item recorded on the current branch (`/execute` and `/pre-merge` write its `branch`), followed by its trace: parent, blockers, PR, fix runs, lessons. Report those lines in "Where you are". On the base branch it is not looked up, because a slice merged long ago may once have built there. `several` means slices share this branch, and none of them is the branch's.
+
 **Parallel tool-use gotcha.** In Claude Code, when one bash call in a parallel batch errors, the harness cancels its in-flight siblings — one bad ref takes down the whole snapshot. This is why Phase 1a must run first (and alone): if base-branch detection fails, nothing in Phase 1b will try to reference `$BASE_BRANCH`. Do not chain `&&`/`||` against a guessed branch name inside a parallel batch to "save a round trip" — it will fail noisily on any repo that does not match your guess.
 
 If `gh` is not authenticated or the repo is not a GitHub repo, note which signals you could not gather and work from the rest. A missing signal is not a failure — it just narrows the recommendation.
@@ -150,9 +199,9 @@ Walk through these checks in priority order. The first one that matches is the r
 |---|---|---|---|
 | 1 | Open PR on current branch | `reviewDecision` is `CHANGES_REQUESTED`: `/respond-to-review`. Otherwise: merge the PR, then run `/compound` | Changes requested: "A teammate requested changes on PR #`<n>` — `/respond-to-review` checks each comment against the code before you decide what to fix or push back on." Otherwise: "You have an open PR on `<branch>` — if review is done, merge it and capture lessons." |
 | 2 | Current branch has commits ahead of base, no open PR | `/pre-merge` | "You have `<N>` commits ahead of `<base>` with no PR yet — `/pre-merge` creates it and runs the architectural review." |
-| 3 | Open slice issues referencing a PRD, none closed | `/execute` on the highest-priority slice with an empty `open_blockers` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
-| 4 | Open slice issues referencing a PRD, some closed | `/execute` on the next slice with an empty `open_blockers` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |
-| 5 | Open PRD issue with no slice issues | `/prd-to-issues` on PRD #`<prd>` | "PRD #`<prd>` is shaped but not yet decomposed — `/prd-to-issues` breaks it into slices." |
+| 3 | Open slice issues (or slice work items) referencing a PRD, none closed | `/execute` on the highest-priority slice with an empty `open_blockers` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
+| 4 | Open slice issues (or slice work items) referencing a PRD, some closed | `/execute` on the next slice with an empty `open_blockers` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |
+| 5 | Open PRD issue (or PRD work item) with no slices | `/prd-to-issues` on PRD #`<prd>` | "PRD #`<prd>` is shaped but not yet decomposed — `/prd-to-issues` breaks it into slices." |
 | 6 | `SIDECAR MISS` from the Phase 1b sidecar block | `/init-pipeline` (its § 8 creates the sidecar) | "No sidecar is registered for this project, so its solutions entries have nowhere to live — `/init-pipeline` § 8 creates one." |
 | 7 | Recent entry in the sidecar's `research/` (excluding `excavation-*.md`, which is `/excavate`'s dossier, and `hackathon-*.md`, which is `/hackathon`'s; neither is a feature), no open PRD issue matching its feature | `/write-a-prd` | "A recent research file for `<feature>` is archived but there is no PRD issue — `/write-a-prd` turns it into a shaped pitch." |
 | 8 | Planning milestone with a `research-ready` feature issue | `/research` on the `research-ready` feature | "Milestone `<name>` has a `research-ready` feature — run `/research` on it." |
@@ -163,6 +212,13 @@ Walk through these checks in priority order. The first one that matches is the r
 | 13 | None of the above — clean slate, no feature in flight | `/shape` (or ask the user what they are trying to do) | "No feature work is in flight — `/shape` is the normal starting point." |
 
 "Unblocked" in signals #3 and #4 means an empty `open_blockers` from the Phase 1b frontier call — read it, do not infer it from `Blocked by` prose in the issue bodies. This is the same rule `/prd-to-issues` §9 and the Ralph loop prompt use, so all three selection sites agree by construction rather than by coincidence.
+
+**On the `sidecar` backend**, rows 1 and 3–5 read the work-item block, and the ids are `W-<n>`:
+
+- **Rows 3 and 4** read an open PRD's trace: its `child` lines are its slices, and their states say whether any has closed. Recommend `/execute W-<n>` on the lowest-numbered slice that appears both among its children and on the `unblocked slices:` line. That line comes from `work list --unblocked`, the sidecar's version of the frontier call, so it is read, not inferred from the slices' bodies.
+- **Row 5** is an open PRD whose trace has no `child` line. Recommend `/prd-to-issues W-<n>`.
+- **Row 1**, when `gh pr list` could not answer: the branch work item counts as an open PR on the current branch when its trace's first line says `open` and it has a `pr` line. `/closeout` closes the item when the PR merges.
+- **Row 7** counts an open PRD work item as a PRD for the research file's feature.
 
 ### 3. Present the recommendation
 
