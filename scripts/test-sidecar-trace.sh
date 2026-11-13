@@ -118,8 +118,8 @@ check "trace --json exits 0" 0 "$rc"
 check "kind and id" '["work","'"$prd"'"]' "$(jqo '[.kind, .id]')"
 check "item carries the frontmatter" '"prd"' "$(jqo '.item.kind')"
 check "item carries no body or comments" '[false,false]' "$(jqo '.item | [has("body"), has("comments")]')"
-check "children, in id order, with kind, state and pr" \
-    '[{"id":"'"$s1"'","kind":"slice","state":"closed","pr":null},{"id":"'"$s2"'","kind":"slice","state":"open","pr":null},{"id":"'"$s3"'","kind":"slice","state":"open","pr":null}]' \
+check "children, in id order, with kind, state, pr and lessons" \
+    '[{"id":"'"$s1"'","kind":"slice","state":"closed","pr":null,"lessons":[]},{"id":"'"$s2"'","kind":"slice","state":"open","pr":null,"lessons":[]},{"id":"'"$s3"'","kind":"slice","state":"open","pr":null,"lessons":[]}]' \
     "$(jqo '.children')"
 check "decomposed_into, with states" \
     '[{"id":"'"$s1"'","state":"closed"},{"id":"'"$s2"'","state":"open"},{"id":"'"$s3"'","state":"open"}]' \
@@ -449,6 +449,197 @@ runo "$P" require nope-2026-01-09.md --from "$L/patterns/alpha-2026-01-01.md"
 check "require miss exits 1" 1 "$rc"
 check "require miss prints MISSING on stderr" "MISSING: nope-2026-01-09.md (referenced by $L/patterns/alpha-2026-01-01.md)" "$err"
 check "require miss prints nothing on stdout" "" "$out"
+
+# -----------------------------------------------------------------------------
+section "lessons on work items"
+
+# work lesson writes the edge and trace reads it from both ends. The stored
+# path is top-level relative for an in-tree lesson, so it survives a worktree's
+# removal: trace resolves it from the current checkout, then from the main one.
+mkproj
+LP="$P"
+runo "$LP" init --name lessons --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+LS="$out"
+mkdir -p "$LP/docs/solutions/testing" "$LP/sub"
+printf '# One\n' > "$LP/docs/solutions/testing/one-2026-02-01.md"
+printf '# Two\n' > "$LP/docs/solutions/testing/two-2026-02-02.md"
+printf '# Three\n' > "$LP/docs/solutions/testing/three-2026-02-03.md"
+git -C "$LP" add -A && git -C "$LP" commit -q -m "fixture lessons"
+runo "$LP" work create --kind prd --body-file "$tmp/body.md"; lprd="$out"
+runo "$LP" work create --kind slice --parent "$lprd" --body-file "$tmp/body.md"; la="$out"
+runo "$LP" work create --kind slice --parent "$lprd" --body-file "$tmp/body.md"; lb="$out"
+runo "$LP" work lesson "$la" docs/solutions/testing/one-2026-02-01.md
+runo "$LP" work lesson "$la" docs/solutions/testing/two-2026-02-02.md
+runo "$LP" work lesson "$lb" docs/solutions/testing/one-2026-02-01.md
+runo "$LP" work close "$lb"
+
+lhead="$(git -C "$LS" rev-parse HEAD)"
+runo "$LP" trace "$la" --json
+check "trace --json exits 0" 0 "$rc"
+check "json lessons: stored path and resolved absolute path" \
+    '[{"path":"docs/solutions/testing/one-2026-02-01.md","resolved":"'"$LP"'/docs/solutions/testing/one-2026-02-01.md"},{"path":"docs/solutions/testing/two-2026-02-02.md","resolved":"'"$LP"'/docs/solutions/testing/two-2026-02-02.md"}]' \
+    "$(jqo '.lessons')"
+runo "$LP" trace "$la"
+check "text: one lesson line per lesson, resolved" \
+    "  lesson  $LP/docs/solutions/testing/one-2026-02-01.md
+  lesson  $LP/docs/solutions/testing/two-2026-02-02.md" "$(printf '%s\n' "$out" | grep '^  lesson  ')"
+runo "$LP" trace "$lprd" --json
+check "a PRD's children carry each slice's lessons" \
+    '[["docs/solutions/testing/one-2026-02-01.md","docs/solutions/testing/two-2026-02-02.md"],["docs/solutions/testing/one-2026-02-01.md"]]' \
+    "$(jqo '[.children[] | [.lessons[].path]]')"
+check "the PRD itself lists no lessons" '[]' "$(jqo '.lessons')"
+runo "$LP" trace "$lprd"
+check "a PRD's text lists each child's lessons right after the child line, indented" \
+    "  child  $la (open)
+    lesson  $LP/docs/solutions/testing/one-2026-02-01.md
+    lesson  $LP/docs/solutions/testing/two-2026-02-02.md
+  child  $lb (closed)
+    lesson  $LP/docs/solutions/testing/one-2026-02-01.md" "$(printf '%s\n' "$out" | grep -E '^  child  |^    lesson  ')"
+
+# A lesson file that is gone is reported, never an error.
+rm -f "$LP/docs/solutions/testing/two-2026-02-02.md"
+runo "$LP" trace "$la"
+check "a deleted lesson: trace still exits 0" 0 "$rc"
+check "a deleted lesson is reported MISSING with its stored path" "  lesson  MISSING: docs/solutions/testing/two-2026-02-02.md" "$(printf '%s\n' "$out" | grep 'MISSING')"
+runo "$LP" trace "$la" --json
+check "a deleted lesson has resolved null" 'null' "$(jqo '.lessons[1].resolved')"
+runo "$LP" trace "$lprd"
+check "a deleted lesson is MISSING under its child too" "    lesson  MISSING: docs/solutions/testing/two-2026-02-02.md" "$(printf '%s\n' "$out" | grep 'MISSING')"
+git -C "$LP" checkout -q -- docs/solutions/testing/two-2026-02-02.md
+
+# trace on the lesson: the items that name it, by id number.
+runo "$LP" trace docs/solutions/testing/one-2026-02-01.md --json
+check "taught_by: both items, with kind and state, in id order" \
+    '[{"id":"'"$la"'","kind":"slice","state":"open"},{"id":"'"$lb"'","kind":"slice","state":"closed"}]' "$(jqo '.taught_by')"
+runo "$LP" trace docs/solutions/testing/one-2026-02-01.md
+check "text: a taught by line per item, after the cited-by lines" \
+    "  taught by  $la (open)
+  taught by  $lb (closed)" "$(printf '%s\n' "$out" | grep '^  taught by  ')"
+runo "$LP/sub" trace ../docs/solutions/testing/two-2026-02-02.md --json
+check "from a subdirectory, taught_by still matches" '["'"$la"'"]' "$(jqo '[.taught_by[].id]')"
+runo "$LP" trace docs/solutions/testing/three-2026-02-03.md --json
+check "a lesson no item names has taught_by []" '[]' "$(jqo '.taught_by')"
+
+# Read-only: trace commits nothing and leaves both trees clean.
+check "trace makes no sidecar commit" "$lhead" "$(git -C "$LS" rev-parse HEAD)"
+check "trace leaves the sidecar clean" "" "$(git -C "$LS" status --porcelain)"
+check "trace leaves the project clean" "" "$(git -C "$LP" status --porcelain)"
+
+# A lesson committed on a worktree's branch is stored relative; trace finds it
+# from the worktree, and from the main checkout once the branch is merged and
+# the worktree removed.
+git -C "$LP" worktree add -q -b wt-lesson "$tmp/lwt" >/dev/null 2>&1
+printf '# Wt\n' > "$tmp/lwt/docs/solutions/testing/wt-2026-02-04.md"
+git -C "$tmp/lwt" add -A && git -C "$tmp/lwt" commit -q -m "wt lesson"
+runo "$tmp/lwt" work lesson "$lb" docs/solutions/testing/wt-2026-02-04.md
+check "work lesson from a worktree exits 0" 0 "$rc"
+runo "$tmp/lwt" trace "$lb" --json
+check "from the worktree the lesson resolves to the worktree copy" '"'"$tmp"'/lwt/docs/solutions/testing/wt-2026-02-04.md"' "$(jqo '.lessons[1].resolved')"
+runo "$LP" trace "$lb" --json
+check "from main before the merge the lesson is null" 'null' "$(jqo '.lessons[1].resolved')"
+runo "$tmp/lwt" trace docs/solutions/testing/wt-2026-02-04.md --json
+check "trace of the worktree's lesson file finds the item by its relative path" '["'"$lb"'"]' "$(jqo '[.taught_by[].id]')"
+# A second worktree, cut before the merge, never holds the lesson file: only the
+# main checkout fallback can find it from there.
+git -C "$LP" worktree add -q -b wt-other "$tmp/lwt2" >/dev/null 2>&1
+git -C "$LP" merge -q wt-lesson >/dev/null 2>&1
+git -C "$LP" worktree remove --force "$tmp/lwt"
+runo "$LP" trace "$lb" --json
+check "after the merge and the removal the lesson resolves from the main checkout" '"'"$LP"'/docs/solutions/testing/wt-2026-02-04.md"' "$(jqo '.lessons[1].resolved')"
+runo "$tmp/lwt2" trace "$lb" --json
+check "from a worktree that lacks the file, the lesson resolves from the main checkout" '"'"$LP"'/docs/solutions/testing/wt-2026-02-04.md"' "$(jqo '.lessons[1].resolved')"
+git -C "$LP" worktree remove --force "$tmp/lwt2"
+
+# A repo with no sidecar: trace on a lesson keeps working, quietly.
+mkproj
+NP="$P"
+mkdir -p "$NP/docs/solutions/testing"
+printf '# Solo\n' > "$NP/docs/solutions/testing/solo-2026-02-05.md"
+runo "$NP" trace docs/solutions/testing/solo-2026-02-05.md --json
+check "no sidecar: trace of a lesson exits 0" 0 "$rc"
+check "no sidecar: taught_by is []" '[]' "$(jqo '.taught_by')"
+check "no sidecar: nothing on stderr (no SIDECAR MISS)" "" "$err"
+runo "$NP" trace docs/solutions/testing/solo-2026-02-05.md
+check "no sidecar: text mode has no taught by line" 0 "$(printf '%s\n' "$out" | grep -c 'taught by')"
+runo "$tmp" trace "$NP/docs/solutions/testing/solo-2026-02-05.md" --json
+check "outside any repo: trace of a lesson exits 0 with taught_by []" '[0,[]]' "$(printf '[%s,%s]' "$rc" "$(jqo '.taught_by')")"
+
+# -----------------------------------------------------------------------------
+section "/compound's work-item block, run for real"
+
+COMPOUND="$repo_root/compound/SKILL.md"
+cblock="$(awk '/^<!-- work-lesson: compound -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$COMPOUND")"
+if [ -z "$cblock" ]; then
+    fatal "compound/SKILL.md has no \`\`\`bash block after <!-- work-lesson: compound -->"
+fi
+ok "compound/SKILL.md carries the work-lesson block"
+# cblock_run <dir> <lesson> <W or empty>: the block with its three assignments filled in.
+cblock_run() {
+    local script
+    script="$(printf '%s\n' "$cblock" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e "s|^LESSON=.*|LESSON=\"$2\"|" -e "s|^W=.*|W=\"$3\"|")"
+    out="$(cd "$1" && "$BASH" -c "$script" 2>"$tmp/stderr")"; rc=$?
+    err="$(cat "$tmp/stderr")"
+}
+lessons_of() { (cd "$LP" && "$BASH" "$SC" work view "$1" --json | jq -c .lessons); }
+
+L3="$LP/docs/solutions/testing/three-2026-02-03.md"
+runo "$LP" work create --kind slice --body-file "$tmp/body.md"; ca="$out"
+cblock_run "$LP" "$L3" "$ca"
+check "(a) a named item: exits 0" 0 "$rc"
+check "(a) a named item: prints its id" "work item: $ca" "$out"
+check "(a) a named item: the lesson is recorded, top-level relative" '["docs/solutions/testing/three-2026-02-03.md"]' "$(lessons_of "$ca")"
+
+# (b) one item, closed, on the current branch; another item on another branch.
+git -C "$LP" checkout -q -b feat-compound
+runo "$LP" work create --kind slice --body-file "$tmp/body.md"; cb="$out"
+runo "$LP" work set "$cb" branch feat-compound
+runo "$LP" work close "$cb"
+runo "$LP" work create --kind slice --body-file "$tmp/body.md"; cother="$out"
+runo "$LP" work set "$cother" branch some-other-branch
+cblock_run "$LP" "$L3" ""
+check "(b) one closed item on the branch: exits 0" 0 "$rc"
+check "(b) one closed item on the branch: prints its id" "work item: $cb" "$out"
+check "(b) one closed item on the branch: recorded on that item only" '[["docs/solutions/testing/three-2026-02-03.md"],"null"]' \
+    "$(printf '[%s,"%s"]' "$(lessons_of "$cb")" "$(lessons_of "$cother")")"
+bhead="$(git -C "$LS" rev-parse HEAD)"
+cblock_run "$LP" "$L3" ""
+check "(b) a second run exits 0 and says the path is already listed" "0:work lesson: $cb already lists docs/solutions/testing/three-2026-02-03.md
+work item: $cb" "$rc:$out"
+check "(b) a second run makes no sidecar commit" "$bhead" "$(git -C "$LS" rev-parse HEAD)"
+
+# (c) two items on the branch: nothing recorded, nothing committed.
+runo "$LP" work create --kind slice --body-file "$tmp/body.md"; cc="$out"
+runo "$LP" work set "$cc" branch feat-compound
+chead="$(git -C "$LS" rev-parse HEAD)"
+cblock_run "$LP" "$LP/docs/solutions/testing/one-2026-02-01.md" ""
+check "(c) two items on the branch: exits 0" 0 "$rc"
+case "$out" in "work item: not recorded"*) ok "(c) two items on the branch: prints not recorded" ;; *) bad "(c) two items on the branch: prints not recorded" "$out" ;; esac
+check "(c) two items on the branch: no sidecar commit" "$chead" "$(git -C "$LS" rev-parse HEAD)"
+check "(c) two items on the branch: neither gained a lesson" '[null,["docs/solutions/testing/three-2026-02-03.md"]]' "$(printf '[%s,%s]' "$(lessons_of "$cc")" "$(lessons_of "$cb")")"
+
+# (d) detached HEAD.
+git -C "$LP" checkout -q --detach
+cblock_run "$LP" "$L3" ""
+check "(d) detached HEAD: exits 0" 0 "$rc"
+case "$out" in "work item: not recorded"*) ok "(d) detached HEAD: prints not recorded" ;; *) bad "(d) detached HEAD: prints not recorded" "$out" ;; esac
+check "(d) detached HEAD: no sidecar commit" "$chead" "$(git -C "$LS" rev-parse HEAD)"
+
+# (e) a repo whose slices live on the forge.
+mkproj
+cblock_run "$P" "$P/none.md" ""
+check "(e) no sidecar: exits 0" 0 "$rc"
+case "$out" in "work item: n/a"*) ok "(e) no sidecar: prints n/a" ;; *) bad "(e) no sidecar: prints n/a" "$out" ;; esac
+
+# (f) a failed work lesson fails the block.
+git -C "$LP" checkout -q feat-compound
+printf '# Sp\n' > "$LP/docs/solutions/testing/has space.md"
+cblock_run "$LP" "$LP/docs/solutions/testing/has space.md" "$ca"
+check "(f) a lesson path work lesson refuses: the block exits nonzero" 1 "$rc"
+check "(f) and prints no work item line" 0 "$(printf '%s\n' "$out" | grep -c '^work item: W-')"
+rm -f "$LP/docs/solutions/testing/has space.md"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
