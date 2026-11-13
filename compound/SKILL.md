@@ -373,7 +373,7 @@ bash "$SC" require "$ENTRY" --from "/compound Phase 5" || exit 1
 bash "$SC" commit -- "$ENTRY" -m "compound: <slug>"
 ```
 
-`commit` never pushes. Phase 4's mechanism and Phase 1's glossary edit, if any, live in the project and go through the in-PR path on their own; the sidecar holds the lesson only. Then go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
+`commit` never pushes. Phase 4's mechanism and Phase 1's glossary edit, if any, live in the project and go through the in-PR path on their own; the sidecar holds the lesson only. Then record the lesson on its work item, below, and go to Phase 6's sidecar block. `scripts/test-sidecar-resolution.sh` runs this block as written.
 
 **In-PR (the default):** commit the solution document onto the open PR branch and push, so the entry joins the PR. Committing does not review it — the hand-back below is what makes it reviewed and merged with the code that taught it:
 
@@ -415,9 +415,38 @@ Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the po
 
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
 
+**Record the lesson on its work item.** On the `sidecar` backend, the slice that taught the lesson keeps a list of its lessons, and `sidecar.sh trace` reads it in both directions. Run this block after the entry is committed, on any of the three paths. `LESSON` is the entry's path: `$ENTRY` on the sidecar branch, the in-tree path otherwise. `W` is the work item your caller named, if any. Without one, the block takes the only work item recorded on the current branch, and when there is none or more than one it records nothing and says so. The block exits 0 on a skip, so a lesson that is already committed is never reported as failed:
+
+<!-- work-lesson: compound -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the entry's path>"
+W="<the work item your caller named, or empty>"
+BK="$(bash "$SC" backend slices)" || { echo "work item: not recorded, sidecar.sh backend slices failed" >&2; exit 1; }
+if [ "$BK" != sidecar ]; then
+  echo "work item: n/a, slices are tracked on the forge"
+  exit 0
+fi
+B=""
+if [ -z "$W" ]; then
+  B="$(git branch --show-current)"
+  M=""
+  [ -z "$B" ] || M="$(bash "$SC" work list --branch "$B" --state all)" || M=""
+  if [ -n "$M" ] && [ "$(printf '%s\n' "$M" | wc -l | tr -d ' ')" -eq 1 ]; then W="$M"; fi
+fi
+if [ -z "$W" ]; then
+  echo "work item: not recorded, no single work item on ${B:-a detached HEAD}"
+  exit 0
+fi
+bash "$SC" work lesson "$W" "$LESSON" || exit 1
+echo "work item: $W"
+```
+
+The list counts closed items too, because `/compound` can run after `/closeout` has closed the slice. `work lesson` adds a path once, so running the block again changes nothing.
+
 ### Phase 6: Report
 
-Tell the user what was captured, then print the closing block that matches the path you took.
+Tell the user what was captured, then print the closing block that matches the path you took. On the `sidecar` backend, add the `work item:` line Phase 5's work-item block printed below the `Mechanism:` line.
 
 **In-PR path (default)** — the lesson now rides the open PR, one commit past the stamp `/pre-merge` Phase 4 wrote. Hand off to the re-run that reviews it and moves the stamp; `/closeout` merges after that, from `/pre-merge`'s menu:
 
