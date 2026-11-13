@@ -220,7 +220,7 @@ SC="<this skill's directory>/references/sidecar.sh"
 W="W-<n>"
 J="$(bash "$SC" work view "$W" --json)" || { echo "start not recorded: cannot read $W" >&2; exit 1; }
 if [ -z "$(jq -r '.start_sha // empty' <<<"$J")" ]; then
-  bash "$SC" work set "$W" start_sha "$(git rev-parse HEAD)"
+  bash "$SC" work set "$W" start_sha "$(git rev-parse HEAD)" || { echo "start not recorded on $W" >&2; exit 1; }
 else
   echo "start_sha already recorded on $W: $(jq -r .start_sha <<<"$J")"
 fi

@@ -932,6 +932,14 @@ git -C "$P" checkout -q --detach
 start W-2
 check "on a detached HEAD the start block exits 0" 0 "$rc"
 check "on a detached HEAD the recorded branch is kept" slice-one-moved "$(field W-2 branch)"
+# An unborn HEAD: rev-parse prints the word HEAD and work set refuses it, while
+# the branch name still resolves. The block's status must be the start_sha
+# write's, not the later branch write's: `range` depends on the start.
+(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md" >/dev/null) # W-8
+git -C "$P" checkout -q --orphan unborn-slice
+start W-8
+check "an unborn HEAD fails the start block rather than recording nothing" 1 "$rc"
+check "an unborn HEAD records no start_sha" "" "$(field W-8 start_sha)"
 clean "the start block leaves the project clean" "$P"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
