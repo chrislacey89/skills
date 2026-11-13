@@ -141,8 +141,8 @@ while IFS= read -r pair; do
         bad_refs="$bad_refs  reference to /$skill, but $target does not exist"$'\n'
         continue
     fi
-    # Step headings are "### N. Title"; sub-steps are "#### Na. Title".
-    if ! grep -qE "^#+ *${step}\." "$target"; then
+    # Step headings are "### N. Title" or "### Step N. Title"; sub-steps are "#### Na. Title".
+    if ! grep -qE "^#+ *(Step )?${step}\." "$target"; then
         bad_refs="$bad_refs  \"/$skill Step $step\" — no such heading in $target"$'\n'
     fi
 done < <(grep -rho '`/[a-z-]\+` Step [0-9]\+[a-z]\?' ./*/SKILL.md 2>/dev/null | sort -u || true)
