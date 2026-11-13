@@ -51,7 +51,7 @@ On the `github` backend these lines are the pack's own repo convention and stay.
 
 On the `sidecar` backend with no work item (the operator answered "none"), the last three rows have no home. Notes and a ledger are printed to the terminal and named as not persisted, and are never written into the PR instead.
 
-`/fix-findings` records each fix run the same way `backend stamp` routes the stamp. On `github`, each fix commit ends with a `Fix-Findings-Run: <run id>` line, plus a `Review-Thread: <url>` line for a teammate thread. On `sidecar`, the commit carries neither, and `sidecar.sh fixrun record <branch> <run id> <sha> [--thread <url>]` writes one line to `<sidecar>/fix-runs/<branch-slug>.jsonl`. `fixrun list <branch> --range <rev-range>` reads back only records whose commit is in the range, so a fold that rewrites a SHA drops its record the way it drops a trailer. `/fix-findings` § Handoff counts rounds from it, and `/respond-to-review` finds earlier fixes with it.
+`/fix-findings` records each fix run the same way `backend stamp` routes the stamp. On `github`, each fix commit ends with a `Fix-Findings-Run: <run id>` line, plus a `Review-Thread: <url>` line for a teammate thread. On `sidecar`, the commit carries neither, and `sidecar.sh fixrun record <branch> <run id> <sha> [--thread <url>] [--work <W-n>]` writes one line to `<sidecar>/fix-runs/<branch-slug>.jsonl`. `fixrun list <branch> --range <rev-range>` reads back only records whose commit is in the range, so a fold that rewrites a SHA drops its record the way it drops a trailer. `/fix-findings` § Handoff counts rounds from it, and `/respond-to-review` finds earlier fixes with it. `--work` names the slice the fix belongs to, and `/fix-findings` passes it when it was handed one. The file is keyed by branch and several slices can share a branch, so a record without `--work` belongs to the branch and to no slice. `fixrun list` prints the same line with or without it.
 
 `/respond-to-review`'s record is not in the table, because `backend stamp` does not decide it. It goes to `<sidecar>/review-responses/pr-<n>.md` on either backend, found through `sidecar.sh path review-responses` and committed with `sidecar.sh commit`. It is the author's private account of a teammate's review, never written to the PR, and its directory is separate from `reviews/` so it cannot collide with a stamp. With no sidecar it is printed to the terminal and named as not persisted.
 
@@ -69,11 +69,13 @@ bash "$SC" stamp clear <branch>                            # /closeout, once the
 
 The file's shape is locked in the parent PRD, chrislacey89/skills#407, § Implementation Decisions, "Stamp". It is not restated here. Readers compare `stamp read`'s output with the branch head by string equality, the same rule as the PR-body marker. `read` prints nothing for a stamp it cannot trust: a file that does not parse, a `branch` field naming another branch, or a `reviewed_sha` that is not 40 lowercase hex. Each of those takes the reader's "no stamp" path rather than reporting a divergence that never happened.
 
+`stamp clear` leaves no record of what was reviewed, so after a successful `stamp write` `/pre-merge` also copies the SHA to the work item's `reviewed_sha`, when there is a work item. The copy is the item's history. Review currency is still read from the stamp alone: no skill reads `reviewed_sha`, and `scripts/test-review-currency-marker.sh` fails when one does.
+
 Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`.
 
 ## Work items
 
-On the `sidecar` backend for `prds` or `slices`, a PRD or slice is a work item: a markdown file at `<sidecar>/work/W-<n>.md`, reached only through `sidecar.sh work`. Its frontmatter fields and body are locked in chrislacey89/skills#407, § Implementation Decisions, "Work item". They are not restated here. A work item's id matches this regex, and no skill writes its own:
+On the `sidecar` backend for `prds` or `slices`, a PRD or slice is a work item: a markdown file at `<sidecar>/work/W-<n>.md`, reached only through `sidecar.sh work`. Its frontmatter fields and body are locked in chrislacey89/skills#407, § Implementation Decisions, "Work item", and the fields added since are recorded in chrislacey89/skills#727, § Implementation Decisions. They are not restated here. A work item's id matches this regex, and no skill writes its own:
 
 ```
 W-[0-9]+
@@ -90,9 +92,9 @@ An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest re
 | Replace the body | `gh issue edit <n> --body-file f` | `work edit W-n --body-file f` |
 | Comment | `gh issue comment <n> --body-file f` | `work comment W-n --body-file f` |
 | Record a decomposition | a `Decomposed into: #…` comment | `work set W-n decomposed_into W-2,W-3` |
-| Maturity, state, PR, reviewed SHA | labels, `gh issue close`, the PR body | `work set W-n <maturity\|state\|pr\|reviewed_sha> <value>` |
+| Maturity, state, PR, branch, reviewed SHA | labels, `gh issue close`, the PR body and its head branch | `work set W-n <maturity\|state\|pr\|branch\|reviewed_sha> <value>` |
 | Close | `gh issue close <n>` | `work close W-n [--superseded-by W-m]` |
-| List | `gh issue list …` | `work list [--kind] [--parent W-n] [--unblocked] [--state open\|closed\|all]` (ids, one per line; open by default) |
+| List | `gh issue list …` | `work list [--kind] [--parent W-n] [--branch <name>] [--unblocked] [--state open\|closed\|all]` (ids, one per line; open by default) |
 
 Three rules differ from the GitHub side:
 
@@ -102,7 +104,9 @@ Three rules differ from the GitHub side:
 
 `work list --unblocked` prints items that are open and whose `blocked_by` ids are all closed. An id that does not exist counts as open.
 
-`sidecar.sh trace W-n [--json]` reads one work item's neighbors in both directions and writes nothing. It prints the items the item's fields name and the items that name it, the research file its body cites (a slice with none gets its parent PRD's), its `review-responses` record, and the dates of its newest `## Review Notes` and `## Review Disposition Ledger` comments. A neighbor that is missing is printed as missing and does not fail the call. `sidecar.sh trace <lesson file>` does the same for a lesson's citations and needs no sidecar, so it works on either backend. `scripts/test-sidecar-trace.sh` pins the output, and reads the text it depends on from `/write-a-prd`'s and `/prd-to-issues`' templates.
+A work item's `branch` is the branch it is being built on. `/execute` writes it when the slice starts and `/pre-merge` Phase 2 writes it again before the PR. `work list --branch <name>` prints the items on a branch, and it can print more than one: slices can share a long-lived branch, and a branch name is reused after a merge. A caller that needs one item checks that it got exactly one.
+
+`sidecar.sh trace W-n [--json]` reads one work item's neighbors in both directions and writes nothing. It prints the items the item's fields name and the items that name it, the research file its body cites (a slice with none gets its parent PRD's), its `review-responses` record, and the dates of its newest `## Review Notes` and `## Review Disposition Ledger` comments. It also prints the item's branch, the head `/pre-merge` last stamped for it, and its fix runs: the records that name it with `--work`, and, listed apart as branch-level, the records on its branch that name no work item. A neighbor that is missing is printed as missing and does not fail the call. `sidecar.sh trace <lesson file>` does the same for a lesson's citations and needs no sidecar, so it works on either backend. `scripts/test-sidecar-trace.sh` pins the output, and reads the text it depends on from `/write-a-prd`'s and `/prd-to-issues`' templates.
 
 ## Branch slugs
 

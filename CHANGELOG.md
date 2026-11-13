@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.39.0 — A work item records its branch, its last reviewed commit, and its fix runs (#727)
+
+On the sidecar backend a review left no record once its PR merged: the stamp was the only record, and `/closeout` clears it. `reviewed_sha` existed as a work-item field and no skill wrote it. A fix run was keyed by branch, and several slices can share a branch, so a fix run could not be attributed to a slice. Nothing recorded which branch a work item was being built on.
+
+### Changes
+
+- **`/pre-merge` copies the stamped SHA to the work item's `reviewed_sha`** after a successful `stamp write`, when there is a work item. The copy is the item's history. The stamp stays the only record of review currency, a failed copy does not undo the stamp, and `scripts/test-review-currency-marker.sh` fails when a skill names the field for anything but that write.
+- **New work-item field `branch`**: `/execute` writes it when a slice starts, on every run, so an item already in flight gets it. `/pre-merge` Phase 2 writes it again before the PR. `work list --branch <name>` prints the items on a branch, which can be more than one.
+- **`fixrun record` takes `--work <W-n>`**, and `/fix-findings` passes the slice's work item when it was handed one. `fixrun list` prints the same line as before.
+- **`sidecar.sh trace W-n` prints the branch, the last reviewed commit, and the fix runs**: the runs that name the item, and, listed apart as branch-level, the runs on its branch that name no item.
+- `fixrun list` and `trace` decide which fix-run lines to trust through one shared definition.
+
 ## v1.38.0 — `sidecar.sh trace` reads a record's neighbors in both directions (#727)
 
 A sidecar keeps one project's state in separate stores, and only work items linked to each other. No verb answered "what is connected to W-3": the two queries that followed a link were `work list --parent` and `--unblocked`, and a skill that needed any other neighbor wrote its own loop over `work view`. Lessons cite related lessons in a `## Related` section, and nothing read those citations or found the lessons that cite a given one.
