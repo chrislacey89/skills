@@ -47,6 +47,7 @@
 #   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|branch|reviewed_sha|start_sha> <value>
 #   sidecar.sh work comment <W-n> --body-file <f>
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
+#   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|closed|all>]
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
@@ -83,7 +84,7 @@
 # frontmatter between --- lines, the body, then "## Comment <ISO-8601>"
 # sections, which `work comment` alone appends. Frontmatter is written one
 # "key: value" per line in a fixed order: ids, enums, and dates plain, lists
-# as [W-1, W-2], free strings (milestone, pr, branch) as JSON strings, so the reader
+# as [W-1, W-2] (lessons holds paths, added by `work lesson`), free strings (milestone, pr, branch) as JSON strings, so the reader
 # below can parse what the writer writes without a YAML library. A new id is
 # max(existing)+1, claimed by hard-linking a finished temp file to W-<n>.md,
 # which fails if another writer got there first; the loser takes the next
