@@ -1570,7 +1570,7 @@ cmd_footprint() {
 
 WORK_ID_RE='W-[0-9]+'
 WORK_COMMENT_RE='^## Comment [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
-WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","branch","reviewed_sha","start_sha","superseded_by","created"]'
+WORK_FIELDS='["id","kind","state","maturity","parent","blocked_by","decomposed_into","milestone","pr","branch","reviewed_sha","start_sha","lessons","superseded_by","created"]'
 
 # jq definitions shared by every work verb. parse_work reads a whole work file
 # (jq -Rs) into {fm, body, tail}: tail is the comment sections, kept as raw
@@ -1672,12 +1672,61 @@ cmd_work() {
     local sub="${1:-}"
     [ $# -gt 0 ] && shift
     case "$sub" in
-        create|view|edit|set|comment|close|list) ;;
-        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list> ..." ;;
+        create|view|edit|set|comment|close|list|lesson) ;;
+        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list|lesson> ..." ;;
     esac
     WORK_SC="$(do_resolve)" || exit 1
     WORK_DIR="$WORK_SC/work"
     "work_$sub" "$@"
+}
+
+# lesson_norm <file>: the form `work lesson` stores for an existing file. A
+# lesson in the project's tree is stored relative to its top level, which is
+# what survives a worktree's removal; a lesson anywhere else (the sidecar's own
+# solutions store) is stored as its physical absolute path.
+lesson_norm() {
+    local abs top
+    abs="$(abs_path "$1")"
+    if in_repo; then
+        top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || top=""
+        case "$abs" in "$top"/*) abs="${abs#"$top"/}" ;; esac
+    fi
+    printf '%s' "$abs"
+}
+
+# lesson_resolve <stored>: the physical absolute path a stored lesson path
+# names, or nothing. An absolute path is taken as is; a relative one is tried
+# from this checkout's top level, then from the main checkout, so a lesson
+# committed on a branch is found from the worktree or from main.
+lesson_resolve() {
+    local stored="$1" b
+    case "$stored" in
+        /*) [ -f "$stored" ] && abs_path "$stored"; return 0 ;;
+    esac
+    if in_repo; then
+        for b in "$(pgit rev-parse --show-toplevel 2>/dev/null)" "$(main_checkout 2>/dev/null)"; do
+            [ -n "$b" ] || continue
+            if [ -f "$b/$stored" ]; then abs_path "$b/$stored"; return 0; fi
+        done
+    fi
+    return 0
+}
+
+work_lesson() {
+    local id="${1:-}" path="${2:-}" norm
+    [ $# -eq 2 ] || die_usage "usage: sidecar.sh work lesson <W-n> <lesson-path>"
+    work_existing "$id"
+    case "$path" in
+        *,*|*" "*|*"["*|*"]"*|*$'\n'*) refuse "work lesson refused: the path may not contain a comma, a space, a bracket, or a newline: $path" ;;
+    esac
+    [ -f "$path" ] || refuse "work lesson refused: not a file: $path"
+    norm="$(lesson_norm "$path")"
+    if work_jq -Rse "$WORK_JQ parse_work | any((.fm.lessons // [])[]; . == \$p)" --arg p "$norm" "$WORK_DIR/$id.md" >/dev/null 2>&1; then
+        printf 'work lesson: %s already lists %s\n' "$id" "$norm"
+        return 0
+    fi
+    # shellcheck disable=SC2016  # $-names are jq variables
+    work_rewrite "$id" "sidecar: work lesson $id" '.fm.lessons = ((.fm.lessons // []) + [$p])' --arg p "$norm"
 }
 
 work_create() {
@@ -1973,7 +2022,7 @@ trace_research() {
 
 trace_work() {
     local id="$1" json="$2" sc dir f one all="" base cited via research="" rr="null" pr out
-    local fixruns="" branchruns="" branch rec fr bfr
+    local fixruns="" branchruns="" branch rec fr bfr lp lres lmap='{}'
     sc="$(do_resolve)" || exit 1
     sc="$(cd "$sc" && pwd -P)"
     dir="$sc/work"
@@ -2005,7 +2054,7 @@ trace_work() {
         | {kind: "work", id: $id,
            item: ($it | del(.body, .comments)),
            parent: (if $it.parent == null then null else ref($it.parent) end),
-           children: [$all[] | select(.parent == $id)] | sort_by(idn) | map({id, kind, state, pr: (.pr // null)}),
+           children: [$all[] | select(.parent == $id)] | sort_by(idn) | map({id, kind, state, pr: (.pr // null), lessons: (.lessons // [])}),
            decomposed_into: [($it.decomposed_into // [])[] | ref(.)],
            blocked_by: [($it.blocked_by // [])[] | ref(.)],
            blocks: [$all[] | select(any((.blocked_by // [])[]; . == $id))] | sort_by(idn) | map({id, state}),
@@ -2023,6 +2072,15 @@ trace_work() {
         [ -n "$f" ] || continue
         research="$research$(trace_research "$f" "$via")"$'\n'
     done <<<"$cited"
+    # Lesson paths are resolved here, for the item and its children together,
+    # because jq cannot test whether a file exists. A path that resolves to
+    # nothing is reported as missing, never as an error.
+    while IFS= read -r lp; do
+        [ -n "$lp" ] || continue
+        lres="$(lesson_resolve "$lp")"
+        # shellcheck disable=SC2016  # $-names are jq variables
+        lmap="$(jq -nc --argjson m "$lmap" --arg k "$lp" --arg v "$lres" '$m + {($k): (if $v == "" then null else $v end)}')"
+    done <<<"$(printf '%s' "$base" | jq -r '([.item.lessons // []] + [.children[] | .lessons // []]) | add | unique | .[]')"
     # The pr field is a URL; GitHub and Bitbucket both end it in the number.
     pr="$(printf '%s' "$base" | jq -r '.item.pr // empty')"
     if [[ "$pr" =~ /([0-9]+)/?$ ]] && [ -f "$sc/review-responses/pr-${BASH_REMATCH[1]}.md" ]; then
@@ -2048,19 +2106,23 @@ trace_work() {
     bfr="$(printf '%s' "$branchruns" | jq -sc --arg br "$branch" '
         map(select(.branch == $br and (has("work") | not))) | sort_by(.run) | map({run, sha, branch, thread: (.thread // null)})')" \
         || refuse "trace: could not read the fix runs in $sc/fix-runs"
-    out="$(printf '%s' "$research" | jq -sc --argjson b "$base" --argjson rr "$rr" --argjson fr "$fr" --argjson bfr "$bfr" '
+    out="$(printf '%s' "$research" | jq -sc --argjson b "$base" --argjson rr "$rr" --argjson fr "$fr" --argjson bfr "$bfr" --argjson lm "$lmap" '
+        def lessons: map({path: ., resolved: $lm[.]});
         . as $r
-        | $b | {kind, id, item, parent, children, decomposed_into, blocked_by, blocks,
+        | $b | {kind, id, item, parent, decomposed_into, blocked_by, blocks,
                 superseded_by, supersedes, research: $r, spike_issues,
+                lessons: ((.item.lessons // []) | lessons),
+                children: (.children | map(. + {lessons: (.lessons | lessons)})),
                 review_responses: $rr, review_notes, disposition_ledger,
                 fix_runs: $fr, branch_fix_runs: $bfr}')" \
         || refuse "trace: could not assemble the trace for $id"
     if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
     printf '%s\n' "$out" | jq -r '
         def w: "\(.id) (\(.state))";
+        def lesson_line: if .resolved then "lesson  \(.resolved)" else "lesson  MISSING: \(.path)" end;
         "\(.id)  \(.item.kind)  \(.item.state)",
         (if .parent then "  parent  \(.parent | w)" else empty end),
-        (.children[] | "  child  \(w)"),
+        (.children[] | "  child  \(w)", (.lessons[] | "    \(lesson_line)")),
         (.decomposed_into[] | "  decomposed into  \(w)"),
         (.blocked_by[] | "  blocked by  \(w)"),
         (.blocks[] | "  blocks  \(w)"),
@@ -2073,6 +2135,7 @@ trace_work() {
                      | (if .resolved then "  research  \(.resolved)\($v)" else "  research  MISSING: \(.cited)\($v)" end),
                        (.newer[] | "  newer research  \(.)")),
         (.spike_issues[] | "  spike issue  #\(.)"),
+        (.lessons[] | "  \(lesson_line)"),
         (if .review_responses then "  review responses  \(.review_responses)" else empty end),
         (if .review_notes then "  review notes  \(.review_notes)" else empty end),
         (if .disposition_ledger then "  disposition ledger  \(.disposition_ledger)" else empty end),
@@ -2115,7 +2178,7 @@ lesson_cites() {
 }
 
 trace_lesson() {
-    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out
+    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel=""
     [ -f "$file" ] || refuse "trace: no such work item or file: $file"
     self="$(abs_path "$file")"
     # solutions-dirs names in-tree dirs relative to the cwd, so it is asked from
@@ -2135,6 +2198,23 @@ trace_lesson() {
         dirs="${dirs:+$dirs$'\n'}$(cd "$d" && pwd -P)"
     done <<<"$raw"
     lines="$(lesson_cites "$self" "$top" "$dirs")"
+    # taught_by: the work items whose lessons field names this file. A trace of
+    # a lesson works on a repo with no sidecar, so a missing one is an empty
+    # answer, never a refusal and never a SIDECAR MISS line.
+    if in_repo && wsc="$(do_resolve 2>/dev/null)" && [ -d "$wsc/work" ]; then
+        [ -z "$top" ] || case "$self" in "$top"/*) rel="${self#"$top"/}" ;; esac
+        for wf in "$wsc"/work/W-*.md; do
+            [ -f "$wf" ] || continue
+            # shellcheck disable=SC2016  # $-names are jq variables
+            wl="$(work_jq -Rsr "$WORK_JQ"'parse_work | .fm as $f | ($f.lessons // [])[] | [$f.id, $f.kind, $f.state, .] | @tsv' "$wf" 2>/dev/null)" || continue
+            while IFS=$'\t' read -r wid wkind wstate wpath; do
+                [ -n "$wid" ] || continue
+                if [ "$(lesson_resolve "$wpath")" = "$self" ] || { [ -n "$rel" ] && [ "$wpath" = "$rel" ]; }; then
+                    tb="${tb:+$tb$'\n'}$wid"$'\t'"$wkind"$'\t'"$wstate"
+                fi
+            done <<<"$wl"
+        done
+    fi
     # cited_by: a cheap grep on the basename, then the same extraction and
     # resolution as above, so a mention outside Related never counts.
     while IFS= read -r d; do
@@ -2148,14 +2228,16 @@ trace_lesson() {
         done <<<"$(find "$d" -type f -name '*.md' -exec grep -lF -- "$(basename "$self")" {} + 2>/dev/null)"
     done <<<"$dirs"
     # shellcheck disable=SC2016  # $-names are jq variables
-    out="$(printf '%s\n' "$lines" | jq -Rnc --arg path "$self" --arg by "$by" '
+    out="$(printf '%s\n' "$lines" | jq -Rnc --arg path "$self" --arg by "$by" --arg tb "$tb" '
         [inputs | select(length > 0) | split("\t")] as $r
         | def firsts(f): reduce .[] as $x ([]; if any(.[]; f == ($x | f)) then . else . + [$x] end);
         {kind: "lesson", path: $path,
          cites: ([$r[] | select(.[0] == "C") | {cited: .[1], resolved: .[2]}] | firsts(.resolved)),
          other: ([$r[] | select(.[0] == "O") | {cited: .[1], resolved: .[2]}] | firsts(.resolved)),
          missing: ([$r[] | select(.[0] == "M") | .[1]] | firsts(.)),
-         cited_by: ($by | split("\n") | map(select(length > 0)) | unique)}')" \
+         cited_by: ($by | split("\n") | map(select(length > 0)) | unique),
+         taught_by: ($tb | split("\n") | map(select(length > 0) | split("\t") | {id: .[0], kind: .[1], state: .[2]})
+                     | unique_by(.id) | sort_by(.id | ltrimstr("W-") | tonumber))}')" \
         || refuse "trace: could not assemble the trace for $self"
     if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
     printf '%s\n' "$out" | jq -r '
@@ -2163,7 +2245,8 @@ trace_lesson() {
         (.cites[] | "  cites  \(.resolved)"),
         (.other[] | "  also cites  \(.resolved)"),
         (.missing[] | "  MISSING: \(.)"),
-        (.cited_by[] | "  cited by  \(.)")'
+        (.cited_by[] | "  cited by  \(.)"),
+        (.taught_by[] | "  taught by  \(.id) (\(.state))")'
 }
 
 verb="${1:-}"
