@@ -641,5 +641,18 @@ check "(f) a lesson path work lesson refuses: the block exits nonzero" 1 "$rc"
 check "(f) and prints no work item line" 0 "$(printf '%s\n' "$out" | grep -c '^work item: W-')"
 rm -f "$LP/docs/solutions/testing/has space.md"
 
+# (g) run from the base branch: an old closed slice that once built there is not a match.
+runo "$LP" base-ref --name; basebr="$out"
+git -C "$LP" checkout -q "$basebr"
+runo "$LP" work create --kind slice --body-file "$tmp/body.md"; cold="$out"
+runo "$LP" work set "$cold" branch "$basebr"
+runo "$LP" work close "$cold"
+ghead="$(git -C "$LS" rev-parse HEAD)"
+cblock_run "$LP" "$L3" ""
+check "(g) on the base branch: exits 0" 0 "$rc"
+case "$out" in "work item: not recorded"*) ok "(g) on the base branch: prints not recorded" ;; *) bad "(g) on the base branch: prints not recorded" "$out" ;; esac
+check "(g) on the base branch: no sidecar commit" "$ghead" "$(git -C "$LS" rev-parse HEAD)"
+check "(g) on the base branch: the old item gained no lesson" null "$(lessons_of "$cold")"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

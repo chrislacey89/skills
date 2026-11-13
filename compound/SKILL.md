@@ -415,7 +415,7 @@ Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the po
 
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path.
 
-**Record the lesson on its work item.** On the `sidecar` backend, the slice that taught the lesson keeps a list of its lessons, and `sidecar.sh trace` reads it in both directions. Run this block after the entry is committed, on any of the three paths. `LESSON` is the entry's path: `$ENTRY` on the sidecar branch, the in-tree path otherwise. `W` is the work item your caller named, if any. Without one, the block takes the only work item recorded on the current branch, and when there is none or more than one it records nothing and says so. The block exits 0 on a skip, so a lesson that is already committed is never reported as failed:
+**Record the lesson on its work item.** On the `sidecar` backend, the slice that taught the lesson keeps a list of its lessons, and `sidecar.sh trace` reads it in both directions. Run this block after the entry is committed, on any of the three paths. `LESSON` is the entry's path: `$ENTRY` on the sidecar branch, the in-tree path otherwise. `W` is the work item your caller named, if any. Without one, the block takes the only work item recorded on the current branch, and when there is none or more than one, or the current branch is the base branch (where `/closeout` runs this skill from, and an old slice may once have built), it records nothing and says so. The block exits 0 on a skip, so a lesson that is already committed is never reported as failed:
 
 <!-- work-lesson: compound -->
 ```bash
@@ -430,6 +430,17 @@ fi
 B=""
 if [ -z "$W" ]; then
   B="$(git branch --show-current)"
+  if [ -n "$B" ]; then
+    BASE="$(bash "$SC" base-ref --name)" || BASE=""
+    if [ -z "$BASE" ]; then
+      echo "work item: not recorded, the base branch is unknown, so branch $B cannot be trusted to name a slice"
+      exit 0
+    fi
+    if [ "$B" = "$BASE" ]; then
+      echo "work item: not recorded, on the base branch $B, where no slice is in flight"
+      exit 0
+    fi
+  fi
   M=""
   [ -z "$B" ] || M="$(bash "$SC" work list --branch "$B" --state all)" || M=""
   if [ -n "$M" ] && [ "$(printf '%s\n' "$M" | wc -l | tr -d ' ')" -eq 1 ]; then W="$M"; fi
@@ -444,7 +455,7 @@ bash "$SC" work lesson "$W" "$LESSON" || exit 1
 echo "work item: $W"
 ```
 
-The list counts closed items too, because `/compound` can run after `/closeout` has closed the slice. `work lesson` adds a path once, so running the block again changes nothing.
+The list counts closed items too, because the slice may already be closed when `/compound` runs on its own branch. `work lesson` adds a path once, so running the block again changes nothing.
 
 ### Phase 6: Report
 
