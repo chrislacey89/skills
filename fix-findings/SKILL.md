@@ -89,7 +89,8 @@ human to dispose of findings, so there is no valid input.
 - **A branch with a review behind it** — a `/pre-merge` review, or a
   teammate's review on its open PR. Working tree clean.
 - **The slice's work item id** (`W-<n>`), on the sidecar backend: the one
-  `/pre-merge` Phase 1 step 2 named. § Handoff's round count reads it, so a
+  `/pre-merge` Phase 1 step 2 named, or the one `/respond-to-review` Step 5
+  hands over for a teammate's threads. § Handoff's round count reads it, so a
   branch carrying several slices counts only this slice's rounds, and Step 1
   writes it into each fix-run record, so a fix is attributed to its slice and
   not to every slice on the branch. On the `github` backend there is none, and

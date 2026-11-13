@@ -509,7 +509,12 @@ If any thread is marked **fix**, invoke `/fix-findings` with exactly those
 numbers. Hand it each item's JSON verbatim, which carries the comment bodies
 and the thread URL, and the Step 2 evidence row beside it. The human's typed
 disposition is the selection `/fix-findings` requires. This skill adds no
-number to it, and drops none from it. `/fix-findings` takes it from there: a
+number to it, and drops none from it. On the `sidecar` backend, hand it the
+slice's `W-<n>` as well, so each fix is attributed to its slice in `trace`:
+`bash "$SC" work list --kind slice --branch "$(git branch --show-current)" --state open`
+names the open slices recorded on this branch. Hand over the one it prints; if
+it prints none or several, ask the human which slice the fixes belong to, and
+if there is none, hand over no `W-<n>`. `/fix-findings` takes it from there: a
 fresh fixer per thread, which may still report `refuted`, a breaker, one
 `Review-Thread: <url>` line per commit, and its own handoff to a `/pre-merge`
 re-run.
