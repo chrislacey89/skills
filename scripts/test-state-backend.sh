@@ -915,32 +915,38 @@ section "/execute on a work item: the start block records the branch on every ru
 # shellcheck disable=SC2016  # the needle is the skill's literal text
 start_block="$(skill_block "$EXEC" 'work set "$W" start_sha')"
 [ -n "$start_block" ] || bad "execute/SKILL.md carries the start block" "not found"
-start() { (cd "$P" && bash -c "${start_block//W=\"W-<n>\"/W=\"$1\"}" >/dev/null 2>"$tmp/stderr"); rc=$?; }
+# start <shell> <W-id>: run the extracted block in <shell>. Agents use bash and
+# zsh, so each shell gets its own slices and its own branches.
+start() { (cd "$P" && "$1" -c "${start_block//W=\"W-<n>\"/W=\"$2\"}" >/dev/null 2>"$tmp/stderr"); rc=$?; }
 field() { (cd "$P" && bash "$SC" work view "$1" --json | jq -r ".$2 // empty"); }
 
-git -C "$P" checkout -q -b slice-one
-start W-2
-check "the start block exits 0" 0 "$rc"
-first_start="$(field W-2 start_sha)"
-check "the first run records start_sha" "$(git -C "$P" rev-parse HEAD)" "$first_start"
-check "the first run records the branch" slice-one "$(field W-2 branch)"
-git -C "$P" commit -q --allow-empty -m "slice work"
-git -C "$P" checkout -q -b slice-one-moved
-start W-2
-check "a later run keeps the recorded start_sha" "$first_start" "$(field W-2 start_sha)"
-check "a later run records the branch for an item whose start is already recorded" slice-one-moved "$(field W-2 branch)"
-git -C "$P" checkout -q --detach
-start W-2
-check "on a detached HEAD the start block exits 0" 0 "$rc"
-check "on a detached HEAD the recorded branch is kept" slice-one-moved "$(field W-2 branch)"
-# An unborn HEAD: rev-parse prints the word HEAD and work set refuses it, while
-# the branch name still resolves. The block's status must be the start_sha
-# write's, not the later branch write's: `range` depends on the start.
-(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md" >/dev/null) # W-8
-git -C "$P" checkout -q --orphan unborn-slice
-start W-8
-check "an unborn HEAD fails the start block rather than recording nothing" 1 "$rc"
-check "an unborn HEAD records no start_sha" "" "$(field W-8 start_sha)"
+for sh in $gate_shells; do
+    sw="$(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md")"
+    git -C "$P" checkout -q -b "slice-one-$sh"
+    start "$sh" "$sw"
+    check "the start block exits 0 ($sh)" 0 "$rc"
+    first_start="$(field "$sw" start_sha)"
+    check "the first run records start_sha ($sh)" "$(git -C "$P" rev-parse HEAD)" "$first_start"
+    check "the first run records the branch ($sh)" "slice-one-$sh" "$(field "$sw" branch)"
+    git -C "$P" commit -q --allow-empty -m "slice work"
+    git -C "$P" checkout -q -b "slice-one-moved-$sh"
+    start "$sh" "$sw"
+    check "a later run keeps the recorded start_sha ($sh)" "$first_start" "$(field "$sw" start_sha)"
+    check "a later run records the branch for an item whose start is already recorded ($sh)" "slice-one-moved-$sh" "$(field "$sw" branch)"
+    git -C "$P" checkout -q --detach
+    start "$sh" "$sw"
+    check "on a detached HEAD the start block exits 0 ($sh)" 0 "$rc"
+    check "on a detached HEAD the recorded branch is kept ($sh)" "slice-one-moved-$sh" "$(field "$sw" branch)"
+    # An unborn HEAD: rev-parse prints the word HEAD and work set refuses it, while
+    # the branch name still resolves. The block's status must be the start_sha
+    # write's, not the later branch write's: `range` depends on the start.
+    sw="$(cd "$P" && bash "$SC" work create --kind slice --parent W-1 --body-file "$tmp/xslice.md")"
+    git -C "$P" checkout -q --orphan "unborn-slice-$sh"
+    start "$sh" "$sw"
+    check "an unborn HEAD fails the start block rather than recording nothing ($sh)" 1 "$rc"
+    check "an unborn HEAD records no start_sha ($sh)" "" "$(field "$sw" start_sha)"
+    git -C "$P" checkout -q -f "slice-one-moved-$sh"
+done
 clean "the start block leaves the project clean" "$P"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
