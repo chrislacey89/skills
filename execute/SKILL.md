@@ -467,6 +467,24 @@ Some legacy PRDs may still reference `research.md` in the repo root or `plans/` 
 
 Treat it as pointers, not truth. The anchors were written at decomposition time and siblings may have merged since; the code and the research artifact still win on any conflict, per the precedence rule below. A stale anchor is a correction to file on the issue, not a reason to skip the block.
 
+**On a sidecar work item, trace the slice and its PRD before the grep below.** `sidecar.sh trace` prints a work item's neighbors from every store the sidecar keeps, and a PRD's trace lists each of its slices with the lessons that slice taught. Those lessons are what this feature has already learned, and they are found by their link, not by guessing a keyword:
+
+<!-- sidecar-read: execute-trace -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+bash "$SC" trace "$W" || exit 1
+J="$(bash "$SC" work view "$W" --json)" || exit 1
+P="$(jq -r '.parent // empty' <<<"$J")"
+[ -z "$P" ] || bash "$SC" trace "$P" || exit 1
+```
+
+- **`lesson` lines** — under a sibling's `child` line in the PRD's trace, or on the slice's own trace when an earlier iteration already compounded. Read each one before the grep. A `lesson  MISSING:` line names a lesson that was renamed, deleted, or still sits on an unmerged branch: say so, and carry on.
+- **`newer research`** — a later dated file with the same slug sits beside the research entry the PRD cites, so `/research` may have superseded it. Read both. In a HITL run, tell the user before implementing. In an AFK iteration, record the difference under **Assumptions that shifted** in Step 6's review notes.
+- **`review notes`, `fix run`** — this slice has been reviewed before, and the review is where an earlier iteration got to. Read the slice's comments for it, as the thread read above says.
+
+`trace` exits 1 only when the work item itself or its store cannot be read. In an AFK iteration, stop and relay its stderr. In a HITL run, show the line to the user and continue without it. On the `github` backend there is no work item to trace, and this block does not run.
+
 Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it). Set `KW` to the keyword to look for:
 
 ```bash
@@ -481,7 +499,7 @@ done
 true
 ```
 
-List matches from both locations; one does not shadow the other. A line marked `related project, unverified here:` comes from another project's sidecar, one in this repo's `solutions.system` group or linked with `sidecar.sh relate` (its header states the policy): read it as evidence about a sibling system, confirm it against this repo before relying on it, and never edit it. A match under an `in_tree_path` other than `docs/solutions` is that repo's own convention: read it as a plain document. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry's file path>"` (a fresh shell has no `SC`) before relying on it, and open the path it prints, not one you derive from the citing entry; on `MISSING:`, stop in an AFK iteration and flag it to the user in a HITL run.
+List matches from both locations; one does not shadow the other. A line marked `related project, unverified here:` comes from another project's sidecar, one in this repo's `solutions.system` group or linked with `sidecar.sh relate` (its header states the policy): read it as evidence about a sibling system, confirm it against this repo before relying on it, and never edit it. A match under an `in_tree_path` other than `docs/solutions` is that repo's own convention: read it as a plain document. When an entry you read cites another path (a `Related:` pointer, a research entry, a dossier), check it with `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" require "<cited path>" --from "<the citing entry's file path>"` (a fresh shell has no `SC`) before relying on it, and open the path it prints, not one you derive from the citing entry; on `MISSING:`, stop in an AFK iteration and flag it to the user in a HITL run. To find an entry's neighbors without guessing another keyword, `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" trace "<the entry's file path>"` prints the entries it cites and the entries that cite it, on either backend.
 
 If past solutions exist for this problem domain, incorporate their lessons and avoid their documented pitfalls.
 

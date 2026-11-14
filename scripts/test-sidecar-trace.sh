@@ -654,5 +654,155 @@ case "$out" in "work item: not recorded"*) ok "(g) on the base branch: prints no
 check "(g) on the base branch: no sidecar commit" "$ghead" "$(git -C "$LS" rev-parse HEAD)"
 check "(g) on the base branch: the old item gained no lesson" null "$(lessons_of "$cold")"
 
+# -----------------------------------------------------------------------------
+section "/help's work-item block, run for real"
+
+# /help Phase 1b reads the work store on the sidecar backend (#696): the
+# frontier is work list --unblocked, each open PRD is traced, and so is the
+# current branch's work item. Run the block as written, with only SC filled in.
+HELP="$repo_root/help/SKILL.md"
+hblock="$(awk '/^<!-- sidecar-read: help-work -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$HELP")"
+[ -n "$hblock" ] || fatal "help/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: help-work -->"
+ok "help/SKILL.md carries the work-item block"
+hblock_run() {
+    local script
+    script="$(printf '%s\n' "$hblock" | sed -e "s|^SC=.*|SC=\"$SC\"|")"
+    out="$(cd "$1" && "$BASH" -c "$script" 2>"$tmp/stderr")"; rc=$?
+    err="$(cat "$tmp/stderr")"
+}
+has()   { case "$3" in *"$2"*) ok "$1" ;; *) bad "$1" "no [$2] in: $3" ;; esac; }
+hasnt() { case "$3" in *"$2"*) bad "$1" "unexpected [$2] in: $3" ;; *) ok "$1" ;; esac; }
+
+# (a) The fixture #696 names: one open PRD, two slices, one of them blocked.
+mkproj
+HP="$P"
+runo "$HP" init --name helpwork --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+HS="$out"
+[ -d "$HS" ] || fatal "init did not create the /help fixture sidecar: $err"
+hblock_run "$HP"
+has "an empty store: no open PRDs" "open PRDs: none" "$out"
+has "an empty store: no unblocked slices" "unblocked slices: none" "$out"
+runo "$HP" work create --kind prd --body-file "$tmp/body.md"; hprd="$out"
+runo "$HP" work create --kind slice --parent "$hprd" --body-file "$tmp/body.md"; ha="$out"
+runo "$HP" work create --kind slice --parent "$hprd" --blocked-by "$ha" --body-file "$tmp/body.md"; hb="$out"
+runo "$HP" work set "$hprd" decomposed_into "$ha,$hb"
+hhead="$(git -C "$HS" rev-parse HEAD)"
+hblock_run "$HP"
+check "(a) exits 0" 0 "$rc"
+has "(a) lists the open PRD" "open PRDs: $hprd" "$out"
+has "(a) lists both open slices" "open slices: $ha $hb" "$out"
+has "(a) lists only the unblocked slice as unblocked" "unblocked slices: $ha"$'\n' "$out"
+has "(a) traces the open PRD" "$hprd  prd  open" "$out"
+has "(a) the PRD's trace lists the unblocked slice as a child" "  child  $ha (open)" "$out"
+has "(a) the PRD's trace lists the blocked slice as a child" "  child  $hb (open)" "$out"
+has "(a) on the base branch, no branch item is looked up" "branch work item: none, on the base branch main" "$out"
+check "(a) the block commits nothing in the sidecar" "$hhead" "$(git -C "$HS" rev-parse HEAD)"
+check "(a) the block leaves the project tree clean" "" "$(git -C "$HP" status --porcelain)"
+
+# (b) A feature branch with one work item: its trace, PR included, is printed.
+git -C "$HP" checkout -q -b feat-help
+runo "$HP" work set "$ha" branch feat-help
+runo "$HP" work set "$ha" pr "https://github.com/acme/helpwork/pull/9"
+hblock_run "$HP"
+check "(b) exits 0" 0 "$rc"
+has "(b) names the branch's work item" "branch work item: $ha"$'\n' "$out"
+has "(b) traces it" "$ha  slice  open" "$out"
+has "(b) the trace carries the PR row 1 reads" "  pr  https://github.com/acme/helpwork/pull/9" "$out"
+has "(b) the trace carries its parent" "  parent  $hprd (open)" "$out"
+
+# (c) A closed item on the same branch counts: the branch has two items now.
+runo "$HP" work create --kind slice --parent "$hprd" --body-file "$tmp/body.md"; hc="$out"
+runo "$HP" work set "$hc" branch feat-help
+runo "$HP" work close "$hc"
+hblock_run "$HP"
+has "(c) two items on one branch are reported as several" "branch work items: several on feat-help: $ha $hc" "$out"
+hasnt "(c) and neither is traced as the branch's" "branch work item: " "$out"
+
+# (d) A branch nothing records.
+git -C "$HP" checkout -q -b feat-other
+hblock_run "$HP"
+has "(d) a branch with no item says so" "branch work item: none recorded on feat-other" "$out"
+
+# (e) Detached HEAD.
+git -C "$HP" checkout -q --detach
+hblock_run "$HP"
+has "(e) a detached HEAD says so" "branch work item: none, HEAD is detached" "$out"
+git -C "$HP" checkout -q main
+
+# (f) An unparseable work file: one line, exit 0, so the parallel batch survives.
+printf -- '---\nnot: [closed\n' > "$HS/work/W-90.md"
+hblock_run "$HP"
+check "(f) an unreadable store still exits 0" 0 "$rc"
+has "(f) and says so" "work items: unreadable" "$out"
+hasnt "(f) and prints no frontier" "unblocked slices:" "$out"
+rm -f "$HS/work/W-90.md"
+
+# (g) A backend refusal: unavailable, exit 0, never a gh fallback.
+cp "$HS/sidecar.json" "$tmp/sidecar.json.bak"
+jq '.forge.write = "issues"' "$tmp/sidecar.json.bak" > "$HS/sidecar.json"
+hblock_run "$HP"
+check "(g) a backend refusal still exits 0" 0 "$rc"
+has "(g) and reports the work items as unavailable" "work items: unavailable" "$out"
+cp "$tmp/sidecar.json.bak" "$HS/sidecar.json"
+
+# (h) No sidecar: the forge holds the slices.
+mkproj
+hblock_run "$P"
+check "(h) no sidecar: exits 0" 0 "$rc"
+has "(h) no sidecar: prints n/a" "work items: n/a" "$out"
+
+# -----------------------------------------------------------------------------
+section "/execute Step 1's trace block, run for real"
+
+# /execute Step 1 traces the slice and its parent PRD, so a lesson an earlier
+# slice of the feature taught is read before the keyword grep (#727 story 2).
+EXECUTE="$repo_root/execute/SKILL.md"
+eblock="$(awk '/^<!-- sidecar-read: execute-trace -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$EXECUTE")"
+[ -n "$eblock" ] || fatal "execute/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: execute-trace -->"
+ok "execute/SKILL.md carries the trace block"
+eblock_run() {
+    local script
+    script="$(printf '%s\n' "$eblock" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e "s|^W=.*|W=\"$2\"|")"
+    out="$(cd "$1" && "$BASH" -c "$script" 2>"$tmp/stderr")"; rc=$?
+    err="$(cat "$tmp/stderr")"
+}
+
+# The /help fixture: $hc is a closed sibling of $hb under $hprd. Give it a lesson.
+mkdir -p "$HP/docs/solutions/testing"
+printf '# Taught\n' > "$HP/docs/solutions/testing/taught-2026-03-01.md"
+runo "$HP" work lesson "$hc" "$HP/docs/solutions/testing/taught-2026-03-01.md"
+check "fixture: the sibling's lesson is recorded" 0 "$rc"
+ehead="$(git -C "$HS" rev-parse HEAD)"
+eblock_run "$HP" "$hb"
+check "a slice with a parent: exits 0" 0 "$rc"
+has "the slice's own trace is printed" "$hb  slice  open" "$out"
+has "the slice's trace names its blocker" "  blocked by  $ha (open)" "$out"
+has "the parent PRD's trace is printed" "$hprd  prd  open" "$out"
+has "the PRD's trace names the closed sibling" "  child  $hc (closed)" "$out"
+has "and the lesson that sibling taught, resolved" "    lesson  $HP/docs/solutions/testing/taught-2026-03-01.md" "$out"
+check "the block commits nothing in the sidecar" "$ehead" "$(git -C "$HS" rev-parse HEAD)"
+
+# A lesson file that is gone is reported, never fatal.
+mv "$HP/docs/solutions/testing/taught-2026-03-01.md" "$tmp/taught.md"
+eblock_run "$HP" "$hb"
+check "a missing sibling lesson: still exits 0" 0 "$rc"
+has "a missing sibling lesson prints MISSING:" "lesson  MISSING: docs/solutions/testing/taught-2026-03-01.md" "$out"
+mv "$tmp/taught.md" "$HP/docs/solutions/testing/taught-2026-03-01.md"
+
+# A PRD has no parent: one trace.
+eblock_run "$HP" "$hprd"
+check "an item with no parent: exits 0" 0 "$rc"
+check "an item with no parent: traced once" 1 "$(printf '%s\n' "$out" | grep -c "^$hprd  prd  open$")"
+
+# A work item the store does not hold fails the block.
+eblock_run "$HP" W-404
+check "a work item the store does not hold: exits 1" 1 "$rc"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.41.0 — `/help` and `/execute` read the sidecar's work items through `trace` (#727, #696)
+
+On the sidecar backend `/help` built its picture of in-flight work only from `gh issue list`, which cannot see work items. It fell through to `/compound` or `/shape` while a decomposed PRD had open, unblocked slices (#696). `/execute` read a slice's body and its PRD's body, and nothing showed it the lessons earlier slices of the same feature had taught.
+
+### Changes
+
+- **`/help` Phase 1b reads the work store** when `sidecar.sh backend slices` answers `sidecar`: open PRDs, open slices, `work list --unblocked` as the frontier, a `trace` of each open PRD, and a `trace` of the current branch's work item. Rows 3–5 of the Step 2 ladder match `W-<n>` ids and recommend `/execute W-<n>` or `/prd-to-issues W-<n>`. Row 1 counts an open branch work item with a `pr` as an open PR when `gh pr list` cannot answer. A refusal or an unreadable store prints one line and exits 0, and `/help` reports the signal as unavailable rather than reading `gh` in its place.
+- **`/execute` Step 1 traces the slice and its parent PRD** before the solutions grep, and reads each `lesson` a sibling slice taught. A `newer research` line is flagged before implementing. For any solutions entry it reads, `trace <entry>` lists the entries it cites and the entries that cite it, on either backend.
+- **`scripts/test-sidecar-trace.sh` runs both blocks as written**, against the fixture #696 names: one open PRD and two slices, one of them blocked.
+
 ## v1.40.0 — A work item lists the lessons it taught (#727)
 
 On the sidecar backend nothing connected a lesson to the slice that taught it. `/compound` wrote the lesson and recorded nothing on the work item, so `sidecar.sh trace` could show a slice's research, review, and fix runs but not what the slice had taught.
