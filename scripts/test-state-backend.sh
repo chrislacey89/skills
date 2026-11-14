@@ -840,11 +840,14 @@ gate "a PRD /prd-to-issues §8 decomposed falls through to takeable" W-1 "takeab
 
 (cd "$P" && bash "$SC" work close W-2 >/dev/null)
 gate "a slice whose blockers are all closed is takeable" W-3 "takeable ever_wired=1 comments=0"
+gate "a closed work item is closed, not takeable (#703)" W-2 "closed []"
 printf 'handoff note\n' > "$tmp/xnote.md"
 (cd "$P" && bash "$SC" work comment W-3 --body-file "$tmp/xnote.md" >/dev/null)
 gate "the takeable line counts the comment thread" W-3 "takeable ever_wired=1 comments=1"
 (cd "$P" && bash "$SC" work set W-3 pr "https://github.com/acme/exec-guest/pull/9" >/dev/null)
 gate "a slice with a recorded pr is in-flight" W-3 'in-flight [{"pr":"https://github.com/acme/exec-guest/pull/9"}]'
+(cd "$P" && bash "$SC" work close W-3 >/dev/null)
+gate "a closed work item names its recorded pr" W-3 'closed [{"pr":"https://github.com/acme/exec-guest/pull/9"}]'
 # The kind field decides, not the body: a prd without the shaped-pitch headings
 # is still undecomposed, and a slice that carries one is never a PRD.
 printf '## Problem\n\nx\n' > "$tmp/xplain.md"

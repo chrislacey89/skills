@@ -33,6 +33,112 @@ Do not use it to replace `/shape`, `/research`, or `/write-a-prd` when the probl
 
 ### 0. Prerequisites
 
+**Issue-shape and blocker gate.** If the task is a GitHub issue, confirm it is a takeable slice before implementing it: still open, not an undecomposed PRD, not blocked, and not already being closed by someone else's open PR. One GraphQL read answers all four, and the block decides — do not judge any of it by eye. It runs first in Step 0, before the branch isolation gate, because it only reads and every stop verdict means no branch is needed: run after isolation, a stop leaves behind an empty worktree and a task-named branch that no PR will ever bring to `/closeout`.
+
+```bash
+N=<n>
+VERDICT_JQ='
+def lines: split("\n")[];
+[inputs][0] | if (.errors // [] | length) > 0 then "unknown" else
+.data.repository.issue as $i
+| if $i == null or $i.number != $n or (($i.title // "") == "")
+     or ($i.state | type) != "string"
+     or ($i.body | type) != "string"
+     or ($i.comments.nodes | type) != "array"
+     or ($i.blockedBy.nodes | type) != "array"
+     or ($i.closedByPullRequestsReferences.nodes | type) != "array"
+     or ($i.comments.nodes | length) != ([$i.comments.totalCount, 100] | min)
+     or ($i.blockedBy.nodes | length) != ([$i.blockedBy.totalCount, 50] | min)
+     or ($i.closedByPullRequestsReferences.nodes | length) != ([$i.closedByPullRequestsReferences.totalCount, 20] | min)
+  then "unknown"
+  else
+    ([$i.comments.nodes[].body | lines | select(test("^Decomposed into: #[0-9]+"))] | length > 0) as $decomposed
+    | ([$i.body | lines | select(test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\s*$"; "i"))] | length > 0) as $prd
+    | [$i.blockedBy.nodes[] | select(.state == "OPEN") | {number, title}] as $open_blockers
+    | [$i.closedByPullRequestsReferences.nodes[] | select(.state == "OPEN" and .headRefName != $branch) | {number, headRefName}] as $in_flight
+    | [$i.closedByPullRequestsReferences.nodes[] | select(.state == "MERGED") | {number, headRefName}] as $merged
+    | if $i.state != "OPEN" then "closed \($merged | tojson)"
+      elif $prd and ($decomposed | not) then "undecomposed-prd"
+      elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
+      elif ($in_flight | length) > 0 then "in-flight \($in_flight | tojson)"
+      else "takeable ever_wired=\($i.blockedBy.totalCount) comments=\($i.comments.totalCount)"
+      end
+  end
+end'
+RESP=$(gh api graphql -F owner='{owner}' -F repo='{repo}' -F n="$N" -f query='
+  query($owner: String!, $repo: String!, $n: Int!) {
+    repository(owner: $owner, name: $repo) {
+      issue(number: $n) {
+        number title state body
+        comments(last: 100) { totalCount nodes { body } }
+        blockedBy(first: 50) { totalCount nodes { number title state } }
+        closedByPullRequestsReferences(first: 20) { totalCount nodes { number state headRefName } }
+      }
+    }
+  }') || RESP=null
+jq -rn --argjson n "$N" --arg branch "$(git branch --show-current)" "$VERDICT_JQ" <<<"${RESP:-null}" || echo unknown
+```
+
+It prints exactly one verdict, and each one names its action:
+
+- **`unknown`** — `gh` failed, the response carried GraphQL errors, the issue's own `number`, `title`, or `state` did not come back, a field came back missing, or a returned list is shorter than its own `totalCount` says it should be. **Stop.** Re-run once; if it is still `unknown`, tell the user the read failed. Never proceed on it: an empty answer looks exactly like an issue with no comments, no blockers, and no PRs, and every check below fails open on it. A session once built a duplicate implementation of an issue an open PR already closed, because its read came back without the comment that said so.
+- **`closed [...]`** — the issue is no longer open. The list names the merged PRs that closed it, and is empty when it was closed by hand or by a PR that does not link it. **Stop and name them.** The work may already be on the base branch; the user decides whether to reopen the issue or file a new one. This check comes before the others, because none of them looks at the issue's own state: a closed issue whose closing PR merged has no open PR, so without it the gate reads `takeable`.
+- **`undecomposed-prd`** — the body carries a shaped-pitch section heading (`Appetite`, `Rabbit Holes`, `No-gos`, `User Stories`, or `Implementation Decisions`) and no comment matches `^Decomposed into: #\d+`. **Stop.** Invoke `/prd-to-issues <this-issue-number>` to produce implementation-ready slices, then restart `/execute` against one of the child slice issues. A decomposed PRD falls through to the checks below; the operator should still have supplied the child slice's number rather than the PRD's. `/prd-to-issues` is responsible for keeping only one `Decomposed into:` comment authoritative. A heading added to the shaped-pitch template is added to the block's list in the same change.
+- **`blocked [...]`** — the listed issues are open blockers. **Stop:** name them to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
+- **`in-flight [...]`** — an open PR closes this issue and its head is not the current branch. **Stop and name it.** The user decides whether to continue that PR, take it over, or override because it is abandoned or only a partial fix.
+- **`takeable ever_wired=<k> comments=<m>`** — proceed. Keep `comments=<m>` for Step 1's thread read.
+
+**Read `ever_wired` before trusting an empty blocker list.** Empty has two causes: the slice genuinely has no open blockers, or the repo predates the edge wiring in `/prd-to-issues` §7 and has no edges at all. `totalCount` counts blockers in every state, so it separates them — `ever_wired > 0` means this slice *was* wired and its blockers have since closed, so the empty list is real. `ever_wired == 0` means no edge was ever written and the empty list proves nothing; if the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand.
+
+**The in-flight check sees only linked PRs.** `closedByPullRequestsReferences` lists PRs that close the issue through a `Closes`/`Fixes`/`Resolves` keyword or a manual link in the sidebar. A PR that only says `Refs #N`, or names the issue nowhere, is invisible to it, so `takeable` means no *linked* PR is open, not that nobody is working on the issue.
+
+Note `state` here is the GraphQL enum — uppercase `OPEN`, not the REST endpoint's lowercase `open`.
+
+**On a sidecar work item.** A task named `W-<n>` is a work item in the project's sidecar, not a GitHub issue ([references/state-backend.md](references/state-backend.md)). No `gh` command runs for it, here or in any later step: on a guest repo the tracker is the client's. This block reads it with `work view --json`, reads each `blocked_by` id the same way, and prints the same verdicts as the GraphQL gate:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+SIDECAR_VERDICT_JQ='
+[inputs][0] as $i
+| if ($i | type) != "object" or $i.id != $w
+     or ($i.body | type) != "string"
+     or ($i.comments | type) != "array"
+     or ($i.blocked_by | type) != "array"
+     or ($i.state | type) != "string"
+  then "unknown"
+  else
+    ((($i.decomposed_into // []) | length) > 0) as $decomposed
+    | ($i.kind == "prd") as $prd
+    | [$i.blocked_by[] | select($st[.] != "closed") | {id: ., state: $st[.]}] as $open_blockers
+    | if $i.state == "closed" then "closed \([$i.pr // empty | select(. != "") | {pr: .}] | tojson)"
+      elif $prd and ($decomposed | not) then "undecomposed-prd"
+      elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
+      elif ($i.pr // "") != "" then "in-flight \([{pr: $i.pr}] | tojson)"
+      else "takeable ever_wired=\($i.blocked_by | length) comments=\($i.comments | length)"
+      end
+  end'
+J="$(bash "$SC" work view "$W" --json)" || J=null
+ST='{}'
+while IFS= read -r b; do
+  [ -n "$b" ] || continue
+  s="$(bash "$SC" work view "$b" --json | jq -r '.state // empty')"
+  ST="$(jq -c --arg b "$b" --arg s "${s:-unreadable}" '. + {($b): $s}' <<<"$ST")"
+done <<<"$(jq -r '(.blocked_by // [])[]?' <<<"$J")"
+jq -rn --arg w "$W" --argjson st "$ST" "$SIDECAR_VERDICT_JQ" <<<"$J" || echo unknown
+```
+
+Each verdict takes the action listed above, with these differences:
+
+- **`unknown`** — `work view` failed, or the item's `id`, `state`, `body`, `comments`, or `blocked_by` did not come back. Same rule: re-run once, never proceed on it.
+- **`closed [...]`** — the item's `state` is `closed`. The list names its `pr` field when one is recorded. Same rule: stop and name it.
+- **`undecomposed-prd`** — the item's `kind` is `prd` and `decomposed_into` is empty. The kind field decides, not the body's headings: a PRD whose body lacks the shaped-pitch headings is still undecomposed, and a slice never is (`work set` refuses `decomposed_into` on one). `/prd-to-issues` §8 writes that field, and `work set` replaces it on every write, so there is no "most recent comment" to pick.
+- **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist.
+- **`in-flight [...]`** — the item's `pr` field is set. A sidecar has no `closedByPullRequestsReferences`, so the field is the only signal, and it carries no branch to compare with the current one. When the PR it names is the one this branch opened, continue; otherwise the GraphQL rule applies.
+- **`takeable ever_wired=<k> comments=<m>`** — `ever_wired` counts every `blocked_by` id. Unlike on GitHub, `0` is a real empty list: `/prd-to-issues` writes `blocked_by` with the slice, so there is no pre-wiring repo for it to be confused with.
+
+Skip this gate for one-off tasks not tied to a GitHub issue or a work item.
+
 **Branch isolation gate.** Before any implementation work, ensure you are working on a clean branch created for this specific task — not a leftover feature branch from previous work.
 
 **Isolation already provided — stand down (check this first, before the numbered rules).** Some environments hand the session a dedicated, isolated worktree+branch *before* `/execute` runs — Conductor workspaces, GitHub Codespaces, devcontainers, and similar hosts each provision "one workspace = one branch, auto-forked from the base," with setup scripts already run. When that is the case the pipeline does not own provisioning: creating a worktree here would nest one *inside* the host's, and the host's branch (named for the *workspace*, not the task) is not "stale." Read the environment's signal and cede the worktree to whoever already owns it (Norman — read the world's signifier instead of carrying an in-head assumption that the pipeline always provisions; Meadows — one actor per stock, so the pipeline *defers* rather than adding a competing manager).
@@ -61,7 +167,7 @@ echo "host_owned=$host_owned"
 
 `CODESPACES` and `REMOTE_CONTAINERS` carry no path to compare and are read for presence; they are container-scoped, so a shell that sees them is inside the container whose repos they describe. The same block appears in `/closeout`, `/lfg`, and `/init-pipeline`, byte-identical, pinned by `scripts/test-host-signal-containment.sh` in the pack's own repo.
 
-When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so most of the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. **Its git-hooks item is the exception and still applies.** Hosts provision *tracked* files plus dependencies; git hooks live in `.git/hooks`, which is per-worktree and untracked, so a host-provisioned workspace characteristically has none. Check that item even when standing down. Continue to the issue-shape gate.
+When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so most of the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. **Its git-hooks item is the exception and still applies.** Hosts provision *tracked* files plus dependencies; git hooks live in `.git/hooks`, which is per-worktree and untracked, so a host-provisioned workspace characteristically has none. Check that item even when standing down. Continue to recording where the slice starts, below.
 
 This stand-down is deliberately *asymmetric* with `/closeout`'s teardown check. Inflow only needs to answer *"am I already isolated?"* — generic detection (toplevel ≠ primary) and the env-var hint each settle that. The outflow question — *"who owns teardown?"* — is stricter and cannot rely on the generic heuristic alone, because a pipeline-made worktree also satisfies toplevel ≠ primary; `/closeout` keys off the explicit setting or host env var only.
 
@@ -116,103 +222,6 @@ install = "pnpm install"
 - [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, and `.claude/.lfg-active` do not exist in the worktree (fresh slate; Step 3 creates one)
 - [ ] **Post-review lock flags absent** — `.claude/.review-stamped` and `.claude/.fix-findings-active` do not exist. Both belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete either one you find — you are at the start of a branch that has had no review, so neither can be describing this one
 
-**Issue-shape and blocker gate.** If the task is a GitHub issue, confirm it is a takeable slice before implementing it: not an undecomposed PRD, not blocked, and not already being closed by someone else's open PR. One GraphQL read answers all three, and the block decides — do not judge any of it by eye:
-
-```bash
-N=<n>
-VERDICT_JQ='
-def lines: split("\n")[];
-[inputs][0] | if (.errors // [] | length) > 0 then "unknown" else
-.data.repository.issue as $i
-| if $i == null or $i.number != $n or (($i.title // "") == "")
-     or ($i.body | type) != "string"
-     or ($i.comments.nodes | type) != "array"
-     or ($i.blockedBy.nodes | type) != "array"
-     or ($i.closedByPullRequestsReferences.nodes | type) != "array"
-     or ($i.comments.nodes | length) != ([$i.comments.totalCount, 100] | min)
-     or ($i.blockedBy.nodes | length) != ([$i.blockedBy.totalCount, 50] | min)
-     or ($i.closedByPullRequestsReferences.nodes | length) != ([$i.closedByPullRequestsReferences.totalCount, 20] | min)
-  then "unknown"
-  else
-    ([$i.comments.nodes[].body | lines | select(test("^Decomposed into: #[0-9]+"))] | length > 0) as $decomposed
-    | ([$i.body | lines | select(test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\s*$"; "i"))] | length > 0) as $prd
-    | [$i.blockedBy.nodes[] | select(.state == "OPEN") | {number, title}] as $open_blockers
-    | [$i.closedByPullRequestsReferences.nodes[] | select(.state == "OPEN" and .headRefName != $branch) | {number, headRefName}] as $in_flight
-    | if $prd and ($decomposed | not) then "undecomposed-prd"
-      elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
-      elif ($in_flight | length) > 0 then "in-flight \($in_flight | tojson)"
-      else "takeable ever_wired=\($i.blockedBy.totalCount) comments=\($i.comments.totalCount)"
-      end
-  end
-end'
-RESP=$(gh api graphql -F owner='{owner}' -F repo='{repo}' -F n="$N" -f query='
-  query($owner: String!, $repo: String!, $n: Int!) {
-    repository(owner: $owner, name: $repo) {
-      issue(number: $n) {
-        number title body
-        comments(last: 100) { totalCount nodes { body } }
-        blockedBy(first: 50) { totalCount nodes { number title state } }
-        closedByPullRequestsReferences(first: 20) { totalCount nodes { number state headRefName } }
-      }
-    }
-  }') || RESP=null
-jq -rn --argjson n "$N" --arg branch "$(git branch --show-current)" "$VERDICT_JQ" <<<"${RESP:-null}" || echo unknown
-```
-
-It prints exactly one verdict, and each one names its action:
-
-- **`unknown`** — `gh` failed, the response carried GraphQL errors, the issue's own `number` or `title` did not come back, a field came back missing, or a returned list is shorter than its own `totalCount` says it should be. **Stop.** Re-run once; if it is still `unknown`, tell the user the read failed. Never proceed on it: an empty answer looks exactly like an issue with no comments, no blockers, and no PRs, and every check below fails open on it. A session once built a duplicate implementation of an issue an open PR already closed, because its read came back without the comment that said so.
-- **`undecomposed-prd`** — the body carries a shaped-pitch section heading (`Appetite`, `Rabbit Holes`, `No-gos`, `User Stories`, or `Implementation Decisions`) and no comment matches `^Decomposed into: #\d+`. **Stop.** Invoke `/prd-to-issues <this-issue-number>` to produce implementation-ready slices, then restart `/execute` against one of the child slice issues. A decomposed PRD falls through to the checks below; the operator should still have supplied the child slice's number rather than the PRD's. `/prd-to-issues` is responsible for keeping only one `Decomposed into:` comment authoritative. A heading added to the shaped-pitch template is added to the block's list in the same change.
-- **`blocked [...]`** — the listed issues are open blockers. **Stop:** name them to the user and let them decide whether to work the blocker first, or to override because the dependency is stale or irrelevant to this slice. Do not start implementing and discover the gap halfway in.
-- **`in-flight [...]`** — an open PR closes this issue and its head is not the current branch. **Stop and name it.** The user decides whether to continue that PR, take it over, or override because it is abandoned or only a partial fix.
-- **`takeable ever_wired=<k> comments=<m>`** — proceed. Keep `comments=<m>` for Step 1's thread read.
-
-**Read `ever_wired` before trusting an empty blocker list.** Empty has two causes: the slice genuinely has no open blockers, or the repo predates the edge wiring in `/prd-to-issues` §7 and has no edges at all. `totalCount` counts blockers in every state, so it separates them — `ever_wired > 0` means this slice *was* wired and its blockers have since closed, so the empty list is real. `ever_wired == 0` means no edge was ever written and the empty list proves nothing; if the issue body carries a prose `Blocked by #N` line, trust the prose and check those blockers' state by hand.
-
-**The in-flight check sees only linked PRs.** `closedByPullRequestsReferences` lists PRs that close the issue through a `Closes`/`Fixes`/`Resolves` keyword or a manual link in the sidebar. A PR that only says `Refs #N`, or names the issue nowhere, is invisible to it, so `takeable` means no *linked* PR is open, not that nobody is working on the issue.
-
-Note `state` here is the GraphQL enum — uppercase `OPEN`, not the REST endpoint's lowercase `open`.
-
-**On a sidecar work item.** A task named `W-<n>` is a work item in the project's sidecar, not a GitHub issue ([references/state-backend.md](references/state-backend.md)). No `gh` command runs for it, here or in any later step: on a guest repo the tracker is the client's. This block reads it with `work view --json`, reads each `blocked_by` id the same way, and prints the same verdicts as the GraphQL gate:
-
-```bash
-SC="<this skill's directory>/references/sidecar.sh"
-W="W-<n>"
-SIDECAR_VERDICT_JQ='
-[inputs][0] as $i
-| if ($i | type) != "object" or $i.id != $w
-     or ($i.body | type) != "string"
-     or ($i.comments | type) != "array"
-     or ($i.blocked_by | type) != "array"
-  then "unknown"
-  else
-    ((($i.decomposed_into // []) | length) > 0) as $decomposed
-    | ($i.kind == "prd") as $prd
-    | [$i.blocked_by[] | select($st[.] != "closed") | {id: ., state: $st[.]}] as $open_blockers
-    | if $prd and ($decomposed | not) then "undecomposed-prd"
-      elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
-      elif ($i.pr // "") != "" then "in-flight \([{pr: $i.pr}] | tojson)"
-      else "takeable ever_wired=\($i.blocked_by | length) comments=\($i.comments | length)"
-      end
-  end'
-J="$(bash "$SC" work view "$W" --json)" || J=null
-ST='{}'
-while IFS= read -r b; do
-  [ -n "$b" ] || continue
-  s="$(bash "$SC" work view "$b" --json | jq -r '.state // empty')"
-  ST="$(jq -c --arg b "$b" --arg s "${s:-unreadable}" '. + {($b): $s}' <<<"$ST")"
-done <<<"$(jq -r '(.blocked_by // [])[]?' <<<"$J")"
-jq -rn --arg w "$W" --argjson st "$ST" "$SIDECAR_VERDICT_JQ" <<<"$J" || echo unknown
-```
-
-Each verdict takes the action listed above, with these differences:
-
-- **`unknown`** — `work view` failed, or the item's `id`, `body`, `comments`, or `blocked_by` did not come back. Same rule: re-run once, never proceed on it.
-- **`undecomposed-prd`** — the item's `kind` is `prd` and `decomposed_into` is empty. The kind field decides, not the body's headings: a PRD whose body lacks the shaped-pitch headings is still undecomposed, and a slice never is (`work set` refuses `decomposed_into` on one). `/prd-to-issues` §8 writes that field, and `work set` replaces it on every write, so there is no "most recent comment" to pick.
-- **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist.
-- **`in-flight [...]`** — the item's `pr` field is set. A sidecar has no `closedByPullRequestsReferences`, so the field is the only signal, and it carries no branch to compare with the current one. When the PR it names is the one this branch opened, continue; otherwise the GraphQL rule applies.
-- **`takeable ever_wired=<k> comments=<m>`** — `ever_wired` counts every `blocked_by` id. Unlike on GitHub, `0` is a real empty list: `/prd-to-issues` writes `blocked_by` with the slice, so there is no pre-wiring repo for it to be confused with.
-
 **Record where the slice starts.** On `takeable`, once the branch this slice will be committed on is checked out and before its first commit, record `HEAD` as the work item's `start_sha`. `sidecar.sh range` reads it, so `/pre-merge`'s first review and `/fix-findings`' round count cover this slice's commits rather than every slice on a long-lived branch. A start already recorded is kept: a later iteration on the same slice must not move it forward past commits the slice already made, and a start a fold or rebase rewrote is not re-anchored either (`range` falls back to the base and says so):
 
 ```bash
@@ -231,8 +240,6 @@ B="$(git branch --show-current)"
 The last two lines record the checked-out branch as the item's `branch` on every run of this block, not only the first, so an item whose start is already recorded still gets it and an item that moved to another branch is corrected. `sidecar.sh trace` and `work list --branch` read it. The field says where the item is being built, and it does not identify the item: several slices can share a branch, and a branch name is reused after a merge.
 
 On the `github` backend there is no work item to hold either field, and `range` reviews from the base.
-
-Skip this gate for one-off tasks not tied to a GitHub issue or a work item.
 
 **Ralph auto-detection gate.** Evaluate all three conditions:
 

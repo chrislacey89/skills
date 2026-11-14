@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.43.0 — `/execute` checks the issue before it makes a branch, and stops on a closed one (#703)
+
+`/execute` Step 0 created the worktree and branch before it ran the issue-shape gate. When the gate then stopped, the run left an empty worktree and a task-named branch behind, and no PR would ever bring them to `/closeout`. The gate also never read the issue's own state. An issue whose closing PR had already merged had no open PR, so it read `takeable` and the run built the work again.
+
+### Changes
+
+- **The issue-shape and blocker gate runs first in Step 0**, both the GitHub block and the sidecar block, ahead of the branch isolation gate. It only reads, and every stop verdict means no branch is needed. Recording the slice's `start_sha` stays after isolation, where the branch it records exists.
+- **A new `closed [...]` verdict stops the run.** The GraphQL read now selects the issue's `state`, and the verdict lists the merged PRs that closed it. On a sidecar work item it reads the item's `state` and lists its recorded `pr`. It is checked before the PRD, blocker, and in-flight checks, and a missing `state` reads `unknown`.
+- **`scripts/test-selection-idiom-consistency.sh` covers the verdict and pins the order**: a closed issue with and without a merged PR, a closed PRD with an open blocker, a missing state, and the issue-shape gate's two blocks sitting above the branch isolation gate. `scripts/test-state-backend.sh` runs the sidecar block against closed work items under bash and zsh.
+
 ## v1.42.0 — Follow-ups from the #730 review (#731)
 
 The review of #730 left five Suggestions open. Two sentences claimed more than the code or its test does, a suite match was case-sensitive, `/respond-to-review`'s slice lookup was inline prose that no test ran, and nothing told a reviewer how to read a PR without its bundled copies.
