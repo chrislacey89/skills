@@ -203,6 +203,12 @@ jobs:
       - name: Run markdown diff-attribute contract suite
         run: bash scripts/test-markdown-diff-attribute.sh
 
+      # CLAUDE.md gives reviewers a diff command that leaves out the generated
+      # references/ copies. This runs it in a scratch repo and checks that a
+      # hand-written file under references/ is still shown.
+      - name: Run authored-diff pathspec suite
+        run: bash scripts/test-authored-diff-pathspec.sh
+
       # A skill block that reads ${VAR:-} before assigning VAR defaults silently
       # in the fresh shell an agent runs it in. Allowlisted exceptions are named
       # in the script and fail once they stop matching.

@@ -42,7 +42,10 @@
 #      or a sourced script, a flag placed between `gh pr` and its verb, a `gh
 #      issue` verb outside its list, or an instruction in prose. Each shape it
 #      does name carries a planted case below.
-#   5. The routes and bundles the skill depends on exist.
+#   5. Step 5's slice lookup against a real sidecar, under bash and zsh: none,
+#      one, several, a closed slice, a detached HEAD, and a failed lookup each
+#      print their verdict (#731).
+#   6. The routes and bundles the skill depends on exist.
 # Every detector is mutation-tested below.
 
 # Every single-quoted `$` below is the skill's literal text or a planted
@@ -834,6 +837,60 @@ check "M19: without the before-Step-5 sentence the order pin fails" 0 "$(order_h
 check "Step 4 names the compound candidate to the human when it writes the round" 1 \
     "$(step4 "$R2R" | grep -c '^Compound candidate: <n>')"
 check "the handoff menu offers no /compound option" 0 "$(handoff "$R2R" | grep -c 'escaped defect')"
+
+# -----------------------------------------------------------------------------
+section "Step 5's slice lookup, against a real sidecar (#731)"
+
+# On the sidecar backend Step 5 hands /fix-findings the slice's W-<n>, found by
+# the branch it is recorded on. A branch does not identify a slice: two can
+# share it, and a slice left open from an earlier use of the name prints like
+# the current one. So the block prints a verdict and the prose asks the human
+# for every one of them.
+LOOKUP="$(block "$R2R" 'work list --kind slice --branch')"
+check "Step 5 carries the slice-lookup block" 1 "$([ -n "$LOOKUP" ] && echo 1 || echo 0)"
+printf '%s' "$LOOKUP" | sed "s|^SC=\"<this skill's directory>/references/sidecar.sh\"$|SC=\"$SIDECAR_SH\"|" > "$tmp/lookup.sh"
+check "the lookup block runs the resolver it was pointed at" 1 "$(grep -cF "SC=\"$SIDECAR_SH\"" "$tmp/lookup.sh")"
+lk="$tmp/lookuprepo"
+git init -q -b main "$lk"
+git -C "$lk" remote add origin https://github.com/acme/lookup.git
+git -C "$lk" commit -q --allow-empty -m base
+lkenv() { SKILL_KIT_SIDECAR_ROOT="$tmp/lookup-sidecars" SKILL_KIT_RESEARCH_ARCHIVE="$tmp/lookup-archive" "$@"; }
+lksc() { (cd "$lk" && lkenv bash "$SIDECAR_SH" "$@"); }
+lookup() { (cd "$lk" && lkenv "$1" "$tmp/lookup.sh" 2>"$tmp/lookup.err"); }
+lksc init --name lookup --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1
+printf '## Problem\n\nx\n\n## Appetite\n\n2 weeks\n' > "$tmp/lk-prd.md"
+printf '## Acceptance Criteria\n\n- [ ] one\n' > "$tmp/lk-slice.md"
+lk_prd="$(lksc work create --kind prd --body-file "$tmp/lk-prd.md")"
+lk_a="$(lksc work create --kind slice --parent "$lk_prd" --body-file "$tmp/lk-slice.md")"
+lk_b="$(lksc work create --kind slice --parent "$lk_prd" --body-file "$tmp/lk-slice.md")"
+check "the lookup fixture holds a PRD and two slices" 1 "$([ -n "$lk_prd" ] && [ -n "$lk_a" ] && [ -n "$lk_b" ] && echo 1 || echo 0)"
+git -C "$lk" checkout -q -b feat
+
+for sh in bash zsh; do
+    command -v "$sh" >/dev/null 2>&1 || { printf '  skip %s is not installed\n' "$sh"; continue; }
+    lksc work set "$lk_a" branch other >/dev/null
+    lksc work set "$lk_b" branch other >/dev/null
+    git -C "$lk" checkout -q feat
+    check "no open slice on the branch prints none ($sh)" "none" "$(lookup "$sh")"
+    lksc work set "$lk_a" branch feat >/dev/null
+    check "one open slice on the branch prints it ($sh)" "one $lk_a" "$(lookup "$sh")"
+    lksc work set "$lk_b" branch feat >/dev/null
+    check "two open slices on the branch print both, in id order ($sh)" "several $lk_a $lk_b" "$(lookup "$sh")"
+    git -C "$lk" checkout -q --detach
+    check "a detached HEAD prints detached, not a usage error ($sh)" "detached" "$(lookup "$sh")"
+    check "a detached HEAD writes nothing to stderr ($sh)" "" "$(cat "$tmp/lookup.err")"
+done
+# A slice closed under the branch is not handed over; one left open is, which is
+# why the prose asks the human to confirm even a single slice.
+git -C "$lk" checkout -q feat
+lksc work close "$lk_b" >/dev/null
+check "a closed slice on the branch is not printed" "one $lk_a" "$(lookup bash)"
+printf '%s' "$LOOKUP" | sed "s|^SC=\"<this skill's directory>/references/sidecar.sh\"$|SC=\"$tmp/sc-fail.sh\"|" > "$tmp/lookup-fail.sh"
+check "a failed lookup prints unknown" "unknown" "$(cd "$lk" && bash "$tmp/lookup-fail.sh" 2>/dev/null)"
+check "Step 5 asks the human to confirm a single slice" 1 \
+    "$(grep -c 'hand it over once they' "$R2R" | awk '{print ($1 > 0)}')"
+check "Step 5 names the stale-slice case" 1 \
+    "$(grep -c 'left open from an earlier use of the same branch name' "$R2R" | awk '{print ($1 > 0)}')"
 
 # -----------------------------------------------------------------------------
 section "routes and bundles"

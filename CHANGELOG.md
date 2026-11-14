@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.42.0 — Follow-ups from the #730 review (#731)
+
+The review of #730 left five Suggestions open. Two sentences claimed more than the code or its test does, a suite match was case-sensitive, `/respond-to-review`'s slice lookup was inline prose that no test ran, and nothing told a reviewer how to read a PR without its bundled copies.
+
+### Changes
+
+- **`/execute`'s branch sentence matches its step.** The start block runs on `takeable` only. The sentence and the v1.39.0 line above said an item "already in flight" gets its branch, which is the name of another verdict. They now say an item whose start is already recorded gets it.
+- **`docs/state-backend.md` states what the review-currency suite checks**: it fails when a skill names `reviewed_sha` for anything but `/pre-merge`'s write. It no longer says no skill reads the field.
+- **`scripts/test-review-currency-marker.sh` matches `last reviewed` in any letter case.**
+- **`/respond-to-review` Step 5's slice lookup is a block that prints a verdict** (`one`, `several`, `none`, `detached`, `unknown`). A detached `HEAD` is no longer a usage error, and a single open slice is named to the human and confirmed before it is handed over, because a slice left open from an earlier use of the same branch name looks the same. `scripts/test-respond-to-review-contract.sh` runs the block against a real sidecar under bash and zsh.
+- **CLAUDE.md § Reading a prose diff gives the command that leaves the generated `references/` copies out of a diff**, with its excludes built from the manifest so hand-written files there stay visible. `scripts/test-authored-diff-pathspec.sh` runs it in a scratch repo.
+
 ## v1.41.0 — `/help` and `/execute` read the sidecar's work items through `trace` (#727, #696)
 
 On the sidecar backend `/help` built its picture of in-flight work only from `gh issue list`, which cannot see work items. It fell through to `/compound` or `/shape` while a decomposed PRD had open, unblocked slices (#696). `/execute` read a slice's body and its PRD's body, and nothing showed it the lessons earlier slices of the same feature had taught.
@@ -27,7 +39,7 @@ On the sidecar backend a review left no record once its PR merged: the stamp was
 ### Changes
 
 - **`/pre-merge` copies the stamped SHA to the work item's `reviewed_sha`** after a successful `stamp write`, when there is a work item. The copy is the item's history. The stamp stays the only record of review currency, a failed copy does not undo the stamp, and `scripts/test-review-currency-marker.sh` fails when a skill names the field for anything but that write.
-- **New work-item field `branch`**: `/execute` writes it when a slice starts, on every run, so an item already in flight gets it. `/pre-merge` Phase 2 writes it again before the PR. `work list --branch <name>` prints the items on a branch, which can be more than one.
+- **New work-item field `branch`**: `/execute` writes it when a slice starts, on every run, so an item whose start is already recorded still gets it. `/pre-merge` Phase 2 writes it again before the PR. `work list --branch <name>` prints the items on a branch, which can be more than one.
 - **`fixrun record` takes `--work <W-n>`**, and `/fix-findings` passes the slice's work item when it was handed one. `fixrun list` prints the same line as before.
 - **`sidecar.sh trace W-n` prints the branch, the last reviewed commit, and the fix runs**: the runs that name the item, and, listed apart as branch-level, the runs on its branch that name no item.
 - `fixrun list` and `trace` decide which fix-run lines to trust through one shared definition.

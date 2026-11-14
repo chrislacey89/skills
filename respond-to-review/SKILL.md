@@ -510,11 +510,37 @@ numbers. Hand it each item's JSON verbatim, which carries the comment bodies
 and the thread URL, and the Step 2 evidence row beside it. The human's typed
 disposition is the selection `/fix-findings` requires. This skill adds no
 number to it, and drops none from it. On the `sidecar` backend, hand it the
-slice's `W-<n>` as well, so each fix is attributed to its slice in `trace`:
-`bash "$SC" work list --kind slice --branch "$(git branch --show-current)" --state open`
-names the open slices recorded on this branch. Hand over the one it prints; if
-it prints none or several, ask the human which slice the fixes belong to, and
-if there is none, hand over no `W-<n>`. `/fix-findings` takes it from there: a
+slice's `W-<n>` as well, so each fix is attributed to its slice in `trace`.
+This block looks up the open slices recorded on the current branch and prints
+one verdict:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+B="$(git branch --show-current)"
+if [ -z "$B" ]; then
+  echo "detached"
+elif ! L="$(bash "$SC" work list --kind slice --branch "$B" --state open)"; then
+  echo "unknown"
+else
+  N="$(printf '%s\n' "$L" | grep -c . || true)"
+  case "$N" in
+    0) echo "none" ;;
+    1) echo "one $L" ;;
+    *) echo "several $(printf '%s\n' "$L" | paste -sd ' ' -)" ;;
+  esac
+fi
+```
+
+- **`one W-<n>`**: name the slice to the human and hand it over once they
+  confirm it. A slice left open from an earlier use of the same branch name
+  prints the same way, and only the human can tell the two apart.
+- **`several W-<a> W-<b> …`** or **`none`**: ask the human which slice the
+  fixes belong to. If there is none, hand over no `W-<n>`.
+- **`detached`**: there is no branch to look the slice up by. Ask the human, as
+  for `none`.
+- **`unknown`**: the lookup failed. Relay its stderr and ask the human.
+
+`/fix-findings` takes it from there: a
 fresh fixer per thread, which may still report `refuted`, a breaker, one
 `Review-Thread: <url>` line per commit, and its own handoff to a `/pre-merge`
 re-run.
