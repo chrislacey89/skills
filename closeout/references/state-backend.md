@@ -69,7 +69,7 @@ bash "$SC" stamp clear <branch>                            # /closeout, once the
 
 The file's shape is locked in the parent PRD, chrislacey89/skills#407, § Implementation Decisions, "Stamp". It is not restated here. Readers compare `stamp read`'s output with the branch head by string equality, the same rule as the PR-body marker. `read` prints nothing for a stamp it cannot trust: a file that does not parse, a `branch` field naming another branch, or a `reviewed_sha` that is not 40 lowercase hex. Each of those takes the reader's "no stamp" path rather than reporting a divergence that never happened.
 
-`stamp clear` leaves no record of what was reviewed, so after a successful `stamp write` `/pre-merge` also copies the SHA to the work item's `reviewed_sha`, when there is a work item. The copy is the item's history. Review currency is still read from the stamp alone: no skill reads `reviewed_sha`, and `scripts/test-review-currency-marker.sh` fails when one does.
+`stamp clear` leaves no record of what was reviewed, so after a successful `stamp write` `/pre-merge` also copies the SHA to the work item's `reviewed_sha`, when there is a work item. The copy is the item's history. Review currency is still read from the stamp alone, and `scripts/test-review-currency-marker.sh` fails when a skill names the field for anything but that write.
 
 Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`.
 
