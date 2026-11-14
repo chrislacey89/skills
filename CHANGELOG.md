@@ -1,12 +1,23 @@
 # Changelog
 
+## v1.43.0 — Follow-ups from the #736 review (#737)
+
+The review of #736 left four Suggestions open. Each was a claim or a command that its test did not fully back: removing the thing the claim describes left the suite green.
+
+### Changes
+
+- **`scripts/test-authored-diff-pathspec.sh` checks CLAUDE.md's diff command against the real tree.** It runs the command's own `$(...)` and fails unless every path it excludes exists as a file and there is one per manifest line. It no longer keeps its own copy of the awk, so a change to where `scripts/sync-skill-references.sh` writes its copies now fails it.
+- **`scripts/test-respond-to-review-contract.sh` records the PRD on the lookup branch**, so dropping `--kind slice` from `/respond-to-review` Step 5's lookup fails the suite. It also checks `/fix-findings`' work-item input bullet for the `W-<n>` that Step 5 hands over. The earlier check passed on any Inputs bullet that named `/respond-to-review`.
+- **`scripts/test-review-currency-marker.sh` scans the hand-written `references/` files** (the ones the manifest does not generate), so the `reviewed_sha` rule stated in `docs/state-backend.md` and CLAUDE.md now covers them. `reviewed_sha` is matched as written, so a `$REVIEWED_SHA` variable is not counted as a mention. `last reviewed` is still matched in any letter case.
+- **This file's v1.42.0 entry** referred to "the v1.39.0 line above". That line is below it.
+
 ## v1.42.0 — Follow-ups from the #730 review (#731)
 
 The review of #730 left five Suggestions open. Two sentences claimed more than the code or its test does, a suite match was case-sensitive, `/respond-to-review`'s slice lookup was inline prose that no test ran, and nothing told a reviewer how to read a PR without its bundled copies.
 
 ### Changes
 
-- **`/execute`'s branch sentence matches its step.** The start block runs on `takeable` only. The sentence and the v1.39.0 line above said an item "already in flight" gets its branch, which is the name of another verdict. They now say an item whose start is already recorded gets it.
+- **`/execute`'s branch sentence matches its step.** The start block runs on `takeable` only. The sentence and the v1.39.0 line below said an item "already in flight" gets its branch, which is the name of another verdict. They now say an item whose start is already recorded gets it.
 - **`docs/state-backend.md` states what the review-currency suite checks**: it fails when a skill names `reviewed_sha` for anything but `/pre-merge`'s write. It no longer says no skill reads the field.
 - **`scripts/test-review-currency-marker.sh` matches `last reviewed` in any letter case.**
 - **`/respond-to-review` Step 5's slice lookup is a block that prints a verdict** (`one`, `several`, `none`, `detached`, `unknown`). A detached `HEAD` is no longer a usage error, and a single open slice is named to the human and confirmed before it is handed over, because a slice left open from an earlier use of the same branch name looks the same. `scripts/test-respond-to-review-contract.sh` runs the block against a real sidecar under bash and zsh.
