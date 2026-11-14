@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.42.0 — Follow-ups from the #730 review (#731)
+
+The review of #730 left five Suggestions open. Two sentences claimed more than the code or its test does, a suite match was case-sensitive, `/respond-to-review`'s slice lookup was inline prose that no test ran, and nothing told a reviewer how to read a PR without its bundled copies.
+
+### Changes
+
+- **`/execute`'s branch sentence matches its step.** The start block runs on `takeable` only. The sentence and the v1.39.0 line above said an item "already in flight" gets its branch, which is the name of another verdict. They now say an item whose start is already recorded gets it.
+- **`docs/state-backend.md` states what the review-currency suite checks**: it fails when a skill names `reviewed_sha` for anything but `/pre-merge`'s write. It no longer says no skill reads the field.
+- **`scripts/test-review-currency-marker.sh` matches `last reviewed` in any letter case.**
+- **`/respond-to-review` Step 5's slice lookup is a block that prints a verdict** (`one`, `several`, `none`, `detached`, `unknown`). A detached `HEAD` is no longer a usage error, and a single open slice is named to the human and confirmed before it is handed over, because a slice left open from an earlier use of the same branch name looks the same. `scripts/test-respond-to-review-contract.sh` runs the block against a real sidecar under bash and zsh.
+- **CLAUDE.md § Reading a prose diff gives the command that leaves the generated `references/` copies out of a diff**, with its excludes built from the manifest so hand-written files there stay visible. `scripts/test-authored-diff-pathspec.sh` runs it in a scratch repo.
+
 ## v1.41.0 — `/help` and `/execute` read the sidecar's work items through `trace` (#727, #696)
 
 On the sidecar backend `/help` built its picture of in-flight work only from `gh issue list`, which cannot see work items. It fell through to `/compound` or `/shape` while a decomposed PRD had open, unblocked slices (#696). `/execute` read a slice's body and its PRD's body, and nothing showed it the lessons earlier slices of the same feature had taught.
