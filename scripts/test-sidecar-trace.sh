@@ -654,6 +654,28 @@ case "$out" in "work item: not recorded"*) ok "(g) on the base branch: prints no
 check "(g) on the base branch: no sidecar commit" "$ghead" "$(git -C "$LS" rev-parse HEAD)"
 check "(g) on the base branch: the old item gained no lesson" null "$(lessons_of "$cold")"
 
+# (h) the base branch is unknown: base-ref --name refuses, so a feature branch
+# with exactly one item is still not trusted to name the slice.
+mkproj
+UP="$P"
+git -C "$UP" branch -m zz-unlisted-base
+runo "$UP" init --name unknownbase --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+US="$out"
+[ -d "$US" ] || fatal "init did not create the unknown-base fixture sidecar: $err"
+mkdir -p "$UP/docs/solutions/testing"
+printf '# U\n' > "$UP/docs/solutions/testing/u-2026-02-06.md"
+git -C "$UP" checkout -q -b feat-unknown-base
+runo "$UP" work create --kind slice --body-file "$tmp/body.md"; cu="$out"
+runo "$UP" work set "$cu" branch feat-unknown-base
+runo "$UP" base-ref --name
+check "(h) fixture: base-ref --name refuses" 1 "$rc"
+uhead="$(git -C "$US" rev-parse HEAD)"
+cblock_run "$UP" "$UP/docs/solutions/testing/u-2026-02-06.md" ""
+check "(h) base branch unknown: exits 0" 0 "$rc"
+case "$out" in "work item: not recorded, the base branch is unknown"*) ok "(h) base branch unknown: prints the unknown-base skip" ;; *) bad "(h) base branch unknown: prints the unknown-base skip" "$out" ;; esac
+check "(h) base branch unknown: no sidecar commit" "$uhead" "$(git -C "$US" rev-parse HEAD)"
+check "(h) base branch unknown: the branch's one item gained no lesson" null "$(cd "$UP" && "$BASH" "$SC" work view "$cu" --json | jq -c .lessons)"
+
 # -----------------------------------------------------------------------------
 section "/help's work-item block, run for real"
 
