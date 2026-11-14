@@ -287,12 +287,13 @@ assert_eq "pre-merge/SKILL.md" "$reviewed_sha_writers" \
 # and are not skill prose, so the one-level glob leaves them out, and docs/ is
 # the canonical text those copies come from, where the rule is stated. `sidecar.sh
 # trace` prints the field as "last reviewed <sha>" without its name, so that
-# phrase is held to the same rule: a skill that quoted it would be reading the
-# history as if it were currency.
-reviewed_sha_siblings="$(grep -nE 'reviewed_sha|last reviewed' -- */*.md | grep -vE '^([^:]+/SKILL\.md|docs/[^:]+):' || true)"
+# phrase is held to the same rule, in any letter case, since a sentence can
+# open with it: a skill that quoted it would be reading the history as if it
+# were currency.
+reviewed_sha_siblings="$(grep -niE 'reviewed_sha|last reviewed' -- */*.md | grep -vE '^([^:]+/SKILL\.md|docs/[^:]+):' || true)"
 assert_eq "" "$reviewed_sha_siblings" \
     "no skill file other than SKILL.md names reviewed_sha or 'last reviewed'"
-last_reviewed_skill="$(grep -nE 'last reviewed' -- */SKILL.md || true)"
+last_reviewed_skill="$(grep -niE 'last reviewed' -- */SKILL.md || true)"
 assert_eq "" "$last_reviewed_skill" \
     "no SKILL.md names trace's 'last reviewed' line"
 
