@@ -908,7 +908,7 @@ check "a refused writeback commits nothing" "$commits_before" "$(git -C "$S" rev
 clean "the writeback leaves the project clean" "$P"
 
 # -----------------------------------------------------------------------------
-section "/execute on a work item: the start block records the branch on every run"
+section "/execute on a work item: the start block records the branch on every takeable run"
 
 # start_sha is written once and kept. The branch is written on every run, so
 # an item whose start is already recorded still gets it.
