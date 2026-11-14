@@ -553,6 +553,20 @@ GOT="$(bash "$tmp/read.sh")"
 check "the latest round wins per thread, and only exact markers are read" \
     "PRRT_a 2026-10-03T00:00:00Z push-back
 PRR_cr 2026-10-04T00:00:00Z postpone" "$GOT"
+# The order must not depend on the reader's shell. en_US.UTF-8 collation skips
+# punctuation, so a bare `sort` puts PRR_cr before PRRT_a there and after it
+# under C. CI runs under C, so it only sees that difference here.
+PUNCT_LOCALE="$(locale -a 2>/dev/null | grep -m1 -iE '^en_US\.utf-?8$')"
+if [ -n "$PUNCT_LOCALE" ] \
+    && [ "$(printf 'PRRT_a\nPRR_cr\n' | LC_ALL="$PUNCT_LOCALE" sort | head -1)" = "PRR_cr" ]; then
+    check "the record read prints the same order under $PUNCT_LOCALE" "$GOT" \
+        "$(LC_ALL="$PUNCT_LOCALE" bash "$tmp/read.sh")"
+    sed 's/| LC_ALL=C sort$/| sort/' "$tmp/read.sh" > "$tmp/read-bare.sh"
+    check "M: a bare sort in the record read fails the locale pin" 1 \
+        "$([ "$(LC_ALL="$PUNCT_LOCALE" bash "$tmp/read-bare.sh")" != "$GOT" ] && echo 1 || echo 0)"
+else
+    echo "  note no locale that collates past punctuation; the record read's locale pin did not run"
+fi
 rm "$tmp/sidecar/review-responses/pr-7.md"
 check "no record prints nothing (a first round)" "" "$(bash "$tmp/read.sh")"
 

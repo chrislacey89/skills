@@ -318,7 +318,7 @@ REC="$(bash "$SC" path review-responses)/pr-<pr-number>.md"
     sub(/^id=/, "", f[2]); sub(/^last-at=/, "", f[3]); sub(/^disposition=/, "", f[4])
     seen[f[2]] = f[3] " " f[4]
   }
-  END { for (id in seen) print id, seen[id] }' "$REC" | sort
+  END { for (id in seen) print id, seen[id] }' "$REC" | LC_ALL=C sort
 ```
 
 Each line is `<thread-id> <last-at> <disposition>` for the latest round that
