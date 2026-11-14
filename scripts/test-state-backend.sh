@@ -988,8 +988,14 @@ for bad_path in "docs/solutions/testing/a,b.md" "docs/solutions/testing/has spac
     check "refused: $bad_path (exit 1)" 1 "$rc"
     check "refused: $bad_path (names the verb)" 1 "$(grep -c '^sidecar.sh: work lesson refused:' <<<"$err")"
 done
+# The file exists, so the refusal comes from the stored-form check, not "not a file".
+printf '# Nl\n' > "$LP/docs/solutions/testing/n
+l.md"
 runo "$LP" work lesson "$lw" "$(printf 'docs/solutions/testing/n\nl.md')"
-check "refused: a newline in the path" 1 "$rc"
+check "refused: a newline in the path (exit 1)" 1 "$rc"
+check "refused: a newline in the path (by the stored-form check)" 1 "$(grep -c '^sidecar.sh: work lesson refused: the path may not contain' <<<"$err")"
+rm -f "$LP/docs/solutions/testing/n
+l.md"
 check "refusals commit nothing" "$lcommits" "$(git -C "$LS" rev-list --count HEAD)"
 check "refusals leave no lessons field" "" "$(cd "$LP" && bash "$SC" work view "$lw" --json | jq -r '.lessons // empty')"
 
