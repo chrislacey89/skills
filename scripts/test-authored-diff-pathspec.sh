@@ -14,8 +14,11 @@
 #   1. A generated copy changed on the branch is left out.
 #   2. A hand-written file under references/ changed on the branch is shown.
 #   3. A file outside references/ changed on the branch is shown.
-# And against this repo: every hand-written references/ file CLAUDE.md names
-# as an example exists and is not a manifest target.
+# And against this repo: every path the command's own substitution excludes
+# exists as a file, one per manifest line, so a change to where
+# scripts/sync-skill-references.sh writes its copies fails here (#737); and
+# every hand-written references/ file CLAUDE.md names as an example exists and
+# is not a manifest target.
 
 set -euo pipefail
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
@@ -38,8 +41,25 @@ manifest=scripts/skill-references.manifest
 cmd="$(grep -E '^git diff origin/prod\.\.\.HEAD -- \. \$\(.*skill-references\.manifest' CLAUDE.md || true)"
 [ -n "$cmd" ] || fatal "CLAUDE.md carries no manifest-built git diff command"
 [ "$(printf '%s\n' "$cmd" | wc -l | tr -d ' ')" = 1 ] || fatal "CLAUDE.md carries more than one such command"
-# Every path the manifest generates: <consumer>/references/<source basename>.
-targets="$(grep -vE '^(#|$)' "$manifest" | awk '{n = split($1, p, "/"); print $2 "/references/" p[n]}')"
+# Every path the command excludes, built by the command's own substitution
+# rather than a copy of it here, so a change to its awk is what this suite runs.
+subst="${cmd#*\$(}"
+subst="${subst%)}"
+targets="$(bash -c "$subst" | sed 's/^:(exclude)//')"
+[ -n "$targets" ] || fatal "the command's substitution printed no excludes"
+
+# -----------------------------------------------------------------------------
+section "every exclude the command builds is a copy the sync script wrote"
+
+# scripts/sync-skill-references.sh is what places the copies. If it nested or
+# renamed them, the command would exclude paths that do not exist and stop
+# hiding the real copies, so each exclude has to name a file in this tree, and
+# there has to be one per manifest line.
+missing="$(while IFS= read -r t; do [ -f "$t" ] || echo "$t"; done <<<"$targets")"
+if [ -z "$missing" ]; then ok "every excluded path exists as a file"; else bad "every excluded path exists as a file" "missing: $(paste -sd ' ' - <<<"$missing")"; fi
+want="$(grep -vcE '^(#|$)' "$manifest")"
+got="$(grep -c . <<<"$targets")"
+if [ "$want" = "$got" ]; then ok "one exclude per manifest line ($got)"; else bad "one exclude per manifest line" "manifest $want, excludes $got"; fi
 
 # -----------------------------------------------------------------------------
 section "the command leaves out generated copies and nothing else"
