@@ -77,6 +77,8 @@ pre-push:
       run: bash scripts/test-shellcheck-version-parity.sh
     markdown-diff-attribute-tests:
       run: bash scripts/test-markdown-diff-attribute.sh
+    authored-diff-pathspec-tests:
+      run: bash scripts/test-authored-diff-pathspec.sh
     block-default-reads-tests:
       run: bash scripts/test-block-default-reads.sh
     skill-arg-substitution-tests:

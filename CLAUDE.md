@@ -218,6 +218,14 @@ git config --global alias.wd 'diff --word-diff'
 
 **`.gitattributes` does a different job — do not confuse the two.** `*.md diff=markdown` selects git's built-in `markdown` userdiff driver, which supplies an `xfuncname`: hunk headers become `@@ -4,3 +4,3 @@ ## Pre-merge` rather than a bare line range, so a reviewer can see which section a hunk lands in. It supplies **no** `wordRegex`, and `--word-diff` output is byte-identical with and without it. That negative is easy to get backwards and was gotten backwards in #295's own proposal, so it is pinned by `scripts/test-markdown-diff-attribute.sh` against the installed git rather than trusted here.
 
+**Leave the bundled copies out.** A change to a file under `docs/` lands again in every `<skill>/references/` copy the manifest names, so a PR's line count can be several times what was written. The copies are not reviewed by reading: the `check-skill-references` CI job and the pre-commit hook run `scripts/sync-skill-references.sh --check`, which fails when any copy differs from its source. Read the authored part with a pathspec built from the manifest, which excludes the copies it generates and nothing else:
+
+```
+git diff origin/prod...HEAD -- . $(grep -vE '^(#|$)' scripts/skill-references.manifest | awk '{n = split($1, p, "/"); print ":(exclude)" $2 "/references/" p[n]}')
+```
+
+Do not exclude `*/references/*` wholesale. Some files there are written by hand (`lfg/references/tracer-test.md`, `hackathon/references/dossier-template.md`, `mermaid/references/contrast-for-github.md`), and that pathspec would hide an edit to them.
+
 ## Post-merge install verification
 
 After a change to the manifest or any shared reference file lands on `prod`, run a one-shot install check to confirm the install CLI still delivers what we expect:
