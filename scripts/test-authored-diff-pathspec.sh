@@ -15,9 +15,12 @@
 #   2. A hand-written file under references/ changed on the branch is shown.
 #   3. A file outside references/ changed on the branch is shown.
 # And against this repo: every path the command's own substitution excludes
-# exists as a file, one per manifest line, so a change to where
-# scripts/sync-skill-references.sh writes its copies fails here (#737); and
-# every hand-written references/ file CLAUDE.md names as an example exists and
+# exists as a file, one per manifest line; and every file under references/ that
+# is byte-identical to a manifest source is among those excludes. The second
+# direction is the one that catches a change to where
+# scripts/sync-skill-references.sh writes its copies (#737): the sync script
+# never deletes, so the old copies stay and satisfy the first direction alone.
+# And every hand-written references/ file CLAUDE.md names as an example exists and
 # is not a manifest target.
 
 set -euo pipefail
@@ -60,6 +63,22 @@ if [ -z "$missing" ]; then ok "every excluded path exists as a file"; else bad "
 want="$({ grep -vcE '^(#|$)' "$manifest" || true; })"
 got="$({ grep -c . <<<"$targets" || true; })"
 if [ "$want" = "$got" ]; then ok "one exclude per manifest line ($got)"; else bad "one exclude per manifest line" "manifest $want, excludes $got"; fi
+
+# The forward check above passes on stale copies: the sync script only copies
+# and never deletes, so if it starts writing somewhere new, the old copies stay
+# and satisfy it while the command stops hiding the new ones. So also go the
+# other way: every file under a references/ directory that is byte-identical to
+# a manifest source is a copy, and has to be among the excludes.
+srcs="$(grep -vE '^(#|$)' "$manifest" | awk '{print $1}')"
+unhidden=""
+while IFS= read -r f; do
+    f="${f#./}"
+    if grep -qxF "$f" <<<"$targets"; then continue; fi
+    while IFS= read -r s; do
+        if cmp -s "$s" "$f"; then unhidden="$unhidden $f"; break; fi
+    done <<<"$srcs"
+done < <(find . \( -name .git -o -name node_modules \) -prune -o -path '*/references/*' -type f -print)
+if [ -z "$unhidden" ]; then ok "every references/ file identical to a manifest source is excluded"; else bad "every references/ file identical to a manifest source is excluded" "shown by the command:$unhidden"; fi
 
 # -----------------------------------------------------------------------------
 section "the command leaves out generated copies and nothing else"
