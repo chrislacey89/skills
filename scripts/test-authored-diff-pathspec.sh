@@ -38,6 +38,8 @@ manifest=scripts/skill-references.manifest
 cmd="$(grep -E '^git diff origin/prod\.\.\.HEAD -- \. \$\(.*skill-references\.manifest' CLAUDE.md || true)"
 [ -n "$cmd" ] || fatal "CLAUDE.md carries no manifest-built git diff command"
 [ "$(printf '%s\n' "$cmd" | wc -l | tr -d ' ')" = 1 ] || fatal "CLAUDE.md carries more than one such command"
+# Every path the manifest generates: <consumer>/references/<source basename>.
+targets="$(grep -vE '^(#|$)' "$manifest" | awk '{n = split($1, p, "/"); print $2 "/references/" p[n]}')"
 
 # -----------------------------------------------------------------------------
 section "the command leaves out generated copies and nothing else"
@@ -57,8 +59,7 @@ read -r src skill < <(grep -vE '^(#|$)' "$manifest" | head -1)
 gen="$skill/references/$(basename "$src")"
 # A hand-written file under references/ that no manifest line produces.
 hand="lfg/references/tracer-test.md"
-grep -vE '^(#|$)' "$manifest" | awk '{n = split($1, p, "/"); print $2 "/references/" p[n]}' | grep -qxF "$hand" \
-    && fatal "$hand is a manifest target; pick another hand-written file"
+grep -qxF "$hand" <<<"$targets" && fatal "$hand is a manifest target; pick another hand-written file"
 plain="docs/authored.md"
 for f in "$gen" "$hand" "$plain"; do mkdir -p "$r/$(dirname "$f")"; echo one > "$r/$f"; done
 git -C "$r" add -A
@@ -79,7 +80,6 @@ section "the hand-written examples CLAUDE.md names are hand-written"
 # shellcheck disable=SC2016  # the patterns match literal backticks
 examples="$(grep -E '^Do not exclude `\*/references/\*` wholesale' CLAUDE.md | grep -oE '`[a-z-]+/references/[^`]+`' | tr -d '`' || true)"
 [ -n "$examples" ] || bad "CLAUDE.md names hand-written references/ files" "none found"
-targets="$(grep -vE '^(#|$)' "$manifest" | awk '{n = split($1, p, "/"); print $2 "/references/" p[n]}')"
 while IFS= read -r e; do
     [ -n "$e" ] || continue
     if [ ! -f "$e" ]; then bad "$e exists" "named in CLAUDE.md, not in the tree"
