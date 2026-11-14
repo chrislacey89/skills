@@ -300,7 +300,7 @@ for f in */*.md */references/*.md; do
     skill_files+=("$f")
 done
 [ "${#skill_files[@]}" -gt 0 ] || { echo "FATAL: no skill files found to scan" >&2; exit 2; }
-printf '%s\n' "${skill_files[@]}" | grep -qxF 'lfg/references/tracer-test.md' \
+grep -qxF 'lfg/references/tracer-test.md' < <(printf '%s\n' "${skill_files[@]}") \
     || { echo "FATAL: the scan does not reach hand-written references/ files" >&2; exit 2; }
 reviewed_sha_siblings="$( { grep -nE 'reviewed_sha' -- "${skill_files[@]}"; grep -niE 'last reviewed' -- "${skill_files[@]}"; } || true)"
 assert_eq "" "$reviewed_sha_siblings" \

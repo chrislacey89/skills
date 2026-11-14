@@ -57,8 +57,8 @@ section "every exclude the command builds is a copy the sync script wrote"
 # there has to be one per manifest line.
 missing="$(while IFS= read -r t; do [ -f "$t" ] || echo "$t"; done <<<"$targets")"
 if [ -z "$missing" ]; then ok "every excluded path exists as a file"; else bad "every excluded path exists as a file" "missing: $(paste -sd ' ' - <<<"$missing")"; fi
-want="$(grep -vcE '^(#|$)' "$manifest")"
-got="$(grep -c . <<<"$targets")"
+want="$({ grep -vcE '^(#|$)' "$manifest" || true; })"
+got="$({ grep -c . <<<"$targets" || true; })"
 if [ "$want" = "$got" ]; then ok "one exclude per manifest line ($got)"; else bad "one exclude per manifest line" "manifest $want, excludes $got"; fi
 
 # -----------------------------------------------------------------------------
