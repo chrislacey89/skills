@@ -85,7 +85,10 @@ Every phase reads these values. Change one here and nowhere else.
 | Kickoff block | the first 20 minutes of the build window |
 | Checkpoint interval | every 90 minutes from the end of the kickoff block, until the freeze |
 | Freeze | 75 minutes before the submission deadline |
-| Submission buffer | submit at least 15 minutes before the deadline |
+| Submission buffer | submit at least 60 minutes before the deadline, then keep editing the page until it closes |
+| Story checkpoint | the last checkpoint before the freeze: by then the submission page has every required section and the video is recorded |
+| First Q&A drill | at the second checkpoint |
+| Restyle cutoff | no visual redesign after the second checkpoint |
 | Table script length | 60 seconds |
 | Dossier prefix | `hackathon-` |
 
@@ -204,8 +207,19 @@ or as pasted text. Fill the dossier's **Event profile** table. Mark every field
 - judging format (stage pitch, floor or table visits, video) and length
 - judging criteria and any weights
 - tracks and prize categories, including sponsor prizes
+- whether a team enters one category or every entry is eligible for every
+  award. When every entry is eligible, there are no lanes to pick, only awards
+  to be the clearest example of
+- stated values about what wins (for example "an ambitious idea that mostly
+  works can beat a safe one that's flawless"), quoted
 - team size; rules on pre-built code, templates, and installed tooling
 - allowed tools and models; required artifacts (repo, video, write-up)
+
+**Kickoff remarks are part of the brief.** Organizers often say aloud what
+they are looking for: an example of a winning idea for each award, how many
+judges will visit each table. Record those remarks as `stated`, quoting the
+speaker, as soon as you hear them, and recheck the chosen project against them
+in the kickoff block.
 
 Never fill a `not stated` field with a typical value. A rubric you invented
 steers every later score toward a judge who does not exist. Instead, list each
@@ -243,9 +257,9 @@ Phase 2).
 
    | Dimension | 1 | 5 |
    |---|---|---|
-   | **Fit** | fits no stated track or criterion | squarely in a stated track and hits every stated criterion |
+   | **Fit** | fits no stated track or criterion | the clearest example in the room of one stated award, and hits every stated criterion |
    | **Familiar surprise** | either a clone of a known thing, or nothing a judge can map to anything | sayable as "a known X, for / with an unexpected Y" |
-   | **Peak moment** | nothing visibly happens in a demo | one moment where a judge watches something surprising happen live |
+   | **Peak moment** | nothing visibly happens in a demo | one moment the judge does not predict, happening live, ideally from the judge's own input |
    | **60-second legibility** | needs a setup talk before it makes sense | a judge gets it from the first screen and one sentence |
    | **Factory showcase** | the process behind it would be invisible | building it exercises tests, gates, and agents you can tour |
    | **Slow-dependency risk** (higher is safer) | needs approvals, hardware, scarce data, or a paid tier | runs on accounts you already have, with public or synthetic data |
@@ -253,6 +267,13 @@ Phase 2).
 
    Weights follow the brief's stated weights. When none are stated, weight the
    dimensions equally and say so; do not invent a weighting.
+
+   **Ambition check.** On an AI-themed event, ask of each candidate what the AI
+   does that a judge can watch. Drafting text that a person then approves is
+   the safe floor. Reading messy input, deciding, explaining a choice, or
+   producing working code is what judges remember. A candidate whose AI only
+   drafts scores no higher than 3 on **Peak moment**. Keep the human approval
+   step when the domain needs one; put the ambitious work in front of it.
 4. **Blind second scorer.** Spawn one fresh sub-agent. Give it only the event
    profile, the candidate one-liners, and the anchor table, never this
    conversation. Have it score the same grid. Discuss only the cells where the
@@ -269,9 +290,18 @@ Phase 2).
    (see the same reference) is smaller than the candidate count, so offer only
    the top scorers that fit, top scorer first and marked recommended; the
    free-text "Other" hatch takes a pick from the rest of the table.
-6. **Write the two lines everything else hangs on** into the dossier:
-   - the **high-concept line** ("a known X, with Y"), and
-   - the **peak moment**: the one thing the judge watches happen.
+6. **Write the three lines everything else hangs on** into the dossier:
+   - the **high-concept line** ("a known X, with Y"),
+   - the **peak moment**: the one thing the judge watches happen, and
+   - the **award line**: "the best <award> entry in the room because <reason>",
+     using the organizers' own words for the award. Have someone outside the
+     build (the non-builder, or a fresh sub-agent given only the line and the
+     event profile) say back what the project is and why it wins. If they
+     can't, rewrite the line or change the project.
+
+   **Choose in the prep sitting, never on the build day.** A project first
+   picked in the hour before kickoff pushes its name, its accounts, and its
+   product rules into the build window, where each one costs an hour.
 
 ### Phase 2. Shape
 
@@ -291,38 +321,74 @@ re-deriving it. Fill the dossier:
   - Give each rung a done-condition and the tracer test that proves it. A rung
     without both is not ready to run AFK.
   - Put the peak moment as early on the ladder as it can go.
+  - The rung that carries the peak moment, and the rung where the AI does its
+    most ambitious work, are never `~`. Cutting them at a checkpoint leaves a
+    safe, forgettable demo; cut polish instead.
+  - An integration earns a rung when a judge sees it happen: a message the
+    judge sends, an email that lands on the judge's phone. Plumbing a judge
+    never sees (bot checks, tracing, rate limits) belongs in the factory tour,
+    not on the ladder.
+  - **The submission is a rung**, with no code. The build lane's agent creates
+    the platform page in the kickoff block with every required section stubbed,
+    drafts each section from the dossier and `DECISIONS.md` as rungs land, and
+    re-pastes the page at each checkpoint. The demo-lane owner reviews it. The
+    page is complete, video included, by the Locked story checkpoint.
 - **Rabbit holes and no-gos.** Name what you will not build, and the parts most
   likely to swallow an hour, along with what you will do instead.
 - **Slow-dependency work goes first.** Move to the kickoff block and rung 1
   everything an agent cannot speed up: API keys and quotas, OAuth and auth, the
   deploy target (its final hostname), the riskiest third-party integration, and
   data access. These fail slowly, and they fail late if left late.
+- **Settle the identity and the rules before the build.** In prep, decide and
+  record: the name and tagline, the domain, the email-sending domain (a
+  sending domain created on the day lands in spam), any paid tiers the deploy
+  target needs, and the visual direction and component library. Also write a
+  **who sees what** table: each role, what it can see and do, and which abuse
+  guards (rate limits, bot checks) are on. The non-builder signs it off. A
+  question about who sees what that is first asked mid-build becomes a rework.
+- **Name the real-world ground.** Write down the real system the project rests
+  on: a public dataset, an official standard or format, a government
+  directory. Lead the write-up with it. Judges read "built on the real thing"
+  as evidence the project could ship.
 - **Factory plan.** Decide which process artifacts to stand up at kickoff and
   show at the table: the pipeline hooks from `/init-pipeline`, CI running the
   tests on every push, a dependency or secret scan, structured logging or a
   health endpoint, and the decision log. Pick what the event's criteria reward.
-  If the brief names none, default to tests, CI, and logs.
+  If the brief names none, default to tests, CI, and logs. When the criteria
+  judge the factory, make its throughput visible as well as its discipline: if
+  the build lane runs several agents, drive them from issues cut from the
+  ladder, each agent in its own worktree with review before merge, so a judge
+  can see work moving.
 - **Lanes.** Split the day by lane, not by person, then give each lane an
   owner from the **Team** table. Record the owners in the dossier.
   - **Build lane** (whoever writes code, with agents): the rungs, the factory,
-    and the deploy. With several builders, give each a rung from the same
-    ladder, choosing rungs that touch different files where possible.
+    the deploy, and the first draft of the submission page and table script.
+    With several builders, give each a rung from the same ladder, choosing
+    rungs that touch different files where possible. Every parallel agent
+    session gets its own worktree; two sessions in one checkout commit each
+    other's work.
   - **Demo lane** (a non-builder when there is one): owns the clock and calls
     each checkpoint; accepts each rung by using it on the deployed URL against
-    its done-condition, not by reading code; seeds the demo data and rehearses
-    the peak moment; keeps `DECISIONS.md` current by asking "why that one?" as
-    decisions happen; drafts the submission write-up and table script during
-    the build instead of after the freeze; asks mentors and organizers the
-    **Open questions** on the floor.
+    its written acceptance script (below), not by reading code; seeds the demo
+    data and rehearses the peak moment; keeps `DECISIONS.md` current by asking
+    "why that one?" as decisions happen; reviews and edits the submission page
+    and table script the build lane drafts; asks mentors and organizers the
+    **Open questions** on the floor. Don't also hand this person the video
+    edit, the write-up and every acceptance at once: one person holding all of
+    those is where the afternoon stalls.
+  - **Acceptance scripts.** For each rung, write the steps the demo-lane owner
+    follows to accept it, short enough to run in 3 minutes on a phone, before
+    the rung is built. Accepting is then a routine, not a conversation.
   - **Solo:** you hold both lanes. Put the demo-lane work into the checkpoint,
     so it happens at fixed times instead of never.
 - **Seed the decision log.** Copy each decision made so far (project, stack,
   cuts), with the alternatives you rejected and why. Judges ask "why X over Y?",
   and the answer should already be written down.
 - **Pre-flight checklist** for the night before (dossier template § Pre-flight):
-  accounts logged in on the build machine, keys tested, the deploy target
-  reachable, chargers and adapters packed, and the rules guide read with
-  Phase 0 rechecked against it.
+  accounts logged in on the build machine, keys tested under the exact
+  environment-variable names the code will read, the domain and paid tiers
+  bought, the deploy target reachable, chargers and adapters packed, and the
+  rules guide read with Phase 0 rechecked against it.
 
 End prep: set `phase: build`, commit the dossier, and print the clock plan from
 the next section so the user sees the day.
@@ -410,13 +476,25 @@ nothing in this phase moves the freeze or the submit-by time.
    on that URL, so a rung that is not deployed cannot be accepted.
 5. Append to `DECISIONS.md` any decision the rung forced, with the rejected
    alternative.
-6. The demo-lane owner (you, when solo) accepts the rung: they use it where a
-   judge would, and either tick it in `PLAN.md` or name the gap. A rung is
+6. The demo-lane owner (you, when solo) accepts the rung: they run its
+   acceptance script where a judge would, and either tick it in `PLAN.md` or
+   name the gap. A rung is
    done only when accepted, so a builder's green commit does not make it done.
 7. Record its end time when it is ticked.
 
 The lanes from Phase 2 run in parallel. The checkpoint re-plan below still runs
 on the whole ladder, and the demo-lane owner calls it.
+
+**Only judged work in the window.** From the start time to submission, do no
+process work the judges won't see: no improvements to the skill pack, no
+retrospectives, no orientation documents, no polishing of internal guides.
+When an idea for one comes up, add a line to the dossier's **After the event**
+list and keep building. After the Locked restyle cutoff, fix visual defects
+but start no redesign.
+
+**Read the clock, don't recall it.** Before stating the time, a time left, or
+a deadline, run `date`. An agent's sense of the time drifts late in a long
+session, and a deadline warning given after the deadline is worse than none.
 
 **Checkpoint** (at each checkpoint time; stop what you are doing):
 
@@ -432,10 +510,17 @@ on the whole ladder, and the demo-lane owner calls it.
    A thinner tracer is almost always cheaper than a new idea.
 4. Record the re-plan (kept, cut, added) in the dossier and `PLAN.md`. A
    changed ladder is a real fork, so confirm it with the user before going on.
+5. **Story check.** Re-paste the submission page from the latest draft. At the
+   Locked first Q&A drill, run the five most likely judge questions (Phase 4
+   step 4) once, out loud, and note the weak answers. At the Locked story
+   checkpoint, confirm the page has every required section and the video is
+   recorded; if either is missing, it takes the next rung's slot.
 
 **Freeze.** At the freeze, stop adding rungs. Whatever is unfinished either
 works behind a flag or gets reverted. Set `phase: demo` and commit the dossier.
-From here on, the only work is demo readiness.
+From here on, the only work is demo readiness. After the deadline, push
+nothing to the event repo, judging included: a commit timestamped after the
+close reads as work done after the deadline.
 
 ### Phase 4. Freeze → demo
 
@@ -443,9 +528,14 @@ From here on, the only work is demo readiness.
    style: do the work, then read the list aloud and confirm each item (Gawande).
    Things fail at the worst moment, so the checklist assumes the live demo will
    break; the template holds the one list.
-2. **Submission.** Fill the platform's write-up from the dossier and `PLAN.md`:
-   the problem, the high-concept line, what shipped (the ticked rungs), how it
-   was built (the factory), and what was cut. Submit by the submit-by time.
+2. **Submission.** The page has been drafted since kickoff, so this step
+   finishes it. Check it against the event profile's required artifacts, one
+   by one (known limitations are a common one to miss). It covers the problem,
+   the high-concept line and the real-world ground, what shipped (the ticked
+   rungs), how it was built (the factory), and what was cut. Every number on
+   it (tests, commits, decisions) comes from one source and matches the README
+   and the deployed site. Paste the final text from the committed draft, not
+   from memory. Submit by the submit-by time.
 3. **Table script** (Locked length): open on the high-concept line, show rung 1's
    path, and **end on the peak moment**. Judges remember the peak and the
    ending. Rehearse it until it fits the time, then rehearse the 15-second
@@ -472,6 +562,11 @@ Before `phase: done`, tick the template's § Pre-handoff confirmations, then com
 | "The rubric probably weights technical depth." | If the brief does not say so, it is `not stated`. Ask the organizers. |
 | "Score each idea as we go." | The first idea's halo then sets every later score. Score each dimension across all candidates first. |
 | "Push the scaffold the night before to save time." | Most events require an empty repo until the start. Prep stays in the sidecar. |
+| "The safe version works perfectly; ship that." | A flawless demo of a routine task is easy to forget. Keep the ambitious rung on the ladder and cut polish instead. |
+| "We'll write the submission after the freeze." | The page is what judges read before and after the table. Draft it from kickoff; the freeze is for finishing it. |
+| "More integrations will look more impressive." | Only the ones a judge sees happen count. The rest are factory evidence for the tour. |
+| "File that pack improvement now, while it's fresh." | Log it under **After the event**. The build window is for work the judges see. |
+| "We'll pick the project in the morning." | Then the name, the accounts, and the product rules get decided during the build. Choose in the prep sitting. |
 
 ## Red Flags
 
@@ -481,6 +576,13 @@ Before `phase: done`, tick the template's § Pre-handoff confirmations, then com
 - A commit in the event repo dated before the start time.
 - No recorded fallback video at the freeze.
 - `DECISIONS.md` unchanged since kickoff.
+- A project first chosen on the build day, or no award line in the dossier.
+- The peak-moment rung or the most ambitious AI rung marked `~`, or cut at a checkpoint.
+- No submission page by the end of the kickoff block, or a page missing a required section at the story checkpoint.
+- Numbers on the submission page that differ from the README or the deployed site.
+- A visual redesign started after the restyle cutoff.
+- Pack improvements or internal documents made during the build window.
+- A commit in the event repo dated after the submission deadline.
 
 ## Handoff
 
