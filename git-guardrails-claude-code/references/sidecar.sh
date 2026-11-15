@@ -487,8 +487,8 @@ owners_of() {
 # when every sidecar is plainly readable, so it never has an unread file to
 # report: on anything owners_of names (a root it cannot list, a directory it
 # cannot enter, a sidecar.json that is not a regular file, one holding no JSON
-# value or several, or "keys" that is not an array) it records nothing, and
-# owners_of reads file by file and names the problem as before. The answer is
+# value or several, or a "keys" jq cannot search, such as a number) it records
+# nothing, and owners_of reads file by file and names the problem as before. The answer is
 # the sidecars as they were when it ran, so a caller runs scan_clear before it
 # writes a sidecar.json. Within a $(...) the answer is inherited, never filled.
 SCAN_KEYS="" SCAN_HITS=""
@@ -522,10 +522,8 @@ owners_scan() {
             | if any(.[]; length != 1) then error("a sidecar.json holds more than one JSON value") else . end
             | ("N\t\(length)"),
               (to_entries[] | .key as $f | ((.value[0].keys // []) as $k
-                | if ($k | type) != "array" then error("keys is not an array") else
-                    ($ARGS.positional[] as $x | select(($k | index($x)) != null)
-                     | "H\t\($x)\t\($f | rtrimstr("/sidecar.json"))")
-                  end))' "${files[@]}" --args "$@" 2>/dev/null)" || return 0
+                | $ARGS.positional[] as $x | select(($k | index($x)) != null)
+                | "H\t\($x)\t\($f | rtrimstr("/sidecar.json"))"))' "${files[@]}" --args "$@" 2>/dev/null)" || return 0
         first="${out%%$'\n'*}"
         [ "$first" = "N"$'\t'"${#files[@]}" ] || return 0
         case "$out" in *$'\n'*) SCAN_HITS="${out#*$'\n'}" ;; esac
