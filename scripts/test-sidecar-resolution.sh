@@ -356,7 +356,12 @@ check "the project's .git/config is unchanged" "$proj_cfg" "$(shasum -a 256 < "$
 # clearing removed must leak, or this section proves nothing.
 VICTIM="$tmp/victim"
 mkrepo "$VICTIM"
-sed 's/env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git/git/' "$SC" > "$tmp/sidecar-unguarded.sh"
+sed 's/^unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE$/:/' "$SC" > "$tmp/sidecar-unguarded.sh"
+# A sed that matches nothing leaves the guard in place and fails the leak check
+# below for the wrong reason; say so directly.
+if cmp -s "$SC" "$tmp/sidecar-unguarded.sh"; then
+    bad "the unguarded copy removed the guard line" "sed matched nothing in $SC"
+fi
 victim_sc="$(cd "$VICTIM" && SKILL_KIT_SIDECAR_ROOT="$tmp/victim-sidecars" bash "$SC" init --name v --mode guest --write sidecar --in-tree-path none 2>/dev/null)"
 victim_before="$(git -C "$VICTIM" rev-list --count HEAD)"
 printf 'x\n' > "$victim_sc/leak.md"

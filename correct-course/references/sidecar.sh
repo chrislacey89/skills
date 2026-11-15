@@ -254,9 +254,10 @@
 # appended and committed. No two sidecars may share a key: init refuses to
 # create a collision, and resolve warns when it finds one.
 #
-# Isolation. Every git call clears GIT_DIR, GIT_WORK_TREE, and GIT_INDEX_FILE.
-# Git exports GIT_DIR into hooks; left set, `git -C <sidecar> commit` exits 0
-# and lands the commit in the project. Nothing here writes to the project's
+# Isolation. The script unsets GIT_DIR, GIT_WORK_TREE, and GIT_INDEX_FILE once,
+# at startup, so no git call it makes can see them. Git exports GIT_DIR into
+# hooks; left set, `git -C <sidecar> commit` exits 0 and lands the commit in the
+# project. Nothing here writes to the project's
 # tree or its .git, and nothing pushes, pulls, or fetches.
 #
 # Requires git >= 2.31 (--path-format=absolute) and jq >= 1.6.
@@ -268,6 +269,10 @@ set -u
 # and echoes it into the captured path; the paths this script prints must not
 # depend on the caller's shell.
 unset CDPATH
+# The Isolation guard. Once here rather than as `env -u` on every git call,
+# which cost a process per call. scripts/test-sidecar-resolution.sh deletes this
+# exact line to prove the guard is load-bearing, so keep it on one line.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
 SIDECAR_ROOT="${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}"
 ARCHIVE_ROOT="${SKILL_KIT_RESEARCH_ARCHIVE:-$HOME/.claude/research}"
@@ -277,12 +282,21 @@ IFS=$'\n'
 die_usage() { printf 'sidecar.sh: %s\n' "$1" >&2; exit 2; }
 refuse()    { printf 'sidecar.sh: %s\n' "$1" >&2; exit 1; }
 
-# git against the project, discovered from the cwd rather than from a leaked env.
-pgit() { env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git "$@"; }
+# git against the project, discovered from the cwd rather than from a leaked env
+# (the env is cleared at startup; see Isolation).
+pgit() { git "$@"; }
 # git against a sidecar.
-sgit() { local dir="$1"; shift; env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE git -C "$dir" "$@"; }
+sgit() { local dir="$1"; shift; git -C "$dir" "$@"; }
 
-lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+# Most input is already lowercase (SHAs, normalized remotes), so tr runs only
+# when there is a capital to fold. ${1,,} would avoid tr entirely, but macOS
+# ships bash 3.2. The pattern uses the same [:upper:] class tr folds.
+lower() {
+    case "$1" in
+        *[[:upper:]]*) printf '%s' "$1" | tr '[:upper:]' '[:lower:]' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
 
 # One path component, no newline: a newline would register two aliases.
 alias_ok() { case "$1" in ''|*/*|.|..|*$'\n'*) return 1 ;; esac; }
@@ -339,13 +353,37 @@ norm_remote() {
     lower "$host/$rest"
 }
 
-in_repo() { pgit rev-parse --git-dir >/dev/null 2>&1; }
+# probe_repo: one rev-parse for the three facts every resolve needs (in a repo
+# at all, shallow or not, the common git dir), where there used to be three.
+# The result is cached per $PWD, because relate reads another checkout's keys
+# from a cd'd subshell. A subshell inherits the parent's cache but cannot fill
+# it, so a caller that wants the saving probes in the parent first; in_repo at
+# the top of each command does.
+PROBE_PWD="" PROBE_RC=1 PROBE_SHALLOW="" PROBE_COMMON=""
+probe_repo() {
+    local out
+    if [ "$PROBE_PWD" != "$PWD" ]; then
+        PROBE_PWD="$PWD"
+        if out="$(pgit rev-parse --is-shallow-repository --path-format=absolute --git-common-dir 2>/dev/null)"; then
+            PROBE_RC=0
+            PROBE_SHALLOW="${out%%$'\n'*}"
+            PROBE_COMMON="${out#*$'\n'}"
+        else
+            PROBE_RC=1 PROBE_SHALLOW="" PROBE_COMMON=""
+        fi
+    fi
+    return "$PROBE_RC"
+}
+
+in_repo() { probe_repo; }
 
 main_checkout() {
-    local common
-    common="$(pgit rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 1
-    if [ "$(basename "$common")" = ".git" ]; then
-        (cd "$(dirname "$common")" && pwd -P)
+    local common parent
+    probe_repo || return 1
+    common="$PROBE_COMMON"
+    if [ "${common##*/}" = ".git" ]; then
+        parent="${common%/*}"
+        (cd "${parent:-/}" && pwd -P)
     else
         (cd "$(pgit rev-parse --show-toplevel)" && pwd -P)
     fi
@@ -355,7 +393,8 @@ main_checkout() {
 # Prints the shallow notice on stderr when it skips the root key.
 current_keys() {
     local root r url n mc
-    if [ "$(pgit rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+    probe_repo
+    if [ "$PROBE_SHALLOW" = "true" ]; then
         printf 'sidecar.sh: shallow clone — skipping the root: key, resolving by remote or path\n' >&2
     else
         root="$(pgit rev-list --max-parents=0 HEAD 2>/dev/null | LC_ALL=C sort | head -n 1)"
@@ -413,7 +452,7 @@ owners_of() {
         rc=0
         jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1 || rc=$?
         case "$rc" in
-            0) hits="${hits:+$hits$'\n'}$(dirname "$f")" ;;
+            0) hits="${hits:+$hits$'\n'}$d" ;;
             1) ;;
             *) unread="${unread:+$unread$'\n'}$f (jq exited $rc)" ;;
         esac
@@ -2256,6 +2295,10 @@ trace_lesson() {
 
 verb="${1:-}"
 [ $# -gt 0 ] && shift
+# Fill probe_repo's cache in this shell, so the many $(do_resolve) and
+# $(current_keys) subshells below inherit it instead of probing again. Outside
+# a repo this only records the miss; each command still decides what that means.
+probe_repo || :
 case "$verb" in
     resolve) [ $# -eq 0 ] || die_usage "usage: sidecar.sh resolve"; do_resolve || exit 1 ;;
     init)    cmd_init "$@" ;;
