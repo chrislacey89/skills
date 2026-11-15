@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.43.0 — Follow-ups from the #736 review (#737)
+## v1.44.0 — Follow-ups from the #736 review (#737)
 
 The review of #736 left four Suggestions open. Each was a claim or a command that its test did not fully back: removing the thing the claim describes left the suite green.
 
@@ -10,6 +10,16 @@ The review of #736 left four Suggestions open. Each was a claim or a command tha
 - **`scripts/test-respond-to-review-contract.sh` records the PRD on the lookup branch**, so dropping `--kind slice` from `/respond-to-review` Step 5's lookup fails the suite. It also checks `/fix-findings`' work-item input bullet for the `W-<n>` that Step 5 hands over. The earlier check passed on any Inputs bullet that named `/respond-to-review`.
 - **`scripts/test-review-currency-marker.sh` scans the hand-written `references/` files** (the ones the manifest does not generate), so the `reviewed_sha` rule stated in `docs/state-backend.md` and CLAUDE.md now covers them. `reviewed_sha` is matched as written, so a `$REVIEWED_SHA` variable is not counted as a mention. `last reviewed` is still matched in any letter case.
 - **This file's v1.42.0 entry** referred to "the v1.39.0 line above". That line is below it.
+
+## v1.43.0 — `/execute` checks the issue before it makes a branch, and stops on a closed one (#703)
+
+`/execute` Step 0 created the worktree and branch before it ran the issue-shape gate. When the gate then stopped, the run left an empty worktree and a task-named branch behind, and no PR would ever bring them to `/closeout`. The gate also never read the issue's own state. An issue whose closing PR had already merged had no open PR, so it read `takeable` and the run built the work again.
+
+### Changes
+
+- **The issue-shape and blocker gate runs first in Step 0**, both the GitHub block and the sidecar block, ahead of the branch isolation gate. It only reads, and every stop verdict means no branch is needed. Recording the slice's `start_sha` stays after isolation, where the branch it records exists.
+- **A new `closed [...]` verdict stops the run.** The GraphQL read now selects the issue's `state`, and the verdict lists the merged PRs that closed it. On a sidecar work item it reads the item's `state` and lists its recorded `pr`. It is checked before the PRD, blocker, and in-flight checks, and a missing `state` reads `unknown`.
+- **`scripts/test-selection-idiom-consistency.sh` covers the verdict and pins the order**: a closed issue with and without a merged PR, a closed PRD with an open blocker, a missing state, and the issue-shape gate's two blocks sitting above the branch isolation gate. `scripts/test-state-backend.sh` runs the sidecar block against closed work items under bash and zsh.
 
 ## v1.42.0 — Follow-ups from the #730 review (#731)
 

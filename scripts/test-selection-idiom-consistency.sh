@@ -173,7 +173,7 @@ else
 fi
 
 gate_block="$(awk '/^N=<n>$/{c=1} c{print} c && /^jq -r/{exit}' execute/SKILL.md)"
-for field in 'closedByPullRequestsReferences' 'state headRefName' 'blockedBy(first: 50) { totalCount nodes { number title state } }' 'comments(last: 100) { totalCount nodes { body } }' 'closedByPullRequestsReferences(first: 20) { totalCount nodes { number state headRefName } }' 'number title body'; do
+for field in 'closedByPullRequestsReferences' 'state headRefName' 'blockedBy(first: 50) { totalCount nodes { number title state } }' 'comments(last: 100) { totalCount nodes { body } }' 'closedByPullRequestsReferences(first: 20) { totalCount nodes { number state headRefName } }' 'number title state body'; do
     if grep -qF -- "$field" <<<"$gate_block"; then
         ok "the gate's query requests: $field"
     else
@@ -260,7 +260,7 @@ run_gate() { # $1 = response JSON ("GHFAIL" makes gh exit 1), $2 = current branc
 }
 fixture() { # jq expression applied to a healthy, takeable base response
     jq -cn "{data: {repository: {issue: {
-        number: 7, title: \"t\", body: \"## Problem\nx\",
+        number: 7, title: \"t\", state: \"OPEN\", body: \"## Problem\nx\",
         comments: {totalCount: 0, nodes: []},
         blockedBy: {totalCount: 0, nodes: []},
         closedByPullRequestsReferences: {totalCount: 0, nodes: []}}}}} | $1"
@@ -341,6 +341,27 @@ assert_eq "in-flight" "$(verdict "$(run_gate "$(fixture '.data.repository.issue.
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences = {totalCount: 1, nodes: [{number: 5, state: "OPEN", headRefName: "mine"}]}')" mine)")" "open PR on the current branch -> takeable"
 assert_eq "takeable"  "$(verdict "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences = {totalCount: 1, nodes: [{number: 5, state: "CLOSED", headRefName: "other"}]}')")")" "closed PR -> takeable"
 assert_eq "unknown"   "$(run_gate "$(fixture '.data.repository.issue.closedByPullRequestsReferences = {totalCount: 2, nodes: [{number: 5, state: "OPEN", headRefName: "other"}]}')")" "PR list shorter than its count -> unknown"
+# #703: the gate read neither the issue's own state nor any MERGED PR, so an
+# issue an earlier PR already closed read takeable and the run re-implemented it.
+assert_eq 'closed [{"number":5,"headRefName":"done"}]' "$(run_gate "$(fixture '.data.repository.issue.state = "CLOSED" | .data.repository.issue.closedByPullRequestsReferences = {totalCount: 1, nodes: [{number: 5, state: "MERGED", headRefName: "done"}]}')")" "closed issue with a merged PR -> closed, naming the PR"
+assert_eq 'closed []' "$(run_gate "$(fixture '.data.repository.issue.state = "CLOSED"')")" "closed issue with no linked PR -> closed []"
+assert_eq "closed"    "$(verdict "$(run_gate "$(fixture '.data.repository.issue.state = "CLOSED" | .data.repository.issue.body = "## Appetite\nx" | .data.repository.issue.blockedBy = {totalCount: 1, nodes: [{number: 3, title: "b", state: "OPEN"}]}')")")" "closed outranks undecomposed-prd and blocked (order pinned)"
+assert_eq "unknown"   "$(run_gate "$(fixture 'del(.data.repository.issue.state)')")" "missing issue state -> unknown"
+
+# #703: the gate only reads, and each stop verdict means no branch is needed, so
+# it runs before the branch isolation gate creates one. Both gate blocks (GitHub
+# and sidecar) must sit above it in Step 0.
+line_of() { grep -nF -- "$1" execute/SKILL.md | head -1 | cut -d: -f1; }
+step0_line="$(line_of '### 0. Prerequisites')"
+shape_line="$(line_of '**Issue-shape and blocker gate.**')"
+sidecar_line="$(line_of 'SIDECAR_VERDICT_JQ=')"
+iso_line="$(line_of '**Branch isolation gate.**')"
+if [[ -n "$step0_line" && -n "$shape_line" && -n "$sidecar_line" && -n "$iso_line" ]] \
+    && (( step0_line < shape_line && shape_line < sidecar_line && sidecar_line < iso_line )); then
+    ok "Step 0 runs the issue-shape gate (both backends) before the branch isolation gate"
+else
+    bad "the issue-shape gate no longer precedes the branch isolation gate" "step0=$step0_line shape=$shape_line sidecar=$sidecar_line isolation=$iso_line"
+fi
 
 # -----------------------------------------------------------------------------
 section "the by-construction claim is backed by this suite"
