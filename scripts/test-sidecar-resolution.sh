@@ -1910,6 +1910,14 @@ run "$RA" relate "$RA"
 check "relate refuses the project's own checkout" 1 "$rc"
 run "$RA" relate "$tmp/rel/nowhere"
 check "relate refuses a path that is not a checkout" 1 "$rc"
+# A directory that exists but is no repo. Unlike the missing path above, the
+# cd into it succeeds, so the answer comes from a repo probe made there. The
+# probe is cached per directory; a cache that ignored the directory would carry
+# this project's "in a repo" over and refuse with "is this project" instead.
+mkdir -p "$tmp/rel/plain"
+run "$RA" relate "$tmp/rel/plain"
+check "relate refuses an existing directory that is no repo" 1 "$rc"
+contains "relate names a plain directory as not a repository" "relate: $tmp/rel/plain is not inside a git repository" "$out"
 check "a refused relate leaves sidecar.json as it was" 1 "$(jq '.solutions.related | length' "$SA/sidecar.json")"
 check "relate made no commit in the related project's sidecar" "$b_head_before" "$(git -C "$SB" rev-parse HEAD)"
 
@@ -2106,6 +2114,43 @@ contains "/init-pipeline offers the system label" 'config set system <label>' "$
 lacks "/init-pipeline no longer offers one relate call per sibling" 'one call per sibling' "$(cat "$repo_root/init-pipeline/SKILL.md")"
 # shellcheck disable=SC2016  # literal pattern
 contains "SYSTEM-OVERVIEW's Institutional knowledge row names the group read path" 'same `solutions.system` label' "$(grep '^| Institutional knowledge |' "$repo_root/SYSTEM-OVERVIEW.md")"
+
+# -----------------------------------------------------------------------------
+section "lookup cost does not grow with the number of sidecars"
+
+# Every skill call resolves, and resolving asks which sidecar claims each of
+# this checkout's keys. Answered with one jq process per sidecar per key, the
+# cost of every call grows with how many projects the operator has a sidecar
+# for, and process starts are most of what a call costs. A resolve of a
+# settled checkout (every key already recorded) must start the same number of
+# jq processes whether the root holds 2 sidecars or 8.
+real_jq="$(type -P jq)"
+jq_count_bin="$tmp/jq-count-bin"
+mkdir -p "$jq_count_bin"
+printf '#!/bin/sh\necho x >> "%s"\nexec "%s" "$@"\n' "$tmp/jq-count.log" "$real_jq" > "$jq_count_bin/jq"
+chmod +x "$jq_count_bin/jq"
+
+# jq_calls_for <count of sidecars> — prints how many jq processes one settled
+# resolve starts under a root holding that many sidecars.
+jq_calls_for() {
+    local k="$1" root="$tmp/scale-$1" i proj
+    for i in $(seq 1 "$((k - 1))"); do
+        mkrepo "$tmp/scale-$k-filler$i"
+        (cd "$tmp/scale-$k-filler$i" && SKILL_KIT_SIDECAR_ROOT="$root" bash "$SC" init --name "filler$i" --mode guest --write sidecar --in-tree-path none --no-migrate-archive) >/dev/null 2>&1
+    done
+    proj="$tmp/scale-$k-proj"
+    mkrepo "$proj"
+    git -C "$proj" remote add origin "https://github.com/acme/scale-$k.git"
+    (cd "$proj" && SKILL_KIT_SIDECAR_ROOT="$root" bash "$SC" init --name "proj" --mode guest --write sidecar --in-tree-path none --no-migrate-archive) >/dev/null 2>&1
+    (cd "$proj" && SKILL_KIT_SIDECAR_ROOT="$root" bash "$SC" resolve) >/dev/null 2>&1
+    : > "$tmp/jq-count.log"
+    (cd "$proj" && SKILL_KIT_SIDECAR_ROOT="$root" PATH="$jq_count_bin:$PATH" bash "$SC" resolve) >/dev/null 2>&1
+    wc -l < "$tmp/jq-count.log" | tr -d ' '
+}
+few="$(jq_calls_for 2)"
+many="$(jq_calls_for 8)"
+check "the scale fixture holds 8 sidecars" 8 "$(find "$tmp/scale-8" -mindepth 2 -maxdepth 2 -name sidecar.json | wc -l | tr -d ' ')"
+check "a settled resolve starts as many jq processes under 8 sidecars as under 2" "$few" "$many"
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

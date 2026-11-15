@@ -183,6 +183,23 @@ else
     check "unreadable sidecar.json restored: backend stamp answers sidecar again" sidecar "$out"
 fi
 
+# Two files jq parses without a syntax error but cannot answer a key lookup
+# from: an empty file holds no JSON value at all, and a "keys" that is a number
+# cannot be searched. Either could be this repo's sidecar, so each is refused
+# like a corrupt file rather than read as "no key here", which would answer
+# github. A lookup that reads the file once for every key must keep both.
+for shape in empty keys-not-array; do
+    case "$shape" in
+        empty) : > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
+        keys-not-array) printf '{"schema": 2, "keys": 7}\n' > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
+    esac
+    runo "$P" backend stamp
+    check "$shape sidecar.json: backend stamp exits 1" 1 "$rc"
+    check "$shape sidecar.json: backend stamp prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"cannot read $SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json (jq exited"*) ok "$shape sidecar.json: backend stamp names the file on stderr" ;; *) bad "$shape sidecar.json: backend stamp names the file on stderr" "got [$err]" ;; esac
+    cp "$tmp/corrupt-good.json" "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
+done
+
 # -----------------------------------------------------------------------------
 section "backend: a corrupt sidecar refuses only the keys no readable sidecar claims"
 

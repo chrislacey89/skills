@@ -270,8 +270,9 @@ set -u
 # depend on the caller's shell.
 unset CDPATH
 # The Isolation guard. Once here rather than as `env -u` on every git call,
-# which cost a process per call. scripts/test-sidecar-resolution.sh deletes this
-# exact line to prove the guard is load-bearing, so keep it on one line.
+# which cost a process per call. scripts/test-sidecar-resolution.sh replaces
+# this exact line with ":" to prove the guard is load-bearing, so keep it on one
+# line.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
 SIDECAR_ROOT="${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}"
@@ -357,8 +358,8 @@ norm_remote() {
 # at all, shallow or not, the common git dir), where there used to be three.
 # The result is cached per $PWD, because relate reads another checkout's keys
 # from a cd'd subshell. A subshell inherits the parent's cache but cannot fill
-# it, so a caller that wants the saving probes in the parent first; in_repo at
-# the top of each command does.
+# it, so the dispatcher at the bottom of this file probes once before running
+# any command; that call is what every $(do_resolve) below saves on.
 PROBE_PWD="" PROBE_RC=1 PROBE_SHALLOW="" PROBE_COMMON=""
 probe_repo() {
     local out
@@ -425,8 +426,18 @@ current_keys() {
 # cannot be entered is unread, like a corrupt file, and so is a sidecar.json
 # that is present but not a regular file; a directory with no sidecar.json is
 # skipped.
+#
+# The loop below starts one jq per sidecar for each key it is asked about. A
+# caller about to ask about several keys runs owners_scan first, which answers
+# them all with one jq over every sidecar; owners_of then reads that answer.
 owners_of() {
     local key="$1" d f rc hits="" unread=""
+    if scan_covers "$key"; then
+        while IFS=$'\t' read -r _ k d; do
+            [ "$k" = "$key" ] && printf '%s\n' "$d"
+        done <<<"$SCAN_HITS"
+        return 0
+    fi
     # A root that exists but cannot be listed and entered hides every sidecar
     # in it; only a root that does not exist at all is a miss.
     if [ -e "$SIDECAR_ROOT" ] && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
@@ -469,6 +480,67 @@ owners_of() {
         done
     fi
     [ -z "$hits" ] || printf '%s\n' "$hits"
+}
+
+# owners_scan <key>...: owners_of's answer for every key, from one jq over all
+# sidecars, held in SCAN_HITS as "H<TAB>key<TAB>dir" lines. It answers only
+# when every sidecar is plainly readable, so it never has an unread file to
+# report: on anything owners_of names (a root it cannot list, a directory it
+# cannot enter, a sidecar.json that is not a regular file, one holding no JSON
+# value or several, or "keys" that is not an array) it records nothing, and
+# owners_of reads file by file and names the problem as before. The answer is
+# the sidecars as they were when it ran, so a caller runs scan_clear before it
+# writes a sidecar.json. Within a $(...) the answer is inherited, never filled.
+SCAN_KEYS="" SCAN_HITS=""
+scan_clear() { SCAN_KEYS="" SCAN_HITS=""; }
+scan_covers() { case "$SCAN_KEYS" in *$'\n'"$1"$'\n'*) return 0 ;; esac; return 1; }
+owners_scan() {
+    local d f k out first files=() keyset=$'\n'
+    scan_clear
+    for k in "$@"; do
+        case "$k" in ''|*$'\n'*|*$'\t'*) return 0 ;; esac
+        keyset="$keyset$k"$'\n'
+    done
+    [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ] || return 0
+    for d in "$SIDECAR_ROOT"/*/; do
+        [ -d "$d" ] || continue
+        d="${d%/}"
+        f="$d/sidecar.json"
+        [ -x "$d" ] || return 0
+        if [ ! -f "$f" ]; then
+            if [ -L "$f" ] || [ -e "$f" ]; then return 0; fi
+            continue
+        fi
+        files+=("$f")
+    done
+    if [ "${#files[@]}" -gt 0 ]; then
+        # The first line counts the files that held exactly one JSON value; a
+        # count short of the files passed means one held none, which jq -e in
+        # owners_of reports (exit 4) and this must not read as a miss.
+        out="$(jq -n -r '
+            reduce inputs as $d ({}; .[input_filename] += [$d])
+            | if any(.[]; length != 1) then error("a sidecar.json holds more than one JSON value") else . end
+            | ("N\t\(length)"),
+              (to_entries[] | .key as $f | ((.value[0].keys // []) as $k
+                | if ($k | type) != "array" then error("keys is not an array") else
+                    ($ARGS.positional[] as $x | select(($k | index($x)) != null)
+                     | "H\t\($x)\t\($f | rtrimstr("/sidecar.json"))")
+                  end))' "${files[@]}" --args "$@" 2>/dev/null)" || return 0
+        first="${out%%$'\n'*}"
+        [ "$first" = "N"$'\t'"${#files[@]}" ] || return 0
+        case "$out" in *$'\n'*) SCAN_HITS="${out#*$'\n'}" ;; esac
+    fi
+    SCAN_KEYS="$keyset"
+}
+
+# scan_or_jq_has <dir> <key>: whether <dir>'s sidecar.json lists <key>, from
+# owners_scan's answer when it covers the key, else by reading the file.
+scan_or_jq_has() {
+    if scan_covers "$2"; then
+        case $'\n'"$SCAN_HITS"$'\n' in *$'\n'"H"$'\t'"$2"$'\t'"$1"$'\n'*) return 0 ;; esac
+        return 1
+    fi
+    jq -e --arg k "$2" '(.keys // []) | index($k) != null' "$1/sidecar.json" >/dev/null 2>&1
 }
 
 # Sidecar names and system labels share one shape.
@@ -548,6 +620,8 @@ do_resolve() {
     local keys key owners count hit="" missing new_keys tmp k other
     in_repo || refuse "not inside a git repository"
     keys="$(current_keys)"
+    # shellcheck disable=SC2086 # split on IFS (newlines), as the loops below do
+    owners_scan $keys
     for key in $keys; do
         owners="$(owners_of "$key")" || exit 1
         [ -n "$owners" ] || continue
@@ -568,7 +642,7 @@ do_resolve() {
     fi
     new_keys=""
     for k in $keys; do
-        if ! jq -e --arg k "$k" '(.keys // []) | index($k) != null' "$hit/sidecar.json" >/dev/null 2>&1; then
+        if ! scan_or_jq_has "$hit" "$k"; then
             # An unreadable sidecar.json might claim this alias; skip adding it
             # rather than refuse a resolve that already has its hit.
             other="$(owners_of "$k")" || continue
@@ -581,6 +655,7 @@ $k"
             fi
         fi
     done
+    scan_clear
     if [ -n "$new_keys" ]; then
         new_keys="${new_keys#?}"
         tmp="$(mktemp "$hit/.sidecar.json.XXXXXX")"
