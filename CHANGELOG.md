@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.44.0 — Follow-ups from the #736 review (#737)
+
+The review of #736 left four Suggestions open. Each was a claim or a command that its test did not fully back: removing the thing the claim describes left the suite green.
+
+### Changes
+
+- **`scripts/test-authored-diff-pathspec.sh` checks CLAUDE.md's diff command against the real tree.** It runs the command's own `$(...)` and fails unless every path it excludes exists as a file and there is one per manifest line. It also fails when a file under `references/` that is byte-identical to a manifest source is not among the excludes. That second check is the one that catches a change to where `scripts/sync-skill-references.sh` writes its copies: the sync script never deletes, so the old copies stay and satisfy the first check alone. The test no longer keeps its own copy of the awk.
+- **`scripts/test-respond-to-review-contract.sh` records the PRD on the lookup branch**, so dropping `--kind slice` from `/respond-to-review` Step 5's lookup fails the suite. It also checks `/fix-findings`' work-item input bullet for the `W-<n>` that Step 5 hands over. The earlier check passed on any Inputs bullet that named `/respond-to-review`.
+- **`scripts/test-review-currency-marker.sh` scans the hand-written `references/` files** (the ones the manifest does not generate), so the `reviewed_sha` rule stated in `docs/state-backend.md` and CLAUDE.md now covers them. `reviewed_sha` is matched as written, so a `$REVIEWED_SHA` variable is not counted as a mention. `last reviewed` is still matched in any letter case.
+- **This file's v1.42.0 entry** referred to "the v1.39.0 line above". That line is below it.
+
 ## v1.43.0 — `/execute` checks the issue before it makes a branch, and stops on a closed one (#703)
 
 `/execute` Step 0 created the worktree and branch before it ran the issue-shape gate. When the gate then stopped, the run left an empty worktree and a task-named branch behind, and no PR would ever bring them to `/closeout`. The gate also never read the issue's own state. An issue whose closing PR had already merged had no open PR, so it read `takeable` and the run built the work again.
@@ -16,7 +27,7 @@ The review of #730 left five Suggestions open. Two sentences claimed more than t
 
 ### Changes
 
-- **`/execute`'s branch sentence matches its step.** The start block runs on `takeable` only. The sentence and the v1.39.0 line above said an item "already in flight" gets its branch, which is the name of another verdict. They now say an item whose start is already recorded gets it.
+- **`/execute`'s branch sentence matches its step.** The start block runs on `takeable` only. The sentence and the v1.39.0 line below said an item "already in flight" gets its branch, which is the name of another verdict. They now say an item whose start is already recorded gets it.
 - **`docs/state-backend.md` states what the review-currency suite checks**: it fails when a skill names `reviewed_sha` for anything but `/pre-merge`'s write. It no longer says no skill reads the field.
 - **`scripts/test-review-currency-marker.sh` matches `last reviewed` in any letter case.**
 - **`/respond-to-review` Step 5's slice lookup is a block that prints a verdict** (`one`, `several`, `none`, `detached`, `unknown`). A detached `HEAD` is no longer a usage error, and a single open slice is named to the human and confirmed before it is handed over, because a slice left open from an earlier use of the same branch name looks the same. `scripts/test-respond-to-review-contract.sh` runs the block against a real sidecar under bash and zsh.

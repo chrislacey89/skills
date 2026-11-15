@@ -865,6 +865,10 @@ lk_a="$(lksc work create --kind slice --parent "$lk_prd" --body-file "$tmp/lk-sl
 lk_b="$(lksc work create --kind slice --parent "$lk_prd" --body-file "$tmp/lk-slice.md")"
 check "the lookup fixture holds a PRD and two slices" 1 "$([ -n "$lk_prd" ] && [ -n "$lk_a" ] && [ -n "$lk_b" ] && echo 1 || echo 0)"
 git -C "$lk" checkout -q -b feat
+# The PRD is recorded on the branch too, so the block's --kind slice is what
+# keeps it out of every verdict below (#737).
+lksc work set "$lk_prd" branch feat >/dev/null
+check "the lookup fixture records the PRD on the branch" "feat" "$(lksc work view "$lk_prd" --json | jq -r '.branch // empty')"
 
 for sh in bash zsh; do
     command -v "$sh" >/dev/null 2>&1 || { printf '  skip %s is not installed\n' "$sh"; continue; }
@@ -876,6 +880,7 @@ for sh in bash zsh; do
     check "one open slice on the branch prints it ($sh)" "one $lk_a" "$(lookup "$sh")"
     lksc work set "$lk_b" branch feat >/dev/null
     check "two open slices on the branch print both, in id order ($sh)" "several $lk_a $lk_b" "$(lookup "$sh")"
+    check "the PRD on the same branch is not printed ($sh)" 0 "$(lookup "$sh" | tr ' ' '\n' | grep -cxF "$lk_prd")"
     git -C "$lk" checkout -q --detach
     check "a detached HEAD prints detached, not a usage error ($sh)" "detached" "$(lookup "$sh")"
     check "a detached HEAD writes nothing to stderr ($sh)" "" "$(cat "$tmp/lookup.err")"
@@ -943,6 +948,14 @@ for b in docs/comment-craft.md docs/next-step-menu.md init-pipeline/scripts/side
 done
 check "/fix-findings' Inputs name /respond-to-review as a source" 1 \
     "$(awk '/^## Inputs/ { on = 1; next } /^## / { on = 0 } on' "$FF" | grep -c '/respond-to-review' | awk '{print ($1 > 0)}')"
+# The W-<n> handoff has two halves: Step 5 above hands the item over, and
+# /fix-findings' work-item input bullet accepts it. Other Inputs bullets name
+# /respond-to-review too, so the check reads that bullet alone (#737).
+FF_WN="$(awk '/^## Inputs/ { on = 1; next } /^## / { on = 0 } on' "$FF" \
+    | awk '/^- \*\*The slice'"'"'s work item id\*\*/ { on = 1; print; next } /^- / || /^$/ { on = 0 } on')"
+check "/fix-findings' work-item input bullet is found" 1 "$([ -n "$FF_WN" ] && echo 1 || echo 0)"
+check "/fix-findings' work-item input accepts the W-<n> /respond-to-review Step 5 hands over" 1 \
+    "$(tr '\n' ' ' <<<"$FF_WN" | grep -c '`/respond-to-review` Step 5 *hands over')"
 check "/closeout Step 2 routes failed review to /respond-to-review" 1 \
     "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c '/respond-to-review' | awk '{print ($1 > 0)}')"
 # /closeout and /help read reviewDecision and no thread signal, so a route that

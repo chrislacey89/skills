@@ -283,16 +283,28 @@ assert_eq "pre-merge/SKILL.md" "$reviewed_sha_writers" \
 
 # The rule binds a skill's whole directory, not only its SKILL.md: a skill's
 # own reference files (pre-merge/review-checklist.md, tdd/tests.md, …) are read
-# by the same agents. The bundled references/ copies are generated from docs/
-# and are not skill prose, so the one-level glob leaves them out, and docs/ is
-# the canonical text those copies come from, where the rule is stated. `sidecar.sh
-# trace` prints the field as "last reviewed <sha>" without its name, so that
-# phrase is held to the same rule, in any letter case, since a sentence can
-# open with it: a skill that quoted it would be reading the history as if it
-# were currency.
-reviewed_sha_siblings="$(grep -niE 'reviewed_sha|last reviewed' -- */*.md | grep -vE '^([^:]+/SKILL\.md|docs/[^:]+):' || true)"
+# by the same agents. That includes the files under references/ written by hand
+# (lfg/references/tracer-test.md, hackathon/references/dossier-template.md, …).
+# The references/ copies the manifest generates are left out: they come from
+# docs/, the canonical text where the rule is stated, and sync-skill-references
+# --check holds them to it. `sidecar.sh trace` prints the field as "last
+# reviewed <sha>" without its name, so that phrase is held to the same rule, in
+# any letter case, since a sentence can open with it: a skill that quoted it
+# would be reading the history as if it were currency. The field name itself is
+# matched as written, so a shell variable like $REVIEWED_SHA is not a mention.
+generated_refs="$(grep -vE '^(#|$)' scripts/skill-references.manifest | awk '{n = split($1, p, "/"); print $2 "/references/" p[n]}')"
+skill_files=()
+for f in */*.md */references/*.md; do
+    case "$f" in */SKILL.md|docs/*) continue ;; esac
+    grep -qxF "$f" <<<"$generated_refs" && continue
+    skill_files+=("$f")
+done
+[ "${#skill_files[@]}" -gt 0 ] || { echo "FATAL: no skill files found to scan" >&2; exit 2; }
+grep -qxF 'lfg/references/tracer-test.md' < <(printf '%s\n' "${skill_files[@]}") \
+    || { echo "FATAL: the scan does not reach hand-written references/ files" >&2; exit 2; }
+reviewed_sha_siblings="$( { grep -nE 'reviewed_sha' -- "${skill_files[@]}"; grep -niE 'last reviewed' -- "${skill_files[@]}"; } || true)"
 assert_eq "" "$reviewed_sha_siblings" \
-    "no skill file other than SKILL.md names reviewed_sha or 'last reviewed'"
+    "no skill file other than SKILL.md, hand-written references/ included, names reviewed_sha or 'last reviewed'"
 last_reviewed_skill="$(grep -niE 'last reviewed' -- */SKILL.md || true)"
 assert_eq "" "$last_reviewed_skill" \
     "no SKILL.md names trace's 'last reviewed' line"
