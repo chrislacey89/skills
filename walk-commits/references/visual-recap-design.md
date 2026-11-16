@@ -72,7 +72,7 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;
     /* radii */
     --r1:5px;--r2:8px;--r3:14px;
-    /* light theme (default) */
+    /* light — used unless the system is dark or the page pins dark */
     --bg:hsl(225 30% 99%);
     --bg-subtle:hsl(225 28% 97%);
     --bg-inset:hsl(225 24% 95%);

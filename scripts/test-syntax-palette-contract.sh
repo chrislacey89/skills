@@ -101,7 +101,8 @@ assert_contains() {
 
 # --- Extract the two theme blocks from the real §1 token core -----------------
 #
-# The light theme is the `:root{` block; dark is `[data-theme="dark"]{`. Both
+# The light theme is the `:root{` block; dark is `:root[data-theme="dark"]{`,
+# read through its `[data-theme="dark"]{` substring. Both
 # end at the first line that is a bare closing brace at that indent. Reading the
 # blocks separately (rather than grepping the whole file) is what makes the
 # symmetry assertion possible.
