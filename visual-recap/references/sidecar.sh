@@ -2581,6 +2581,10 @@ lessons_match() {
                 shift; continue ;;
             --*) die_usage "lessons match: unknown argument: $arg" ;;
             *$'\n'*) die_usage "lessons match: an argument holds a newline; pass one path per argument" ;;
+        esac
+        # A Context anchor names a line or a range after the path: path:12, path:12-40.
+        if [[ "$arg" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then arg="${BASH_REMATCH[1]}"; fi
+        case "$arg" in
             "$top") arg="" ;;
             "$top"/*) arg="${arg#"$top"/}" ;;
             /*) refuse "lessons match: $arg is outside the project at $top" ;;

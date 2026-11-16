@@ -120,6 +120,18 @@ runo "$P" lessons match lib/y.sh
 check "a pointer written ./lib/ is the folder lib" \
     "folder${TAB}docs/solutions/testing/g-2026-01-01.md${TAB}Trailing slash" "$(printf '%s\n' "$out" | head -n 1)"
 
+# Context anchors name a file with a line or a range after it
+# (`init-pipeline/scripts/sidecar.sh:1277`, `scripts/test-x.sh:120-131`).
+# A folder pointer matches whatever follows it, so only an exact pointer can
+# tell whether the suffix was removed.
+lesson "$P" "testing/h-2026-01-01.md" "Exact file" "paths: [tools/run.sh]"
+runo "$P" lessons match tools/run.sh:1277
+check "a path with a :line suffix matches as the path" \
+    "exact${TAB}docs/solutions/testing/h-2026-01-01.md${TAB}Exact file" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match tools/run.sh:120-131
+check "a path with a :start-end suffix matches as the path" \
+    "exact${TAB}docs/solutions/testing/h-2026-01-01.md${TAB}Exact file" "$(printf '%s\n' "$out" | head -n 1)"
+
 # -----------------------------------------------------------------------------
 section "order: exact first, then folders deepest first"
 
