@@ -361,6 +361,13 @@ jobs:
       - name: Run sidecar trace suite
         run: bash scripts/test-sidecar-trace.sh
 
+      # `sidecar.sh lessons match` finds a lesson by the files its `paths` line
+      # names. This runs it against scratch repos, holds its three outcomes
+      # apart, counts its processes at 3 and 30 lessons, and runs /execute
+      # Step 1's lessons-start block under bash and zsh (#748).
+      - name: Run lesson recall suite
+        run: bash scripts/test-lesson-recall.sh
+
       # /pre-merge Phase 2's sidecar PR block and /closeout Step 3's merge,
       # extracted and run against a stubbed gh on a guest repo: neither may pass
       # the forge a pack marker (#526).

@@ -49,6 +49,7 @@
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
 #   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|closed|all>]
+#   sidecar.sh lessons match <path>...   (the lessons whose paths name these files or a folder above them; read-only)
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
@@ -2384,6 +2385,174 @@ trace_lesson() {
         (.taught_by[] | "  taught by  \(.id) (\(.state))")'
 }
 
+# lessons_scan: one record per lesson under the directories solutions-dirs
+# prints, read from the project's top level so an in-tree lesson's path is
+# relative to it:
+#   <lesson path>\t<title>\t<paths>\t<replaces>\t<related>
+# Each list is comma-joined, and empty when its key is absent, `[]`, or not in
+# the one-line bracket form. <title> is the first `# ` heading after the
+# frontmatter. The reader is tolerant: a frontmatter line it does not need is
+# ignored, never an error. A field is kept only once the frontmatter closes,
+# and every field resets at the first line of each file, so an unterminated
+# frontmatter gives its own file no fields and never lends any to the next
+# file. One find and one awk for the whole store, however many lessons it
+# holds. A directory that does not exist holds no lessons; one that cannot be
+# read fails the scan.
+# shellcheck disable=SC2016  # awk program text
+LESSONS_SCAN_AWK='
+function flush() {
+    if (cur == "") return
+    printf "%s\t%s\t%s\t%s\t%s\n", cur, title, p, rp, rl
+    seen[cur] = 1
+}
+function list(v,   n, a, i, out, e) {
+    sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+    if (v !~ /^\[.*\]$/) return ""
+    n = split(substr(v, 2, length(v) - 2), a, ",")
+    out = ""
+    for (i = 1; i <= n; i++) {
+        e = a[i]; sub(/^[ \t]+/, "", e); sub(/[ \t]+$/, "", e)
+        if (e ~ /^".*"$/) e = substr(e, 2, length(e) - 2)
+        if (e != "") out = out (out == "" ? "" : ",") e
+    }
+    return out
+}
+{ sub(/\r$/, "") }
+FNR == 1 {
+    flush()
+    cur = FILENAME; title = ""; p = ""; rp = ""; rl = ""; tp = ""; trp = ""; trl = ""
+    if ($0 == "---") { state = "fm"; next }
+    state = "body"
+}
+state == "fm" {
+    if ($0 == "---") { state = "body"; p = tp; rp = trp; rl = trl }
+    else if ($0 ~ /^paths:/) tp = list(substr($0, 7))
+    else if ($0 ~ /^replaces:/) trp = list(substr($0, 10))
+    else if ($0 ~ /^related:/) trl = list(substr($0, 9))
+    next
+}
+title == "" && /^# / { title = substr($0, 3); gsub(/\t/, " ", title); sub(/[ \t]+$/, "", title) }
+END {
+    flush()
+    for (i = 1; i < ARGC; i++) if (!(ARGV[i] in seen)) printf "%s\t\t\t\t\n", ARGV[i]
+}'
+# lessons_scan [<dirs>]: <dirs> is solutions-dirs' output, newline-separated,
+# for a caller that already has it; with none, it is asked for here.
+lessons_scan() {
+    local dirs d list=""
+    if [ $# -gt 0 ]; then dirs="$1"; else dirs="$(cmd_solutions_dirs)" || return 1; fi
+    for d in $dirs; do
+        [ -n "$d" ] || continue
+        [ -e "$d" ] || continue
+        list="${list:+$list$'\n'}$d"
+    done
+    [ -n "$list" ] || return 0
+    # shellcheck disable=SC2086  # split on IFS (newlines): a dir may hold spaces
+    find $list -type f -name '*.md' -exec awk "$LESSONS_SCAN_AWK" {} +
+}
+
+# lessons match: which lessons' `paths` name the given files. A pointer matches
+# a file it names exactly, or a folder above the file, on path-segment
+# boundaries only. Each lesson is printed once, at its best match: every exact
+# line first, then folder lines from the deepest matching folder up, ties in
+# lesson-path order. Matching runs in one awk over the scan, so the process
+# count does not grow with the number of lessons.
+# shellcheck disable=SC2016  # awk program text
+LESSONS_MATCH_AWK='
+function norm(s) { sub(/^(\.\/)+/, "", s); sub(/\/+$/, "", s); return s }
+# A file path with its "." and ".." segments collapsed, lexically.
+function canon(s,   n, a, i, k, st, out) {
+    n = split(s, a, "/"); k = 0
+    for (i = 1; i <= n; i++) {
+        if (a[i] == "" || a[i] == ".") continue
+        if (a[i] == ".." && k > 0 && st[k] != "..") { k--; continue }
+        st[++k] = a[i]
+    }
+    out = ""
+    for (i = 1; i <= k; i++) out = out (i > 1 ? "/" : "") st[i]
+    return out
+}
+FILENAME == ARGV[1] { if ($0 != "") q[++nq] = canon($0); next }
+{
+    scanned++
+    if ($3 == "") next
+    with++
+    np = split($3, ps, ",")
+    best = -1
+    for (i = 1; i <= np; i++) {
+        e = norm(ps[i])
+        if (e == "") continue
+        depth = split(e, segs, "/")
+        for (j = 1; j <= nq; j++) {
+            if (q[j] == e) best = 1000000
+            else if (index(q[j], e "/") == 1 && depth > best) best = depth
+        }
+    }
+    if (best < 0) next
+    matched++
+    if (best == 1000000) printf "0000000\texact\t%s\t%s\n", $1, $2
+    else printf "1%06d\tfolder\t%s\t%s\n", 999999 - best, $1, $2
+}
+END { printf "~\t%d\t%d\t%d\n", matched, scanned, with }'
+lessons_match() {
+    local top prefix arg q="" name dirs first scan tmpd line key kind lpath title m=0 s=0 w=0 rows=""
+    in_repo || refuse "lessons match: not inside a git repository"
+    top="$(pgit rev-parse --show-toplevel)" || refuse "lessons match: cannot find the project's top level"
+    prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons match: cannot find the project's top level"
+    for arg in "$@"; do
+        case "$arg" in
+            --*) die_usage "lessons match: unknown argument: $arg" ;;
+            *$'\n'*) die_usage "lessons match: an argument holds a newline; pass one path per argument" ;;
+            "$top") arg="" ;;
+            "$top"/*) arg="${arg#"$top"/}" ;;
+            /*) refuse "lessons match: $arg is outside the project at $top" ;;
+            *) arg="$prefix$arg" ;;
+        esac
+        [ -n "$arg" ] || continue
+        q="${q:+$q$'\n'}$arg"
+    done
+    cd "$top" || refuse "lessons match: cannot enter $top"
+    tmpd="$(mktemp -d)" || refuse "lessons match: cannot create a temp directory"
+    scan="$tmpd/scan"
+    if ! dirs="$(cmd_solutions_dirs)" || ! lessons_scan "$dirs" > "$scan"; then
+        rm -rf "$tmpd"; refuse "lessons match: could not read the lesson headers; nothing was matched"
+    fi
+    # The project read: the sidecar's name when solutions-dirs led with one,
+    # else this checkout's directory name.
+    first="${dirs%%$'\n'*}"
+    case "$first" in
+        "$SIDECAR_ROOT"/*/solutions) name="${first%/solutions}"; name="${name##*/}" ;;
+        *) name="${top##*/}" ;;
+    esac
+    printf '%s\n' "$q" > "$tmpd/q"
+    if ! awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$scan" | LC_ALL=C sort > "$tmpd/rows"; then
+        rm -rf "$tmpd"; refuse "lessons match: could not match the lesson headers"
+    fi
+    while IFS=$'\t' read -r key kind lpath title; do
+        if [ "$key" = "~" ]; then m="$kind"; s="$lpath"; w="$title"; continue; fi
+        rows="$rows$kind"$'\t'"$lpath"$'\t'"$title"$'\n'
+    done < "$tmpd/rows"
+    rm -rf "$tmpd"
+    if [ -z "$q" ]; then
+        printf 'no file list given; nothing to match\n'
+    elif [ -z "$rows" ]; then
+        printf 'no lesson points at these files\n'
+    else
+        printf '%s' "$rows"
+    fi
+    printf 'lessons: %s matched, %s scanned, %s with paths, projects: %s, recorded: no\n' "$m" "$s" "$w" "$name"
+}
+
+cmd_lessons() {
+    local sub="${1:-}"
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+        match) ;;
+        *) die_usage "usage: sidecar.sh lessons <match> ..." ;;
+    esac
+    "lessons_$sub" "$@"
+}
+
 verb="${1:-}"
 [ $# -gt 0 ] && shift
 # Fill probe_repo's cache in this shell, so the many $(do_resolve) and
@@ -2410,6 +2579,7 @@ case "$verb" in
     fixrun)  cmd_fixrun "$@" ;;
     footprint) cmd_footprint "$@" ;;
     work)    cmd_work "$@" ;;
+    lessons) cmd_lessons "$@" ;;
     trace)   cmd_trace "$@" ;;
-    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|fixrun|footprint|work|trace> ..." ;;
+    *) die_usage "usage: sidecar.sh <resolve|init|config get|config set|base-ref|range|profile|path|solutions-dirs|related-solutions-dirs|relate|migrate-archive|archive-dir|commit|require|backend|stamp|fixrun|footprint|work|lessons|trace> ..." ;;
 esac

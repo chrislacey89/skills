@@ -6,6 +6,7 @@ components: [pre-merge/SKILL.md, init-pipeline/scripts/sidecar.sh, scripts/test-
 technologies: [bash, claude-code]
 severity: high
 volatility: stable
+related: [claude-project-dir-can-name-another-checkout-2026-11-16.md]
 ---
 
 # A preset variable tests a path no run takes
