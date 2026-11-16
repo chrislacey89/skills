@@ -137,6 +137,7 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
       --flag-load:hsl(32 94% 64%);
       --flag-mech:hsl(220 12% 62%);
       --flag-risky:hsl(2 82% 70%);
+      --flag-fw:hsl(186 70% 60%);
       --sx-k:hsl(266 86% 80%);
       --sx-f:hsl(212 94% 78%);
       --sx-v:hsl(312 84% 78%);
