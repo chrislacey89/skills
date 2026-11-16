@@ -555,23 +555,38 @@ differences: its kind label is `framework` in `--flag-fw`, its note is three lab
 page. It keeps the callout's `c-<file-slug>-L<line>` id and `data-feedback-kind="callout"`,
 and its line marker is the usual numbered `.vr-marker`.
 
+It renders question first (core §3, *ask first, then reveal*): the three questions, then a
+`data-feedback-recall` field for the reader's answer, then the labeled lines and the docs
+link inside a closed `<details>`. The order on the page is the order of the attempt, so the
+field sits above the reveal. Keep the questions the same three on every framework callout;
+the reader learns to answer them, and the author compares like with like.
+
 ```html
 <div id="callout-c-app-ts-L18" class="vr-callout" data-feedback-id="c-app-ts-L18" data-feedback-kind="callout" onclick="setActive('c-app-ts-L18')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
   <span class="vr-marker" style="flex:none;width:20px;height:20px;font-size:11px">2</span>
   <div style="min-width:0">
     <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-fw)">framework</span> · app.ts:18</div>
+    <p style="margin:0;font-size:13.5px;line-height:1.5;color:var(--fg);text-wrap:pretty">No line in this diff calls <code style="font-family:var(--mono)">authGuard</code>. What calls it, and when? What happens if it fails?</p>
+    <textarea data-feedback-recall onclick="event.stopPropagation()" placeholder="Your answer, before you open it…" style="width:100%;margin-top:var(--s2);min-height:52px;resize:vertical;padding:var(--s2) var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
+    <details onclick="event.stopPropagation()" style="margin-top:var(--s2)">
+    <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--flag-fw)">Show the answer</summary>
     <dl style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px var(--s3);margin:0;font-size:13px;line-height:1.5">
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">called by</dt>
-      <dd style="margin:0;color:var(--fg);text-wrap:pretty">Express, for every request whose path starts with <code style="font-family:var(--mono)">/api</code>. No line in this diff calls <code style="font-family:var(--mono)">authGuard</code>.</dd>
+      <dd style="margin:0;color:var(--fg);text-wrap:pretty">Express, for every request whose path starts with <code style="font-family:var(--mono)">/api</code>.</dd>
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">when</dt>
       <dd style="margin:0;color:var(--fg);text-wrap:pretty">Before any route handler under <code style="font-family:var(--mono)">/api</code>, in the order the <code style="font-family:var(--mono)">app.use</code> calls appear.</dd>
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">if it fails</dt>
       <dd style="margin:0;color:var(--fg);text-wrap:pretty">It calls <code style="font-family:var(--mono)">next(err)</code>, Express skips the remaining handlers, and the error handler sends the response. The route handler never runs.</dd>
     </dl>
     <a href="https://expressjs.com/en/guide/using-middleware.html" style="display:inline-block;margin-top:var(--s2);font-size:12px;color:var(--flag-fw)">Express docs: Using middleware ↗</a>
+    </details>
   </div>
 </div>
 ```
+
+The `stopPropagation` calls keep typing and opening the answer from toggling the card's
+active state. A reader who opens the answer without writing anything sends nothing back,
+and that is fine: the field is an invitation, not a gate.
 
 **Cited or asserted.** The docs link is what makes the note cited. With no page to link,
 drop the link and put an `asserted` chip after the kind label. It is §11's chip, inlined so
@@ -581,14 +596,17 @@ Never link a page that doesn't describe the mechanism just to fill the slot.
 
 **On a line that already has a change callout,** the framework note nests inside that card
 under its note line, like the typed note-pair above: one bordered half in `--flag-fw`, with
-the same three labeled lines and the link. The card keeps its own kind label and id.
+the same questions, recall field, and collapsed answer. The card keeps its own kind label and
+id, and the serializer reports the attempt on the card's line.
 
 **What runs before the handler: the lifecycle figure.** When the change puts behavior in
 the framework's request lifecycle (middleware, a validation hook, an authorization check,
 an injected argument), add one figure showing what runs, in order, before the handler the
 diff touched. It is usually a trivial spine, so it takes the §5 CSS primitive. Mark each
 stage the diff touched with `.is-accent`, and give every stage that has a framework callout
-the callout's number, so the figure and the cards point at each other.
+the callout's number, so the figure and the cards point at each other. The figure answers the
+callouts' *when*, so place it after the hunk whose callouts it numbers: read there, it checks
+the reader's answers instead of handing them out.
 
 ```html
 <figure style="margin:0">
@@ -609,22 +627,21 @@ the callout's number, so the figure and the cards point at each other.
 
 **The framework features table.** It closes the overview (§3) and lists every framework
 mechanism the diff relies on, including the repeats that got no callout of their own. One
-row per mechanism: where the diff uses it (`file:line`, grounded), what runs it, and the
-docs page. A row whose callout is on screen links to it.
+row per mechanism: where the diff uses it (`file:line`, grounded) and the docs page. A row
+whose callout is on screen links to it. There is no "what runs it" column: the table sits
+above the callouts and would answer their first question before the reader tries.
 
 ```html
 <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:var(--s5)">
   <thead><tr style="text-align:left;color:var(--fg-muted);font-size:11px;letter-spacing:.08em;text-transform:uppercase">
     <th style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border-strong)">Framework feature</th>
     <th style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border-strong)">Used at</th>
-    <th style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border-strong)">What runs it</th>
     <th style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border-strong)">Docs</th>
   </tr></thead>
   <tbody>
     <tr>
       <td style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border)">Middleware</td>
       <td style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px"><a href="#callout-c-app-ts-L18">app.ts:18</a>, app.ts:24</td>
-      <td style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border)">Express, per matching request, in registration order</td>
       <td style="padding:var(--s2) var(--s3);border-bottom:1px solid var(--border)"><a href="https://expressjs.com/en/guide/using-middleware.html" style="color:var(--flag-fw)">Using middleware ↗</a></td>
     </tr>
   </tbody>
