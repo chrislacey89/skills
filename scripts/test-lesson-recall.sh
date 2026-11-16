@@ -414,7 +414,7 @@ lib/one.sh" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
     check "$sh: several files, one blank line: exits 0" 0 "$rc"
     check "$sh: each file is its own argument" \
 "exact${TAB}docs/solutions/x/hit-2026-04-04.md${TAB}Hit
-lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), recorded: no" "$out"
+lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), recorded: no: no sidecar resolves" "$out"
     out="$(cd "$BP" && TEST_FILES="" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
     check "$sh: no file list: exits 0" 0 "$rc"
     check "$sh: no file list: says no file list was given" "no file list given; nothing to match" \
@@ -423,6 +423,71 @@ lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), record
     if [ "$rc" -ne 0 ] && [ -z "$out" ]; then ok "$sh: a failed lookup exits nonzero with nothing on stdout"
     else bad "$sh: a failed lookup exits nonzero with nothing on stdout" "rc=$rc out=[$out]"; fi
 done
+
+# -----------------------------------------------------------------------------
+section "/execute's lookup blocks record their phase"
+
+# One project with a sidecar, a base branch, and a slice branch that changed
+# two files. The Step 1 block records phase start for the files it is given;
+# the Step 4 block records phase changed for the files the branch changed.
+mkproj
+XP="$P"
+runo "$XP" init --name blocks --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+XS="$out"
+[ -d "$XS" ] || fatal "init did not create a sidecar: $err"
+runo "$XP" config set base_ref main
+[ "$rc" -eq 0 ] || fatal "config set base_ref main failed: $err"
+lesson "$XP" "x/changed-2026-06-06.md" "Changed" "paths: [lib]"
+git -C "$XP" add docs && git -C "$XP" commit -q -m "lesson"
+git -C "$XP" checkout -q -b slice/one
+mkdir -p "$XP/lib"
+printf 'a\n' > "$XP/lib/one.sh"; printf 'b\n' > "$XP/top.txt"
+git -C "$XP" add lib top.txt && git -C "$XP" commit -q -m "slice work"
+XLOG="$XS/lookups/slice%2Fone.jsonl"
+cblock="$(awk '/^<!-- sidecar-read: execute-lessons-changed -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$EXECUTE")"
+[ -n "$cblock" ] || fatal "execute/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: execute-lessons-changed -->"
+ok "execute/SKILL.md carries the lessons-changed block"
+cscript="$(printf '%s\n' "$cblock" | sed -e "s|^SC=.*|SC=\"$SC\"|")"
+# The Step 4 block sits in Tier 1, after the slice-range diff it reuses.
+cline="$(grep -n '^<!-- sidecar-read: execute-lessons-changed -->$' "$EXECUTE" | cut -d: -f1)"
+t1line="$(grep -n '^#### Tier 1: Static Verification' "$EXECUTE" | cut -d: -f1)"
+t2line="$(grep -n '^#### Tier 2: Command Verification' "$EXECUTE" | cut -d: -f1)"
+if [ -n "$t1line" ] && [ -n "$t2line" ] && [ "$t1line" -lt "$cline" ] && [ "$cline" -lt "$t2line" ]; then
+    ok "the lessons-changed block sits in Step 4 Tier 1"
+else
+    bad "the lessons-changed block sits in Step 4 Tier 1" "tier1=$t1line block=$cline tier2=$t2line"
+fi
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    : > "$XLOG" 2>/dev/null || { mkdir -p "$XS/lookups"; : > "$XLOG"; }
+    out="$(cd "$XP" && TEST_FILES="lib/one.sh" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: Step 1 block with a sidecar: exits 0" 0 "$rc"
+    check "$sh: Step 1 block: recorded: yes" "recorded: yes" "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
+    check "$sh: Step 1 block: the record's phase is start" start "$(tail -n 1 "$XLOG" | jq -r .phase)"
+    out="$(cd "$XP" && "${runner[@]}" "$cscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: Step 4 block: exits 0" 0 "$rc"
+    check "$sh: Step 4 block: prints the lesson for the changed file" \
+        "folder${TAB}docs/solutions/x/changed-2026-06-06.md${TAB}Changed" "$(printf '%s\n' "$out" | head -n 1)"
+    check "$sh: Step 4 block: the record's phase is changed" changed "$(tail -n 1 "$XLOG" | jq -r .phase)"
+    check "$sh: Step 4 block: the record names the files the slice changed" '["lib/one.sh","top.txt"]' \
+        "$(tail -n 1 "$XLOG" | jq -c '.files | sort')"
+done
+
+# -----------------------------------------------------------------------------
+section "the Review Notes template carries no lookup output"
+
+# Review Notes go into the PR body, which other people read; lesson names are
+# private sidecar content. The template is extracted as /execute ships it.
+notes="$(awk '/^```markdown$/ { inb = 1; buf = ""; next }
+              inb && /^```$/ { if (buf ~ /## Review Notes/) { printf "%s", buf; exit } inb = 0; next }
+              inb { buf = buf $0 "\n" }' "$EXECUTE")"
+[ -n "$notes" ] || fatal "execute/SKILL.md has no markdown block carrying ## Review Notes"
+ok "execute/SKILL.md carries the Review Notes template"
+leaks="$(printf '%s\n' "$notes" | grep -nE 'lessons match|lessons: [0-9]|recorded: (yes|no)|lookups/|^(exact|folder)	|docs/solutions/' || true)"
+check "the template names no lesson lookup, receipt, run log, or lesson" "" "$leaks"
 
 # -----------------------------------------------------------------------------
 section "the run log: --record writes one line per lookup"
