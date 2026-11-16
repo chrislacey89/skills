@@ -33,13 +33,12 @@ the reviewer auditing parallel hunks? scroll.**
 > diff instead of re-learning the layout each run (Refactoring UI: *systematize choices*;
 > Norman: *knowledge in the world, not in the head*).
 
-The values below are the proven reference (the "Visual Recap v2" surface): dark-first deep
-blue-ink canvas, a single electric-violet accent, monospace-forward dense layout, a fixed
+The values below are the proven reference (the "Visual Recap v2" surface): a deep
+blue-ink canvas in dark, a single electric-violet accent, monospace-forward dense layout, a fixed
 272px rail beside a full-width scrolling column running overview → files → contracts
 (when schema/API surfaces changed) → diagram → wireframes (when rendered UI changed) →
 annotated changes → before/after → review. Every semantic color is tuned for WCAG AA
-contrast against its surface in **both** themes — light is the `:root` default, dark flips
-on `[data-theme="dark"]` — with **one documented exception.** Three syntax tokens sit below
+contrast against its surface in **both** themes — how the two themes switch is stated once, in the §1 token block — with **one documented exception.** Three syntax tokens sit below
 the 4.5:1 body-text bar: `--sx-s`, `--sx-n`, and `--sx-c` in light, and `--sx-c` again in
 dark. They stay legible against every surface, but do not claim AA for them and do not put
 anything a reviewer must not miss in one. That exception list is exact and pinned by a
@@ -50,9 +49,14 @@ claim back to "every."
 
 ## 1. The token core (copy verbatim)
 
-Paste this `<style>` block into `<head>`. It is the load-bearing layer — named CSS variables
-flipped on `[data-theme]`, no CDN, no web fonts (two native system stacks so the surface
-works fully offline). These variable names are the canonical set; do not rename them per run —
+Paste this `<style>` block into `<head>`. It is the load-bearing layer — named CSS variables,
+no CDN, no web fonts (two native system stacks so the surface works fully offline). It themes
+in three states: light on `:root`; dark under `@media (prefers-color-scheme: dark)`, guarded by
+`:root:not([data-theme="light"])`; and dark again under `:root[data-theme="dark"]`. With no
+attribute the page follows the viewer's system theme, which is what a host that sets no
+attribute needs, and the theme toggle (§10) pins either one by writing `data-theme` on
+`<html>`. Put the attribute nowhere else: `:root` never matches a `<div>`. The local file and
+a hosted page come from this one block, unedited. These variable names are the canonical set; do not rename them per run —
 and specifically **do not adopt the visual language of the app under review** (its palette,
 fonts, or chrome). A review instrument stays visually independent of its subject: the pull to
 theme the recap in a well-designed app's own aesthetic is strongest exactly where it does most
@@ -105,7 +109,44 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --sx-c:hsl(222 12% 56%);  /* comment */
     --shadow:0 1px 2px hsla(225 40% 20% / 0.04),0 8px 24px -12px hsla(225 40% 20% / 0.12);
   }
-  [data-theme="dark"]{
+  /* dark — the same values twice: once for a viewer whose system is dark (unless the page
+     pins light), once for a page that pins dark. Change both copies together. */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:hsl(228 24% 6%);
+      --bg-subtle:hsl(228 20% 8.5%);
+      --bg-inset:hsl(228 18% 12%);
+      --bg-elev:hsl(228 19% 10%);
+      --fg:hsl(222 24% 92%);
+      --fg-muted:hsl(222 12% 58%);
+      --fg-faint:hsl(222 10% 40%);
+      --border:hsl(228 16% 16%);
+      --border-strong:hsl(228 14% 24%);
+      --accent:hsl(256 92% 74%);
+      --accent-dim:hsla(256 92% 74% / 0.14);
+      --accent-glow:hsla(256 92% 74% / 0.5);
+      --add:hsl(150 58% 56%);
+      --add-bg:hsla(150 66% 46% / 0.12);
+      --del:hsl(2 82% 70%);
+      --del-bg:hsla(356 76% 60% / 0.12);
+      --risk:hsl(38 96% 64%);
+      --mark-bg:hsla(256 92% 74% / 0.13);
+      --flag-new:hsl(212 90% 68%);
+      --flag-moved:hsl(265 80% 76%);
+      --flag-load:hsl(32 94% 64%);
+      --flag-mech:hsl(220 12% 62%);
+      --flag-risky:hsl(2 82% 70%);
+      --flag-fw:hsl(186 70% 60%);
+      --sx-k:hsl(266 86% 80%);
+      --sx-f:hsl(212 94% 78%);
+      --sx-v:hsl(312 84% 78%);
+      --sx-s:hsl(155 64% 64%);
+      --sx-n:hsl(35 92% 70%);
+      --sx-c:hsl(222 12% 48%);
+      --shadow:0 1px 2px hsla(0 0% 0% / 0.3),0 16px 40px -16px hsla(0 0% 0% / 0.6);
+    }
+  }
+  :root[data-theme="dark"]{
     --bg:hsl(228 24% 6%);
     --bg-subtle:hsl(228 20% 8.5%);
     --bg-inset:hsl(228 18% 12%);
@@ -220,7 +261,7 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
 ## 2. The shell (rail + scrolling column)
 
 ```html
-<div id="vr-root" data-theme="dark" style="min-height:100vh;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased">
+<div id="vr-root" style="min-height:100vh;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased">
   <div style="display:grid;grid-template-columns:272px minmax(0,1fr);align-items:start">
 
     <!-- RAIL: brand · change scale · scroll-spy TOC · theme toggle -->
@@ -449,6 +490,13 @@ frame rather than rendering at its intrinsic (tiny) size:
   }));
 </script>
 ```
+
+**Hosts that render Mermaid natively need no loader.** Some hosts that publish HTML pages
+render `<pre class="mermaid">` natively. On such a host, leave out the loader script above:
+the same `<pre>` source becomes the diagram with no CDN request. Leave out the degrade note
+too, because the note says the figure loads from a CDN, which is no longer true. Do this only
+for a host whose own documentation says it renders Mermaid. Everywhere else, including the
+local file, keep the loader and the note.
 
 ---
 
@@ -906,9 +954,12 @@ scroll — never a click that hides one side. That is also the rule §12 is buil
 
 ```html
 <script>
-  const root = document.getElementById('vr-root');
+  // The theme lives on <html>, where §1's :root rules can see it. With no attribute the
+  // page follows the viewer's system theme; the first toggle pins the opposite of it.
   function toggleTheme(){
-    root.dataset.theme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    const pinned = document.documentElement.dataset.theme;
+    const dark = pinned ? pinned === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark';
   }
   let activeId = null;
   function setActive(id){
@@ -1604,7 +1655,7 @@ reviewer will actually do:
   @media print{.dk aside,.topbar{display:none} .screen[hidden]{display:block}}
 </style>
 
-<div class="dk" id="dk" data-theme="dark" style="min-height:100vh;background:var(--bg);color:var(--fg);font-family:var(--sans)">
+<div class="dk" id="dk" style="min-height:100vh;background:var(--bg);color:var(--fg);font-family:var(--sans)">
   <aside>
     <div class="brand"><span class="mk">297</span><span class="tx">Change-by-change</span></div>
     <div class="brand-sub">PR #297 · closes #293 · 8 commits</div>
@@ -1818,6 +1869,11 @@ serializer is separate and unchanged.
 ```html
 <script>
   const dk = document.getElementById('dk');
+  function toggleTheme(){   // same as Part I §10: the theme lives on <html>
+    const pinned = document.documentElement.dataset.theme;
+    const dark = pinned ? pinned === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+  }
   const screens = [...dk.querySelectorAll('.screen')];
   const items = [...dk.querySelectorAll('.navitem')];
   const indexOf = id => screens.findIndex(s => s.id === id);
@@ -1850,7 +1906,7 @@ serializer is separate and unchanged.
     if (k === 'j' || e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); show(cur + 1); }
     else if (k === 'k' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); show(cur - 1); }
     else if (k === 'a') showAll();
-    else if (k === 't') dk.dataset.theme = dk.dataset.theme === 'light' ? 'dark' : 'light';
+    else if (k === 't') toggleTheme();
     else if (/^[1-9]$/.test(k) && +k - 1 < screens.length) show(+k - 1);
   });
   show(0);

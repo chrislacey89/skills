@@ -240,6 +240,12 @@ jobs:
       # in use, which is the half a membership check alone would miss.
       - name: Run syntax-palette contract suite
         run: bash scripts/test-syntax-palette-contract.sh
+      # #763: the token core carries its dark values twice (system-dark media
+      # query and a pinned data-theme), so a recap reads right as a local file
+      # and on a host that follows the viewer's theme. Pins the shape, that the
+      # two copies match, and that the theme attribute lives on <html>.
+      - name: Run theme-token shape suite
+        run: bash scripts/test-theme-token-shape.sh
       # #307's drift class: an always-on surface contradicting the doc it points
       # at. The `description:` frontmatter is in every downstream session's
       # context window, and it announced a diagram default the canon no longer
