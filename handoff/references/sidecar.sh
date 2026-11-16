@@ -487,7 +487,7 @@ owners_of() {
 # when every sidecar is plainly readable, so it never has an unread file to
 # report: on anything owners_of names (a root it cannot list, a directory it
 # cannot enter, a sidecar.json that is not a regular file, one holding no JSON
-# value or several, or a "keys" jq cannot search, such as a number) it records
+# value or several (each file is parsed on its own, so a value split across two files is corrupt in both), or a "keys" jq cannot search, such as a number) it records
 # nothing, and owners_of reads file by file and names the problem as before. The answer is
 # the sidecars as they were when it ran, so a caller runs scan_clear before it
 # writes a sidecar.json. Within a $(...) the answer is inherited, never filled.
@@ -514,16 +514,25 @@ owners_scan() {
         files+=("$f")
     done
     if [ "${#files[@]}" -gt 0 ]; then
-        # The first line counts the files that held exactly one JSON value; a
-        # count short of the files passed means one held none, which jq -e in
-        # owners_of reports (exit 4) and this must not read as a miss.
-        out="$(jq -n -r '
-            reduce inputs as $d ({}; .[input_filename] += [$d])
-            | if any(.[]; length != 1) then error("a sidecar.json holds more than one JSON value") else . end
+        # Each file goes in as its own --rawfile string and is parsed on its
+        # own with fromjson, so a value cannot run from one file into the next
+        # (jq reads files named on its command line as one stream, and
+        # `printf 1 >c; printf 2 >d; jq -n '[inputs]' c d` yields [12]).
+        # fromjson errors on a string holding no JSON value or several, and on
+        # corrupt JSON, and any error fails the whole jq: the caller falls back.
+        # --rawfile and $ARGS.named (which carries it) are in jq 1.6.
+        local jqargs=() i=0
+        for f in "${files[@]}"; do
+            jqargs+=(--rawfile "f$i" "$f" --arg "p$i" "$f")
+            i=$((i + 1))
+        done
+        out="$(jq -n -r --argjson n "${#files[@]}" '
+            $ARGS.named as $a
+            | [range(0; $n) | {f: $a["p\(.)"], d: ($a["f\(.)"] | fromjson)}]
             | ("N\t\(length)"),
-              (to_entries[] | .key as $f | ((.value[0].keys // []) as $k
+              (.[] | .f as $f | ((.d.keys // []) as $k
                 | $ARGS.positional[] as $x | select(($k | index($x)) != null)
-                | "H\t\($x)\t\($f | rtrimstr("/sidecar.json"))"))' "${files[@]}" --args "$@" 2>/dev/null)" || return 0
+                | "H\t\($x)\t\($f | rtrimstr("/sidecar.json"))"))' "${jqargs[@]}" --args "$@" 2>/dev/null)" || return 0
         first="${out%%$'\n'*}"
         [ "$first" = "N"$'\t'"${#files[@]}" ] || return 0
         case "$out" in *$'\n'*) SCAN_HITS="${out#*$'\n'}" ;; esac

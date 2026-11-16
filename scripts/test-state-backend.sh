@@ -200,6 +200,21 @@ for shape in empty keys-not-array; do
     cp "$tmp/corrupt-good.json" "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
 done
 
+# One JSON value split across two files: jq reads files named on its command
+# line as a single stream, so a lookup that hands it every sidecar.json at once
+# counts the value once, under the second file's name, and answers from files
+# neither of which parses. Each file must be parsed on its own, so both are
+# refused like any corrupt file.
+split_root="$tmp/split-sidecars"
+mkdir -p "$split_root/a" "$split_root/b"
+printf '{"keys":[]} {"keys":["remote:github.com/acme/div"]' > "$split_root/a/sidecar.json"
+printf '}' > "$split_root/b/sidecar.json"
+mkproj https://github.com/acme/div.git
+SKILL_KIT_SIDECAR_ROOT="$split_root" runo "$P" resolve
+check "value split across two sidecar.json files: resolve exits 1" 1 "$rc"
+check "value split across two sidecar.json files: resolve prints nothing on stdout" "" "$out"
+case "$err" in *"cannot read $split_root/a/sidecar.json (jq exited"*"cannot read $split_root/b/sidecar.json (jq exited"*) ok "value split across two sidecar.json files: resolve names both files on stderr" ;; *) bad "value split across two sidecar.json files: resolve names both files on stderr" "got [$err]" ;; esac
+
 # -----------------------------------------------------------------------------
 section "backend: a corrupt sidecar refuses only the keys no readable sidecar claims"
 
