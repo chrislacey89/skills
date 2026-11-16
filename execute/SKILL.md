@@ -492,6 +492,27 @@ P="$(jq -r '.parent // empty' <<<"$J")"
 
 `trace` exits 1 only when the work item itself or its store cannot be read. In an AFK iteration, stop and relay its stderr. In a HITL run, show the line to the user and continue without it. On the `github` backend there is no work item to trace, and this block does not run.
 
+**Look up the lessons that point at this slice's files, before the keyword search below.** A lesson's `paths` line names the files and folders it applies to, so it is found by the files the slice touches, whatever words the task uses. Set `FILES` to one path per line: every path named in the slice's **Produces** entries and **Context › Anchors** lines. For work with no issue, use the paths the plan names. With none, leave it empty. This runs on either backend:
+
+<!-- sidecar-read: execute-lessons-start -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+FILES="<one path per line>"
+set --
+while IFS= read -r f; do
+  [ -n "$f" ] && set -- "$@" "$f"
+done <<EOF
+$FILES
+EOF
+bash "$SC" lessons match "$@"
+```
+
+- **`exact` and `folder` lines** name a lesson and its title, the files it names exactly first, then the folders it names, deepest first. Read each one before the keyword search. A folder line on a busy folder can be a lesson about something else in that folder: read its title first and skip what does not apply.
+- **`no lesson points at these files`** and **`no file list given; nothing to match`** mean the lookup ran and found nothing. The keyword search below still runs.
+- **The `lessons:` receipt** counts the lessons scanned and how many carry `paths`. A count of `0 with paths` means no lesson can be found this way yet, not that none applies.
+
+A nonzero exit means the lesson headers could not be read; nothing was matched, and the empty result is not a no-match. In an AFK iteration, stop and relay its stderr. In a HITL run, show the line to the user and continue to the keyword search.
+
 Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it). Set `KW` to the keyword to look for:
 
 ```bash

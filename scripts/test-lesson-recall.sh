@@ -22,6 +22,7 @@
 # private global config, and every fixture root commit carries its own path
 # (scripts/test-fixture-root-collision.sh).
 
+# shellcheck disable=SC2016  # literal $ and backticks in sed and grep patterns
 set -u
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -225,6 +226,9 @@ runo "$P" lessons match --record start
 check "an unknown flag: exits 2" 2 "$rc"
 runo "$P" lessons
 check "no sub-verb: exits 2" 2 "$rc"
+runo "$P" lessons match "$(printf 'scripts/a.sh\nlib/b.sh')"
+check "a list joined into one argument: exits 2" 2 "$rc"
+check "a list joined into one argument: nothing on stdout" "" "$out"
 
 # -----------------------------------------------------------------------------
 section "the planted case: found by file, not by word"
@@ -307,6 +311,56 @@ c3="$(count_calls "$small")"
 c30="$(count_calls "$large")"
 if [ "$c3" -gt 0 ]; then ok "the shim sees sidecar.sh's processes ($c3 at 3 lessons)"; else bad "the shim sees sidecar.sh's processes" "0 calls logged: the shim is not on the path"; fi
 check "30 lessons start as many processes as 3" "$c3" "$c30"
+
+# -----------------------------------------------------------------------------
+section "/execute Step 1's lessons-start block, run as written"
+
+# The agent runs the block in its own shell, which on macOS is zsh, so each
+# case runs under bash and under zsh
+# (docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md).
+# Only the SC and FILES lines are replaced; FILES takes the list from the
+# environment so it can hold several lines.
+EXECUTE="$repo_root/execute/SKILL.md"
+lblock="$(awk '/^<!-- sidecar-read: execute-lessons-start -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$EXECUTE")"
+[ -n "$lblock" ] || fatal "execute/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: execute-lessons-start -->"
+ok "execute/SKILL.md carries the lessons-start block"
+case "$lblock" in *'FILES='*) ;; *) fatal "the lessons-start block sets no FILES" ;; esac
+lscript="$(printf '%s\n' "$lblock" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e 's|^FILES=.*|FILES="$TEST_FILES"|')"
+# Step 1 reads the lessons before the keyword search, and after the trace.
+lline="$(grep -n '^<!-- sidecar-read: execute-lessons-start -->$' "$EXECUTE" | cut -d: -f1)"
+tline="$(grep -n '^<!-- sidecar-read: execute-trace -->$' "$EXECUTE" | cut -d: -f1)"
+kline="$(grep -n '^Consult `docs/solutions/` and the sidecar' "$EXECUTE" | cut -d: -f1)"
+if [ -n "$tline" ] && [ -n "$kline" ] && [ "$tline" -lt "$lline" ] && [ "$lline" -lt "$kline" ]; then
+    ok "the block sits after the trace block and before the keyword search"
+else
+    bad "the block sits after the trace block and before the keyword search" "trace=$tline lessons=$lline keyword=$kline"
+fi
+
+mkproj
+BP="$P"
+lesson "$BP" "x/hit-2026-04-04.md" "Hit" "paths: [lib/one.sh]"
+block_shells="bash"
+if command -v zsh >/dev/null 2>&1; then block_shells="bash zsh"; else printf '  skip zsh not installed\n'; fi
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    out="$(cd "$BP" && TEST_FILES="lib/two.sh
+
+lib/one.sh" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: several files, one blank line: exits 0" 0 "$rc"
+    check "$sh: each file is its own argument" \
+"exact${TAB}docs/solutions/x/hit-2026-04-04.md${TAB}Hit
+lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), recorded: no" "$out"
+    out="$(cd "$BP" && TEST_FILES="" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: no file list: exits 0" 0 "$rc"
+    check "$sh: no file list: says no file list was given" "no file list given; nothing to match" \
+        "$(printf '%s\n' "$out" | head -n 1)"
+    out="$(cd "$tmp" && TEST_FILES="lib/one.sh" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
+    if [ "$rc" -ne 0 ] && [ -z "$out" ]; then ok "$sh: a failed lookup exits nonzero with nothing on stdout"
+    else bad "$sh: a failed lookup exits nonzero with nothing on stdout" "rc=$rc out=[$out]"; fi
+done
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

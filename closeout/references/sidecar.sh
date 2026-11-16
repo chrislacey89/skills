@@ -2502,6 +2502,7 @@ lessons_match() {
     for arg in "$@"; do
         case "$arg" in
             --*) die_usage "lessons match: unknown argument: $arg" ;;
+            *$'\n'*) die_usage "lessons match: an argument holds a newline; pass one path per argument" ;;
             "$top") arg="" ;;
             "$top"/*) arg="${arg#"$top"/}" ;;
             /*) refuse "lessons match: $arg is outside the project at $top" ;;
