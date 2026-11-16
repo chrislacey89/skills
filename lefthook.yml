@@ -95,6 +95,8 @@ pre-push:
       run: bash scripts/test-recap-mode-contract.sh
     decision-card-grounding-tests:
       run: bash scripts/test-decision-card-grounding.sh
+    recall-callout-contract-tests:
+      run: bash scripts/test-recall-callout-contract.sh
     post-review-edit-lock-tests:
       run: bash scripts/test-post-review-edit-lock.sh
     skill-frontmatter-loads-tests:

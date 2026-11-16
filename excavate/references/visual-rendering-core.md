@@ -101,6 +101,7 @@ statement still matters.
 - **The docs link is the citation.** A framework note is a claim about the framework, not about the diff, so §1's derived-by-tooling split cannot ground it. It takes the forward-looking rule's test instead: a note that links the framework's page for that mechanism renders as cited; one without a page renders with the `asserted` treatment. Prefer the docs for the version the project's lockfile pins. The anchor is still grounded: a framework callout names a real line in the real hunk, like any other callout.
 - **One mechanism, one callout.** When the diff relies on the same mechanism at several lines, annotate the first and list the rest in the features table. These callouts are in addition to the 3–8 change callouts, never a replacement for one.
 - **No second card on a line.** When a line already carries a change callout, the framework note nests inside that card as a labeled half, the way the typed note-pair does. Its id stays `c-<file-slug>-L<line>`, so the serializer needs no new id shape.
+- **Ask first, then reveal.** A framework callout renders as a question, a field for the reader's answer, and the answer collapsed under a native `<details>` that the reader opens after trying. An explanation the reader only reads is recognized the next time, not recalled: *The Programmer's Brain* (Hermans, ch. 3) separates storage strength from retrieval strength, and only an attempt to recall builds the second. A layer that explains every mechanism also becomes a crutch the reader never needs less of. The answer field carries `data-feedback-recall`, and the §4 serializer emits what the reader wrote next to the callout's id, so a missed recall comes back to whoever reads the feedback: compare the attempt with the collapsed answer and say where they part. Nothing in the page grades the attempt. The reveal needs no script, so the answer is still there when JavaScript is off. The features table and the lifecycle figure would answer the questions before the reader tries, so the table carries no "what runs it" column and the figure follows the hunk whose callouts it numbers (`visual-recap-design.md` §6).
 
 **Scope the line highlight to the code cell**, not the whole split-diff row — otherwise the empty before-cell of an added line also lights up (a real spike finding).
 
@@ -152,7 +153,10 @@ Stable-id-keyed, emoji-safe, one item per line, agent-parseable:
 - callout#c-auth-ts-L42: needs-change — "this should reuse getSession(), not inline it"
 - question#q-1: "yes, ship behind the existing flag"
 - signoff#signoff-a1b2c3d: 🟡 — "confirm the migration is reversible before merge"
+- callout#c-app-ts-L18: recall "runs after the route handler, once per request"
 ```
+
+A `recall "…"` part is the reader's own answer to a framework callout's questions (§3), written before they opened the answer. It is the reader's attempt, not a note to the author, so it never shares the note's quotes: a unit with a verdict, a note, and an attempt serializes as `verdict — "note" — recall "attempt"`. The serializer reads the field only when the unit itself owns it, so a callout nested in a per-unit series is not reported twice.
 
 The agent reading this back parses each line by its stable id and either (a) patches the HTML it generated, (b) drives the change into code, or (c) promotes durable items to GitHub PR review comments. **GitHub PR review comments remain the durable, line-anchored channel** for anything that must outlive the session — the clipboard loop is for the working round-trip, not the system of record.
 
@@ -169,11 +173,14 @@ A minimal serializer (hand-roll per artifact; this is the shape, not a shipped l
       const kind = el.dataset.feedbackKind;     // any kind registered in §4 above
       const verdict = el.dataset.verdict || ''; // e.g. needs-change, 🟡
       const note = (el.querySelector('[data-feedback-note]')?.value || '').trim();
-      if (!verdict && !note) return;            // skip untouched units
-      const parts = [];                         // em-dash separates verdict from note,
-      if (verdict) parts.push(verdict);         // and only appears when both are present —
-      if (note) parts.push('"' + note + '"');   // so a verdict-less question serializes as
-      lines.push(`- ${kind}#${id}: ${parts.join(' — ')}`); // `question#q-1: "…"`, per §4
+      const rf = el.querySelector('[data-feedback-recall]');   // a framework callout's answer
+      const recall = rf && rf.closest('[data-feedback-id]') === el ? rf.value.trim() : '';
+      if (!verdict && !note && !recall) return; // skip untouched units
+      const parts = [];                         // em-dash separates the parts present,
+      if (verdict) parts.push(verdict);         // so a verdict-less question serializes as
+      if (note) parts.push('"' + note + '"');   // `question#q-1: "…"`, per §4
+      if (recall) parts.push('recall "' + recall + '"');
+      lines.push(`- ${kind}#${id}: ${parts.join(' — ')}`);
     });
     return lines.join('\n');
   }
