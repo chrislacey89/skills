@@ -230,6 +230,16 @@ else
     check "an unreadable lesson file: nothing on stdout" "" "$out"
     chmod 644 "$P/docs/solutions/y/b-2026-01-01.md"
 fi
+# With no sidecar, the project is named for its main checkout, so every
+# worktree of one project reports the same name and not its own folder's.
+mkproj
+lesson "$P" "x/wt-2026-01-01.md" "In a worktree" "paths: [a.sh]"
+git -C "$P" add docs && git -C "$P" commit -q -m "lesson"
+git -C "$P" worktree add -q "$tmp/wt-feature-branch" -b feature-branch
+runo "$tmp/wt-feature-branch" lessons match a.sh
+check "in a worktree with no sidecar: projects names the main checkout" \
+    "projects: $(basename "$P")" "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, \(projects: [^,]*\),.*/\1/')"
+
 mkproj
 runo "$tmp" lessons match scripts/a.sh
 check "outside a repository: exits nonzero" 1 "$rc"

@@ -2599,11 +2599,11 @@ lessons_match() {
     [ -z "$phase" ] || branch="$(pgit symbolic-ref --short -q HEAD)" || branch=""
     dirs="$(cmd_solutions_dirs)" || lessons_fail "could not list the lesson directories"
     # The project read: the sidecar's name when solutions-dirs led with one,
-    # else this checkout's directory name.
+    # else the main checkout's directory name, which every worktree shares.
     first="${dirs%%$'\n'*}"
     case "$first" in
         "$SIDECAR_ROOT"/*/solutions) sc="${first%/solutions}"; name="${sc##*/}" ;;
-        *) name="${top##*/}" ;;
+        *) name="$(main_checkout)" || name="$top"; name="${name##*/}" ;;
     esac
     lessons_scan "$dirs" > "$scan" || lessons_fail "could not read the lesson headers"
     printf '%s\n' "$q" > "$tmpd/q"
