@@ -2,11 +2,11 @@
 date: 2026-11-16
 category: devops
 problem_type: an inherited path variable trusted as naming the current checkout, guarded only against being unset
-components: [pre-merge, execute, closeout, fix-findings, lfg, hackathon]
+components: [pre-merge, execute, closeout, fix-findings, lfg, hackathon, setup-ralph-loop]
 technologies: [bash, claude-code]
 severity: medium
 volatility: stable
-paths: [pre-merge/SKILL.md, execute/SKILL.md, closeout/SKILL.md, fix-findings/SKILL.md, lfg/SKILL.md, hackathon/SKILL.md]
+paths: [pre-merge/SKILL.md, execute/SKILL.md, closeout/SKILL.md, fix-findings/SKILL.md, lfg/SKILL.md, hackathon/SKILL.md, setup-ralph-loop/SKILL.md]
 replaces: []
 related: []
 ---
