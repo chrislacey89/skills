@@ -15,7 +15,7 @@ related: [a-preset-variable-tests-a-path-no-run-takes-2026-10-26.md]
 
 ## Problem
 
-`/pre-merge` Phase 4 writes the post-review lock to `"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"`. In a session where the shell's `CLAUDE_PROJECT_DIR` named a different repository, the lock went there, and the worktree under review was left unlocked. Nothing failed: the block exited 0 and printed nothing, which is what it does on success.
+`/pre-merge` Phase 4 writes the post-review lock to `"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"`. In a session where the shell's `CLAUDE_PROJECT_DIR` named a different repository, the lock went there, and the worktree under review was left unlocked. Nothing failed: the block exited 0, and nothing it printed names where the lock went.
 
 ## Context
 
@@ -23,7 +23,7 @@ The session was launched from this repo's main checkout and moved into a worktre
 
 ## Symptoms
 
-- The stamp block exits 0 with no output, and `ls .claude/` in the worktree shows no `.review-stamped` afterward.
+- The stamp block exits 0, nothing it prints names the lock path, and `ls .claude/` in the worktree shows no `.review-stamped` afterward.
 - `echo "$CLAUDE_PROJECT_DIR"` and `git rev-parse --show-toplevel` disagree.
 
 ## Root Cause
