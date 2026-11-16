@@ -89,6 +89,8 @@ pre-push:
       run: bash scripts/test-guards-can-fire.sh
     syntax-palette-contract-tests:
       run: bash scripts/test-syntax-palette-contract.sh
+    theme-token-shape-tests:
+      run: bash scripts/test-theme-token-shape.sh
     pipefail-safe-matcher-tests:
       run: bash scripts/test-pipefail-safe-matchers.sh
     recap-mode-contract-tests:
