@@ -431,7 +431,7 @@ current_keys() {
 # caller about to ask about several keys runs owners_scan first, which answers
 # them all with one jq over every sidecar; owners_of then reads that answer.
 owners_of() {
-    local key="$1" d f rc hits="" unread=""
+    local key="$1" k d f rc hits="" unread=""
     if scan_covers "$key"; then
         while IFS=$'\t' read -r _ k d; do
             [ "$k" = "$key" ] && printf '%s\n' "$d"
