@@ -222,8 +222,12 @@ mkproj
 runo "$tmp" lessons match scripts/a.sh
 check "outside a repository: exits nonzero" 1 "$rc"
 check "outside a repository: nothing on stdout" "" "$out"
-runo "$P" lessons match --record start
+runo "$P" lessons match --bogus
 check "an unknown flag: exits 2" 2 "$rc"
+runo "$P" lessons match a.sh --record
+check "--record with no phase: exits 2" 2 "$rc"
+runo "$P" lessons match a.sh --record later
+check "--record with a phase other than start or changed: exits 2" 2 "$rc"
 runo "$P" lessons
 check "no sub-verb: exits 2" 2 "$rc"
 runo "$P" lessons match "$(printf 'scripts/a.sh\nlib/b.sh')"
@@ -361,6 +365,117 @@ lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), record
     if [ "$rc" -ne 0 ] && [ -z "$out" ]; then ok "$sh: a failed lookup exits nonzero with nothing on stdout"
     else bad "$sh: a failed lookup exits nonzero with nothing on stdout" "rc=$rc out=[$out]"; fi
 done
+
+# -----------------------------------------------------------------------------
+section "the run log: --record writes one line per lookup"
+
+# The command writes the record itself, so a branch with no record is a branch
+# where the lookup did not run. The line's shape is PRD #747's locked contract.
+mkproj
+LP="$P"
+runo "$LP" init --name logproj --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+LS="$out"
+[ -d "$LS" ] || fatal "init did not create a sidecar: $err"
+git -C "$LP" checkout -q -b feat/x
+lesson "$LP" "x/hit-2026-05-05.md" "Logged" "paths: [a/b.sh]"
+LOG="$LS/lookups/feat%2Fx.jsonl"
+lhead="$(git -C "$LS" rev-parse HEAD)"
+runo "$LP" lessons match a/b.sh other/c.sh --record start
+check "--record start: exits 0" 0 "$rc"
+check "--record start: the receipt says recorded: yes" \
+    "lessons: 1 matched, 1 scanned, 1 with paths, projects: logproj, recorded: yes" "$(printf '%s\n' "$out" | tail -n 1)"
+check "--record start: one line in lookups/<branch-slug>.jsonl" 1 "$(wc -l < "$LOG" 2>/dev/null | tr -d ' ')"
+check "the record carries exactly the contract's keys" \
+    '["at","branch","files","matched","outcome","phase","projects","scanned","with_paths"]' \
+    "$(jq -c 'keys' "$LOG" 2>/dev/null)"
+check "the record's values" \
+    '{"branch":"feat/x","phase":"start","files":["a/b.sh","other/c.sh"],"scanned":1,"with_paths":1,"projects":["logproj"],"matched":["hit-2026-05-05.md"],"outcome":"matched"}' \
+    "$(jq -c 'del(.at)' "$LOG" 2>/dev/null)"
+if jq -e '.at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")' "$LOG" >/dev/null 2>&1; then
+    ok "the record's at is an ISO 8601 UTC time"
+else bad "the record's at is an ISO 8601 UTC time" "$(cat "$LOG" 2>/dev/null)"; fi
+check "the record is committed in the sidecar" "" "$(git -C "$LS" status --porcelain)"
+if [ "$(git -C "$LS" rev-parse HEAD)" != "$lhead" ]; then ok "the sidecar's HEAD moved by the record's commit"
+else bad "the sidecar's HEAD moved by the record's commit" "HEAD is still $lhead"; fi
+
+lhead="$(git -C "$LS" rev-parse HEAD)"
+runo "$LP" lessons match a/b.sh
+check "without --record: the receipt still says recorded: no" \
+    "lessons: 1 matched, 1 scanned, 1 with paths, projects: logproj, recorded: no" "$(printf '%s\n' "$out" | tail -n 1)"
+check "without --record: the log is unchanged" 1 "$(wc -l < "$LOG" | tr -d ' ')"
+check "without --record: the sidecar's HEAD has not moved" "$lhead" "$(git -C "$LS" rev-parse HEAD)"
+
+git -C "$LP" checkout -q --detach
+runo "$LP" lessons match a/b.sh --record start
+check "detached HEAD: exits 0" 0 "$rc"
+check "detached HEAD: still prints the match" \
+    "exact${TAB}docs/solutions/x/hit-2026-05-05.md${TAB}Logged" "$(printf '%s\n' "$out" | head -n 1)"
+check "detached HEAD: recorded: no, with the reason" \
+    "lessons: 1 matched, 1 scanned, 1 with paths, projects: logproj, recorded: no: HEAD is detached" \
+    "$(printf '%s\n' "$out" | tail -n 1)"
+check "detached HEAD: the sidecar's HEAD has not moved" "$lhead" "$(git -C "$LS" rev-parse HEAD)"
+git -C "$LP" checkout -q feat/x
+
+runo "$LP" lessons match --record start
+check "--record start with no paths: exits 0" 0 "$rc"
+check "--record start with no paths: records outcome no-files" no-files "$(tail -n 1 "$LOG" | jq -r .outcome)"
+check "--record start with no paths: records no files" '[]' "$(tail -n 1 "$LOG" | jq -c .files)"
+
+# An append cut off before its newline: the next record must not be glued onto
+# it, and the file must hold complete lines only.
+printf '%s' '{"at":"2026-01-01T00:00:00Z","branch":"feat/x","phase":"st' >> "$LOG"
+runo "$LP" lessons match a/b.sh --record changed
+check "after an interrupted append: exits 0" 0 "$rc"
+check "after an interrupted append: the file ends in a newline" 0a "$(tail -c 1 "$LOG" | od -An -tx1 | tr -d ' ')"
+if jq -e . "$LOG" >/dev/null 2>&1; then ok "after an interrupted append: every line parses as JSON"
+else bad "after an interrupted append: every line parses as JSON" "$(cat "$LOG")"; fi
+check "after an interrupted append: the new record is the last line" changed "$(tail -n 1 "$LOG" | jq -r .phase)"
+check "after an interrupted append: the partial line is gone" 0 "$(grep -c '"phase":"st$' "$LOG")"
+
+# A lookup that fails while --record is set: nonzero exit, nothing on stdout,
+# and a record whose outcome is failed, so the log never reads it as "none".
+if [ "$(id -u)" -ne 0 ]; then
+    lesson "$LP" "y/locked-2026-05-05.md" "Locked" "paths: [a/b.sh]"
+    chmod 000 "$LP/docs/solutions/y/locked-2026-05-05.md"
+    nlines="$(wc -l < "$LOG" | tr -d ' ')"
+    runo "$LP" lessons match a/b.sh --record changed
+    check "unreadable lesson with --record: exits 1" 1 "$rc"
+    check "unreadable lesson with --record: nothing on stdout" "" "$out"
+    check "unreadable lesson with --record: one record appended" "$((nlines + 1))" "$(wc -l < "$LOG" | tr -d ' ')"
+    check "unreadable lesson with --record: its outcome is failed" failed "$(tail -n 1 "$LOG" | jq -r .outcome)"
+    case "$err" in *"recorded as failed"*) ok "unreadable lesson with --record: stderr says it was recorded" ;;
+        *) bad "unreadable lesson with --record: stderr says it was recorded" "stderr: $err" ;; esac
+    chmod 644 "$LP/docs/solutions/y/locked-2026-05-05.md"
+    rm -f "$LP/docs/solutions/y/locked-2026-05-05.md"
+fi
+
+# The matching step failing, with the header scan intact. The shim fails only
+# the matcher's awk call, which is the one given -F.
+fshim="$tmp/failshim"
+mkdir -p "$fshim"
+realawk="$(command -v awk)"
+printf '#!/bin/sh\n[ "$1" = -F ] && { echo "awk: forced failure" >&2; exit 2; }\nexec "%s" "$@"\n' "$realawk" > "$fshim/awk"
+chmod +x "$fshim/awk"
+nlines="$(wc -l < "$LOG" | tr -d ' ')"
+out="$(cd "$LP" && PATH="$fshim:$PATH" "$BASH" "$SC" lessons match a/b.sh --record changed 2>"$tmp/stderr")"; rc=$?
+err="$(cat "$tmp/stderr")"
+check "a failing match step: exits 1" 1 "$rc"
+check "a failing match step: nothing on stdout, never the no-match line" "" "$out"
+check "a failing match step: its record's outcome is failed" failed "$(tail -n 1 "$LOG" | jq -r .outcome)"
+check "a failing match step: one record appended" "$((nlines + 1))" "$(wc -l < "$LOG" | tr -d ' ')"
+out="$(cd "$LP" && PATH="$fshim:$PATH" "$BASH" "$SC" lessons match a/b.sh 2>"$tmp/stderr")"; rc=$?
+check "a failing match step without --record: exits 1" 1 "$rc"
+check "a failing match step without --record: nothing on stdout" "" "$out"
+
+mkproj
+git -C "$P" checkout -q -b feat/y
+lesson "$P" "x/nosc-2026-05-05.md" "No sidecar" "paths: [a/b.sh]"
+runo "$P" lessons match a/b.sh --record start
+check "no sidecar: exits 0" 0 "$rc"
+check "no sidecar: still prints the match" \
+    "exact${TAB}docs/solutions/x/nosc-2026-05-05.md${TAB}No sidecar" "$(printf '%s\n' "$out" | head -n 1)"
+check "no sidecar: recorded: no, with the reason" "recorded: no: no sidecar resolves" \
+    "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
