@@ -65,6 +65,7 @@ The fallback guards only the unset case, and the wrong-value case is the one tha
 - PR #757, where this surfaced during `/pre-merge`
 - #693, the marker path under `EnterWorktree` isolation
 - #378, the same containment rule for `CONDUCTOR_WORKSPACE_PATH`
+- `a-preset-variable-tests-a-path-no-run-takes-2026-10-26.md`, the lesson on preset variables, which this one qualifies for `CLAUDE_PROJECT_DIR`
 
 ## Shelf Life
 
