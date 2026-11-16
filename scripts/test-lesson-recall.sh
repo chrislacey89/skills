@@ -158,6 +158,17 @@ check "several files: a lesson matched by any of them is printed" \
 folder${TAB}docs/solutions/a/shallow-2026-01-01.md${TAB}Shallow
 folder${TAB}docs/solutions/e/both-2026-01-01.md${TAB}Both kinds" "$(printf '%s\n' "$out" | sed '$d')"
 
+# A lesson with several folder pointers ranks by the deepest one that matches,
+# not the first one listed: "Two folders" lists src first, but its src/core/io
+# pointer puts it above "One folder" at src/core.
+mkproj
+lesson "$P" "a/two-2026-01-01.md" "Two folders" "paths: [src, src/core/io]"
+lesson "$P" "b/one-2026-01-01.md" "One folder" "paths: [src/core]"
+runo "$P" lessons match src/core/io/x.sh
+check "several folder pointers: ranked by the deepest that matches" \
+"folder${TAB}docs/solutions/a/two-2026-01-01.md${TAB}Two folders
+folder${TAB}docs/solutions/b/one-2026-01-01.md${TAB}One folder" "$(printf '%s\n' "$out" | sed '$d')"
+
 # -----------------------------------------------------------------------------
 section "no match, and lessons with no paths"
 
@@ -207,6 +218,31 @@ lessons: 1 matched, 2 scanned, 1 with paths" "$(printf '%s\n' "$out" | sed 's/, 
         "no lesson points at these files
 lessons: 0 matched, 2 scanned, 1 with paths" "$(printf '%s\n' "$out" | sed 's/, projects.*//')"
 done
+
+# -----------------------------------------------------------------------------
+section "real lessons as fixtures: title, CRLF, quotes"
+
+# Copied from this repo's own corpus, so the reader meets real input: this
+# lesson has `# ` comment lines inside its code blocks after its title. Each
+# copy gains one paths line after volatility.
+REAL="$repo_root/docs/solutions/testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md"
+[ -f "$REAL" ] || fatal "the real-lesson fixture is gone: $REAL"
+[ "$(grep -c '^# ' "$REAL")" -gt 1 ] || fatal "the real-lesson fixture no longer has a # line after its title"
+REAL_TITLE="$(grep -m 1 '^# ' "$REAL" | sed 's/^# //')"
+mkproj
+mkdir -p "$P/docs/solutions/real"
+awk '{ print } /^volatility:/ { print "paths: [real/plain.sh]" }' "$REAL" > "$P/docs/solutions/real/plain-2026-08-19.md"
+awk '{ printf "%s\r\n", $0 } /^volatility:/ { printf "paths: [real/crlf.sh]\r\n" }' "$REAL" > "$P/docs/solutions/real/crlf-2026-08-19.md"
+awk '{ print } /^volatility:/ { print "paths: [\"real/quoted.sh\"]" }' "$REAL" > "$P/docs/solutions/real/quoted-2026-08-19.md"
+runo "$P" lessons match real/plain.sh
+check "a real lesson's title is its first # heading, not a later code comment" \
+    "exact${TAB}docs/solutions/real/plain-2026-08-19.md${TAB}$REAL_TITLE" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match real/crlf.sh
+check "the same lesson with CRLF line endings: found, title clean" \
+    "exact${TAB}docs/solutions/real/crlf-2026-08-19.md${TAB}$REAL_TITLE" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match real/quoted.sh
+check "a quoted paths entry matches the bare path" \
+    "exact${TAB}docs/solutions/real/quoted-2026-08-19.md${TAB}$REAL_TITLE" "$(printf '%s\n' "$out" | head -n 1)"
 
 # -----------------------------------------------------------------------------
 section "a store that cannot be read"
