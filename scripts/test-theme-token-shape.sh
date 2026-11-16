@@ -140,7 +140,7 @@ flags="$(printf '%s\n' "$light_names" | grep -E '^--flag-' || true)"
 check "light declares --flag-* colors" "no --flag-* tokens found in the light block" test -n "$flags"
 while IFS= read -r flag; do
     [[ -n "$flag" ]] || continue
-    if printf '%s\n' "$guarded_names" | grep -qxF -- "$flag" && printf '%s\n' "$dark_names" | grep -qxF -- "$flag"; then
+    if grep -qxF -- "$flag" <<< "$guarded_names" && grep -qxF -- "$flag" <<< "$dark_names"; then
         pass "$flag is defined in light and both dark copies"
     else
         bad "$flag is defined in light but missing from a dark copy"
