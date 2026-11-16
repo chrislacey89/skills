@@ -38,8 +38,7 @@ blue-ink canvas in dark, a single electric-violet accent, monospace-forward dens
 272px rail beside a full-width scrolling column running overview → files → contracts
 (when schema/API surfaces changed) → diagram → wireframes (when rendered UI changed) →
 annotated changes → before/after → review. Every semantic color is tuned for WCAG AA
-contrast against its surface in **both** themes — light is the `:root` default, dark follows
-the viewer's system theme, and `data-theme` on `<html>` pins either one — with **one documented exception.** Three syntax tokens sit below
+contrast against its surface in **both** themes — how the two themes switch is stated once, in the §1 token block — with **one documented exception.** Three syntax tokens sit below
 the 4.5:1 body-text bar: `--sx-s`, `--sx-n`, and `--sx-c` in light, and `--sx-c` again in
 dark. They stay legible against every surface, but do not claim AA for them and do not put
 anything a reviewer must not miss in one. That exception list is exact and pinned by a

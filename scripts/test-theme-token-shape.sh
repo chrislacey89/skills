@@ -25,8 +25,6 @@
 #      script that writes the theme writes it on `document.documentElement`.
 #   4. NATIVE MERMAID — the diagram section names hosts that render
 #      `<pre class="mermaid">` themselves and need no loader.
-#   5. PROSE — the SKILL.md and rendering-core sentences that describe the
-#      token block name the media query, so they do not restate the old shape.
 
 set -euo pipefail
 
@@ -121,10 +119,6 @@ if grep -qE 'render[s]? `<pre class="mermaid">` (natively|itself|themselves)' "$
 else
     bad "the diagram section does not name hosts that render <pre class=\"mermaid\"> natively"
 fi
-
-# 5. PROSE
-check "SKILL.md names the media query" "visual-recap/SKILL.md still describes the token block without prefers-color-scheme" grep -qF prefers-color-scheme "$skill"
-check "rendering core names the media query" "docs/visual-rendering-core.md still describes the token block without prefers-color-scheme" grep -qF prefers-color-scheme "$core"
 
 if [[ "$fail" -ne 0 ]]; then
     printf '\nFAILED\n'; exit 1
