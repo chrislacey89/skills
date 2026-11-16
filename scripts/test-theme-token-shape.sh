@@ -26,7 +26,7 @@
 #   4. NATIVE MERMAID — the diagram section names hosts that render
 #      `<pre class="mermaid">` themselves and need no loader.
 #   5. PROSE — the SKILL.md and rendering-core sentences that describe the
-#      token block name the media query.
+#      token block name the media query, so they do not restate the old shape.
 
 set -euo pipefail
 
