@@ -127,6 +127,8 @@ pre-push:
       run: bash scripts/test-state-backend.sh
     sidecar-trace-tests:
       run: bash scripts/test-sidecar-trace.sh
+    lesson-recall-tests:
+      run: bash scripts/test-lesson-recall.sh
     guest-footprint-tests:
       run: bash scripts/test-guest-footprint.sh
     closeout-work-close-tests:
