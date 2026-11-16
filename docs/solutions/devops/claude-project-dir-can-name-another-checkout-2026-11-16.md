@@ -8,7 +8,7 @@ severity: medium
 volatility: stable
 paths: [pre-merge/SKILL.md, execute/SKILL.md, closeout/SKILL.md, fix-findings/SKILL.md, lfg/SKILL.md, hackathon/SKILL.md, setup-ralph-loop/SKILL.md]
 replaces: []
-related: []
+related: [a-preset-variable-tests-a-path-no-run-takes-2026-10-26.md]
 ---
 
 # `$CLAUDE_PROJECT_DIR` in a skill block can name another checkout
