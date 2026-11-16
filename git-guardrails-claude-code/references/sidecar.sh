@@ -409,10 +409,19 @@ current_keys() {
     mc="$(main_checkout)" && [ -n "$mc" ] && printf 'path:%s\n' "$(lower "$mc")"
 }
 
+# file_lists_key <file> <key>: jq's status for whether <file>'s "keys" holds
+# <key>: 0 yes, 1 no, anything else unread. --slurp reads the whole file as an
+# array of its values, so a file holding no value or several is an error rather
+# than an answer from whichever value jq read last.
+file_lists_key() {
+    jq -e -s --arg k "$2" '
+        if length != 1 then error("holds \(length) JSON values, not one")
+        else (.[0].keys // []) | index($k) != null end' "$1" >/dev/null 2>&1
+}
+
 # Sidecar directories whose sidecar.json carries key $1, one per line.
-# With -e, jq exits 1 for a false result (this key is not listed) and 0 for a
-# true one (see `man jq`, --exit-status), so any other status is an error: the
-# file is corrupt or unreadable, which is not a miss. Such a file cannot be
+# file_lists_key answers 0 or 1, so any other status is an error: the file is
+# corrupt, unreadable, or holds other than one JSON value, which is not a miss. Such a file cannot be
 # ruled out as the key's owner without parsing it, so when no readable sidecar
 # claims the key this returns 2 and names it; when one does, the key is owned
 # and the unreadable file is only named, as a warning (chrislacey89/skills#530: one corrupt
@@ -461,7 +470,7 @@ owners_of() {
             continue
         fi
         rc=0
-        jq -e --arg k "$key" '(.keys // []) | index($k) != null' "$f" >/dev/null 2>&1 || rc=$?
+        file_lists_key "$f" "$key" || rc=$?
         case "$rc" in
             0) hits="${hits:+$hits$'\n'}$d" ;;
             1) ;;
@@ -547,7 +556,7 @@ scan_or_jq_has() {
         case $'\n'"$SCAN_HITS"$'\n' in *$'\n'"H"$'\t'"$2"$'\t'"$1"$'\n'*) return 0 ;; esac
         return 1
     fi
-    jq -e --arg k "$2" '(.keys // []) | index($k) != null' "$1/sidecar.json" >/dev/null 2>&1
+    file_lists_key "$1/sidecar.json" "$2"
 }
 
 # Sidecar names and system labels share one shape.

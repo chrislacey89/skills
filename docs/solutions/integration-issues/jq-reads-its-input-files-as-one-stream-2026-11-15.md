@@ -2,7 +2,7 @@
 date: 2026-11-15
 category: integration-issues
 problem_type: batching per-file jq reads into one invocation removes the file boundary, so a JSON value can start in one file and end in the next and a corrupt pair parses as valid
-components: [init-pipeline/scripts/sidecar.sh, owners_scan, owners_of]
+components: [init-pipeline/scripts/sidecar.sh, owners_scan, owners_of, file_lists_key]
 technologies: [jq, bash]
 severity: medium
 volatility: stable
@@ -73,6 +73,8 @@ jq -n -r --argjson n "${#files[@]}" '
 
 **Code-level:** `scripts/test-state-backend.sh` builds the split pair (`{"keys":[]} {"keys":[…]` / `}`) and asserts that resolve refuses with exit 1, prints nothing on stdout, and names both files on stderr. Reverting `owners_scan` to one input stream fails those three assertions, and none of the pre-existing corrupt-file cases do.
 
+The same suite pins the one-value rule for the per-file read: a file holding two values, in either order, is refused. Reverting `file_lists_key` to plain `jq -e` fails both cases.
+
 **Process-level:** When a change batches N per-item tool invocations into one, list the failure boundaries each invocation gave for free: process exit status, parse unit, timeout, working directory. Show that the batched form still has each one, or add a test that splits an input across the new seam.
 
 ## Key Decision
@@ -85,7 +87,8 @@ jq -n -r --argjson n "${#files[@]}" '
 ## Related
 
 - PR #742 (one jq per resolve), review finding C1, fix `ae7a932`.
-- Open on the same PR, not fixed here: the per-file `jq -e` read treats a `sidecar.json` holding several JSON values as a miss (it answers from the last value), so `backend` answers `github`. This predates #742 and is the compat-default failure from the sibling entry above.
+- Fixed in #745 (issue #743): the per-file read had the same blind spot within one file. `jq -e` evaluates every value in its input and exits on the last, so a `sidecar.json` holding two values answered from whichever came second: a miss (and `github`) with the key's value first, a hit with it last. `owners_of` and `scan_or_jq_has` now read through `file_lists_key`, which slurps the file (`jq -e -s`) and errors unless it holds exactly one value. `scripts/test-state-backend.sh` pins both orders (`key-value-first`, `key-value-last`). This was the compat-default failure from the sibling entry above.
+- Still open, same family: a `sidecar.json` whose `keys` is a string is searched as a substring by `index`, so it claims any key it contains, and one that does not contain the key reads as a miss. Both readers share it, since `.keys // []` passes a string through.
 
 ## Shelf Life
 
