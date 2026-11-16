@@ -97,6 +97,8 @@ pre-push:
       run: bash scripts/test-recap-mode-contract.sh
     decision-card-grounding-tests:
       run: bash scripts/test-decision-card-grounding.sh
+    recall-callout-contract-tests:
+      run: bash scripts/test-recall-callout-contract.sh
     post-review-edit-lock-tests:
       run: bash scripts/test-post-review-edit-lock.sh
     skill-frontmatter-loads-tests:
@@ -129,6 +131,8 @@ pre-push:
       run: bash scripts/test-state-backend.sh
     sidecar-trace-tests:
       run: bash scripts/test-sidecar-trace.sh
+    lesson-recall-tests:
+      run: bash scripts/test-lesson-recall.sh
     guest-footprint-tests:
       run: bash scripts/test-guest-footprint.sh
     closeout-work-close-tests:

@@ -261,6 +261,12 @@ jobs:
       - name: Run decision card grounding contract suite
         run: bash scripts/test-decision-card-grounding.sh
 
+      # A framework callout's recall field is only worth rendering if Copy
+      # feedback carries the attempt back. The markup names the field and core
+      # §4's serializer reads it; this runs that serializer under node.
+      - name: Run recall callout contract suite
+        run: bash scripts/test-recall-callout-contract.sh
+
       # A committed instrument that fails while reporting normally is the defect
       # docs/solutions/testing-patterns/validate-the-instrument-not-only-the-
       # subject-2026-08-23.md recorded as prose. This is its mechanizable half:
@@ -366,6 +372,13 @@ jobs:
       # write-a-prd's template, and traces every docs/solutions lesson (#727).
       - name: Run sidecar trace suite
         run: bash scripts/test-sidecar-trace.sh
+
+      # `sidecar.sh lessons match` finds a lesson by the files its `paths` line
+      # names. This runs it against scratch repos, holds its three outcomes
+      # apart, counts its processes at 3 and 30 lessons, and runs /execute
+      # Step 1's lessons-start block under bash and zsh (#748).
+      - name: Run lesson recall suite
+        run: bash scripts/test-lesson-recall.sh
 
       # /pre-merge Phase 2's sidecar PR block and /closeout Step 3's merge,
       # extracted and run against a stubbed gh on a guest repo: neither may pass

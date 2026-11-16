@@ -702,6 +702,9 @@ components: [<from the cited paths>]
 technologies: [<from the manifest, if relevant>]
 severity: <high for the knee leader, medium otherwise>
 volatility: volatile
+paths: [<from the cited paths>]
+replaces: []
+related: []
 ---
 ```
 

@@ -67,7 +67,7 @@ Thirteen blocks cover the surface — ten for reviewing a finished change, two f
 | Block | Role | Grounded inputs (tooling) | Authored (prose) |
 |---|---|---|---|
 | **overview** | Read-intent-first header: scale (files, ±LOC, commits), reading mode, what moved | `git diff --stat`, commit count | the 1–3 sentence "what this change is" |
-| **file-tree + change-flags** | The topology — which files moved, each flagged | file list, ±LOC per file | per-file flag: `new` / `moved` / `load-bearing` / `mechanical` / `risky` |
+| **file-tree + change-flags** | The topology — which files moved, each flagged | file list, ±LOC per file | per-file flag: `new` / `moved` / `load-bearing` / `mechanical` / `risky`. A callout's kind label is one of these five, or the opt-in sixth, `framework`, which labels a line and never a file (below) |
 | **annotated-diff** | Split before/after for one hunk, callouts anchored to after-side lines, with a one-line intent summary above it | the hunk text, line numbers | the hunk `summary` (intent) and each callout `note` |
 | **callout** | A note anchored to a line range, rendered *at* that line | `lines: "42-47"` from the real hunk | the `note` |
 | **before/after** | Small-multiple comparison of two states of the same unit — labeled side-by-side columns; stacked frames when the content is too wide to halve, never a toggle that hides one side | both states' text | which difference matters |
@@ -94,6 +94,14 @@ statement still matters.
 **Options compare as panels, never as sequence.** When a skill has generated N mutually exclusive options, prose describes them one after another — and Tufte names that as the comparison anti-pattern outright: *"The viewer cannot compare what they cannot see at the same time. Memory is not vision."* Constancy of Design is what makes panels comparable, so every option carries the same attributes in the same order, and only the content differs. Two things are visible in panels and invisible in prose by construction: **domination** (one option paying a cost while closing no question — a relation *between* options, which sequence never shows two of at once) and **a missing option**, which the empty space in a matrix makes obvious. The threshold that triggers this block, and its relationship to the `AskUserQuestion` menu that takes the choice afterward, live in `next-step-menu.md`; the markup lives in `visual-recap-design.md` §11.
 
 **Callouts are direct labels, not legends** (Tufte, *direct labeling over legends*; Norman, *natural mapping*). The note lives spatially where the thing it explains is — clicking the inline marker highlights the exact line and rings its card. Never collect notes into a separate keyed legend the reviewer has to cross-reference; that puts the topology back in their head, which is the whole problem this surface exists to remove.
+
+**Framework callouts are opt-in, for a reader still learning the framework.** Some of a change's behavior runs by convention rather than by any call the diff shows: a handler the router calls by name, a validation hook the framework runs before the handler, an argument a dependency-injection container fills in, a field hidden from serialization, a transaction or lock helper. A reader who knows the framework sees these. A reader who is learning it doesn't, and these lines are often where the change's behavior actually lives. A `framework` callout says three things about such a line: **what calls it**, **when**, and **what happens if it fails**. It links the framework's own docs page for that mechanism. The markup, the lifecycle figure for what runs before the handler, and the table of framework features the diff relies on are in `visual-recap-design.md` §6.
+
+- **Off by default, turned on per reader.** Render them only when the reader asked for them, or their standing instructions say they are learning the framework. For a reader who knows it, they are noise in the 3–8 callouts that carry the change.
+- **The docs link is the citation.** A framework note is a claim about the framework, not about the diff, so §1's derived-by-tooling split cannot ground it. It takes the forward-looking rule's test instead: a note that links the framework's page for that mechanism renders as cited; one without a page renders with the `asserted` treatment. Prefer the docs for the version the project's lockfile pins. The anchor is still grounded: a framework callout names a real line in the real hunk, like any other callout.
+- **One mechanism, one callout.** When the diff relies on the same mechanism at several lines, annotate the first and list the rest in the features table. These callouts are in addition to the 3–8 change callouts, never a replacement for one.
+- **No second card on a line.** When a line already carries a change callout, the framework note nests inside that card as a labeled half, the way the typed note-pair does. Its id stays `c-<file-slug>-L<line>`, so the serializer needs no new id shape.
+- **Ask first, then reveal.** A framework callout renders as a question, a field for the reader's answer, and the answer collapsed under a native `<details>` that the reader opens after trying. An explanation the reader only reads is recognized the next time, not recalled: *The Programmer's Brain* (Hermans, ch. 3) separates storage strength from retrieval strength, and only an attempt to recall builds the second. A layer that explains every mechanism also becomes a crutch the reader never needs less of. The answer field carries `data-feedback-recall`, and the §4 serializer emits what the reader wrote next to the callout's id, so a missed recall comes back to whoever reads the feedback: compare the attempt with the collapsed answer and say where they part. Nothing in the page grades the attempt. The reveal needs no script, so the answer is still there when JavaScript is off. The features table and the lifecycle figure would answer the questions before the reader tries, so the table carries no "what runs it" column and the figure follows the hunk whose callouts it numbers (`visual-recap-design.md` §6).
 
 **Scope the line highlight to the code cell**, not the whole split-diff row — otherwise the empty before-cell of an added line also lights up (a real spike finding).
 
@@ -145,7 +153,10 @@ Stable-id-keyed, emoji-safe, one item per line, agent-parseable:
 - callout#c-auth-ts-L42: needs-change — "this should reuse getSession(), not inline it"
 - question#q-1: "yes, ship behind the existing flag"
 - signoff#signoff-a1b2c3d: 🟡 — "confirm the migration is reversible before merge"
+- callout#c-app-ts-L18: recall "runs after the route handler, once per request"
 ```
+
+A `recall "…"` part is the reader's own answer to a framework callout's questions (§3), written before they opened the answer. It is the reader's attempt, not a note to the author, so it never shares the note's quotes: a unit with a verdict, a note, and an attempt serializes as `verdict — "note" — recall "attempt"`. The serializer reads the field only when the unit itself owns it, so a callout nested in a per-unit series is not reported twice.
 
 The agent reading this back parses each line by its stable id and either (a) patches the HTML it generated, (b) drives the change into code, or (c) promotes durable items to GitHub PR review comments. **GitHub PR review comments remain the durable, line-anchored channel** for anything that must outlive the session — the clipboard loop is for the working round-trip, not the system of record.
 
@@ -162,11 +173,14 @@ A minimal serializer (hand-roll per artifact; this is the shape, not a shipped l
       const kind = el.dataset.feedbackKind;     // any kind registered in §4 above
       const verdict = el.dataset.verdict || ''; // e.g. needs-change, 🟡
       const note = (el.querySelector('[data-feedback-note]')?.value || '').trim();
-      if (!verdict && !note) return;            // skip untouched units
-      const parts = [];                         // em-dash separates verdict from note,
-      if (verdict) parts.push(verdict);         // and only appears when both are present —
-      if (note) parts.push('"' + note + '"');   // so a verdict-less question serializes as
-      lines.push(`- ${kind}#${id}: ${parts.join(' — ')}`); // `question#q-1: "…"`, per §4
+      const rf = el.querySelector('[data-feedback-recall]');   // a framework callout's answer
+      const recall = rf && rf.closest('[data-feedback-id]') === el ? rf.value.trim() : '';
+      if (!verdict && !note && !recall) return; // skip untouched units
+      const parts = [];                         // em-dash separates the parts present,
+      if (verdict) parts.push(verdict);         // so a verdict-less question serializes as
+      if (note) parts.push('"' + note + '"');   // `question#q-1: "…"`, per §4
+      if (recall) parts.push('recall "' + recall + '"');
+      lines.push(`- ${kind}#${id}: ${parts.join(' — ')}`);
     });
     return lines.join('\n');
   }

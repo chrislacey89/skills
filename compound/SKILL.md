@@ -209,6 +209,9 @@ components: [list, of, affected, components]
 technologies: [list, of, relevant, technologies]
 severity: low | medium | high | critical
 volatility: evergreen | stable | volatile
+paths: [<file or folder, relative to the project's top level>, ...]
+replaces: [<lesson file name>, ...]
+related: [<lesson file name>, ...]
 ---
 
 # [Problem Title]
