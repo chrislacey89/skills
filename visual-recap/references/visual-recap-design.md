@@ -390,7 +390,7 @@ spine cannot express, and the pack was teaching authors away from them. So §6's
 must still read identically offline; a **diagram figure** may degrade, and must say so on its
 own face. chrislacey89/skills#129's render-confirm gate is retained unchanged (core §7).
 
-**Every Mermaid figure carries a visible degrade note.** Not once in a footer — beside the
+**Every Mermaid figure carries a visible degrade note, except where `visual-rendering-core.md` §6 says otherwise.** Not once in a footer — beside the
 figure, where a reader who jumped straight to it will see it:
 
 ```html
