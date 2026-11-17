@@ -1192,6 +1192,23 @@ check "flag on a member's lesson: exits 0" 0 "$rc"
 check "flag on a member's lesson: recorded in this project's sidecar" "$((nflags + 1))" "$(wc -l < "$FLAGS" | tr -d ' ')"
 check "flag on a member's lesson: the member's directory is unchanged" "$gbefore" "$(gsum)"
 
+# One unreadable member store must not turn this project's own flags line into
+# could-not-run: the group part of the audit is best effort, the own part strict.
+if [ "$(id -u)" -ne 0 ]; then
+    runo "$FLP" lessons audit
+    fl_ok="$(printf '%s\n' "$out" | grep -c '^flags: broad-2026-01-01.md ')"
+    chmod 000 "$GMS/solutions/m"
+    runo "$FLP" lessons audit
+    chmod 755 "$GMS/solutions/m"
+    check "audit: an unreadable group member still exits 0" 0 "$rc"
+    check "audit: an unreadable group member leaves this project's open flags line" "$fl_ok" \
+        "$(printf '%s\n' "$out" | grep -c '^flags: broad-2026-01-01.md ')"
+    check "audit: an open flags line exists to keep" 1 "$fl_ok"
+    check "audit: an unreadable group member is not a flags could-not-run" 0 "$(printf '%s\n' "$out" | grep -c '^flags: could-not-run')"
+    case "$err" in *"some lessons in the group directory"*"could not be read"*) ok "audit: the unreadable member is named in a warning" ;;
+        *) bad "audit: the unreadable member is named in a warning" "stderr: $err" ;; esac
+fi
+
 section "/execute's lookup blocks say when to flag (#753)"
 
 # The prose after each block, up to the next block or heading, names the flag
