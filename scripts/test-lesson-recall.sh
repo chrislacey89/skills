@@ -972,6 +972,28 @@ if [ "$(id -u)" -ne 0 ]; then
     runo "$GRP" lessons check docs/solutions/x/partial-2026-01-01.md
     chmod 755 "$MS/solutions/m"
     check "check: no false dead-link for a name in a readable member folder" 0 "$(printf '%s\n' "$out" | grep -c '^dead-link')"
+    # One unreadable FILE inside a readable member folder drops only itself: awk
+    # stops at the first input it cannot open, so a batched read would lose the
+    # readable lessons beside it, and find's order is not controllable, so several
+    # readable lessons sit around the locked one, each replacing the home lesson,
+    # so whichever the batched read would have dropped shows as a missing backlink.
+    for nm in aaa mmm zzz "with space"; do
+        printf -- '---\npaths: [svc]\nreplaces: [plain-2026-01-01.md]\n---\n\n# Sibling %s\n' "$nm" > "$MS/solutions/r/$nm-2026-01-01.md"
+    done
+    printf -- '---\npaths: [svc]\n---\n\n# Locked\n' > "$MS/solutions/r/locked-2026-01-01.md"
+    chmod 000 "$MS/solutions/r/locked-2026-01-01.md"
+    runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md
+    check "trace: every readable member lesson in the folder backlinks, the locked one does not" \
+        5 "$(printf '%s\n' "$out" | grep -c '^  replaced by  related project: .*/solutions/r/')"
+    runo "$GRP" lessons match lib/a.sh
+    check "match: replaced-by names every readable lesson beside the unreadable file" \
+        5 "$(printf '%s\n' "$out" | grep '^exact.*plain-' | tr ',' '\n' | grep -c -E 'ready-2026|aaa-2026|mmm-2026|zzz-2026|with space-2026')"
+    runo "$GRP" trace docs/solutions/x/partial-2026-01-01.md
+    check "trace: the index lists the same readable lesson (forward link resolves)" \
+        "  related  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
+    check "trace: the unreadable file draws a warning, not a failure" 1 "$([ "$(printf '%s\n' "$err" | grep -c 'could not be read')" -ge 1 ] && echo 1 || echo 0)"
+    chmod 644 "$MS/solutions/r/locked-2026-01-01.md"
+    rm -f "$MS/solutions/r/"{aaa,mmm,zzz,"with space",locked}-2026-01-01.md
     rm -f "$GRP/docs/solutions/x/partial-2026-01-01.md"
     git -C "$MS" rm -q -r solutions/r && git -C "$MS" commit -q -m "drop readable member lesson"
     # The project's OWN store stays strict through lessons_index: propose reads no other

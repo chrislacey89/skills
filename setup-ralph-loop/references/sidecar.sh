@@ -2527,15 +2527,47 @@ lessons_scan() {
     find $list -type f -name '*.md' -exec awk "$LESSONS_SCAN_AWK" {} +
 }
 
-# lessons_scan_group <dirs>: lessons_scan over the group's directories, best
+# lessons_group_files <dir>: the readable lesson files under one group
+# member's directory, NUL-separated on stdout. Each file is tested with the
+# shell's [ -r ] rather than opened by a tool, so one file that cannot be read
+# is left out alone instead of failing a whole batch (awk stops at the first
+# input it cannot open and skips its END block, which drops every lesson in the
+# batch). When anything could not be listed or read, a warning goes to stderr.
+# lessons_scan_group and lessons_index both read the group through this, so the
+# two readers agree on which lessons exist.
+lessons_group_files() {
+    local d="$1" st
+    find "$d" -type f -name '*.md' -print0 2>/dev/null | {
+        local f bad=0
+        while IFS= read -r -d '' f; do
+            if [ -r "$f" ]; then printf '%s\0' "$f"; else bad=1; fi
+        done
+        [ "$bad" -eq 0 ]
+    }
+    st=("${PIPESTATUS[@]}")
+    if [ "${st[0]}" -ne 0 ] || [ "${st[1]}" -ne 0 ]; then
+        printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
+    fi
+    return 0
+}
+
+# lessons_scan_group <dirs>: the lesson scan over the group's directories, best
 # effort: lessons that cannot be read in a member directory are left out with a
-# warning, and the readable ones stay, so one bad folder in another project
-# never turns off this project's lookups. lessons_index keeps the same rule.
+# warning, and the readable ones stay, so one bad file or folder in another
+# project never turns off this project's lookups. lessons_index keeps the same
+# rule, through the same lessons_group_files.
 lessons_scan_group() {
-    local d
+    local d f
+    local -a files
     while IFS= read -r d; do
         [ -n "$d" ] || continue
-        lessons_scan "$d" 2>/dev/null || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
+        [ -e "$d" ] || continue
+        files=()
+        while IFS= read -r -d '' f; do files[${#files[@]}]="$f"; done < <(lessons_group_files "$d")
+        # With no readable file, awk would read stdin: skip it.
+        [ "${#files[@]}" -gt 0 ] || continue
+        awk "$LESSONS_SCAN_AWK" "${files[@]}" 2>/dev/null \
+            || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
     done <<<"$1"
     return 0
 }
@@ -2768,7 +2800,7 @@ lessons_match() {
 # own one that cannot be read fails the index, a group member's keeps the
 # lessons it could read and warns.
 lessons_index() {
-    local d tag l rc=0
+    local d tag l f rc=0
     for tag in own rel; do
         if [ "$tag" = own ]; then set -- "$1" "$2" "$1"; else set -- "$1" "$2" "$2"; fi
         for d in $3; do
@@ -2777,8 +2809,7 @@ lessons_index() {
             if [ "$tag" = own ]; then
                 l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} +)" || rc=1
             else
-                l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} + 2>/dev/null)" \
-                    || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
+                l="$(while IFS= read -r -d '' f; do printf 'rel\t%s\n' "$f"; done < <(lessons_group_files "$d"))"
             fi
             [ -z "$l" ] || printf '%s\n' "$l" | LC_ALL=C sort
         done
