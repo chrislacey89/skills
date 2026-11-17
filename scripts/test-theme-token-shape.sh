@@ -19,19 +19,26 @@
 #   1. SHAPE — light on `:root{`, a media-guarded dark copy, an attribute dark
 #      copy, and no bare `[data-theme="dark"]{` selector left over.
 #   2. PARITY — the two dark copies declare the same properties with the same
-#      values, line for line.
+#      values, line for line, and every dark token is also defined in light.
 #   3. WHERE THE ATTRIBUTE LIVES — `:root[data-theme]` only matches <html>, so
 #      no example element other than <html> carries `data-theme=`, and every
 #      script that writes the theme writes it on `document.documentElement`.
-#   4. NATIVE MERMAID — the diagram section names hosts that render
-#      `<pre class="mermaid">` themselves and need no loader.
+#   4. COVERAGE — every light token except the layout-only ones (`--sans`,
+#      `--mono`, `--s<n>`, `--r<n>`) is also defined in both dark copies, so a
+#      new light color cannot land without a dark value. Each `--flag-*` color is
+#      reported by name (#769). Names are read from every declaration, including
+#      packed lines such as `--s1:4px;--s2:8px;`. Before this, deleting `--flag-fw`
+#      from both dark copies still passed, and dark pages fell back to the light
+#      value (#772).
+#
+# The native-Mermaid exception is prose, and a grep over prose passes a sentence
+# that reverses it, so it is not pinned here; core §6 is its one statement (#772,
+# docs/solutions/testing-patterns/prose-contract-tests-are-restated-claims-2026-08-27.md).
 
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 design="$repo_root/docs/visual-recap-design.md"
-core="$repo_root/docs/visual-rendering-core.md"
-skill="$repo_root/visual-recap/SKILL.md"
 
 fail=0
 pass() { printf 'PASS: %s\n' "$1"; }
@@ -43,9 +50,7 @@ check() {
     if "$@"; then pass "$good"; else bad "$badmsg"; fi
 }
 
-for f in "$design" "$core" "$skill"; do
-    [[ -f "$f" ]] || fatal "$f not found"
-done
+[[ -f "$design" ]] || fatal "$design not found"
 
 # block <opener> — the declarations inside the first rule whose line contains
 # <opener>, one per line, leading and trailing whitespace stripped. Ends at the
@@ -96,8 +101,15 @@ else
     diff <(printf '%s\n' "$guarded") <(printf '%s\n' "$attr") || true
 fi
 
-light_names="$(printf '%s\n' "$light" | grep -oE '^--[a-z0-9-]+:' | sort -u || true)"
-dark_names="$(printf '%s\n' "$attr" | grep -oE '^--[a-z0-9-]+:' | sort -u || true)"
+# names <declarations> — every custom-property name declared, one per line,
+# sorted. Splits on `;` first, so each name on a packed line counts.
+names() {
+    printf '%s\n' "$1" | tr ';' '\n' | sed -E 's/^[[:space:]]+//' \
+        | grep -oE '^--[a-z0-9-]+:' | sed 's/:$//' | sort -u || true
+}
+light_names="$(names "$light")"
+guarded_names="$(names "$guarded")"
+dark_names="$(names "$attr")"
 extra="$(comm -13 <(printf '%s\n' "$light_names") <(printf '%s\n' "$dark_names"))"
 check "every dark token is also defined in light" "dark defines tokens light lacks: $(printf '%s' "$extra" | tr '\n' ' ')" test -z "$extra"
 
@@ -112,13 +124,28 @@ check "a script writes dataset.theme" "no script writes dataset.theme; the theme
 check "every theme write targets document.documentElement" \
     "these theme writes do not target document.documentElement: $off_root" test -z "$off_root"
 
-# 4. NATIVE MERMAID
-# shellcheck disable=SC2016  # the backticks are literal Markdown, not a command
-if grep -qE 'render[s]? `<pre class="mermaid">` (natively|itself|themselves)' "$design"; then
-    pass "the diagram section names hosts that render Mermaid natively"
-else
-    bad "the diagram section does not name hosts that render <pre class=\"mermaid\"> natively"
-fi
+# 4. COVERAGE
+# Layout tokens are theme-independent, so light is their only home.
+themed="$(printf '%s\n' "$light_names" | grep -vE '^--(sans|mono|s[0-9]+|r[0-9]+)$' || true)"
+check "light declares themed tokens to check" "no themed tokens found in the light block" test -n "$themed"
+for copy in guarded attr; do
+    if [[ "$copy" == guarded ]]; then have="$guarded_names"; label='the media-guarded dark copy'
+    else have="$dark_names"; label='the :root[data-theme="dark"] copy'; fi
+    missing="$(comm -23 <(printf '%s\n' "$themed") <(printf '%s\n' "$have"))"
+    check "every themed light token is also defined in $label" \
+        "light tokens with no value in $label: $(printf '%s' "$missing" | tr '\n' ' ')" test -z "$missing"
+done
+
+flags="$(printf '%s\n' "$light_names" | grep -E '^--flag-' || true)"
+check "light declares --flag-* colors" "no --flag-* tokens found in the light block" test -n "$flags"
+while IFS= read -r flag; do
+    [[ -n "$flag" ]] || continue
+    if grep -qxF -- "$flag" <<< "$guarded_names" && grep -qxF -- "$flag" <<< "$dark_names"; then
+        pass "$flag is defined in light and both dark copies"
+    else
+        bad "$flag is defined in light but missing from a dark copy"
+    fi
+done <<< "$flags"
 
 if [[ "$fail" -ne 0 ]]; then
     printf '\nFAILED\n'; exit 1

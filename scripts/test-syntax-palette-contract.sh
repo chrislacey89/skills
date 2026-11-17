@@ -101,7 +101,8 @@ assert_contains() {
 
 # --- Extract the two theme blocks from the real §1 token core -----------------
 #
-# The light theme is the `:root{` block; dark is `[data-theme="dark"]{`. Both
+# The light theme is the `:root{` block; dark is `:root[data-theme="dark"]{`,
+# read through its `[data-theme="dark"]{` substring. Both
 # end at the first line that is a bare closing brace at that indent. Reading the
 # blocks separately (rather than grepping the whole file) is what makes the
 # symmetry assertion possible.
@@ -404,12 +405,18 @@ section "the block count §3 restates is unchanged"
 #
 # #317 follow-up added the open question (§14) and ran the sweep again: still
 # one live surface, so the pin moves Twelve -> Thirteen.
+#
+# #766 added the decision trail (§15) and ran the sweep again: still one live
+# surface, so the pin moves Thirteen -> Fourteen.
+#
+# #761 added the seam block (§16) for multi-repo mode: still one live surface,
+# so the pin moves Fourteen -> Fifteen.
 block_sentence="$(grep -o 'blocks cover the surface' "$core" || true)"
 [[ -n "$block_sentence" ]] || fatal "the '… blocks cover the surface' sentence is gone from $core — §3's opening moved; update this suite with it."
 
 count_word="$(grep -o '[A-Z][a-z]* blocks cover the surface' "$core" || true)"
 count_word="$(printf '%s' "$count_word" | head -1 | awk '{print $1}' || true)"
-assert_eq "Fourteen" "$count_word" "§3 still opens 'Fourteen blocks cover the surface'"
+assert_eq "Fifteen" "$count_word" "§3 still opens 'Fifteen blocks cover the surface'"
 
 # -----------------------------------------------------------------------------
 #

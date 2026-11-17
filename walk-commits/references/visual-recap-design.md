@@ -72,7 +72,7 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;
     /* radii */
     --r1:5px;--r2:8px;--r3:14px;
-    /* light theme (default) */
+    /* light — used unless the system is dark or the page pins dark */
     --bg:hsl(225 30% 99%);
     --bg-subtle:hsl(225 28% 97%);
     --bg-inset:hsl(225 24% 95%);
@@ -390,7 +390,7 @@ spine cannot express, and the pack was teaching authors away from them. So §6's
 must still read identically offline; a **diagram figure** may degrade, and must say so on its
 own face. chrislacey89/skills#129's render-confirm gate is retained unchanged (core §7).
 
-**Every Mermaid figure carries a visible degrade note.** Not once in a footer — beside the
+**Every Mermaid figure carries a visible degrade note, except where `visual-rendering-core.md` §6 says otherwise.** Not once in a footer — beside the
 figure, where a reader who jumped straight to it will see it:
 
 ```html
@@ -512,6 +512,13 @@ line gets a numbered `.vr-marker`; clicking it activates its callout (see §10).
 Stable ids per `visual-rendering-core.md` §4: callout cards and their markers share a
 `data-feedback-id="c-<file-slug>-L<line>"`.
 
+**A load-bearing callout names the decision it serves.** When the recap opens with a decision
+trail (§15), give the callout card an optional `data-decision="dc-<slug>"` naming the trail
+entry it carries out, and say so on the card's meta line (`serves dc-<slug>`). Only the card
+carries it, never the marker. The serializer reads it (`visual-rendering-core.md` §4), so a
+reader's note on the line comes back tied to the commitment. Leave it off a callout that serves
+no listed decision: an unlinked callout is information, not a fault.
+
 ```html
 <section id="sec-changes" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">04</span> &nbsp;Annotated changes</div>
@@ -550,10 +557,10 @@ Stable ids per `visual-rendering-core.md` §4: callout cards and their markers s
 
     <!-- callouts (direct labels, anchored below the hunk) -->
     <div style="border-top:1px solid var(--border);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);background:var(--bg-subtle)">
-      <div id="callout-c-session-ts-L33" class="vr-callout" data-feedback-id="c-session-ts-L33" data-feedback-kind="callout" onclick="setActive('c-session-ts-L33')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
+      <div id="callout-c-session-ts-L33" class="vr-callout" data-feedback-id="c-session-ts-L33" data-feedback-kind="callout" data-decision="dc-server-side-sessions" onclick="setActive('c-session-ts-L33')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
         <span class="vr-marker" style="flex:none;width:20px;height:20px;font-size:11px">1</span>
         <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33 · serves dc-server-side-sessions</div>
           <div style="font-size:13.5px;color:var(--fg);line-height:1.5;text-wrap:pretty">The note — one sentence of authored prose anchored to this exact line.</div>
         </div>
       </div>
@@ -1488,6 +1495,74 @@ and say what happens if nobody answers.
 
 ---
 
+## 15. Block: decision trail (scroll mode, a finished diff)
+
+**Scope note — §13's retrospective counterpart.** A decision card renders a commitment a plan
+has made. The trail renders the commitments a *finished diff carries out*, so a reviewer can
+tell a deliberate choice from an accident before reading the hunks. It sits right after the
+overview (§3), in scroll mode only; the deck argues its decisions screen by screen instead.
+
+**Every entry is cited; the code is derived.** The Grounding Rule
+(`visual-rendering-core.md` §1) is unchanged. An entry quotes where the decision was made: the
+PRD or issue body, a review thread, a research entry. It shows that source with §11's
+`.oc-cited` / `.oc-src` treatment. There is no `asserted` entry: a decision you cannot cite is
+your reading of the code, and it belongs in the overview as prose. The trail never restates
+what a line does; the callouts it links to do that, grounded in the real hunk.
+
+**Each entry links to the callouts that carry it out, and each of those callouts names it
+back.** The links are anchors to the callout cards (`#callout-c-<file-slug>-L<line>`), and the
+card's `data-decision` (§6) names the entry's id. An entry no callout carries out is a finding,
+not an entry: either the diff skipped the decision, which the overview's risk paragraph says,
+or a load-bearing line is missing its callout. Add the callout.
+
+**List 5–8.** The trail is a reading aid, not a census: list the commitments a reviewer would
+otherwise have to reconstruct, the ones that rule something out. With fewer than three, skip
+the block and name them in the overview. Past eight, the trail has become a second PR body.
+
+Entries take the `dc-<decision-slug>` id (`visual-rendering-core.md` §4), the same id a plan's
+§13 card used for the same decision, and a note field, so a response serializes as
+`decision#dc-<slug>: "…"`. A finished-diff recap renders no §13 cards, so the id is unique on
+the page; the entry's element id is `trail-dc-<slug>`, so the callout's `serves dc-<slug>`
+meta line can link back to it.
+
+```html
+<style>
+  /* decision-trail primitives (§15) — same tokens; paste §11's .oc-cited / .oc-src too */
+  .dt-list{list-style:none;margin:0;padding:0;border:1px solid var(--border);
+    border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);overflow:hidden}
+  .dt-entry{display:grid;gap:var(--s2);padding:var(--s3) var(--s4);border-top:1px solid var(--border)}
+  .dt-entry:first-child{border-top:none}
+  .dt-name{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)}
+  .dt-impl{font-family:var(--mono);font-size:11px;color:var(--fg-muted)}
+  .dt-impl a{color:var(--accent)}
+  .dt-note{box-sizing:border-box;width:100%;padding:4px 7px;border-radius:var(--r1);
+    border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px;outline:none}
+</style>
+
+<section id="sec-trail" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;Decisions this change carries out</div>
+  <ol class="dt-list">
+    <li id="trail-dc-server-side-sessions" class="dt-entry" data-feedback-id="dc-server-side-sessions" data-feedback-kind="decision">
+      <span class="dt-name">Sessions stay server-side</span>
+      <span class="oc-cited">Each request looks its token up in the token store; nothing session-shaped reaches the client.<span class="oc-src">PRD § Implementation Decisions: “Session state lives server-side, keyed by session id.”</span></span>
+      <span class="dt-impl">carried out at <a href="#callout-c-session-ts-L33" onclick="setActive('c-session-ts-L33')">session.ts:33</a></span>
+      <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+    </li>
+    <li id="trail-dc-guard-at-router" class="dt-entry" data-feedback-id="dc-guard-at-router" data-feedback-kind="decision">
+      <span class="dt-name">Auth runs once, at the router</span>
+      <span class="oc-cited">Every <code>/api</code> route is guarded by one middleware, not a check per handler.<span class="oc-src">PR review thread on app.ts:18: “Move the guard up so a new route can’t forget it.”</span></span>
+      <span class="dt-impl">carried out at <a href="#callout-c-app-ts-L18" onclick="setActive('c-app-ts-L18')">app.ts:18</a></span>
+      <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
+    </li>
+  </ol>
+</section>
+```
+
+The example shows two entries to keep the markup short. A real trail lists five to eight.
+
+---
+
 ## 16. Block: seam (multi-repo mode)
 
 **Scope note: the block for the line between two repositories.** A multi-repo recap
@@ -1497,8 +1572,8 @@ both sides enforce that must change together, an outcome one side keys by id whi
 returns an ordered list. Each repository's own blocks (§3–§9) read fine on their own. The seam
 block puts the two sides of one contract next to each other, so the disagreement is something
 the reader sees instead of something they have to remember from two pages back. **It is
-required in multi-repo mode** and comes right after the overview, before either repository's
-files. A single-repo recap never renders it.
+required in multi-repo mode** and comes right after the overview (after the §15 decision
+trail when one renders), before either repository's files. A single-repo recap never renders it.
 
 It has two parts, always in this order:
 
