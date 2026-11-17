@@ -992,6 +992,14 @@ if [ "$(id -u)" -ne 0 ]; then
     check "trace: the index lists the same readable lesson (forward link resolves)" \
         "  related  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
     check "trace: the unreadable file draws a warning, not a failure" 1 "$([ "$(printf '%s\n' "$err" | grep -c 'could not be read')" -ge 1 ] && echo 1 || echo 0)"
+    # The index side: a home lesson whose related names the locked file resolves
+    # through lessons_index, which must skip the file the scan skips, so the name
+    # is MISSING (a find over every *.md would list it and resolve it).
+    lesson "$GRP" "x/lockref-2026-01-01.md" "Lockref" "paths: [lib]" "related: [locked-2026-01-01.md]"
+    runo "$GRP" trace docs/solutions/x/lockref-2026-01-01.md
+    check "trace: the index leaves the unreadable file out (forward link is MISSING)" \
+        "  related  MISSING: locked-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
+    rm -f "$GRP/docs/solutions/x/lockref-2026-01-01.md"
     chmod 644 "$MS/solutions/r/locked-2026-01-01.md"
     rm -f "$MS/solutions/r/"{aaa,mmm,zzz,"with space",locked}-2026-01-01.md
     rm -f "$GRP/docs/solutions/x/partial-2026-01-01.md"
