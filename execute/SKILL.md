@@ -187,15 +187,17 @@ Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-pag
 **Hand off to a fresh session in the worktree (when you created a worktree).** This paragraph and the list under it are the one statement of how a session gets into the worktree Step 0 creates; other files point here. Creating the worktree does not put this session inside it: `wt switch --create` resets the shell cwd back to the project root after each command. Do not move this session in with Claude Code's `EnterWorktree` tool by default. A session moved that way runs under the harness's worktree-isolation guard, which refuses many of the pack's own documented commands (a nested `$(git rev-parse --git-dir)`, marker `touch` blocks, multi-line blocks that mix `git` or `gh` with loops or command substitution) as too complex to verify (chrislacey89/skills#782, chrislacey89/skills#693). A session *started* inside the worktree is not isolated that way, and its working directory is the worktree from its first command.
 
 - Create the worktree exactly as above. `wt switch --create` / `git worktree add` runs the worktrunk `pre-start` hooks that seed `.env.local` and dependencies; the hand-off does not replace them.
-- Print the hand-off and stop. Give the human the command to start a new session in the worktree, and what to type in it to resume, with the real path, branch, and issue or work item filled in:
+- Print the hand-off and stop. Give the human the folder to start a new session in, and what to type there to resume, with the real path, branch, and issue or work item filled in:
 
   ```
-  cd <absolute-worktree-path> && claude
+  cd <absolute-worktree-path>
   ```
 
   ```
   /execute <issue number or W-n>
   ```
+
+  Tell them to start Claude Code in that folder with whatever command they usually launch it with (for example `claude`). Do not print a launcher yourself: this session cannot see how the human starts Claude Code, and a different launcher can start a different account or permission mode than the one they work in.
 
   Name the branch in the same message. Then end this run of `/execute`: no edits, commits, marker files, or sidecar writes from this session. The new session does all of them, starting with the setup checklist and the slice's `start_sha` below.
 - **Re-entry.** The new session reaches this Step 0 again, already inside the worktree, and must continue rather than hand off a second time. It does, because nothing is created: under `auto`, the stand-down above fires on its toplevel-not-primary signal, and under `pipeline`, rule 1 finds the branch named for this task, so rules 2 and 3 create nothing and there is no new worktree to hand off. A worktree this pipeline created was not seeded by a host, so in that session run the whole Worktree setup checklist below, not the stand-down's reduced reading of it.

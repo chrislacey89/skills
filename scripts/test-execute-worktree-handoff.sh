@@ -20,7 +20,9 @@
 #
 # WHAT THIS PINS.
 #   1. execute/SKILL.md carries the hand-off: a fenced block whose command is
-#      `cd <absolute-worktree-path> && claude`, a fenced block resuming with
+#      `cd <absolute-worktree-path>` with no launcher after it (the human
+#      starts Claude Code their usual way, since an alias can pick another
+#      account or permission mode), a fenced block resuming with
 #      `/execute <...>`, and a Re-entry rule so the new session does not hand
 #      off again.
 #   2. Every execute/SKILL.md line that names EnterWorktree names it as the
@@ -60,10 +62,25 @@ printf '\n=== /execute Step 0: the hand-off ===\n'
 fenced="$(fenced_lines "$ex")"
 afk="$(grep '^\*\*AFK / headless\.\*\*' "$ex" || true)"
 
-if grep -qx 'cd <absolute-worktree-path> && claude' <<<"$fenced"; then
-    ok "a fenced block starts a new session inside the worktree"
+if grep -qx 'cd <absolute-worktree-path>' <<<"$fenced"; then
+    ok "a fenced block names the folder to start a new session in"
 else
-    bad "a fenced block starts a new session inside the worktree" "no fenced line 'cd <absolute-worktree-path> && claude' in $ex"
+    bad "a fenced block names the folder to start a new session in" "no fenced line 'cd <absolute-worktree-path>' in $ex"
+fi
+
+# The human's launcher is theirs: an alias can pick another account or
+# permission mode, so the hand-off never prints one after the cd.
+cd_lines="$(grep -E '^cd <absolute-worktree-path>' <<<"$fenced" || true)"
+if grep -qw 'claude' <<<"$cd_lines"; then
+    bad "the hand-off prints no launcher" "a fenced 'cd <absolute-worktree-path>' line names claude in $ex"
+else
+    ok "the hand-off prints no launcher"
+fi
+
+if grep -q 'with whatever command they usually launch it with' "$ex"; then
+    ok "the hand-off tells the human to use their usual launcher"
+else
+    bad "the hand-off tells the human to use their usual launcher" "no 'with whatever command they usually launch it with' sentence in $ex"
 fi
 
 if grep -qE '^/execute <[^>]+>$' <<<"$fenced"; then
