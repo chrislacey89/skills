@@ -408,12 +408,18 @@ section "the block count §3 restates is unchanged"
 #
 # #766 added the decision trail (§15) and ran the sweep again: still one live
 # surface, so the pin moves Thirteen -> Fourteen.
+#
+# #761 added the seam block (§16) for multi-repo mode beside it: still one live
+# surface, so the pin moves Fourteen -> Fifteen.
+#
+# #762 added the sitting plan (§17): still one live surface, so the pin moves
+# Fifteen -> Sixteen.
 block_sentence="$(grep -o 'blocks cover the surface' "$core" || true)"
 [[ -n "$block_sentence" ]] || fatal "the '… blocks cover the surface' sentence is gone from $core — §3's opening moved; update this suite with it."
 
 count_word="$(grep -o '[A-Z][a-z]* blocks cover the surface' "$core" || true)"
 count_word="$(printf '%s' "$count_word" | head -1 | awk '{print $1}' || true)"
-assert_eq "Fourteen" "$count_word" "§3 still opens 'Fourteen blocks cover the surface'"
+assert_eq "Sixteen" "$count_word" "§3 still opens 'Sixteen blocks cover the surface'"
 
 # -----------------------------------------------------------------------------
 #

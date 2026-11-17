@@ -13,7 +13,7 @@ resolving to nothing. Forward-looking blocks live in this file and `/visual-reca
 them.
 
 **The document has two parts, and they are two rendering modes, not two layouts of one thing.**
-Everything numbered §1–§12 is **Part I — the scroll recap**: a single scrolling column for a
+Everything numbered §1–§17 is **Part I — the scroll recap**: a single scrolling column for a
 reviewer *auditing* a change. **Part II — the walkthrough deck** (§D1–§D9, at the end of this
 file) is a paged, one-idea-per-screen shell for a reviewer being *argued through* a change with a
 causal arc. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading
@@ -61,7 +61,9 @@ and specifically **do not adopt the visual language of the app under review** (i
 fonts, or chrome). A review instrument stays visually independent of its subject: the pull to
 theme the recap in a well-designed app's own aesthetic is strongest exactly where it does most
 harm, because it both destroys run-to-run constancy and sprays the subject's accent onto recap
-chrome that carries no diff meaning (Tufte: decoration exceeding the data).
+chrome that carries no diff meaning (Tufte: decoration exceeding the data). A palette the
+*reader* brings is a different thing, allowed under checks (*A reader palette*, at the end of
+this section).
 
 ```html
 <style>
@@ -91,7 +93,7 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --del-bg:hsl(356 84% 97%);
     --risk:hsl(32 90% 42%);
     --mark-bg:hsla(255 78% 58% / 0.10);
-    /* file change-type flags — five calm, distinct hues */
+    /* file change-type flags — five calm, distinct hues (--flag-fw below is not one of them) */
     --flag-new:hsl(212 78% 50%);
     --flag-moved:hsl(265 60% 58%);
     --flag-load:hsl(28 84% 46%);
@@ -256,6 +258,66 @@ display 30px/600/−0.02em · stat 22px/680 tabular · title 15px/650 · body 14
 overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.75 · code
 (before/after) 13px/1.9.
 
+**A reader palette: the reader's colors, never the subject's.** The ban above is on the
+*subject's* look, because the subject's palette says something about the change it is
+reviewing and it is the wrong thing. A reader's own palette, such as their editor theme, says
+nothing about the subject, and on a long review it is easier to read. Render one only when the
+reader supplies it: they asked, or their standing instructions name it. Keep the canonical
+block above verbatim and paste the reader palette **after** it, as an override block, under
+three checks:
+
+1. **Canonical names only.** It sets values for names the canonical block defines and adds
+   none. Syntax colors map onto the six `--sx-*` roles by the table above, never a seventh.
+2. **The same three-state shape.** A dark palette goes in both dark copies, identical; a light
+   one goes on `:root`. A palette for one theme leaves the other theme canonical.
+3. **The two-theme contrast check.** In each theme the palette touches, every text color left
+   on screen (`--fg`, `--fg-muted`, `--add`, `--del`, `--risk`, every `--flag-*` and `--sx-*`)
+   reaches 4.5:1 against every surface (`--bg`, `--bg-subtle`, `--bg-inset`, `--bg-elev`, and
+   the `--add-bg` / `--del-bg` washes over `--bg`), except the tokens the exception list at the
+   top of this file names. Measure the canonical tokens the palette leaves alone too: a new
+   `--bg` moves their contrast.
+
+The token-core check (`visual-rendering-core.md` §6) then reads a reader palette for its names
+and its contrast instead of its values. The example is an editor theme's dark-blue variant; its
+lowest ratio is `--flag-mech` at 4.76:1 on `--bg-inset`, and `--sx-c` sits under the dark
+exception.
+
+```html
+<style>
+  /* reader palette (§1, A reader palette): canonical names only, after the canonical block */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:hsl(210 47% 12%);
+      --bg-subtle:hsl(210 44% 14%);
+      --bg-inset:hsl(210 40% 19%);
+      --bg-elev:hsl(210 42% 16%);
+      --fg:hsl(210 49% 82%);
+      --fg-muted:hsl(210 24% 66%);
+      --sx-k:hsl(198 100% 50%);
+      --sx-f:hsl(180 100% 43%);
+      --sx-v:hsl(40 100% 79%);
+      --sx-s:hsl(96 66% 70%);
+      --sx-n:hsl(24 100% 75%);
+      --sx-c:hsl(200 13% 45%);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:hsl(210 47% 12%);
+    --bg-subtle:hsl(210 44% 14%);
+    --bg-inset:hsl(210 40% 19%);
+    --bg-elev:hsl(210 42% 16%);
+    --fg:hsl(210 49% 82%);
+    --fg-muted:hsl(210 24% 66%);
+    --sx-k:hsl(198 100% 50%);
+    --sx-f:hsl(180 100% 43%);
+    --sx-v:hsl(40 100% 79%);
+    --sx-s:hsl(96 66% 70%);
+    --sx-n:hsl(24 100% 75%);
+    --sx-c:hsl(200 13% 45%);
+  }
+</style>
+```
+
 ---
 
 ## 2. The shell (rail + scrolling column)
@@ -284,8 +346,9 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
       <nav style="display:flex;flex-direction:column;margin-top:auto">
         <div style="font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s2)">Contents</div>
         <a href="#sec-overview" style="display:flex;align-items:center;gap:11px;padding:7px 0;text-decoration:none;font-size:13px;font-weight:500;color:var(--fg-muted)"><span style="width:2px;height:15px;background:var(--accent);border-radius:2px"></span><span style="font-family:var(--mono);font-size:11px;width:14px">01</span>Overview</a>
-        <!-- …then one entry per rendered section (files, contracts, diagram, wireframes, changes, compare, review), numbered in render order — same shape -->
+        <!-- …then one entry per rendered section (sitting plan, seam, decision trail, files, contracts, diagram, wireframes, changes, compare, review), numbered in render order — same shape -->
       </nav>
+      <!-- with a sitting plan (§17), its per-sitting progress indicator goes here -->
       <div style="display:flex;align-items:center;justify-content:flex-end;padding-top:var(--s4);border-top:1px solid var(--border)">
         <button onclick="toggleTheme()" style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--border-strong);border-radius:999px;background:var(--bg-elev);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:550;cursor:pointer">◐ Theme</button>
       </div>
@@ -293,7 +356,7 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
 
     <!-- MAIN: one scrolling column, full width — no max-width; title and lede keep their own reading measure -->
     <main style="min-width:0;padding:var(--s8) var(--s7)">
-      <!-- the blocks of §3–§9 drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
+      <!-- the blocks of §3–§9, §12, §15's decision trail, §16's seam, and §17's sitting plan drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
     </main>
   </div>
 </div>
@@ -512,9 +575,23 @@ line gets a numbered `.vr-marker`; clicking it activates its callout (see §10).
 Stable ids per `visual-rendering-core.md` §4: callout cards and their markers share a
 `data-feedback-id="c-<file-slug>-L<line>"`.
 
+**Excerpt the unit under discussion, and mark what the excerpt skips.** Two rules keep an
+excerpt honest about what it leaves out:
+
+- **Scope it to the method, not the file.** For a new file, or a hunk inside a long function,
+  excerpt the function or method the callouts discuss, from its signature to its closing line.
+  The rest of the file is in the file tree with its ±count (§4); reproducing it spends the
+  reading budget (`visual-rendering-core.md` §5) on lines nobody annotated.
+- **A jump in line numbers gets a gap row.** When one pane holds lines that are not adjacent
+  (two hunks, or a hunk and its distant context), put a `.vr-gap` row between them naming the
+  skipped range. Without it, 33 followed by 37 reads as two adjacent lines, and the reader
+  takes the excerpt for the whole function. Each pane marks its own gaps, so a gap can sit on
+  one side only.
+
 **A load-bearing callout names the decision it serves.** When the recap opens with a decision
 trail (§15), give the callout card an optional `data-decision="dc-<slug>"` naming the trail
-entry it carries out, and say so on the card's meta line (`serves dc-<slug>`). Only the card
+entry it carries out, and say so on the card's meta line as a link back to the entry
+(`serves <a href="#trail-dc-<slug>">dc-<slug></a>`). Only the card
 carries it, never the marker. The serializer reads it (`visual-rendering-core.md` §4), so a
 reader's note on the line comes back tied to the commitment. Leave it off a callout that serves
 no listed decision: an unlinked callout is information, not a fault.
@@ -541,6 +618,8 @@ no listed decision: an unlinked callout is information, not a fault.
         <div style="padding:var(--s2) 0">
           <!-- a removed line: --del spine + --del-bg wash -->
           <div style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--del);background:var(--del-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">if</span> (!currentToken) {</code></div>
+          <!-- a gap row: the line numbers jump, so say which lines the excerpt skips -->
+          <div class="vr-gap" data-gap="34-36" style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid transparent;background:var(--bg-subtle)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">⋯</span><span style="padding:1px var(--s3);font-family:var(--sans);font-size:11px;font-style:italic;color:var(--fg-muted)">lines 34–36 not shown</span></div>
           <!-- a context line: transparent spine, no wash -->
           <div style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid transparent"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">37</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">}</code></div>
         </div>
@@ -551,17 +630,27 @@ no listed decision: an unlinked callout is information, not a fault.
           <!-- an added + annotated line: --add spine + --add-bg, plus a numbered marker.
                The row carries .vr-line + id so the marker can wash it on activation. -->
           <div id="line-c-session-ts-L33" class="vr-line" style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--add);background:var(--add-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)<button class="vr-marker" data-feedback-id="c-session-ts-L33" onclick="setActive('c-session-ts-L33')" style="width:17px;height:17px;margin-left:8px;font-size:10px;vertical-align:middle">1</button></code></div>
+          <div id="line-c-session-ts-L34" class="vr-line" style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--add);background:var(--add-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">34</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">if</span> (!token || token.expiresAt &lt;= Date.<span style="color:var(--sx-f)">now</span>()) <span style="color:var(--sx-k)">return</span> res.<span style="color:var(--sx-f)">sendStatus</span>(<span style="color:var(--sx-n)">401</span>)<button class="vr-marker" data-feedback-id="c-session-ts-L34" onclick="setActive('c-session-ts-L34')" style="width:17px;height:17px;margin-left:8px;font-size:10px;vertical-align:middle">2</button></code></div>
         </div>
       </div>
     </div>
 
     <!-- callouts (direct labels, anchored below the hunk) -->
     <div style="border-top:1px solid var(--border);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);background:var(--bg-subtle)">
+      <!-- data-decision and the "serves" link: only when the recap has a decision trail (§15) and this
+           callout carries out one of its entries. Drop both otherwise. -->
       <div id="callout-c-session-ts-L33" class="vr-callout" data-feedback-id="c-session-ts-L33" data-feedback-kind="callout" data-decision="dc-server-side-sessions" onclick="setActive('c-session-ts-L33')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
         <span class="vr-marker" style="flex:none;width:20px;height:20px;font-size:11px">1</span>
         <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33 · serves dc-server-side-sessions</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33 · serves <a href="#trail-dc-server-side-sessions" onclick="event.stopPropagation()" style="color:var(--accent)">dc-server-side-sessions</a></div>
           <div style="font-size:13.5px;color:var(--fg);line-height:1.5;text-wrap:pretty">The note — one sentence of authored prose anchored to this exact line.</div>
+        </div>
+      </div>
+      <div id="callout-c-session-ts-L34" class="vr-callout" data-feedback-id="c-session-ts-L34" data-feedback-kind="callout" data-decision="dc-refuse-expired-tokens" onclick="setActive('c-session-ts-L34')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
+        <span class="vr-marker" style="flex:none;width:20px;height:20px;font-size:11px">2</span>
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:34 · serves <a href="#trail-dc-refuse-expired-tokens" onclick="event.stopPropagation()" style="color:var(--accent)">dc-refuse-expired-tokens</a></div>
+          <div style="font-size:13.5px;color:var(--fg);line-height:1.5;text-wrap:pretty">A second callout on the same hunk: same card, its own line and id.</div>
         </div>
       </div>
     </div>
@@ -603,14 +692,14 @@ that one as a lone `good` half.
 
 ### The framework callout (opt-in, for a reader learning the framework)
 
-The rule is `visual-rendering-core.md` §3: off by default, on per reader, one callout per
-mechanism, the docs link as the citation. A `framework` callout is a §6 callout with three
+When to turn the layer on and the rules its callouts follow are `visual-rendering-core.md` §3;
+this section is the markup. A `framework` callout is a §6 callout with three
 differences: its kind label is `framework` in `--flag-fw`, its note is three labeled lines
 (**called by**, **when**, **if it fails**), and it ends with a link to the framework's docs
 page. It keeps the callout's `c-<file-slug>-L<line>` id and `data-feedback-kind="callout"`,
 and its line marker is the usual numbered `.vr-marker`.
 
-It renders question first (core §3, *ask first, then reveal*): the three questions, then a
+It renders question first (core §3): the three questions, then a
 `data-feedback-recall` field for the reader's answer, then the labeled lines and the docs
 link inside a closed `<details>`. The order on the page is the order of the attempt, so the
 field sits above the reveal. Keep the questions the same three on every framework callout;
@@ -627,11 +716,11 @@ the reader learns to answer them, and the author compares like with like.
     <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--flag-fw)">Show the answer</summary>
     <dl style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px var(--s3);margin:0;font-size:13px;line-height:1.5">
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">called by</dt>
-      <dd style="margin:0;color:var(--fg);text-wrap:pretty">Express, for every request whose path starts with <code style="font-family:var(--mono)">/api</code>.</dd>
+      <dd style="margin:0;color:var(--fg);text-wrap:pretty">Express, for every request whose path is <code style="font-family:var(--mono)">/api</code> or starts with <code style="font-family:var(--mono)">/api/</code> (whole path segments, so <code style="font-family:var(--mono)">/apiary</code> does not match).</dd>
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">when</dt>
       <dd style="margin:0;color:var(--fg);text-wrap:pretty">Before any route handler under <code style="font-family:var(--mono)">/api</code>, in the order the <code style="font-family:var(--mono)">app.use</code> calls appear.</dd>
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">if it fails</dt>
-      <dd style="margin:0;color:var(--fg);text-wrap:pretty">It calls <code style="font-family:var(--mono)">next(err)</code>, Express skips the remaining handlers, and the error handler sends the response. The route handler never runs.</dd>
+      <dd style="margin:0;color:var(--fg);text-wrap:pretty">It calls <code style="font-family:var(--mono)">next(err)</code>, Express skips the remaining handlers, and the error handler sends the response. The route handler never runs. (<a href="https://expressjs.com/en/guide/error-handling.html" style="color:var(--flag-fw)">Express docs: Error handling ↗</a>)</dd>
     </dl>
     <a href="https://expressjs.com/en/guide/using-middleware.html" style="display:inline-block;margin-top:var(--s2);font-size:12px;color:var(--flag-fw)">Express docs: Using middleware ↗</a>
     </details>
@@ -649,8 +738,8 @@ the callout doesn't need §11's stylesheet:
 `<span style="border:1px solid var(--risk);color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);border-radius:999px;padding:1px 7px;font-family:var(--sans);font-size:10px;font-weight:600;margin-left:6px">asserted</span>`.
 Never link a page that doesn't describe the mechanism just to fill the slot.
 
-**On a line that already has a change callout,** the framework note nests inside that card
-under its note line, like the typed note-pair above: one bordered half in `--flag-fw`, with
+**On a line that already has a change callout** (core §3), the framework note nests inside that
+card under its note line, like the typed note-pair above: one bordered half in `--flag-fw`, with
 the same questions, recall field, and collapsed answer. The card keeps its own kind label and
 id, and the serializer reports the attempt on the card's line.
 
@@ -659,7 +748,9 @@ the framework's request lifecycle (middleware, a validation hook, an authorizati
 an injected argument), add one figure showing what runs, in order, before the handler the
 diff touched. It is usually a trivial spine, so it takes the §5 CSS primitive. Mark each
 stage the diff touched with `.is-accent`, and give every stage that has a framework callout
-the callout's number, so the figure and the cards point at each other. The figure answers the
+the callout's number, so the figure and the cards point at each other; a stage the diff touched
+with only a change callout gets the accent and no number. A stage the diff did not touch cites the
+line that registers it, per `visual-rendering-core.md` §1. The figure answers the
 callouts' *when*, so place it after the hunk whose callouts it numbers: read there, it checks
 the reader's answers instead of handing them out.
 
@@ -669,11 +760,11 @@ the reader's answers instead of handing them out.
     <div class="fc">
       <div class="fc-node is-muted"><div class="fc-title">request</div><div class="fc-sub">GET /api/session</div></div>
       <div class="fc-conn"><div class="fc-line"></div><div class="fc-tip">▼</div></div>
-      <div class="fc-node is-muted"><div class="fc-title">express.json()</div><div class="fc-sub">parses the body · not in this diff</div></div>
+      <div class="fc-node is-muted"><div class="fc-title">express.json()</div><div class="fc-sub">app.ts:12 · parses the body · not in this diff</div></div>
       <div class="fc-conn"><div class="fc-line"></div><div class="fc-tip">▼</div></div>
       <div class="fc-node is-accent"><span class="fc-step">callout 2</span><div class="fc-title">authGuard</div><div class="fc-sub">app.ts:18 · next(err) here skips everything below</div></div>
       <div class="fc-conn"><div class="fc-line"></div><div class="fc-tip">▼</div></div>
-      <div class="fc-node is-accent"><span class="fc-step">callout 1</span><div class="fc-title">route handler</div><div class="fc-sub">session.ts:33 · the code the diff changed</div></div>
+      <div class="fc-node is-accent"><div class="fc-title">route handler</div><div class="fc-sub">session.ts:33 · the code the diff changed</div></div>
     </div>
   </div>
   <figcaption style="margin-top:var(--s3);font-size:12px;color:var(--fg-muted)">Fig 2 · What Express runs before <code style="font-family:var(--mono)">GET /api/session</code> reaches its handler. Accented stages are in this diff.</figcaption>
@@ -1500,14 +1591,13 @@ and say what happens if nobody answers.
 **Scope note — §13's retrospective counterpart.** A decision card renders a commitment a plan
 has made. The trail renders the commitments a *finished diff carries out*, so a reviewer can
 tell a deliberate choice from an accident before reading the hunks. It sits right after the
-overview (§3), in scroll mode only; the deck argues its decisions screen by screen instead.
+overview (§3), in scroll mode only (§16 and §17 order it against the seam and the sitting plan); the
+deck argues its decisions screen by screen instead.
 
-**Every entry is cited; the code is derived.** The Grounding Rule
-(`visual-rendering-core.md` §1) is unchanged. An entry quotes where the decision was made: the
-PRD or issue body, a review thread, a research entry. It shows that source with §11's
-`.oc-cited` / `.oc-src` treatment. There is no `asserted` entry: a decision you cannot cite is
-your reading of the code, and it belongs in the overview as prose. The trail never restates
-what a line does; the callouts it links to do that, grounded in the real hunk.
+**Every entry is cited; the code is derived.** What counts as a source, and why there is no
+`asserted` entry, is `visual-rendering-core.md` §1. Show each entry's source with §11's
+`.oc-cited` / `.oc-src` treatment. The trail never restates what a line does; the callouts it
+links to do that, grounded in the real hunk.
 
 **Each entry links to the callouts that carry it out, and each of those callouts names it
 back.** The links are anchors to the callout cards (`#callout-c-<file-slug>-L<line>`), and the
@@ -1549,10 +1639,10 @@ meta line can link back to it.
       <span class="dt-impl">carried out at <a href="#callout-c-session-ts-L33" onclick="setActive('c-session-ts-L33')">session.ts:33</a></span>
       <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
     </li>
-    <li id="trail-dc-guard-at-router" class="dt-entry" data-feedback-id="dc-guard-at-router" data-feedback-kind="decision">
-      <span class="dt-name">Auth runs once, at the router</span>
-      <span class="oc-cited">Every <code>/api</code> route is guarded by one middleware, not a check per handler.<span class="oc-src">PR review thread on app.ts:18: “Move the guard up so a new route can’t forget it.”</span></span>
-      <span class="dt-impl">carried out at <a href="#callout-c-app-ts-L18" onclick="setActive('c-app-ts-L18')">app.ts:18</a></span>
+    <li id="trail-dc-refuse-expired-tokens" class="dt-entry" data-feedback-id="dc-refuse-expired-tokens" data-feedback-kind="decision">
+      <span class="dt-name">An expired token is refused, never refreshed in place</span>
+      <span class="oc-cited">The request gets a 401 and the client signs in again; nothing extends the token on the server.<span class="oc-src">PR review thread on session.ts:34: “Refreshing here hides the expiry from the client. Send 401 and let it re-auth.”</span></span>
+      <span class="dt-impl">carried out at <a href="#callout-c-session-ts-L34" onclick="setActive('c-session-ts-L34')">session.ts:34</a></span>
       <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
     </li>
   </ol>
@@ -1560,6 +1650,217 @@ meta line can link back to it.
 ```
 
 The example shows two entries to keep the markup short. A real trail lists five to eight.
+
+---
+
+## 16. Block: seam (multi-repo mode)
+
+**Scope note: the block for the line between two repositories.** A multi-repo recap
+(`/visual-recap` §1, one `<repo-path>@<base>..<head>` scope per repository) exists for the
+findings no single-repo recap can hold: a status value spelled differently on each side, a cap
+both sides enforce that must change together, an outcome one side keys by id while the other
+returns an ordered list. Each repository's own blocks (§3–§9) read fine on their own. The seam
+block puts the two sides of one contract next to each other, so the disagreement is something
+the reader sees instead of something they have to remember from two pages back. **It is
+required in multi-repo mode** and comes right after the overview (and the sitting plan, §17,
+when there is one), before either repository's files. When the recap also carries a decision trail (§15), the seam comes first and the trail
+follows it: the seam is the reason the mode exists. A single-repo recap never renders it.
+
+It has two parts, always in this order:
+
+1. **The comparison**: one table per contract that crosses the seam (a route, a queue message,
+   an event). One row per field, error code, or limit, with what the sending side puts on the
+   wire beside what the accepting side checks. A row whose sides disagree carries
+   `data-agree="no"` and the `--del` wash; agreeing rows stay unwashed, so the disagreement is
+   the only thing that stands out (Tufte: the smallest effective difference).
+2. **The findings**: the comparison shows *what* differs; a finding says *why it matters*. Each
+   one takes exactly one chip:
+   - **`mismatch`**: the sides disagree today. A value one sends that the other rejects, a field
+     one requires that the other never sends, a limit that differs.
+   - **`fragile`**: the sides agree today, but only because the same fact is written twice. A cap
+     enforced on both sides, an enum copied rather than shared. Change one and the other breaks
+     with nothing failing at build time.
+   - **`planned`**: a mismatch a later slice or issue already covers. It still renders, because
+     a reader who sees the disagreement in the comparison and no finding for it cannot tell a
+     known gap from a missed one. It cites the slice or issue that covers it.
+
+**Every row and every finding cites a line on both sides.** Each cite is
+`<repo>:<path>:<line>`, read at that scope's head with `git -C <repo> show <head>:<path>`, and
+the line may be one the diff never touched: the accepting side's validator is often unchanged
+code, and it is exactly the code the reader needs. This is the Grounding Rule
+(`visual-rendering-core.md` §1) applied per side; the model still writes only the finding's
+note. **A finding you can cite on one side only is not a seam finding.** It is an ordinary
+callout in that repository's §6 block. When a side does not handle the field at all, its cell
+says so (`not sent`, `not checked`) and cites the line where it would have to be: the request
+builder, the validation rules.
+
+**Ids.** The comparison carries `seam-<contract-slug>` (`seam-post-refunds`) and each finding
+`sf-<finding-slug>` (`sf-status-spelling`), both registered in `visual-rendering-core.md` §4.
+Slug the finding by its subject, never by its chip: a `planned` finding that a later run finds
+fixed keeps its id, so the reviewer's note still attaches to it.
+
+```html
+<style>
+  /* seam primitives (§16): same tokens, no new palette */
+  .sm{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden}
+  .sm-head,.sm-row{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr);
+    gap:var(--s3);padding:6px var(--s4);align-items:start}
+  .sm-head{font-size:11px;font-weight:600;color:var(--fg-muted);border-bottom:1px solid var(--border)}
+  .sm-row{font-family:var(--mono);font-size:12.5px;color:var(--fg);border-left:2px solid transparent}
+  .sm-row[data-agree="no"]{border-left-color:var(--del);background:var(--del-bg)}
+  .sm-cite,.sf-cite{display:block;font-size:11px;color:var(--fg-muted)}
+  .sf{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);
+    padding:var(--s4);margin-top:var(--s3)}
+  .sf-chip{border:1px solid currentColor;border-radius:999px;padding:2px 9px;
+    font-size:10px;font-weight:600;margin-right:var(--s2)}
+  .sf-mismatch{color:var(--del)} .sf-fragile{color:var(--risk)} .sf-planned{color:var(--fg-muted)}
+  .sf-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s3);
+    margin-top:var(--s3);font-family:var(--mono)}
+  .sf-note{display:block;width:100%;box-sizing:border-box;margin-top:var(--s3);padding:4px 7px;
+    border-radius:var(--r1);border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px}
+</style>
+```
+
+```html
+<section id="sec-seam" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;The seam: web → billing</div>
+
+  <div class="sm" data-feedback-id="seam-post-refunds" data-feedback-kind="seam">
+    <div class="sm-head"><span>POST /refunds</span><span>web sends</span><span>billing accepts</span></div>
+    <div class="sm-row" data-agree="no"><span>status</span><span>'CANCELED'<span class="sm-cite">web:src/refunds/client.ts:41</span></span><span>in: pending, cancelled<span class="sm-cite">billing:app/Http/Requests/RefundRequest.php:22</span></span></div>
+    <div class="sm-row"><span>items</span><span>array · max 50<span class="sm-cite">web:src/refunds/limits.ts:3</span></span><span>array · max:50<span class="sm-cite">billing:app/Http/Requests/RefundRequest.php:24</span></span></div>
+    <div class="sm-row" data-agree="no"><span>200 outcomes</span><span>reads Record&lt;id, Outcome&gt;<span class="sm-cite">web:src/refunds/client.ts:58</span></span><span>returns Outcome[] (ordered)<span class="sm-cite">billing:app/Http/Controllers/RefundController.php:37</span></span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Note on this contract…"></textarea>
+  </div>
+
+  <div class="sf" data-feedback-id="sf-status-spelling" data-feedback-kind="seam-finding">
+    <span class="sf-chip sf-mismatch">mismatch</span><b>Every canceled refund fails validation.</b>
+    web sends the American spelling and billing's rule lists the British one, so the request is a 422 before any refund logic runs.
+    <div class="sf-sides"><span class="sf-cite">web:src/refunds/client.ts:41</span><span class="sf-cite">billing:app/Http/Requests/RefundRequest.php:22</span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Your note…"></textarea>
+  </div><!-- /finding -->
+
+  <div class="sf" data-feedback-id="sf-items-cap" data-feedback-kind="seam-finding">
+    <span class="sf-chip sf-fragile">fragile</span><b>The 50-item cap is written twice.</b>
+    Both sides agree today. Raise one and the other rejects or truncates, and no build or test in either repository fails.
+    <div class="sf-sides"><span class="sf-cite">web:src/refunds/limits.ts:3</span><span class="sf-cite">billing:app/Http/Requests/RefundRequest.php:24</span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Your note…"></textarea>
+  </div><!-- /finding -->
+
+  <div class="sf" data-feedback-id="sf-outcome-shape" data-feedback-kind="seam-finding">
+    <span class="sf-chip sf-planned">planned</span><b>web reads outcomes by id; billing returns a list.</b>
+    Slice 3 of the PRD switches web to the ordered list, so this disagreement is known and scheduled, not missed.
+    <div class="sf-sides"><span class="sf-cite">web:src/refunds/client.ts:58</span><span class="sf-cite">billing:app/Http/Controllers/RefundController.php:37</span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Your note…"></textarea>
+  </div><!-- /finding -->
+</section>
+```
+
+The `planned` finding's covering slice belongs in its note, linked when it has a URL; that link
+is the finding's evidence that the gap is known, and a `planned` chip without one is an
+`asserted` claim (`visual-rendering-core.md` §1) wearing a settled chip's color.
+
+**When not to render a finding.** A row that agrees and duplicates nothing gets no finding: the
+comparison already shows it, and a finding per row rebuilds the table as prose. Render the rows
+where the sides disagree, or agree only by copy.
+
+---
+
+## 17. Block: sitting plan (scroll mode, a diff over one reading budget)
+
+**Scope note: the reading budget as structure, not advice.** The budget
+(`visual-rendering-core.md` §5) is a ceiling and a floor: about 100–300 lines of excerpt, 30–60
+minutes. A diff whose excerpts need more than one budget can still only be read as one long
+page, so the ceiling stays a suggestion. The sitting plan splits that page into **sittings**,
+each inside one budget, and lets the reader mark what they have read. Under one budget, skip
+it: a plan with one sitting is a table of contents. It comes right after the overview, ahead
+of the seam (§16) and the trail (§15), because it is the map of everything below it.
+
+**Group the hunks into sittings, in reading order.** The seam first (§16, in a multi-repo
+recap), then failure paths (errors, refusals, rollbacks), then concurrency (locks,
+transactions, ordering), then the remaining changes, then tests. Each sitting is complete:
+every hunk it names is rendered in full in its §6 card, never sampled (Cohen's rule, the same
+one §12 applies to a population). A sitting lists its hunks by the anchor of each hunk's first
+callout and states its size in excerpt lines, counted from the excerpts, not estimated.
+
+**Reviewed state belongs to the reader, in their browser.** Each hunk in a sitting carries a
+checkbox; checking it counts toward that sitting's `n of m reviewed`, shown on the sitting and
+again in the rail (§2), so the reader sees where they stopped before scrolling. The state is a
+per-reader convenience, so it is held in `localStorage` under the recap's slug, and every read
+and write is wrapped in `try`/`catch`: storage can be blocked, empty, or throw (a private
+window, cleared site data, a sandboxed preview). When it does, the page still counts within the
+visit and starts at zero next time. Never put reviewed state in the feedback serializer
+(`visual-rendering-core.md` §4): it is where the reader is, not what they think, and the
+checkboxes carry no `data-feedback-id`.
+
+```html
+<style>
+  /* sitting-plan primitives (§17): same tokens */
+  .st-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s3)}
+  .st{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);padding:var(--s3) var(--s4)}
+  .st-head{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:baseline}
+  .st-name{font-weight:600;color:var(--fg)}
+  .st-size,.st-count{font-family:var(--mono);font-size:11px;color:var(--fg-muted)}
+  .st-hunks{list-style:none;margin:var(--s2) 0 0;padding:0;display:grid;gap:4px;font-family:var(--mono);font-size:12px}
+  .st-hunks a{color:var(--accent)}
+</style>
+
+<section id="sec-sittings" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;Sitting plan</div>
+  <ol class="st-list">
+    <li id="sitting-failure-paths" class="st" data-sitting="failure-paths">
+      <div class="st-head"><span class="st-name">1 · Failure paths</span><span class="st-size">140 excerpt lines</span><span class="st-count" data-sitting-count>0 of 2 reviewed</span></div>
+      <ul class="st-hunks">
+        <li><label><input type="checkbox" data-reviewed="c-session-ts-L34" onchange="markReviewed(this)"> <a href="#callout-c-session-ts-L34">session.ts:34</a></label></li>
+        <li><label><input type="checkbox" data-reviewed="c-app-ts-L18" onchange="markReviewed(this)"> <a href="#callout-c-app-ts-L18">app.ts:18</a></label></li>
+      </ul>
+    </li>
+    <li id="sitting-session-store" class="st" data-sitting="session-store">
+      <div class="st-head"><span class="st-name">2 · The session store</span><span class="st-size">210 excerpt lines</span><span class="st-count" data-sitting-count>0 of 1 reviewed</span></div>
+      <ul class="st-hunks">
+        <li><label><input type="checkbox" data-reviewed="c-session-ts-L33" onchange="markReviewed(this)"> <a href="#callout-c-session-ts-L33">session.ts:33</a></label></li>
+      </ul>
+    </li>
+  </ol>
+</section>
+
+<!-- the rail's progress indicator: one line per sitting, under §2's Contents nav -->
+<div style="display:grid;gap:4px;margin-top:var(--s4);font-size:12px;color:var(--fg-muted)">
+  <div style="font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint)">Sittings</div>
+  <a href="#sitting-failure-paths" style="color:inherit;text-decoration:none">1 · Failure paths <span data-sitting-progress="failure-paths" style="font-family:var(--mono)">0 of 2 reviewed</span></a>
+  <a href="#sitting-session-store" style="color:inherit;text-decoration:none">2 · The session store <span data-sitting-progress="session-store" style="font-family:var(--mono)">0 of 1 reviewed</span></a>
+</div>
+
+<script>
+  // §17: reviewed state is per reader. Storage can be blocked or throw; the page counts without it.
+  const SIT_KEY = 'visual-recap:' + RECAP_SLUG + ':reviewed';
+  let reviewed = new Set();
+  try { reviewed = new Set(JSON.parse(localStorage.getItem(SIT_KEY) || '[]')); } catch (_) {}
+  function saveReviewed(){
+    try { localStorage.setItem(SIT_KEY, JSON.stringify([...reviewed])); } catch (_) {}
+  }
+  function renderSittings(){
+    document.querySelectorAll('[data-sitting]').forEach(st => {
+      const boxes = [...st.querySelectorAll('[data-reviewed]')];
+      boxes.forEach(b => { b.checked = reviewed.has(b.dataset.reviewed); });
+      const label = boxes.filter(b => b.checked).length + ' of ' + boxes.length + ' reviewed';
+      st.querySelector('[data-sitting-count]').textContent = label;
+      const rail = document.querySelector('[data-sitting-progress="' + st.dataset.sitting + '"]');
+      if (rail) rail.textContent = label;
+    });
+  }
+  function markReviewed(box){
+    if (box.checked) reviewed.add(box.dataset.reviewed); else reviewed.delete(box.dataset.reviewed);
+    saveReviewed();
+    renderSittings();
+  }
+  renderSittings();
+</script>
+```
+
+The example shows two sittings to keep the markup short. A real plan has as many as the
+budget needs, each one sized from its own excerpts.
 
 ---
 
@@ -1916,8 +2217,9 @@ never invokes it — same rule as every other cross-skill seam in the pack.
 
 Deck diagrams are usually the picture of *the whole mechanism before and after* — labeled edges,
 fan-outs, styled failure and guard nodes, two graphs the reader compares. That is the
-multi-stage/behavioral case, so the default is **Mermaid via CDN with the visible degrade note**
-(`visual-rendering-core.md` §5, §6; markup and label-safety in §5 above). The `.fc-*` primitive
+multi-stage/behavioral case, so the default is **Mermaid via CDN with the visible degrade note**,
+except where `visual-rendering-core.md` §6 says otherwise (`visual-rendering-core.md` §5, §6;
+markup and label-safety in §5 above). The `.fc-*` primitive
 stays the right answer for a trivial spine, and is the *recommended* answer when the review
 context is known to be offline.
 

@@ -25,7 +25,9 @@
 #      and linked to at least one callout card. The detector is healthy at zero
 #      hits, so it is self-tested against perturbed copies of the real example.
 #   6. The links resolve both ways: each trail link names a real callout card
-#      in the design doc, and each data-decision names an entry the trail lists.
+#      in the design doc, each data-decision names an entry the trail lists, each
+#      entry's linked cards name that same entry back (self-tested), and each
+#      card's "serves" meta line links to its entry.
 
 set -euo pipefail
 
@@ -89,6 +91,7 @@ fi
 # self-test: strip every source; the detector must fail it
 if [ "$(entry_check <<<"${trail//class=\"oc-src\"/class=\"x\"}")" = bad ]; then ok "self-test: detector rejects an uncited entry"; else bad "self-test: detector accepted an uncited entry"; fi
 if [ "$(entry_check <<<"${trail//href=\"#callout-/href=\"#nowhere-}")" = bad ]; then ok "self-test: detector rejects an entry linked to no callout"; else bad "self-test: detector accepted an entry linked to no callout"; fi
+if [ "$(entry_check <<<"${trail//data-feedback-kind=\"decision\"/data-feedback-kind=\"callout\"}")" = bad ]; then ok "self-test: detector rejects an entry not of kind decision"; else bad "self-test: detector accepted an entry not of kind decision"; fi
 
 # --- 6. the links resolve both ways inside the design doc -------------------
 # Every callout a trail entry links to exists as a callout card, and every
@@ -102,6 +105,36 @@ refs="$(grep -oE 'data-decision="dc-[a-z0-9-]+"' "$DESIGN" | sed 's/^data-decisi
 while IFS= read -r ref; do
   [ -n "$ref" ] || continue
   if grep -qF "id=\"trail-$ref\" class=\"dt-entry\" data-feedback-id=\"$ref\"" <<<"$trail"; then ok "data-decision=\"$ref\" names a trail entry"; else bad "data-decision=\"$ref\" names no trail entry"; fi
+done <<<"$refs"
+
+# Pairing, per entry: every callout an entry links to names that same entry back
+# in its data-decision. Resolving each direction separately (above) passes when
+# entry A links a card that names entry B, which is the pairing the trail promises.
+pairing_check() { # pairing_check <trail-html> <design-html> -> ok | bad:<detail>
+  local t="$1" d="$2" id target detail=""
+  while IFS= read -r line; do
+    id="$(grep -oE 'data-feedback-id="dc-[a-z0-9-]+"' <<<"$line" | sed 's/.*="//; s/"$//')"
+    [ -n "$id" ] || continue
+    entry="$(awk -v id="$id" 'index($0, "data-feedback-id=\"" id "\"") {on=1} on {print} on && /<\/li>/ {exit}' <<<"$t")"
+    while IFS= read -r target; do
+      [ -n "$target" ] || continue
+      grep -qE "id=\"callout-$target\" class=\"vr-callout\" [^>]*data-decision=\"$id\"" <<<"$d" || detail+=" $id->$target"
+    done < <(grep -oE 'href="#callout-c-[a-z0-9-]+-L[0-9]+"' <<<"$entry" | sed 's/^href="#callout-//; s/"$//')
+  done < <(grep 'class="dt-entry"' <<<"$t")
+  if [ -z "$detail" ]; then echo ok; else echo "bad:$detail"; fi
+}
+design_html="$(cat "$DESIGN")"
+pair="$(pairing_check "$trail" "$design_html")"
+if [ "$pair" = ok ]; then ok "every trail entry's linked callouts name that entry back"; else bad "trail entry links a callout that does not name it back:${pair#bad:}"; fi
+# self-test: swap one card's decision for a sibling entry's; the check must fail
+swapped="${design_html/data-decision=\"dc-refuse-expired-tokens\"/data-decision=\"dc-server-side-sessions\"}"
+if [ "$swapped" != "$design_html" ] && [ "$(pairing_check "$trail" "$swapped")" != ok ]; then ok "self-test: pairing check rejects a card naming another entry"; else bad "self-test: pairing check accepted a card naming another entry"; fi
+
+# The card's "serves" meta line links back to the trail entry it names.
+while IFS= read -r ref; do
+  [ -n "$ref" ] || continue
+  card="$(awk -v r="data-decision=\"$ref\"" 'index($0, r) {on=1; n=0} on {print; if (++n > 4) exit}' "$DESIGN")"
+  if grep -qF "serves <a href=\"#trail-$ref\"" <<<"$card"; then ok "callout serving $ref links back to #trail-$ref"; else bad "callout serving $ref has no 'serves <a href=\"#trail-$ref\">' link"; fi
 done <<<"$refs"
 
 # --- 1. run the real serializer ---------------------------------------------

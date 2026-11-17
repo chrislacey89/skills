@@ -101,6 +101,14 @@ pre-push:
       run: bash scripts/test-recall-callout-contract.sh
     decision-trail-contract-tests:
       run: bash scripts/test-decision-trail-contract.sh
+    multi-repo-seam-contract-tests:
+      run: bash scripts/test-multi-repo-seam-contract.sh
+    recap-generator-checklist-tests:
+      run: bash scripts/test-recap-generator-checklist.sh
+    reader-palette-contract-tests:
+      run: bash scripts/test-reader-palette-contract.sh
+    sitting-plan-contract-tests:
+      run: bash scripts/test-sitting-plan-contract.sh
     post-review-edit-lock-tests:
       run: bash scripts/test-post-review-edit-lock.sh
     skill-frontmatter-loads-tests:
