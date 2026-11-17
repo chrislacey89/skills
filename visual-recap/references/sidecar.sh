@@ -51,6 +51,7 @@
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|closed|all>]
 #   sidecar.sh lessons match <path>... [--record <start|changed>]   (the lessons whose paths name these files or a folder above them; --record appends the run to lookups/)
 #   sidecar.sh lessons check [<lesson-file>]   (loose ends, one "<kind><TAB><lesson><TAB><detail>" line each, then "loose ends: <n>"; read-only)
+#   sidecar.sh lessons audit [--branch <name>]   (self-check, coverage, group, loose ends, and per-branch runs; --branch prints that branch's runs line only; read-only)
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
@@ -2853,6 +2854,7 @@ lessons_listed() {
     done
 }
 
+# shellcheck disable=SC2120  # its argument comes through cmd_lessons' "lessons_$sub" dispatch
 lessons_check() {
     local top file="" dirs="" d list="" raw t a b c det bk listed="" n=0 out="" abs idx hits
     [ $# -le 1 ] || die_usage "usage: sidecar.sh lessons check [<lesson-file>]"
@@ -2913,12 +2915,149 @@ lessons_check() {
     printf 'loose ends: %s\n' "$n"
 }
 
+# lessons audit: whether recall is working, read-only. Sections in order:
+# self-check, coverage, group, loose ends, runs. Each line starts with its
+# label. --branch prints only that branch's runs line, which /pre-merge shows.
+# The run classes come from the run log's phase and outcome: a phase counts
+# when its outcome is not failed, and a branch whose every record failed is
+# failed.
+# shellcheck disable=SC2016  # jq program text
+LESSONS_RUNS_JQ='
+[inputs | fromjson? | objects | select(.branch | type == "string")]
+| group_by(.branch)[]
+| . as $g
+| [$g[] | select(.outcome != "failed") | .phase] as $ok
+| "runs: \($g[0].branch) "
+  + (if ($ok | index("start")) and ($ok | index("changed")) then "both"
+     elif ($ok | index("start")) then "start-only"
+     elif ($ok | index("changed")) then "changed-only"
+     else "failed" end)'
+
+# lessons_audit_runs <sidecar> [<branch>]: the runs lines, for every branch
+# with a log file or for one.
+lessons_audit_runs() {
+    local sc="$1" f files=() line
+    if [ $# -ge 2 ]; then
+        f="$sc/lookups/$(branch_slug "$2").jsonl"
+        line=""
+        [ -f "$f" ] && line="$(jq -Rrn --arg b "$2" "$LESSONS_RUNS_JQ"' | select(startswith("runs: \($b) "))' "$f")"
+        if [ -n "$line" ]; then printf '%s\n' "$line"; else printf 'no lesson lookup recorded for this branch\n'; fi
+        return 0
+    fi
+    for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
+    if [ "${#files[@]}" -eq 0 ]; then printf 'runs: none recorded\n'; return 0; fi
+    jq -Rrn "$LESSONS_RUNS_JQ" "${files[@]}" | LC_ALL=C sort
+}
+
+# lessons_audit_group <sidecar>: one line per member of the project's
+# solutions.system group and per solutions.related key, "readable" when its
+# sidecar.json and its solutions/ can be read. A sidecar whose sidecar.json
+# cannot be read may be a member, so with a group label it is listed as
+# unreadable; a related key that matches no sidecar is unreadable too.
+lessons_audit_group() {
+    local sc="$1" own rel d f label key hit rc seen=$'\n'
+    own="$(jq -r '.solutions.system // "" | strings' "$sc/sidecar.json" 2>/dev/null)" || own=""
+    rel="$(jq -r '.solutions.related // [] | .[]? | strings' "$sc/sidecar.json" 2>/dev/null)" || rel=""
+    lessons_group_line() {
+        case "$seen" in *$'\n'"$1"$'\n'*) return 0 ;; esac
+        seen="$seen$1"$'\n'
+        printf 'group: %s %s\n' "$2" "$3"
+    }
+    lessons_readable() {
+        [ -r "$1/sidecar.json" ] || return 1
+        [ ! -e "$1/solutions" ] || { [ -r "$1/solutions" ] && [ -x "$1/solutions" ]; }
+    }
+    if [ -n "$own" ]; then
+        for d in "$SIDECAR_ROOT"/*/; do
+            [ -d "$d" ] || continue
+            d="${d%/}"
+            [ "$d" != "$sc" ] || continue
+            f="$d/sidecar.json"
+            if [ ! -x "$d" ] || { [ -e "$f" ] && ! label="$(jq -r '.solutions.system // "" | strings' "$f" 2>/dev/null)"; }; then
+                lessons_group_line "$d" "${d##*/}" unreadable
+                continue
+            fi
+            [ -f "$f" ] || continue
+            [ "$label" = "$own" ] || continue
+            if lessons_readable "$d"; then lessons_group_line "$d" "${d##*/}" readable
+            else lessons_group_line "$d" "${d##*/}" unreadable; fi
+        done
+    fi
+    while IFS= read -r key; do
+        [ -n "$key" ] || continue
+        rc=0
+        hit="$(owners_of "$key" 2>/dev/null)" || rc=$?
+        hit="${hit%%$'\n'*}"
+        if [ "$rc" -ne 0 ] || [ -z "$hit" ]; then lessons_group_line "key:$key" "$key" unreadable; continue; fi
+        [ "$hit" != "$sc" ] || continue
+        if lessons_readable "$hit"; then lessons_group_line "$hit" "${hit##*/}" readable
+        else lessons_group_line "$hit" "${hit##*/}" unreadable; fi
+    done <<<"$rel"
+}
+
+lessons_audit() {
+    local branch="" has_branch=0 top sc dirs scan lesson entry res rc s=0 p=0 l pth fld3
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --branch) [ $# -ge 2 ] || die_usage "lessons audit: --branch needs a name"
+                      branch="$2"; has_branch=1; shift 2 ;;
+            *) die_usage "usage: sidecar.sh lessons audit [--branch <name>]" ;;
+        esac
+    done
+    [ "$has_branch" -eq 0 ] || [ -n "$branch" ] || die_usage "lessons audit: --branch needs a name"
+    in_repo || refuse "lessons audit: not inside a git repository"
+    top="$(pgit rev-parse --show-toplevel)" || refuse "lessons audit: cannot find the project's top level"
+    cd "$top" || refuse "lessons audit: cannot enter $top"
+    sc="$(do_resolve 2>/dev/null)" || sc=""
+    if [ "$has_branch" -eq 1 ]; then
+        if [ -z "$sc" ]; then printf 'lookups are not recorded: no sidecar\n'; return 0; fi
+        lessons_audit_runs "$sc" "$branch"
+        return 0
+    fi
+    dirs="$(cmd_solutions_dirs)" || refuse "lessons audit: could not list the lesson directories"
+    scan="$(lessons_scan "$dirs")" || refuse "lessons audit: could not read the lesson headers"
+    lesson="" entry=""
+    while IFS= read -r l; do
+        [ -n "$l" ] || continue
+        s=$((s + 1))
+        pth="${l%%$'\t'*}"
+        fld3="${l#*$'\t'}"; fld3="${fld3#*$'\t'}"; fld3="${fld3%%$'\t'*}"
+        [ -n "$fld3" ] || continue
+        p=$((p + 1))
+        if [ -z "$lesson" ]; then lesson="$pth"; entry="${fld3%%,*}"; fi
+    done <<<"$(printf '%s\n' "$scan" | LC_ALL=C sort)"
+    # The self-check runs the real matcher on a real lesson's first entry and
+    # passes only when that lesson comes back; with nothing to compare it
+    # says it could not run.
+    if [ -z "$lesson" ]; then
+        printf 'self-check: could-not-run: no lesson carries paths\n'
+    else
+        rc=0
+        res="$( (lessons_match "$entry") 2>/dev/null)" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            printf 'self-check: FAIL: lessons match %s exited %s\n' "$entry" "$rc"
+        elif printf '%s\n' "$res" | awk -F '\t' -v want="$lesson" '$2 == want { f = 1 } END { exit !f }'; then
+            printf 'self-check: pass\n'
+        else
+            printf 'self-check: FAIL: lessons match %s did not return %s\n' "$entry" "$lesson"
+        fi
+    fi
+    printf 'coverage: %s of %s lessons carry paths\n' "$p" "$s"
+    [ -z "$sc" ] || lessons_audit_group "$sc"
+    # shellcheck disable=SC2119  # the whole store: no lesson file is passed
+    l="$( (lessons_check) 2>/dev/null | tail -n 1)"
+    case "$l" in "loose ends: "*) printf '%s\n' "$l" ;; *) printf 'loose ends: could-not-run\n' ;; esac
+    if [ -z "$sc" ]; then printf 'runs: lookups are not recorded: no sidecar\n'
+    else lessons_audit_runs "$sc"
+    fi
+}
+
 cmd_lessons() {
     local sub="${1:-}"
     [ $# -gt 0 ] && shift
     case "$sub" in
-        match|check) ;;
-        *) die_usage "usage: sidecar.sh lessons <match|check> ..." ;;
+        match|check|audit) ;;
+        *) die_usage "usage: sidecar.sh lessons <match|check|audit> ..." ;;
     esac
     "lessons_$sub" "$@"
 }

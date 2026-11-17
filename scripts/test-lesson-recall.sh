@@ -889,5 +889,134 @@ check "no links anywhere: the match line has three fields" "exact${TAB}docs/solu
     "$(printf '%s\n' "$out" | head -n 1)"
 runo "$P" trace docs/solutions/x/solo-2026-01-01.md
 check "no links anywhere: trace prints only the lesson line" "lesson  $P/docs/solutions/x/solo-2026-01-01.md" "$out"
+# -----------------------------------------------------------------------------
+section "lessons audit (#752)"
+
+# A project in a group with one readable member, one related link that matches
+# nothing, and run logs for four branches.
+mkproj
+AM="$P"
+runo "$AM" init --name amember --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+runo "$AM" config set system agrp
+mkproj
+AP="$P"
+runo "$AP" init --name audited --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+AS="$out"
+[ -d "$AS" ] || fatal "init did not create a sidecar: $err"
+runo "$AP" config set system agrp
+mkdir -p "$AP/lib"; : > "$AP/lib/a.sh"
+lesson "$AP" "x/one-2026-01-01.md" "One" "paths: [lib/a.sh]"
+lesson "$AP" "x/two-2026-01-01.md" "Two" "paths: [lib/gone.sh]"
+lesson "$AP" "x/three-2026-01-01.md" "Three"
+git -C "$AP" add docs lib && git -C "$AP" commit -q -m "lessons"
+for b in both start changed bad; do
+    git -C "$AP" checkout -q -b "feat/$b" main
+    case "$b" in
+        both) runo "$AP" lessons match lib/a.sh --record start; runo "$AP" lessons match lib/a.sh --record changed ;;
+        start) runo "$AP" lessons match lib/a.sh --record start ;;
+        changed) runo "$AP" lessons match lib/a.sh --record changed ;;
+        bad) mkdir -p "$AS/lookups"
+             printf '%s\n' '{"at":"2026-01-01T00:00:00Z","branch":"feat/bad","phase":"start","files":[],"scanned":0,"with_paths":0,"projects":["audited"],"matched":[],"outcome":"failed"}' > "$AS/lookups/feat%2Fbad.jsonl"
+             git -C "$AS" add lookups && git -C "$AS" commit -q -m "failed run" ;;
+    esac
+done
+git -C "$AP" checkout -q main
+asum() { (cd "$1" && find . -path ./.git -prune -o -type f -exec cksum {} + | LC_ALL=C sort; git -C "$1" rev-parse HEAD; git -C "$1" status --porcelain); }
+sbefore="$(asum "$AS")"; pbefore="$(asum "$AP")"
+runo "$AP" lessons audit
+check "audit: exits 0" 0 "$rc"
+check "audit: its sections, in order" \
+"self-check: pass
+coverage: 2 of 3 lessons carry paths
+group: amember readable
+loose ends: 5
+runs: feat/bad failed
+runs: feat/both both
+runs: feat/changed changed-only
+runs: feat/start start-only" "$out"
+check "audit writes nothing to the sidecar" "$sbefore" "$(asum "$AS")"
+check "audit writes nothing to the project" "$pbefore" "$(asum "$AP")"
+runo "$AP" lessons audit --branch feat/start
+check "audit --branch: that branch's runs line only" "runs: feat/start start-only" "$out"
+runo "$AP" lessons audit --branch feat/none
+check "audit --branch with no log: says so" "no lesson lookup recorded for this branch" "$out"
+check "audit --branch with no log: exits 0" 0 "$rc"
+runo "$AP" lessons audit --bogus
+check "audit with an unknown flag: exits 2" 2 "$rc"
+
+# A member whose sidecar.json cannot be read is unreadable; a related key that
+# matches no sidecar is unreadable too.
+if [ "$(id -u)" -ne 0 ]; then
+    jq '.solutions.related = ["root:0000000000000000000000000000000000000000"]' "$AS/sidecar.json" > "$tmp/sj" && cp "$tmp/sj" "$AS/sidecar.json"
+    chmod 000 "$tmp/sidecars/amember/sidecar.json"
+    runo "$AP" lessons audit
+    chmod 644 "$tmp/sidecars/amember/sidecar.json"
+    check "audit: an unreadable member and a dead related key are unreadable" \
+"group: amember unreadable
+group: root:0000000000000000000000000000000000000000 unreadable" "$(printf '%s\n' "$out" | grep '^group: ')"
+    git -C "$AS" checkout -q -- sidecar.json
+fi
+
+# No lesson carries paths: the self-check could not run, never pass.
+mkproj
+runo "$P" init --name nopaths --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+lesson "$P" "x/bare-2026-01-01.md" "Bare"
+runo "$P" lessons audit
+check "no lesson carries paths: self-check could not run, with the reason" \
+    "self-check: could-not-run: no lesson carries paths" "$(printf '%s\n' "$out" | head -n 1)"
+check "no lesson carries paths: coverage is 0" "coverage: 0 of 1 lessons carry paths" "$(printf '%s\n' "$out" | sed -n 2p)"
+check "no logs at all: one runs line says none" "runs: none recorded" "$(printf '%s\n' "$out" | tail -n 1)"
+
+# No sidecar: nothing is recorded, and audit --branch says so.
+mkproj
+lesson "$P" "x/a-2026-01-01.md" "A" "paths: [a.sh]"
+runo "$P" lessons audit --branch main
+check "no sidecar: audit --branch says lookups are not recorded" "lookups are not recorded: no sidecar" "$out"
+runo "$P" lessons audit
+check "no sidecar: the self-check still runs" "self-check: pass" "$(printf '%s\n' "$out" | head -n 1)"
+check "no sidecar: the runs line says lookups are not recorded" "runs: lookups are not recorded: no sidecar" "$(printf '%s\n' "$out" | tail -n 1)"
+
+# [QA-RELI] The self-check runs the real matcher. A fixture copy of sidecar.sh
+# whose matcher never matches must print FAIL, never pass.
+broken="$tmp/broken-sidecar.sh"
+sed -e 's/if (q\[j\] == e) best = 1000000/if (0) best = 1000000/' \
+    -e 's/else if (index(q\[j\], e "\/") == 1 \&\& depth > best) best = depth/else if (0) best = depth/' "$SC" > "$broken"
+cmp -s "$SC" "$broken" && fatal "the matcher mutation changed nothing in $SC"
+out="$(cd "$AP" && "$BASH" "$broken" lessons audit 2>"$tmp/stderr")"; rc=$?
+case "$(printf '%s\n' "$out" | head -n 1)" in
+    "self-check: FAIL: "*) ok "a broken matcher: self-check FAIL" ;;
+    *) bad "a broken matcher: self-check FAIL" "got: $(printf '%s\n' "$out" | head -n 1)" ;;
+esac
+
+section "/pre-merge's lessons block, run as written (#752)"
+
+PREMERGE="$repo_root/pre-merge/SKILL.md"
+pblock="$(awk '/^ *<!-- sidecar-read: pre-merge-lessons -->$/ { on = 1; next }
+               on && /^ *```bash$/ { inb = 1; next }
+               inb && /^ *```$/ { exit }
+               inb { print }' "$PREMERGE")"
+[ -n "$pblock" ] || fatal "pre-merge/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: pre-merge-lessons -->"
+ok "pre-merge/SKILL.md carries the lessons block"
+pscript="$(printf '%s\n' "$pblock" | sed -e "s|^\( *\)SC=.*|\1SC=\"$SC\"|")"
+pl="$(grep -n 'sidecar-read: pre-merge-lessons' "$PREMERGE" | cut -d: -f1)"
+p1="$(grep -n '^### Phase 1' "$PREMERGE" | cut -d: -f1)"
+p2="$(grep -n '^### Phase 2' "$PREMERGE" | cut -d: -f1)"
+if [ -n "$p1" ] && [ -n "$p2" ] && [ "$p1" -lt "$pl" ] && [ "$pl" -lt "$p2" ]; then ok "the block sits in Phase 1"
+else bad "the block sits in Phase 1" "phase1=$p1 block=$pl phase2=$p2"; fi
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    git -C "$AP" checkout -q feat/both
+    out="$(cd "$AP" && "${runner[@]}" "$pscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: on a branch with both lookups: exits 0" 0 "$rc"
+    check "$sh: prints the branch's runs line" "runs: feat/both both" "$out"
+    git -C "$AP" checkout -q main
+    out="$(cd "$AP" && "${runner[@]}" "$pscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: on a branch with no record: says so" "no lesson lookup recorded for this branch" "$out"
+    git -C "$AP" checkout -q --detach
+    out="$(cd "$AP" && "${runner[@]}" "$pscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: on a detached HEAD: exits 0" 0 "$rc"
+    git -C "$AP" checkout -q main
+done
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
