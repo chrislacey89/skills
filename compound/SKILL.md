@@ -552,7 +552,7 @@ Lessons saved before the `paths` field existed cannot be found by file. This pas
 <!-- sidecar-read: compound-guided-list -->
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-bash "$SC" lessons check | awk -F '\t' '$1 == "no-paths" { print $2 }'
+bash "$SC" lessons check | awk -F '\t' '$(1) == "no-paths" { print $(2) }'
 ```
 
 **For each lesson in that list, one per turn:** show its title and the lines the proposal prints, then ask the closed question *write as shown, edit, or skip*, the per-item confirm `/excavate` § 7 uses. Never present several lessons to approve at once.
@@ -574,11 +574,12 @@ SC="<this skill's directory>/references/sidecar.sh"
 LESSON="<the lesson's path>"
 PATHS_LINE="<the confirmed paths line>"
 RELATED_LINE="<the confirmed related line>"
+bash "$SC" require "$LESSON" --from "/compound guided pass" >/dev/null || exit 1
 TMP="$(mktemp "$LESSON.XXXXXX")" || exit 1
 awk -v p="$PATHS_LINE" -v r="$RELATED_LINE" '
-  NR == 1 && $0 == "---" { fm = 1; print; next }
-  fm && ($0 ~ /^paths:/ || $0 ~ /^related:/) { next }
-  fm && $0 == "---" { if (!done) { print p; print r; done = 1 } fm = 0; print; next }
+  NR == 1 && $(0) == "---" { fm = 1; print; next }
+  fm && ($(0) ~ /^paths:/ || $(0) ~ /^related:/) { next }
+  fm && $(0) == "---" { if (!done) { print p; print r; done = 1 } fm = 0; print; next }
   { print }
   fm && /^volatility:/ && !done { print p; print r; done = 1 }
 ' "$LESSON" > "$TMP" && mv "$TMP" "$LESSON" || { rm -f "$TMP"; exit 1; }

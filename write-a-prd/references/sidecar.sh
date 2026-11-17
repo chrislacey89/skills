@@ -2963,6 +2963,20 @@ lessons_audit_runs() {
     jq -Rrn "$LESSONS_RUNS_JQ" "${files[@]}" | LC_ALL=C sort
 }
 
+# lessons_group_line <id> <name> <state>: one group line, once per id. It reads
+# and extends lessons_audit_group's seen, through bash's dynamic scope.
+lessons_group_line() {
+    case "$seen" in *$'\n'"$1"$'\n'*) return 0 ;; esac
+    seen="$seen$1"$'\n'
+    printf 'group: %s %s\n' "$2" "$3"
+}
+
+# lessons_readable <sidecar dir>: its sidecar.json and solutions/ can be read.
+lessons_readable() {
+    [ -r "$1/sidecar.json" ] || return 1
+    [ ! -e "$1/solutions" ] || { [ -r "$1/solutions" ] && [ -x "$1/solutions" ]; }
+}
+
 # lessons_audit_group <sidecar>: one line per member of the project's
 # solutions.system group and per solutions.related key, "readable" when its
 # sidecar.json and its solutions/ can be read. A sidecar whose sidecar.json
@@ -2972,15 +2986,6 @@ lessons_audit_group() {
     local sc="$1" own rel d f label key hit rc seen=$'\n'
     own="$(jq -r '.solutions.system // "" | strings' "$sc/sidecar.json" 2>/dev/null)" || own=""
     rel="$(jq -r '.solutions.related // [] | .[]? | strings' "$sc/sidecar.json" 2>/dev/null)" || rel=""
-    lessons_group_line() {
-        case "$seen" in *$'\n'"$1"$'\n'*) return 0 ;; esac
-        seen="$seen$1"$'\n'
-        printf 'group: %s %s\n' "$2" "$3"
-    }
-    lessons_readable() {
-        [ -r "$1/sidecar.json" ] || return 1
-        [ ! -e "$1/solutions" ] || { [ -r "$1/solutions" ] && [ -x "$1/solutions" ]; }
-    }
     if [ -n "$own" ]; then
         for d in "$SIDECAR_ROOT"/*/; do
             [ -d "$d" ] || continue
