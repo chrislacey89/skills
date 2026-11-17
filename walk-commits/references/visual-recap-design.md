@@ -1545,13 +1545,13 @@ meta line can link back to it.
   <ol class="dt-list">
     <li id="trail-dc-server-side-sessions" class="dt-entry" data-feedback-id="dc-server-side-sessions" data-feedback-kind="decision">
       <span class="dt-name">Sessions stay server-side</span>
-      <span class="oc-cited">Each request looks its token up in the token store; nothing session-shaped reaches the client.<span class="oc-src">PRD #412 § Implementation Decisions: “Session state lives server-side, keyed by session id.”</span></span>
+      <span class="oc-cited">Each request looks its token up in the token store; nothing session-shaped reaches the client.<span class="oc-src">PRD § Implementation Decisions: “Session state lives server-side, keyed by session id.”</span></span>
       <span class="dt-impl">carried out at <a href="#callout-c-session-ts-L33" onclick="setActive('c-session-ts-L33')">session.ts:33</a></span>
       <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
     </li>
     <li id="trail-dc-guard-at-router" class="dt-entry" data-feedback-id="dc-guard-at-router" data-feedback-kind="decision">
       <span class="dt-name">Auth runs once, at the router</span>
-      <span class="oc-cited">Every <code>/api</code> route is guarded by one middleware, not a check per handler.<span class="oc-src">PR #418 review thread: “Move the guard up so a new route can’t forget it.”</span></span>
+      <span class="oc-cited">Every <code>/api</code> route is guarded by one middleware, not a check per handler.<span class="oc-src">PR review thread on app.ts:18: “Move the guard up so a new route can’t forget it.”</span></span>
       <span class="dt-impl">carried out at <a href="#callout-c-app-ts-L18" onclick="setActive('c-app-ts-L18')">app.ts:18</a></span>
       <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
     </li>
