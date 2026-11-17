@@ -512,6 +512,13 @@ line gets a numbered `.vr-marker`; clicking it activates its callout (see §10).
 Stable ids per `visual-rendering-core.md` §4: callout cards and their markers share a
 `data-feedback-id="c-<file-slug>-L<line>"`.
 
+**A load-bearing callout names the decision it serves.** When the recap opens with a decision
+trail (§15), give the callout card an optional `data-decision="dc-<slug>"` naming the trail
+entry it carries out, and say so on the card's meta line (`serves dc-<slug>`). Only the card
+carries it, never the marker. The serializer reads it (`visual-rendering-core.md` §4), so a
+reader's note on the line comes back tied to the commitment. Leave it off a callout that serves
+no listed decision: an unlinked callout is information, not a fault.
+
 ```html
 <section id="sec-changes" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">04</span> &nbsp;Annotated changes</div>
@@ -550,10 +557,10 @@ Stable ids per `visual-rendering-core.md` §4: callout cards and their markers s
 
     <!-- callouts (direct labels, anchored below the hunk) -->
     <div style="border-top:1px solid var(--border);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);background:var(--bg-subtle)">
-      <div id="callout-c-session-ts-L33" class="vr-callout" data-feedback-id="c-session-ts-L33" data-feedback-kind="callout" onclick="setActive('c-session-ts-L33')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
+      <div id="callout-c-session-ts-L33" class="vr-callout" data-feedback-id="c-session-ts-L33" data-feedback-kind="callout" data-decision="dc-server-side-sessions" onclick="setActive('c-session-ts-L33')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
         <span class="vr-marker" style="flex:none;width:20px;height:20px;font-size:11px">1</span>
         <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33 · serves dc-server-side-sessions</div>
           <div style="font-size:13.5px;color:var(--fg);line-height:1.5;text-wrap:pretty">The note — one sentence of authored prose anchored to this exact line.</div>
         </div>
       </div>

@@ -154,7 +154,10 @@ Stable-id-keyed, emoji-safe, one item per line, agent-parseable:
 - question#q-1: "yes, ship behind the existing flag"
 - signoff#signoff-a1b2c3d: 🟡 — "confirm the migration is reversible before merge"
 - callout#c-app-ts-L18: recall "runs after the route handler, once per request"
+- callout#c-session-ts-L33: needs-change — "keep the expiry check here" — decision dc-server-side-sessions
 ```
+
+A `decision dc-<slug>` part names the decision a load-bearing callout serves: the callout card's optional `data-decision` attribute, pointing at an entry in the recap's decision trail (`visual-recap-design.md` §15). The author sets it, not the reader, so it never makes a line on its own. It rides on a unit the reader already answered, last, after the verdict, note, and attempt, so whoever reads the feedback knows which commitment the reader's response bears on.
 
 A `recall "…"` part is the reader's own answer to a framework callout's questions (§3), written before they opened the answer. It is the reader's attempt, not a note to the author, so it never shares the note's quotes: a unit with a verdict, a note, and an attempt serializes as `verdict — "note" — recall "attempt"`. The serializer reads the field only when the unit itself owns it, so a callout nested in a per-unit series is not reported twice.
 
@@ -180,6 +183,7 @@ A minimal serializer (hand-roll per artifact; this is the shape, not a shipped l
       if (verdict) parts.push(verdict);         // so a verdict-less question serializes as
       if (note) parts.push('"' + note + '"');   // `question#q-1: "…"`, per §4
       if (recall) parts.push('recall "' + recall + '"');
+      if (el.dataset.decision) parts.push('decision ' + el.dataset.decision); // §15 trail entry this callout serves
       lines.push(`- ${kind}#${id}: ${parts.join(' — ')}`);
     });
     return lines.join('\n');

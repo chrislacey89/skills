@@ -267,6 +267,12 @@ jobs:
       - name: Run recall callout contract suite
         run: bash scripts/test-recall-callout-contract.sh
 
+      # A callout names the decision-trail entry it serves; core §4's serializer
+      # carries that reference. This runs the serializer under node and checks
+      # the trail example's links and citations resolve.
+      - name: Run decision trail contract suite
+        run: bash scripts/test-decision-trail-contract.sh
+
       # A committed instrument that fails while reporting normally is the defect
       # docs/solutions/testing-patterns/validate-the-instrument-not-only-the-
       # subject-2026-08-23.md recorded as prose. This is its mechanizable half:
