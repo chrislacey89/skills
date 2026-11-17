@@ -1387,7 +1387,7 @@ mkdir -p "$BHP/lib" "$BMS/solutions/big"
 lesson "$BHP" "x/target-2026-01-01.md" "Target" "paths: [lib/a.sh]"
 bigname="$(awk 'BEGIN { s = "n"; while (length(s) < 190) s = s "n"; print s }')"
 bigprefix="$BMS/solutions/big/$bigname"
-bigplen=$(( ${#bigprefix} + 12 ))   # the prefix, "-NNNNN.md" and the separator
+bigplen=$(( ${#bigprefix} + 10 ))   # the prefix, "-NNNNN.md" (9) and the NUL separator (1)
 bigcount=$(( argmax / bigplen + 200 ))
 if [ "$bigcount" -gt 40000 ]; then
     printf '  SKIP ARG_MAX %s needs %s lessons, over the 40000 cap\n' "$argmax" "$bigcount"
@@ -1404,10 +1404,13 @@ else
     }'
     bigmid="$(printf '%s-%05d.md' "$bigname" "$((bigcount / 2))")"
     runo "$BHP" lessons match lib/a.sh
-    check "big folder: the group is bigger than ARG_MAX ($argmax) in path bytes" 1 \
-        "$([ $((bigcount * bigplen)) -gt "$argmax" ] && echo 1 || echo 0)"
+    # Measured, not recomputed from the sizing sum: printf is a builtin, so the glob
+    # of the real files reaches no exec and cannot itself hit E2BIG.
+    bigbytes="$(printf '%s\0' "$BMS"/solutions/big/*.md | wc -c | tr -d ' ')"
+    check "big folder: the member folder's real path bytes ($bigbytes) exceed ARG_MAX ($argmax)" 1 \
+        "$([ "$bigbytes" -gt "$argmax" ] && echo 1 || echo 0)"
     check "big folder: match exits 0" 0 "$rc"
-    check "big folder: the home lesson is replaced-by the member lesson past the batch split" \
+    check "big folder: the home lesson is replaced-by a lesson in the over-ARG_MAX member folder" \
         "exact${TAB}docs/solutions/x/target-2026-01-01.md${TAB}Target${TAB}replaced-by:$bigmid" "$(printf '%s\n' "$out" | grep '^exact')"
     check "big folder: no could-not-be-read warning" 0 "$(printf '%s\n' "$err" | grep -c 'could not be read')"
     printf '  (big-folder arm: %s lessons, %ss)\n' "$bigcount" "$(( $(date +%s) - bigstart ))"
