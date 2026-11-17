@@ -61,7 +61,8 @@ while IFS= read -r id; do
     bad "checkbox $id does not link a callout card the design has"
   fi
 done <<<"$reviewed_ids"
-sittings="$(grep -oE 'data-sitting="[^"]+"' <<<"$example" | sed 's/^data-sitting="//; s/"$//')"
+sittings="$(grep -oE 'data-sitting="[^"]+"' <<<"$example" | sed 's/^data-sitting="//; s/"$//' || true)"
+[[ -n "$sittings" ]] || bad "the example has no data-sitting attribute"
 while IFS= read -r s; do
   [[ -n "$s" ]] || continue
   li="$(awk -v s="data-sitting=\"$s\"" 'index($0, s) {on=1} on {print} on && /<\/li>$/ && !/<label>/ {exit}' <<<"$example")"
