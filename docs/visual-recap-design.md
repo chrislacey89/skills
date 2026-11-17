@@ -1488,7 +1488,7 @@ and say what happens if nobody answers.
 
 ---
 
-## 15. Block: seam (multi-repo mode)
+## 16. Block: seam (multi-repo mode)
 
 **Scope note: the block for the line between two repositories.** A multi-repo recap
 (`/visual-recap` §1, one `<repo-path>@<base>..<head>` scope per repository) exists for the
@@ -1535,7 +1535,7 @@ fixed keeps its id, so the reviewer's note still attaches to it.
 
 ```html
 <style>
-  /* seam primitives (§15): same tokens, no new palette */
+  /* seam primitives (§16): same tokens, no new palette */
   .sm{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden}
   .sm-head,.sm-row{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr);
     gap:var(--s3);padding:6px var(--s4);align-items:start}

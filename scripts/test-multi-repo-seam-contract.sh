@@ -3,7 +3,8 @@
 # shellcheck disable=SC2016
 # test-multi-repo-seam-contract.sh — contract test for /visual-recap's
 # multi-repo mode (chrislacey89/skills#761): the multi-scope resolve block in
-# visual-recap/SKILL.md §1, the seam block in visual-recap-design.md §15, and
+# visual-recap/SKILL.md §1, the seam block in visual-recap-design.md (its
+# section number is read from the heading, not assumed), and
 # its registration in visual-rendering-core.md §3 and §4.
 #
 # THE DRIFT CLASS: a command a downstream agent copies out of a SKILL.md and
@@ -23,13 +24,19 @@
 #   2. It refuses before printing anything when any scope is malformed (no `@`,
 #      three dots) or names a ref its repository does not have, and when given
 #      fewer than two scopes.
-#   3. Design §15 exists, carries the three finding chips, and every finding in
+#   3. The design's seam section exists, carries the three finding chips, and every finding in
 #      its example cites both sides.
 #   4. Core §3 lists the seam block and core §4 registers its two id shapes, and
 #      the design example uses exactly those shapes.
-#   5. SKILL.md points at design §15 from the multi-repo step.
+#   5. SKILL.md and core point at the seam section by the number its heading
+#      carries, so a renumber at merge time that misses a pointer fails here.
 
 set -euo pipefail
+
+# A git hook runs with GIT_DIR exported. Without this, the fixture repos below
+# re-initialize and commit into the repository the hook points at (#429;
+# scripts/test-fixture-git-isolation.sh is the mechanism that catches it).
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
@@ -101,11 +108,13 @@ refuses "a scope with no @" "$work/caller@base..feature" "$work/service"
 refuses "an empty endpoint" "$work/caller@base..feature" "$work/service@..feature"
 refuses "a single scope" "$work/caller@base..feature"
 
-# --- 3. design §15: the seam block ------------------------------------------
-sec15="$(awk '/^## 15\. Block: seam/{on=1; print; next} on&&/^## /{exit} on' "$DESIGN")"
-if [[ -n "$sec15" ]]; then ok "design has §15 Block: seam"; else bad "design has no '## 15. Block: seam' section"; fi
+# --- 3. design: the seam block ----------------------------------------------
+N="$(sed -nE 's/^## ([0-9]+)\. Block: seam.*/\1/p' "$DESIGN" | head -1)"
+sec15=""
+[[ -n "$N" ]] && sec15="$(awk -v h="^## $N\\. Block: seam" '$0 ~ h {on=1; print; next} on&&/^## /{exit} on' "$DESIGN")"
+if [[ -n "$sec15" ]]; then ok "design has §$N Block: seam"; else bad "design has no '## <n>. Block: seam' section"; fi
 for chip in mismatch fragile planned; do
-  if grep -q "class=\"sf-chip sf-$chip\"" <<<"$sec15"; then ok "§15 example renders a $chip chip"; else bad "§15 example has no sf-$chip chip"; fi
+  if grep -q "class=\"sf-chip sf-$chip\"" <<<"$sec15"; then ok "seam example renders a $chip chip"; else bad "seam example has no sf-$chip chip"; fi
 done
 # Every finding (data-feedback-kind="seam-finding") cites both sides: two
 # .sf-cite spans inside it. Count per finding, not in sum.
@@ -115,8 +124,8 @@ cites="$(awk '
   inf && /<!-- \/finding -->/ { print n; inf=0 }
 ' <<<"$sec15")"
 nfind="$(grep -c 'data-feedback-kind="seam-finding"' <<<"$sec15" || true)"
-if [[ "$nfind" -ge 3 ]]; then ok "§15 example has $nfind findings"; else bad "§15 example has $nfind findings (< 3, one per chip)"; fi
-if [[ -n "$cites" ]] && ! grep -qvx 2 <<<"$cites"; then ok "every §15 finding cites exactly two sides"; else bad "a §15 finding does not cite both sides; per-finding cite counts: $(tr '\n' ' ' <<<"$cites")"; fi
+if [[ "$nfind" -ge 3 ]]; then ok "seam example has $nfind findings"; else bad "seam example has $nfind findings (< 3, one per chip)"; fi
+if [[ -n "$cites" ]] && ! grep -qvx 2 <<<"$cites"; then ok "every seam finding cites exactly two sides"; else bad "a seam finding does not cite both sides; per-finding cite counts: $(tr '\n' ' ' <<<"$cites")"; fi
 # The comparison table: every row cites both sides too.
 rows="$(grep -c 'class="sm-row"' <<<"$sec15" || true)"
 rowcites="$({ grep 'class="sm-row"' <<<"$sec15" || true; } | awk '{ print gsub(/class="sm-cite"/, "&") }' | sort -u | tr '\n' ' ')"
@@ -128,10 +137,14 @@ for id in 'seam-<contract-slug>' 'sf-<finding-slug>'; do
   if grep -qF "→ \`$id\`" "$CORE"; then ok "core §4 registers $id"; else bad "core §4 does not register $id"; fi
 done
 bad_ids="$(grep -oE 'data-feedback-id="[^"]*"' <<<"$sec15" | grep -vE '"(seam|sf)-[a-z0-9-]+"' || true)"
-if [[ -z "$bad_ids" ]]; then ok "§15 ids all take a registered seam-/sf- shape"; else bad "§15 ids outside the registry: $bad_ids"; fi
+if [[ -z "$bad_ids" ]]; then ok "seam ids all take a registered seam-/sf- shape"; else bad "seam ids outside the registry: $bad_ids"; fi
 
 # --- 5. skill pointer --------------------------------------------------------
-if grep -q 'visual-recap-design.md` §15' "$SKILL"; then ok "SKILL.md points at design §15"; else bad "SKILL.md does not point at design §15"; fi
+for f in "$SKILL" "$CORE"; do
+  if grep -q "visual-recap-design.md\` §$N\b" "$f"; then ok "$f points at design §$N"; else bad "$f does not point at design §$N"; fi
+  stale="$(grep -n 'seam' "$f" | grep -oE 'visual-recap-design.md` §[0-9]+' | grep -v "§$N\$" || true)"
+  if [[ -z "$stale" ]]; then ok "$f has no seam pointer at another section number"; else bad "$f points at the seam by a stale number: $stale"; fi
+done
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]
