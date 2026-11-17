@@ -107,6 +107,12 @@ refuses "three dots" "$work/caller@base..feature" "$work/service@base...feature"
 refuses "a scope with no @" "$work/caller@base..feature" "$work/service"
 refuses "an empty endpoint" "$work/caller@base..feature" "$work/service@..feature"
 refuses "an empty repo path" "$work/caller@base..feature" "@base..feature"
+# Both refs resolve here; only the merge base is missing, so only that guard can refuse it.
+git init -q -b orphanbase "$work/orphan"
+git -C "$work/orphan" -c user.name=t -c user.email=t@t commit -q --allow-empty -m a
+git -C "$work/orphan" checkout -q --orphan unrelated
+git -C "$work/orphan" -c user.name=t -c user.email=t@t commit -q --allow-empty -m b
+refuses "refs that resolve but share no merge base" "$work/caller@base..feature" "$work/orphan@orphanbase..unrelated"
 refuses "a single scope" "$work/caller@base..feature"
 
 # --- 3. design: the seam block ----------------------------------------------

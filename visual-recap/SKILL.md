@@ -78,7 +78,7 @@ git log --oneline --no-merges "$BASE_REF..HEAD"
 
 Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a PR, resolve its head/base with `gh pr view <n>`. The `git diff` is three-dot (diff from the merge base) while the `git log` stays two-dot — swapping the diff to two-dot reports deletions for base-side work this branch never touched, and the Grounding Rule above stakes this skill on those ±counts being real.
 
-**Multi-repo mode: one feature across two or more repositories.** When a feature spans a caller and the service it calls, the findings worth the most sit between them: a status value spelled differently on each side, a cap both sides enforce, an id-keyed map on one side against an ordered list on the other. Two single-repo recaps each read fine and never show any of it. So take every repository in one recap, one scope each, written `<repo-path>@<base>..<head>`, where `<repo-path>` is a local checkout and the two refs exist in it. For a PR in each repository, read its base and head with `gh pr view <n>` in that checkout first. The block checks every scope before it diffs any, so a bad one stops the run with nothing half-printed:
+**Multi-repo mode: one feature across two or more repositories.** When a feature spans a caller and the service it calls, the findings worth the most sit between them: a status value spelled differently on each side, a cap both sides enforce, an id-keyed map on one side against an ordered list on the other. Two single-repo recaps each read fine and never show any of it. So take every repository in one recap, one scope each, written `<repo-path>@<base>..<head>`, where `<repo-path>` is a local checkout and the two refs exist in it. For a PR in each repository, read its base and head with `gh pr view <n>` in that checkout first. The block checks every scope before it diffs any (the refs resolve and share a merge base, which the three-dot diff needs), so a bad one stops the run with nothing half-printed:
 
 ```bash
 # visual-recap: multi-scope resolve
@@ -96,6 +96,8 @@ for scope in "$@"; do
   { git -C "$repo" rev-parse --verify --quiet "${range%%..*}^{commit}" &&
     git -C "$repo" rev-parse --verify --quiet "${range#*..}^{commit}"; } >/dev/null ||
     { echo "scope [$scope]: a ref does not resolve in $repo; not guessing" >&2; exit 1; }
+  git -C "$repo" merge-base "${range%%..*}" "${range#*..}" >/dev/null 2>&1 ||
+    { echo "scope [$scope]: the two refs share no merge base in $repo (unrelated histories, or a shallow clone); not guessing" >&2; exit 1; }
 done
 for scope in "$@"; do
   repo="${scope%%@*}"; range="${scope#*@}"
