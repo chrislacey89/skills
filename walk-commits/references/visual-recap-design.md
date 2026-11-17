@@ -284,7 +284,7 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
       <nav style="display:flex;flex-direction:column;margin-top:auto">
         <div style="font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s2)">Contents</div>
         <a href="#sec-overview" style="display:flex;align-items:center;gap:11px;padding:7px 0;text-decoration:none;font-size:13px;font-weight:500;color:var(--fg-muted)"><span style="width:2px;height:15px;background:var(--accent);border-radius:2px"></span><span style="font-family:var(--mono);font-size:11px;width:14px">01</span>Overview</a>
-        <!-- …then one entry per rendered section (files, contracts, diagram, wireframes, changes, compare, review), numbered in render order — same shape -->
+        <!-- …then one entry per rendered section (seam, decision trail, files, contracts, diagram, wireframes, changes, compare, review), numbered in render order — same shape -->
       </nav>
       <div style="display:flex;align-items:center;justify-content:flex-end;padding-top:var(--s4);border-top:1px solid var(--border)">
         <button onclick="toggleTheme()" style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--border-strong);border-radius:999px;background:var(--bg-elev);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:550;cursor:pointer">◐ Theme</button>
@@ -293,7 +293,7 @@ overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.
 
     <!-- MAIN: one scrolling column, full width — no max-width; title and lede keep their own reading measure -->
     <main style="min-width:0;padding:var(--s8) var(--s7)">
-      <!-- the blocks of §3–§9 drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
+      <!-- the blocks of §3–§9, §12, §15's decision trail, and §16's seam drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
     </main>
   </div>
 </div>
@@ -514,7 +514,8 @@ Stable ids per `visual-rendering-core.md` §4: callout cards and their markers s
 
 **A load-bearing callout names the decision it serves.** When the recap opens with a decision
 trail (§15), give the callout card an optional `data-decision="dc-<slug>"` naming the trail
-entry it carries out, and say so on the card's meta line (`serves dc-<slug>`). Only the card
+entry it carries out, and say so on the card's meta line as a link back to the entry
+(`serves <a href="#trail-dc-<slug>">dc-<slug></a>`). Only the card
 carries it, never the marker. The serializer reads it (`visual-rendering-core.md` §4), so a
 reader's note on the line comes back tied to the commitment. Leave it off a callout that serves
 no listed decision: an unlinked callout is information, not a fault.
@@ -551,17 +552,27 @@ no listed decision: an unlinked callout is information, not a fault.
           <!-- an added + annotated line: --add spine + --add-bg, plus a numbered marker.
                The row carries .vr-line + id so the marker can wash it on activation. -->
           <div id="line-c-session-ts-L33" class="vr-line" style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--add);background:var(--add-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">const</span> token = <span style="color:var(--sx-k)">await</span> tokenStore.<span style="color:var(--sx-f)">get</span>(req.sessionId)<button class="vr-marker" data-feedback-id="c-session-ts-L33" onclick="setActive('c-session-ts-L33')" style="width:17px;height:17px;margin-left:8px;font-size:10px;vertical-align:middle">1</button></code></div>
+          <div id="line-c-session-ts-L34" class="vr-line" style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--add);background:var(--add-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">34</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">if</span> (!token || token.expiresAt &lt;= Date.<span style="color:var(--sx-f)">now</span>()) <span style="color:var(--sx-k)">return</span> res.<span style="color:var(--sx-f)">sendStatus</span>(<span style="color:var(--sx-n)">401</span>)<button class="vr-marker" data-feedback-id="c-session-ts-L34" onclick="setActive('c-session-ts-L34')" style="width:17px;height:17px;margin-left:8px;font-size:10px;vertical-align:middle">2</button></code></div>
         </div>
       </div>
     </div>
 
     <!-- callouts (direct labels, anchored below the hunk) -->
     <div style="border-top:1px solid var(--border);padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);background:var(--bg-subtle)">
+      <!-- data-decision and the "serves" link: only when the recap has a decision trail (§15) and this
+           callout carries out one of its entries. Drop both otherwise. -->
       <div id="callout-c-session-ts-L33" class="vr-callout" data-feedback-id="c-session-ts-L33" data-feedback-kind="callout" data-decision="dc-server-side-sessions" onclick="setActive('c-session-ts-L33')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
         <span class="vr-marker" style="flex:none;width:20px;height:20px;font-size:11px">1</span>
         <div>
-          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33 · serves dc-server-side-sessions</div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:33 · serves <a href="#trail-dc-server-side-sessions" onclick="event.stopPropagation()" style="color:var(--accent)">dc-server-side-sessions</a></div>
           <div style="font-size:13.5px;color:var(--fg);line-height:1.5;text-wrap:pretty">The note — one sentence of authored prose anchored to this exact line.</div>
+        </div>
+      </div>
+      <div id="callout-c-session-ts-L34" class="vr-callout" data-feedback-id="c-session-ts-L34" data-feedback-kind="callout" data-decision="dc-refuse-expired-tokens" onclick="setActive('c-session-ts-L34')" style="display:flex;gap:var(--s3);padding:var(--s3) var(--s4);cursor:pointer">
+        <span class="vr-marker" style="flex:none;width:20px;height:20px;font-size:11px">2</span>
+        <div>
+          <div style="font-family:var(--mono);font-size:11px;color:var(--fg-muted);margin-bottom:3px"><span style="color:var(--flag-load)">load-bearing</span> · session.ts:34 · serves <a href="#trail-dc-refuse-expired-tokens" onclick="event.stopPropagation()" style="color:var(--accent)">dc-refuse-expired-tokens</a></div>
+          <div style="font-size:13.5px;color:var(--fg);line-height:1.5;text-wrap:pretty">A second callout on the same hunk: same card, its own line and id.</div>
         </div>
       </div>
     </div>
@@ -1503,12 +1514,10 @@ tell a deliberate choice from an accident before reading the hunks. It sits righ
 overview (§3), in scroll mode only (§16 orders it against the seam in a multi-repo recap); the
 deck argues its decisions screen by screen instead.
 
-**Every entry is cited; the code is derived.** The Grounding Rule
-(`visual-rendering-core.md` §1) is unchanged. An entry quotes where the decision was made: the
-PRD or issue body, a review thread, a research entry. It shows that source with §11's
-`.oc-cited` / `.oc-src` treatment. There is no `asserted` entry: a decision you cannot cite is
-your reading of the code, and it belongs in the overview as prose. The trail never restates
-what a line does; the callouts it links to do that, grounded in the real hunk.
+**Every entry is cited; the code is derived.** What counts as a source, and why there is no
+`asserted` entry, is `visual-rendering-core.md` §1. Show each entry's source with §11's
+`.oc-cited` / `.oc-src` treatment. The trail never restates what a line does; the callouts it
+links to do that, grounded in the real hunk.
 
 **Each entry links to the callouts that carry it out, and each of those callouts names it
 back.** The links are anchors to the callout cards (`#callout-c-<file-slug>-L<line>`), and the
@@ -1550,10 +1559,10 @@ meta line can link back to it.
       <span class="dt-impl">carried out at <a href="#callout-c-session-ts-L33" onclick="setActive('c-session-ts-L33')">session.ts:33</a></span>
       <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
     </li>
-    <li id="trail-dc-guard-at-router" class="dt-entry" data-feedback-id="dc-guard-at-router" data-feedback-kind="decision">
-      <span class="dt-name">Auth runs once, at the router</span>
-      <span class="oc-cited">Every <code>/api</code> route is guarded by one middleware, not a check per handler.<span class="oc-src">PR review thread on app.ts:18: “Move the guard up so a new route can’t forget it.”</span></span>
-      <span class="dt-impl">carried out at <a href="#callout-c-app-ts-L18" onclick="setActive('c-app-ts-L18')">app.ts:18</a></span>
+    <li id="trail-dc-refuse-expired-tokens" class="dt-entry" data-feedback-id="dc-refuse-expired-tokens" data-feedback-kind="decision">
+      <span class="dt-name">An expired token is refused, never refreshed in place</span>
+      <span class="oc-cited">The request gets a 401 and the client signs in again; nothing extends the token on the server.<span class="oc-src">PR review thread on session.ts:34: “Refreshing here hides the expiry from the client. Send 401 and let it re-auth.”</span></span>
+      <span class="dt-impl">carried out at <a href="#callout-c-session-ts-L34" onclick="setActive('c-session-ts-L34')">session.ts:34</a></span>
       <textarea class="dt-note" data-feedback-note placeholder="Response to this decision…"></textarea>
     </li>
   </ol>
