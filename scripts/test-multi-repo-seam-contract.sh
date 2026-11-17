@@ -219,6 +219,7 @@ done
 # SKILL.md and the design header both say "Part I (§1–§<n>)". It read §1–§12
 # after §13–§16 landed, because nothing checked it when a section was added.
 last="$(sed -nE 's/^## ([0-9]+)\. .*/\1/p' "$DESIGN" | sort -n | tail -1)"
+# coverage: enumerated — the two files that state Part I's range (rg '§1–§[0-9]').
 for f in "$SKILL" "$DESIGN"; do
   ranges="$(grep -oE 'Part I[^§]{0,40}§1–§[0-9]+|§1–§[0-9]+ is \*\*Part I' "$f" | grep -oE '§1–§[0-9]+' | sort -u || true)"
   if [[ -n "$ranges" && "$ranges" == "§1–§$last" ]]; then ok "$f names Part I as §1–§$last"; else bad "$f names Part I as [$(tr '\n' ' ' <<<"$ranges")], but the last numbered section is §$last"; fi
