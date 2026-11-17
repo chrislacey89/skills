@@ -82,7 +82,8 @@ Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a
 
 ```bash
 # visual-recap: multi-scope resolve
-# One argument per scope: <repo-path>@<base>..<head>, split at the first `@`.
+# Replace the placeholder scopes on the next line, one quoted argument per scope, split at the first `@`.
+set -- "<repo-path>@<base>..<head>" "<repo-path>@<base>..<head>"
 [ "$#" -ge 2 ] || { echo "multi-repo mode needs two or more scopes; use the single-repo block above" >&2; exit 1; }
 usage='write each scope as <repo-path>@<base>..<head>, with two dots'
 for scope in "$@"; do

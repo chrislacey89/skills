@@ -77,7 +77,17 @@ mkrepo() { # mkrepo <dir> <file> <base-line> <head-line>
 mkrepo "$work/caller" caller.ts 'send(status)' "send('CANCELED')"
 mkrepo "$work/service" service.php 'accept($status)' "accept('cancelled')"
 
-run_block() { bash -c "$block" multi-scope "$@"; }
+# The block sets its own scopes on one placeholder `set --` line, as the skill documents it
+# (an agent pasting the block has no argv). Fill that line by substitution, never through argv.
+if [[ "$(grep -c '^set -- ' <<<"$block")" -eq 1 ]]; then ok "block carries exactly one placeholder 'set --' line"; else bad "block must carry exactly one '^set -- ' placeholder line"; fi
+run_block() {
+  local argline line src=""
+  argline="set --$(printf ' %q' "$@")"
+  while IFS= read -r line; do
+    if [[ "$line" == 'set -- '* ]]; then src+="$argline"$'\n'; else src+="$line"$'\n'; fi
+  done <<<"$block"
+  bash -c "$src"
+}
 
 out="$(run_block "$work/caller@base..feature" "$work/service@base..feature" 2>&1)" && rc=0 || rc=$?
 if [[ $rc -eq 0 ]]; then ok "two valid scopes exit 0"; else bad "two valid scopes exited $rc: $out"; fi
