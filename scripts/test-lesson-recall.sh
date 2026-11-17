@@ -600,5 +600,211 @@ check "no sidecar: still prints the match" \
 check "no sidecar: recorded: no, with the reason" "recorded: no: no sidecar resolves" \
     "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
 
+# -----------------------------------------------------------------------------
+section "review fixes: a failure listing the lesson directories is recorded"
+
+# The sidecar is resolved before any step that can fail, so a listing failure
+# under --record is recorded as failed and never reads "no sidecar resolves".
+# solutions-dirs fails when it cannot create the sidecar's solutions/: the
+# sidecar is made read-only with solutions/ gone, and lookups/ kept writable.
+if [ "$(id -u)" -ne 0 ]; then
+    mkproj
+    FP="$P"
+    runo "$FP" init --name listfail --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+    FS="$out"
+    [ -d "$FS" ] || fatal "init did not create a sidecar: $err"
+    git -C "$FP" checkout -q -b feat/l
+    mkdir -p "$FS/lookups"
+    rmdir "$FS/solutions" 2>/dev/null || rm -rf "$FS/solutions"
+    chmod 555 "$FS"
+    runo "$FP" lessons match a/b.sh --record start
+    chmod 755 "$FS"
+    check "listing fails with --record: exits 1" 1 "$rc"
+    check "listing fails with --record: nothing on stdout" "" "$out"
+    case "$err" in *"could not list the lesson directories"*"(recorded as failed)"*) ok "listing fails with --record: stderr says it was recorded as failed" ;;
+        *) bad "listing fails with --record: stderr says it was recorded as failed" "stderr: $err" ;; esac
+    check "listing fails with --record: the record's outcome is failed" failed \
+        "$(tail -n 1 "$FS/lookups/feat%2Fl.jsonl" 2>/dev/null | jq -r .outcome)"
+    check "listing fails with --record: the record names the sidecar's project" '["listfail"]' \
+        "$(tail -n 1 "$FS/lookups/feat%2Fl.jsonl" 2>/dev/null | jq -c .projects)"
+fi
+
+section "review fixes: guards that need a test that fails without them"
+
+# The matcher's awk runs for real and prints its receipt, then exits nonzero:
+# the receipt guard alone would take that as a complete result.
+mkproj
+GP="$P"
+lesson "$GP" "x/g-2026-01-01.md" "Guarded" "paths: [a/b.sh]"
+rshim="$tmp/receiptshim"
+mkdir -p "$rshim"
+printf '#!/bin/sh\nif [ "$1" = -F ]; then "%s" "$@"; exit 3; fi\nexec "%s" "$@"\n' "$(command -v awk)" "$(command -v awk)" > "$rshim/awk"
+chmod +x "$rshim/awk"
+out="$(cd "$GP" && PATH="$rshim:$PATH" "$BASH" "$SC" lessons match a/b.sh 2>"$tmp/stderr")"; rc=$?
+err="$(cat "$tmp/stderr")"
+check "a matcher that prints its receipt then fails: exits 1" 1 "$rc"
+check "a matcher that prints its receipt then fails: nothing on stdout" "" "$out"
+
+# The run log's directory cannot be written: the receipt says so, and no line
+# is added.
+if [ "$(id -u)" -ne 0 ]; then
+    mkproj
+    WP="$P"
+    runo "$WP" init --name nowrite --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+    WS="$out"
+    [ -d "$WS" ] || fatal "init did not create a sidecar: $err"
+    git -C "$WP" checkout -q -b feat/w
+    lesson "$WP" "x/w-2026-01-01.md" "Unwritten" "paths: [a/b.sh]"
+    mkdir -p "$WS/lookups"
+    printf '%s\n' '{"at":"2026-01-01T00:00:00Z"}' > "$WS/lookups/feat%2Fw.jsonl"
+    chmod 555 "$WS/lookups"
+    runo "$WP" lessons match a/b.sh --record start
+    chmod 755 "$WS/lookups"
+    check "an unwritable lookups/: exits 0" 0 "$rc"
+    check "an unwritable lookups/: the receipt says the log could not be written" \
+        "recorded: no: the run log could not be written" "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
+    check "an unwritable lookups/: no line is added" 1 "$(wc -l < "$WS/lookups/feat%2Fw.jsonl" | tr -d ' ')"
+fi
+
+# -----------------------------------------------------------------------------
+section "lessons check: loose ends (#750)"
+
+# lessons check reports and never edits: every lesson file is compared byte
+# for byte before and after.
+mkproj
+CP="$P"
+mkdir -p "$CP/lib/sub" "$CP/tools"
+: > "$CP/lib/sub/real.sh"
+: > "$CP/tools/t.sh"
+lesson "$CP" "a/nokey-2026-01-01.md" "No paths key"
+lesson "$CP" "a/empty-2026-01-01.md" "Empty paths" "paths: []"
+lesson "$CP" "b/good-2026-01-01.md" "Good" "paths: [lib/sub/real.sh, tools/]"
+lesson "$CP" "b/dead-2026-01-01.md" "Dead path" "paths: [lib/sub/real.sh, lib/gone.sh, ../outside.sh]"
+lesson "$CP" "c/multi-2026-01-01.md" "Multi-line" "paths:" "  - lib/sub/real.sh"
+lesson "$CP" "c/space-2026-01-01.md" "Space entry" "paths: [\"lib/a b.sh\", tools]"
+lesson "$CP" "c/comma-2026-01-01.md" "Comma entry" "paths: [\"lib/a,b.sh\"]"
+lesson "$CP" "c/bracket-2026-01-01.md" "Bracket entry" "paths: [[tools]]"
+lesson "$CP" "c/related-2026-01-01.md" "Bad related" "paths: [tools]" "related: not-a-list.md"
+before="$(cd "$CP" && find docs -type f -exec cksum {} + | LC_ALL=C sort)"
+runo "$CP" lessons check
+check "check: exits 0" 0 "$rc"
+check "check: one line per loose end in lesson order, unlisted n/a, then the total" \
+"no-paths${TAB}docs/solutions/a/empty-2026-01-01.md${TAB}paths is empty
+no-paths${TAB}docs/solutions/a/nokey-2026-01-01.md${TAB}no paths key
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}lib/gone.sh
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}../outside.sh (outside the project tree)
+bad-list${TAB}docs/solutions/c/bracket-2026-01-01.md${TAB}paths: an entry holds a comma, space, or bracket: [tools]
+bad-list${TAB}docs/solutions/c/comma-2026-01-01.md${TAB}paths: an entry holds a comma, space, or bracket: lib/a,b.sh
+bad-list${TAB}docs/solutions/c/multi-2026-01-01.md${TAB}paths: not a one-line bracket list
+bad-list${TAB}docs/solutions/c/related-2026-01-01.md${TAB}related: not a one-line bracket list
+bad-list${TAB}docs/solutions/c/space-2026-01-01.md${TAB}paths: an entry holds a comma, space, or bracket: lib/a b.sh
+unlisted: n/a
+loose ends: 9" "$out"
+check "check: every lesson file is byte-identical" "$before" "$(cd "$CP" && find docs -type f -exec cksum {} + | LC_ALL=C sort)"
+
+runo "$CP" lessons check docs/solutions/b/dead-2026-01-01.md
+check "check <file>: exits 0" 0 "$rc"
+check "check <file>: that lesson only" \
+"dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}lib/gone.sh
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}../outside.sh (outside the project tree)
+unlisted: n/a
+loose ends: 2" "$out"
+runo "$CP/docs" lessons check solutions/b/good-2026-01-01.md
+check "check <file> from a subdirectory: a clean lesson" \
+"unlisted: n/a
+loose ends: 0" "$out"
+runo "$CP" lessons check docs/solutions/none.md
+check "check <file> that does not exist: exits 1" 1 "$rc"
+check "check <file> that does not exist: nothing on stdout" "" "$out"
+runo "$CP" lessons check a b
+check "check with two files: exits 2" 2 "$rc"
+
+# An unterminated frontmatter lends nothing to the next file in either order.
+for order in first last; do
+    mkproj
+    if [ "$order" = first ]; then u="a-open-2026-01-01.md"; else u="z-open-2026-01-01.md"; fi
+    mkdir -p "$P/docs/solutions/r" "$P/x"
+    : > "$P/x/real.sh"
+    printf -- '---\ntitle: "Open"\npaths: [only/gone.sh]\n\n# Open\n' > "$P/docs/solutions/r/$u"
+    lesson "$P" "r/b-tail-2026-01-01.md" "Tail" "paths: [x/real.sh]"
+    runo "$P" lessons check
+    check "check, unterminated $order: the open file has no paths, the next is clean" \
+"no-paths${TAB}docs/solutions/r/$u${TAB}no paths key
+unlisted: n/a
+loose ends: 1" "$out"
+done
+
+# An unreadable store: the check did not run, so it exits nonzero.
+if [ "$(id -u)" -ne 0 ]; then
+    mkproj
+    lesson "$P" "y/b-2026-01-01.md" "Unreadable" "paths: [a]"
+    chmod 000 "$P/docs/solutions/y/b-2026-01-01.md"
+    runo "$P" lessons check
+    check "check over an unreadable lesson: exits 1" 1 "$rc"
+    check "check over an unreadable lesson: nothing on stdout" "" "$out"
+    chmod 644 "$P/docs/solutions/y/b-2026-01-01.md"
+fi
+
+section "lessons check: unlisted on the sidecar backend (#750)"
+
+# A guest sidecar answers sidecar for backend slices; a lesson no work item
+# lists is reported, one a work item lists is not.
+mkproj
+UP="$P"
+runo "$UP" init --name unlisted --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+US="$out"
+[ -d "$US" ] || fatal "init did not create a sidecar: $err"
+runo "$UP" backend slices
+check "the guest fixture answers sidecar for backend slices" sidecar "$out"
+mkdir -p "$UP/lib"; : > "$UP/lib/x.sh"
+lesson "$UP" "a/listed-2026-01-01.md" "Listed" "paths: [lib/x.sh]"
+lesson "$UP" "a/loose-2026-01-01.md" "Loose" "paths: [lib/x.sh]"
+mkdir -p "$US/solutions/s"
+printf -- '---\npaths: [lib/x.sh]\n---\n\n# Side\n' > "$US/solutions/s/side-2026-01-01.md"
+printf 'slice body\n' > "$tmp/body"
+runo "$UP" work create --kind slice --body-file "$tmp/body"
+wid="$out"
+runo "$UP" work lesson "$wid" docs/solutions/a/listed-2026-01-01.md
+runo "$UP" work lesson "$wid" "$US/solutions/s/side-2026-01-01.md"
+runo "$UP" lessons check
+check "sidecar backend: one unlisted line, for the lesson no work item lists" \
+"unlisted${TAB}docs/solutions/a/loose-2026-01-01.md${TAB}no work item lists it
+loose ends: 1" "$out"
+runo "$UP" lessons check docs/solutions/a/listed-2026-01-01.md
+check "sidecar backend: a listed lesson checked alone is clean" "loose ends: 0" "$out"
+
+section "/compound Phase 5's lessons-check block, run as written (#750)"
+
+COMPOUND="$repo_root/compound/SKILL.md"
+kblock="$(awk '/^<!-- sidecar-read: compound-lessons-check -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$COMPOUND")"
+[ -n "$kblock" ] || fatal "compound/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: compound-lessons-check -->"
+ok "compound/SKILL.md carries the lessons-check block"
+case "$kblock" in *'LESSON='*) ;; *) fatal "the lessons-check block sets no LESSON" ;; esac
+kscript="$(printf '%s\n' "$kblock" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e 's|^LESSON=.*|LESSON="$TEST_LESSON"|')"
+# It sits in Phase 5, after the work-item block that follows the save.
+kline="$(grep -n '^<!-- sidecar-read: compound-lessons-check -->$' "$COMPOUND" | cut -d: -f1)"
+wline="$(grep -n '^<!-- work-lesson: compound -->$' "$COMPOUND" | cut -d: -f1)"
+p6line="$(grep -n '^### Phase 6' "$COMPOUND" | cut -d: -f1)"
+if [ -n "$wline" ] && [ -n "$p6line" ] && [ "$wline" -lt "$kline" ] && [ "$kline" -lt "$p6line" ]; then
+    ok "the block sits in Phase 5 after the work-item block"
+else
+    bad "the block sits in Phase 5 after the work-item block" "work-lesson=$wline check=$kline phase6=$p6line"
+fi
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    out="$(cd "$CP" && TEST_LESSON="docs/solutions/b/dead-2026-01-01.md" "${runner[@]}" "$kscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: exits 0" 0 "$rc"
+    check "$sh: prints the check for the lesson it was given" \
+"dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}lib/gone.sh
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}../outside.sh (outside the project tree)
+unlisted: n/a
+loose ends: 2" "$out"
+    out="$(cd "$UP" && TEST_LESSON="$US/solutions/s/side-2026-01-01.md" "${runner[@]}" "$kscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: a sidecar lesson by its absolute path: clean" "loose ends: 0" "$out"
+done
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

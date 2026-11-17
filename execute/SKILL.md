@@ -511,7 +511,7 @@ bash "$SC" lessons match "$@" --record start
 - **`no lesson points at these files`** and **`no file list given; nothing to match`** mean the lookup ran and found nothing. The keyword search below still runs.
 - **The `lessons:` receipt** counts the lessons scanned and how many carry `paths`. A count of `0 with paths` means no lesson can be found this way yet, not that none applies. Its last field says whether the command wrote this run to the sidecar's run log: `recorded: yes`, or `recorded: no:` and the reason. The command writes that record itself; nothing in this skill writes or edits it.
 
-A nonzero exit means the lesson headers could not be read; nothing was matched, and the empty result is not a no-match. The command records the run as failed when it can. In either mode, relay its stderr, continue to the keyword search, and say in the slice's closing summary that the lesson lookup failed.
+A nonzero exit means the lookup failed, for one of the causes [references/state-backend.md](references/state-backend.md) § Lesson recall lists; nothing was matched, and the empty result is not a no-match. The command records the run as failed when it can. In either mode, relay its stderr, continue to the keyword search, and say in the slice's closing summary that the lesson lookup failed.
 
 Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it). Set `KW` to the keyword to look for:
 

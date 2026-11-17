@@ -314,6 +314,8 @@ related: [<lesson file name>, ...]
 [What change would make this solution unnecessary? E.g., "When Ably SDK v3 ships built-in auth" or "When we refactor the auth module per RFC #42". If this is an enduring principle, write "Evergreen — no expiration condition."]
 ```
 
+**Propose `paths` from the files the branch changed.** `paths` is how `/execute` finds this lesson again by file, whatever words a later task uses. List the files the branch changed (`git diff --name-only "$(bash "$SC" base-ref)...HEAD"`, with `SC` as in Phase 5), keep the ones the lesson's text names, and write them relative to the project's top level, a folder in place of its files when the lesson is about the whole folder. Show the proposed line to the user with the rest of the entry; it is written only as they confirm or edit it, and `[]` when nothing fits. `replaces` and `related` name other lessons by file name, and are `[]` unless the user names one. Each list is one line in brackets, and no entry may hold a comma, a space, or a bracket.
+
 **Adjust the template to fit the content.** Not every solution needs every section. A simple bug fix might just need Problem, Root Cause, Solution, and Prevention. An architectural decision might skip Symptoms and emphasize Key Decision. Don't pad sections that have nothing to say.
 
 ### Phase 4: Check for Overlaps
@@ -461,6 +463,17 @@ echo "work item: $W"
 ```
 
 The list counts closed items too, because the slice may already be closed when `/compound` runs on its own branch. `work lesson` adds a path once, so running the block again changes nothing.
+
+**Check the saved lesson for loose ends.** Run this after the work-item block, on any of the three paths, with `LESSON` set to the entry's path as above. It reads the lesson and changes nothing:
+
+<!-- sidecar-read: compound-lessons-check -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the entry's path>"
+bash "$SC" lessons check "$LESSON"
+```
+
+Each line before the `loose ends:` total names one loose end; [references/state-backend.md](references/state-backend.md) § Lesson recall lists the kinds. Show the lines to the user; a fix is an edit to the lesson they confirm, then a commit on the same path the entry took. The check never blocks the capture, and a nonzero exit means it could not read the lesson: relay its stderr and go on to Phase 6.
 
 ### Phase 6: Report
 

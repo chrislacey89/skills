@@ -50,6 +50,7 @@
 #   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|closed|all>]
 #   sidecar.sh lessons match <path>... [--record <start|changed>]   (the lessons whose paths name these files or a folder above them; --record appends the run to lookups/)
+#   sidecar.sh lessons check [<lesson-file>]   (loose ends, one "<kind><TAB><lesson><TAB><detail>" line each, then "loose ends: <n>"; read-only)
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
@@ -2536,38 +2537,40 @@ lessons_record() {
     commit_paths "$sc" "sidecar: lesson lookup $phase on $branch" "$rel" >/dev/null || return 1
 }
 
-# lessons_try_record <outcome> <scanned> <with> <matched>: record this lookup
-# and print the receipt's recorded value. It reads lessons_match's sc, branch,
-# phase, q, and name, which bash's dynamic scope makes visible here.
+# lessons_try_record <sidecar> <branch> <phase> <files> <project> <outcome>
+#   <scanned> <with> <matched>: record this lookup and print the receipt's
+# recorded value. Every input is an argument, so a caller that fails early
+# records with what it already knows.
 lessons_try_record() {
-    if [ -z "$sc" ]; then
+    if [ -z "$1" ]; then
         printf 'no: no sidecar resolves'
-    elif [ -z "$branch" ]; then
+    elif [ -z "$2" ]; then
         printf 'no: HEAD is detached'
-    elif lessons_record "$sc" "$branch" "$phase" "$1" "$q" "$2" "$3" "$name" "$4"; then
+    elif lessons_record "$1" "$2" "$3" "$6" "$4" "$7" "$8" "$5" "$9"; then
         printf 'yes'
     else
         printf 'no: the run log could not be written'
     fi
 }
 
-# lessons_fail <why>: the failed outcome. Records it when --record was given,
-# then exits 1 with nothing on stdout.
+# lessons_fail <tmpd> <sidecar> <branch> <phase> <files> <project> <why>: the
+# failed outcome. Records it when a phase was given, then exits 1 with nothing
+# on stdout.
 lessons_fail() {
     local note="" r
-    rm -rf "$tmpd"
-    if [ -n "$phase" ]; then
-        r="$(lessons_try_record failed 0 0 "")"
+    [ -z "$1" ] || rm -rf "$1"
+    if [ -n "$4" ]; then
+        r="$(lessons_try_record "$2" "$3" "$4" "$5" "$6" failed 0 0 "")"
         case "$r" in
             yes) note=" (recorded as failed)" ;;
             *) note=" (not recorded: ${r#no: })" ;;
         esac
     fi
-    refuse "lessons match: $1; nothing was matched$note"
+    refuse "lessons match: $7; nothing was matched$note"
 }
 
 lessons_match() {
-    local top prefix arg q="" name dirs first scan tmpd line key kind lpath title m=0 s=0 w=0 rows=""
+    local top prefix arg q="" name dirs scan tmpd="" line key kind lpath title m=0 s=0 w=0 rows=""
     local phase="" sc="" branch="" recorded="no" outcome names=""
     in_repo || refuse "lessons match: not inside a git repository"
     top="$(pgit rev-parse --show-toplevel)" || refuse "lessons match: cannot find the project's top level"
@@ -2594,37 +2597,39 @@ lessons_match() {
         q="${q:+$q$'\n'}$arg"
     done
     cd "$top" || refuse "lessons match: cannot enter $top"
-    tmpd="$(mktemp -d)" || refuse "lessons match: cannot create a temp directory"
-    scan="$tmpd/scan"
+    # The sidecar and the project's name are found before any step that can
+    # fail, so every failure after this point is recorded where it can be. The
+    # project read is the sidecar's name, else the main checkout's directory
+    # name, which every worktree shares.
+    sc="$(do_resolve 2>/dev/null)" || sc=""
+    if [ -n "$sc" ]; then name="${sc##*/}"
+    else name="$(main_checkout)" || name="$top"; name="${name##*/}"
+    fi
     [ -z "$phase" ] || branch="$(pgit symbolic-ref --short -q HEAD)" || branch=""
-    dirs="$(cmd_solutions_dirs)" || lessons_fail "could not list the lesson directories"
-    # The project read: the sidecar's name when solutions-dirs led with one,
-    # else the main checkout's directory name, which every worktree shares.
-    first="${dirs%%$'\n'*}"
-    case "$first" in
-        "$SIDECAR_ROOT"/*/solutions) sc="${first%/solutions}"; name="${sc##*/}" ;;
-        *) name="$(main_checkout)" || name="$top"; name="${name##*/}" ;;
-    esac
-    lessons_scan "$dirs" > "$scan" || lessons_fail "could not read the lesson headers"
+    tmpd="$(mktemp -d)" || lessons_fail "" "$sc" "$branch" "$phase" "$q" "$name" "cannot create a temp directory"
+    scan="$tmpd/scan"
+    dirs="$(cmd_solutions_dirs)" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not list the lesson directories"
+    lessons_scan "$dirs" > "$scan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson headers"
     printf '%s\n' "$q" > "$tmpd/q"
     # Each step is checked on its own: a pipeline reports only its last
     # command's status, and a matcher that failed must never print as a
     # lookup that found nothing.
-    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$scan" > "$tmpd/raw" || lessons_fail "could not match the lesson headers"
-    LC_ALL=C sort "$tmpd/raw" > "$tmpd/rows" || lessons_fail "could not sort the matches"
+    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$scan" > "$tmpd/raw" \
+        || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not match the lesson headers"
+    LC_ALL=C sort "$tmpd/raw" > "$tmpd/rows" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not sort the matches"
     key=""
     while IFS=$'\t' read -r key kind lpath title; do
         if [ "$key" = "~" ]; then m="$kind"; s="$lpath"; w="$title"; break; fi
         rows="$rows$kind"$'\t'"$lpath"$'\t'"$title"$'\n'
         names="$names${lpath##*/}"$'\n'
     done < "$tmpd/rows"
-    [ "$key" = "~" ] || lessons_fail "the matcher printed no receipt"
+    [ "$key" = "~" ] || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "the matcher printed no receipt"
     rm -rf "$tmpd"
     if [ -z "$q" ]; then outcome=no-files
     elif [ -z "$rows" ]; then outcome=none
     else outcome=matched
     fi
-    [ -z "$phase" ] || recorded="$(lessons_try_record "$outcome" "$s" "$w" "$names")"
+    [ -z "$phase" ] || recorded="$(lessons_try_record "$sc" "$branch" "$phase" "$q" "$name" "$outcome" "$s" "$w" "$names")"
     case "$outcome" in
         no-files) printf 'no file list given; nothing to match\n' ;;
         none) printf 'no lesson points at these files\n' ;;
@@ -2633,12 +2638,160 @@ lessons_match() {
     printf 'lessons: %s matched, %s scanned, %s with paths, projects: %s, recorded: %s\n' "$m" "$s" "$w" "$name" "$recorded"
 }
 
+# lessons check: loose ends, read-only. The reader below is lessons_scan's,
+# kept apart because it reports the forms the scan silently treats as empty.
+# Per lesson it prints "F<TAB><lesson>", then "X<TAB><lesson><TAB><kind><TAB>
+# <detail>" for a loose end it can see alone (no-paths, bad-list), then
+# "P<TAB><lesson><TAB><entry>" per well-formed paths entry and
+# "L<TAB><lesson><TAB><key><TAB><name>" per well-formed replaces or related
+# name, which the shell checks against the tree and the stores. Entries are
+# split on commas outside double quotes, so a quoted entry holding a comma is
+# seen and reported. Fields reset at each file and are kept only once the
+# frontmatter closes, as in the scan.
+# shellcheck disable=SC2016  # awk program text
+LESSONS_CHECK_AWK='
+function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+function flush(   i) {
+    if (cur == "") return
+    if (!closed) { hp = 0; nb = 0; ne = 0 }
+    printf "F\t%s\n", cur
+    if (!hp) printf "X\t%s\tno-paths\tno paths key\n", cur
+    else if (np == 0 && !pbad) printf "X\t%s\tno-paths\tpaths is empty\n", cur
+    for (i = 1; i <= nb; i++) printf "X\t%s\tbad-list\t%s\n", cur, bad[i]
+    for (i = 1; i <= ne; i++) print ent[i]
+    seen[cur] = 1
+}
+function badl(key, why) { bad[++nb] = key ": " why; if (key == "paths") pbad = 1 }
+function add(key, e) {
+    e = trim(e)
+    if (e ~ /^".*"$/) e = substr(e, 2, length(e) - 2)
+    if (e == "") return
+    if (e ~ /[,\[\]" \t]/) { badl(key, "an entry holds a comma, space, or bracket: " e); return }
+    if (key == "paths") { np++; ent[++ne] = "P\t" cur "\t" e }
+    else ent[++ne] = "L\t" cur "\t" key "\t" e
+}
+function parse(key, v,   inner, i, c, inq, e, n) {
+    v = trim(v)
+    if (v !~ /^\[.*\]$/) { badl(key, "not a one-line bracket list"); return }
+    inner = substr(v, 2, length(v) - 2); n = length(inner); e = ""; inq = 0
+    for (i = 1; i <= n; i++) {
+        c = substr(inner, i, 1)
+        if (c == "\"") inq = !inq
+        if (c == "," && !inq) { add(key, e); e = ""; continue }
+        e = e c
+    }
+    if (inq) { badl(key, "an unclosed quote"); return }
+    add(key, e)
+}
+{ sub(/\r$/, "") }
+FNR == 1 {
+    flush()
+    cur = FILENAME; closed = 0; hp = 0; np = 0; pbad = 0; nb = 0; ne = 0
+    if ($0 == "---") { state = "fm"; next }
+    state = "body"; closed = 1
+}
+state == "fm" {
+    if ($0 == "---") { state = "body"; closed = 1 }
+    else if ($0 ~ /^paths:/) { hp = 1; parse("paths", substr($0, 7)) }
+    else if ($0 ~ /^replaces:/) parse("replaces", substr($0, 10))
+    else if ($0 ~ /^related:/) parse("related", substr($0, 9))
+    next
+}
+END {
+    flush()
+    for (i = 1; i < ARGC; i++) if (!(ARGV[i] in seen)) { printf "F\t%s\n", ARGV[i]; printf "X\t%s\tno-paths\tno paths key\n", ARGV[i] }
+}'
+
+# lessons_check_entry <top> <entry>: whether a paths entry names something in
+# the project tree; prints the dead-path detail and returns 1 when it does not.
+lessons_check_entry() {
+    local e="$2"
+    while :; do case "$e" in ./*) e="${e#./}" ;; *) break ;; esac; done
+    while :; do case "$e" in */) e="${e%/}" ;; *) break ;; esac; done
+    case "/$e/" in
+        //*|*/../*) printf '%s (outside the project tree)' "$2"; return 1 ;;
+    esac
+    [ -e "$1/$e" ] && return 0
+    printf '%s' "$2"
+    return 1
+}
+
+# lessons_listed <top>: one line per lesson a work item lists, as the physical
+# absolute path it resolves to and as the stored form, for unlisted.
+lessons_listed() {
+    local wsc wf wl e r
+    wsc="$(do_resolve 2>/dev/null)" || return 0
+    [ -d "$wsc/work" ] || return 0
+    for wf in "$wsc"/work/W-*.md; do
+        [ -f "$wf" ] || continue
+        wl="$(work_jq -Rsr "$WORK_JQ"'parse_work | (.fm.lessons // [])[]' "$wf" 2>/dev/null)" || continue
+        while IFS= read -r e; do
+            [ -n "$e" ] || continue
+            printf '%s\n' "$e"
+            r="$(lesson_resolve "$e")"
+            [ -z "$r" ] || printf '%s\n' "$r"
+        done <<<"$wl"
+    done
+}
+
+lessons_check() {
+    local top file="" dirs d list="" raw t a b c det bk listed="" n=0 out="" abs
+    [ $# -le 1 ] || die_usage "usage: sidecar.sh lessons check [<lesson-file>]"
+    in_repo || refuse "lessons check: not inside a git repository"
+    top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || refuse "lessons check: cannot find the project's top level"
+    if [ $# -eq 1 ]; then
+        [ -f "$1" ] || refuse "lessons check: no such lesson file: $1"
+        file="$(abs_path "$1")"
+        case "$file" in "$top"/*) file="${file#"$top"/}" ;; esac
+    fi
+    cd "$top" || refuse "lessons check: cannot enter $top"
+    if [ -n "$file" ]; then
+        raw="$(awk "$LESSONS_CHECK_AWK" "$file")" || refuse "lessons check: could not read $file"
+    else
+        dirs="$(cmd_solutions_dirs)" || refuse "lessons check: could not list the lesson directories"
+        for d in $dirs; do
+            [ -n "$d" ] || continue
+            [ -e "$d" ] || continue
+            list="${list:+$list$'\n'}$d"
+        done
+        if [ -n "$list" ]; then
+            # shellcheck disable=SC2086  # split on IFS (newlines): a dir may hold spaces
+            raw="$(find $list -type f -name '*.md' -exec awk "$LESSONS_CHECK_AWK" {} +)" \
+                || refuse "lessons check: could not read the lesson headers"
+        fi
+    fi
+    bk="$(cmd_backend slices 2>/dev/null)" || bk=failed
+    [ "$bk" != sidecar ] || listed="$(lessons_listed "$top")"
+    while IFS=$'\t' read -r t a b c; do
+        case "$t" in
+            X) out="$out$b"$'\t'"$a"$'\t'"$c"$'\n'; n=$((n + 1)) ;;
+            P) if ! det="$(lessons_check_entry "$top" "$b")"; then
+                   out="${out}dead-path"$'\t'"$a"$'\t'"$det"$'\n'; n=$((n + 1))
+               fi ;;
+            F) [ "$bk" = sidecar ] || continue
+               case "$a" in /*) abs="$(abs_path "$a")" ;; *) abs="$top/$a" ;; esac
+               case $'\n'"$listed"$'\n' in
+                   *$'\n'"$abs"$'\n'*|*$'\n'"$a"$'\n'*) ;;
+                   *) out="${out}unlisted"$'\t'"$a"$'\t'"no work item lists it"$'\n'; n=$((n + 1)) ;;
+               esac ;;
+        esac
+    done <<<"$raw"
+    # Grouped by lesson, in path order; within a lesson the reader's order holds.
+    [ -z "$out" ] || printf '%s' "$out" | LC_ALL=C sort -s -t "$(printf '\t')" -k2,2
+    case "$bk" in
+        sidecar) ;;
+        github) printf 'unlisted: n/a\n' ;;
+        *) printf 'unlisted: not checked: sidecar.sh backend slices failed\n' ;;
+    esac
+    printf 'loose ends: %s\n' "$n"
+}
+
 cmd_lessons() {
     local sub="${1:-}"
     [ $# -gt 0 ] && shift
     case "$sub" in
-        match) ;;
-        *) die_usage "usage: sidecar.sh lessons <match> ..." ;;
+        match|check) ;;
+        *) die_usage "usage: sidecar.sh lessons <match|check> ..." ;;
     esac
     "lessons_$sub" "$@"
 }
