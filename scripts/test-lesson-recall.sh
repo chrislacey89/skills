@@ -961,6 +961,17 @@ if [ "$(id -u)" -ne 0 ]; then
     check "check: no false dead-link for a name in a readable member folder" 0 "$(printf '%s\n' "$out" | grep -c '^dead-link')"
     rm -f "$GRP/docs/solutions/x/partial-2026-01-01.md"
     git -C "$MS" rm -q -r solutions/r && git -C "$MS" commit -q -m "drop readable member lesson"
+    # The project's OWN store stays strict through lessons_index: propose reads no other
+    # directory before it, so an unreadable own folder must fail there, not be skipped.
+    mkdir -p "$GRP/docs/solutions/own-locked"
+    chmod 000 "$GRP/docs/solutions/own-locked"
+    runo "$GRP" lessons propose docs/solutions/x/plain-2026-01-01.md
+    chmod 755 "$GRP/docs/solutions/own-locked"
+    check "propose: an unreadable folder in the project's own store fails, nonzero" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+    check "propose: the failure names the lesson listing" 1 "$(printf '%s\n' "$err" | grep -c 'could not list the lessons')"
+    runo "$GRP" lessons propose docs/solutions/x/plain-2026-01-01.md
+    check "propose: readable again, exit 0" 0 "$rc"
+    rmdir "$GRP/docs/solutions/own-locked"
 fi
 
 sbefore="$(asum "$AS")"; pbefore="$(asum "$AP")"
