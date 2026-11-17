@@ -134,7 +134,9 @@
 # (branch_fix_runs), kept apart because a branch does not identify one item. A
 # lesson's citations come from its "## Related" section and its "Sibling docs:"
 # list, resolved as require resolves them, then from the lesson's own store root
-# (<category>/<name>.md), then from the project's top level. A neighbor that is
+# (<category>/<name>.md), then from the project's top level. Its replaces and
+# related names resolve by file name across the project's stores and its
+# group's, and "replaced by" is derived from every such lesson's replaces. A neighbor that is
 # missing is printed as missing and never fails the call: exit 1 means the
 # subject itself is missing (or its store cannot be read).
 #
@@ -2323,8 +2325,41 @@ lesson_cites() {
     done <<<"$toks"
 }
 
+# lesson_links <lesson> <own dirs> <group dirs>: the lesson's replaces and
+# related names, each with every file it resolves to, then the lessons whose
+# replaces names this one, as tab-separated lines for trace:
+#   N <replaces|related> <name>        one per name, in file order
+#   R <replaces|related> <name> <own|rel> <path>   one per file a name resolves to
+#   B <own|rel> <path>                 one per lesson that replaces this one
+# "Replaced by" is derived here from every lesson's replaces; nothing stores it.
+lesson_links() {
+    local self="$1" own="$2" rel="$3" rec base idx key n name tag path rp
+    base="${self##*/}"
+    rec="$(awk "$LESSONS_SCAN_AWK" "$self")" || return 1
+    idx="$(lessons_index "$own" "$rel")" || return 1
+    for key in replaces related; do
+        if [ "$key" = replaces ]; then n="$(printf '%s' "$rec" | cut -f4)"; else n="$(printf '%s' "$rec" | cut -f5)"; fi
+        for name in $(printf '%s' "$n" | tr ',' '\n'); do
+            printf 'N\t%s\t%s\n' "$key" "$name"
+            while IFS=$'\t' read -r tag path; do
+                [ -n "$path" ] || continue
+                [ "${path##*/}" = "$name" ] || continue
+                printf 'R\t%s\t%s\t%s\t%s\n' "$key" "$name" "$tag" "$path"
+            done <<<"$idx"
+        done
+    done
+    for tag in own rel; do
+        if [ "$tag" = own ]; then rp="$(lessons_scan "$own")" || return 1
+        else rp="$(lessons_scan "$rel")" || return 1; fi
+        while IFS=$'\t' read -r path _ _ n _; do
+            [ -n "$n" ] && [ "$path" != "$self" ] || continue
+            case ",$n," in *",$base,"*) printf 'B\t%s\t%s\n' "$tag" "$path" ;; esac
+        done <<<"$rp"
+    done
+}
+
 trace_lesson() {
-    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel=""
+    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel="" rdirs links
     [ -f "$file" ] || refuse "trace: no such work item or file: $file"
     self="$(abs_path "$file")"
     # solutions-dirs names in-tree dirs relative to the cwd, so it is asked from
@@ -2385,6 +2420,20 @@ trace_lesson() {
          taught_by: ($tb | split("\n") | map(select(length > 0) | split("\t") | {id: .[0], kind: .[1], state: .[2]})
                      | unique_by(.id) | sort_by(.id | ltrimstr("W-") | tonumber))}')" \
         || refuse "trace: could not assemble the trace for $self"
+    # replaces, related, and replaced by, resolved across the project's stores
+    # and its group's, read-only. Appended after every existing key.
+    rdirs=""
+    if in_repo; then rdirs="$(cd "${top:-.}" && cmd_related_solutions_dirs 2>/dev/null)" || rdirs=""; fi
+    links="$(lesson_links "$self" "$dirs" "$rdirs")" || refuse "trace: could not read the lessons $self links to"
+    # shellcheck disable=SC2016  # $-names are jq variables
+    out="$(printf '%s\n' "$links" | jq -Rnc --argjson base "$out" '
+        [inputs | select(length > 0) | split("\t")] as $r
+        | def names($k): [$r[] | select(.[0] == "N" and .[1] == $k) | .[2]]
+            | map(. as $n | {name: $n, resolved: [$r[] | select(.[0] == "R" and .[1] == $k and .[2] == $n)
+                                                    | {path: .[4], related_project: (.[3] == "rel")}]});
+        $base + {replaces: names("replaces"), related: names("related"),
+                 replaced_by: [$r[] | select(.[0] == "B") | {path: .[2], related_project: (.[1] == "rel")}]}')" \
+        || refuse "trace: could not assemble the trace for $self"
     if [ "$json" -eq 1 ]; then printf '%s\n' "$out" | jq .; return 0; fi
     printf '%s\n' "$out" | jq -r '
         "lesson  \(.path)",
@@ -2392,7 +2441,11 @@ trace_lesson() {
         (.other[] | "  also cites  \(.resolved)"),
         (.missing[] | "  MISSING: \(.)"),
         (.cited_by[] | "  cited by  \(.)"),
-        (.taught_by[] | "  taught by  \(.id) (\(.state))")'
+        (.taught_by[] | "  taught by  \(.id) (\(.state))"),
+        (["replaces", "related"][] as $k | .[$k][]
+            | if .resolved == [] then "  \($k)  MISSING: \(.name)"
+              else (.resolved[] | "  \($k)  " + (if .related_project then "related project: " else "" end) + .path) end),
+        (.replaced_by[] | "  replaced by  " + (if .related_project then "related project: " else "" end) + .path)'
 }
 
 # lessons_scan: one record per lesson under the directories solutions-dirs
@@ -2483,6 +2536,19 @@ function canon(s,   n, a, i, k, st, out) {
     return out
 }
 FILENAME == ARGV[1] { if ($0 != "") q[++nq] = canon($0); next }
+# The second file is every scanned lesson, here and in the group: whatever its
+# replaces names is replaced by it. Derived on each run, never stored.
+FILENAME == ARGV[2] {
+    if ($4 == "") next
+    b = $1; sub(/.*\//, "", b)
+    nr = split($4, rs, ",")
+    for (i = 1; i <= nr; i++) {
+        if (rs[i] == "" || ((rs[i], b) in had)) continue
+        had[rs[i], b] = 1
+        rb[rs[i]] = (rb[rs[i]] == "" ? b : rb[rs[i]] "," b)
+    }
+    next
+}
 {
     scanned++
     if ($3 == "") next
@@ -2500,8 +2566,10 @@ FILENAME == ARGV[1] { if ($0 != "") q[++nq] = canon($0); next }
     }
     if (best < 0) next
     matched++
-    if (best == 1000000) printf "0000000\texact\t%s\t%s\n", $1, $2
-    else printf "1%06d\tfolder\t%s\t%s\n", 999999 - best, $1, $2
+    b = $1; sub(/.*\//, "", b)
+    extra = (b in rb) ? "\treplaced-by:" rb[b] : ""
+    if (best == 1000000) printf "0000000\texact\t%s\t%s%s\n", $1, $2, extra
+    else printf "1%06d\tfolder\t%s\t%s%s\n", 999999 - best, $1, $2, extra
 }
 END { printf "~\t%d\t%d\t%d\n", matched, scanned, with }'
 # lessons_record <sidecar> <branch> <phase> <outcome> <files> <scanned> <with>
@@ -2570,7 +2638,7 @@ lessons_fail() {
 }
 
 lessons_match() {
-    local top prefix arg q="" name dirs scan tmpd="" line key kind lpath title m=0 s=0 w=0 rows=""
+    local top prefix arg q="" name dirs rdirs scan tmpd="" line key lpath m=0 s=0 w=0 rows=""
     local phase="" sc="" branch="" recorded="no" outcome names=""
     in_repo || refuse "lessons match: not inside a git repository"
     top="$(pgit rev-parse --show-toplevel)" || refuse "lessons match: cannot find the project's top level"
@@ -2610,17 +2678,31 @@ lessons_match() {
     scan="$tmpd/scan"
     dirs="$(cmd_solutions_dirs)" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not list the lesson directories"
     lessons_scan "$dirs" > "$scan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson headers"
+    # The group's lessons are read for their replaces only: their paths name
+    # files in another checkout, so they are never matched here.
+    rdirs="$(cmd_related_solutions_dirs)" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not list the group's lesson directories"
+    lessons_scan "$rdirs" > "$tmpd/rscan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the group's lesson headers"
+    cat "$tmpd/rscan" "$scan" > "$tmpd/reps" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson headers"
     printf '%s\n' "$q" > "$tmpd/q"
     # Each step is checked on its own: a pipeline reports only its last
     # command's status, and a matcher that failed must never print as a
     # lookup that found nothing.
-    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$scan" > "$tmpd/raw" \
+    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$tmpd/reps" "$scan" > "$tmpd/raw" \
         || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not match the lesson headers"
     LC_ALL=C sort "$tmpd/raw" > "$tmpd/rows" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not sort the matches"
+    # A row is "<sort key><TAB><the match line>"; the receipt's key is "~".
+    # Fields are cut by hand, because read would merge an empty title's tabs.
     key=""
-    while IFS=$'\t' read -r key kind lpath title; do
-        if [ "$key" = "~" ]; then m="$kind"; s="$lpath"; w="$title"; break; fi
-        rows="$rows$kind"$'\t'"$lpath"$'\t'"$title"$'\n'
+    while IFS= read -r line; do
+        key="${line%%$'\t'*}"
+        line="${line#*$'\t'}"
+        if [ "$key" = "~" ]; then
+            m="${line%%$'\t'*}"; line="${line#*$'\t'}"
+            s="${line%%$'\t'*}"; w="${line#*$'\t'}"
+            break
+        fi
+        rows="$rows$line"$'\n'
+        lpath="${line#*$'\t'}"; lpath="${lpath%%$'\t'*}"
         names="$names${lpath##*/}"$'\n'
     done < "$tmpd/rows"
     [ "$key" = "~" ] || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "the matcher printed no receipt"
@@ -2638,13 +2720,50 @@ lessons_match() {
     printf 'lessons: %s matched, %s scanned, %s with paths, projects: %s, recorded: %s\n' "$m" "$s" "$w" "$name" "$recorded"
 }
 
+# lessons_index <own dirs> <group dirs>: one line per lesson file, "own<TAB>
+# <path>" for the project's stores and "rel<TAB><path>" for the group's, from
+# one find per directory, each directory's lines in path order. A directory that does not exist holds no lessons; one
+# that cannot be read fails the index.
+lessons_index() {
+    local d tag l rc=0
+    for tag in own rel; do
+        if [ "$tag" = own ]; then set -- "$1" "$2" "$1"; else set -- "$1" "$2" "$2"; fi
+        for d in $3; do
+            [ -n "$d" ] || continue
+            [ -e "$d" ] || continue
+            l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} +)" || rc=1
+            [ -z "$l" ] || printf '%s\n' "$l" | LC_ALL=C sort
+        done
+    done
+    return "$rc"
+}
+
+# lessons_resolve_name <lesson file name> [<index>]: one line per lesson file
+# with that base name, across the directories solutions-dirs and
+# related-solutions-dirs print, a group member's prefixed "related project: ".
+# No line means no lesson has the name. Links are names, never paths, so a
+# name holding "/" resolves to nothing. With no index, one is built here.
+lessons_resolve_name() {
+    local want="$1" idx tag path
+    if [ $# -ge 2 ]; then idx="$2"
+    else
+        idx="$(lessons_index "$(cmd_solutions_dirs)" "$(cmd_related_solutions_dirs)")" || return 1
+    fi
+    case "$want" in ''|*/*) return 0 ;; esac
+    while IFS=$'\t' read -r tag path; do
+        [ "${path##*/}" = "$want" ] || continue
+        if [ "$tag" = rel ]; then printf 'related project: %s\n' "$path"; else printf '%s\n' "$path"; fi
+    done <<<"$idx"
+}
+
 # lessons check: loose ends, read-only. The reader below is lessons_scan's,
 # kept apart because it reports the forms the scan silently treats as empty.
-# Per lesson it prints "F<TAB><lesson>", then "X<TAB><lesson><TAB><kind><TAB>
-# <detail>" for a loose end it can see alone (no-paths, bad-list), then
-# "P<TAB><lesson><TAB><entry>" per well-formed paths entry and
-# "L<TAB><lesson><TAB><key><TAB><name>" per well-formed replaces or related
-# name, which the shell checks against the tree and the stores. Entries are
+# Per lesson it prints "X<TAB><lesson><TAB><kind><TAB><detail>" for a loose
+# end it can see alone (no-paths, bad-list), then "P<TAB><lesson><TAB><entry>"
+# per well-formed paths entry and "L<TAB><lesson><TAB><key><TAB><name>" per
+# well-formed replaces or related name, which the shell checks against the
+# tree and the stores, then "F<TAB><lesson>", on which the shell checks the
+# work items. Entries are
 # split on commas outside double quotes, so a quoted entry holding a comma is
 # seen and reported. Fields reset at each file and are kept only once the
 # frontmatter closes, as in the scan.
@@ -2654,11 +2773,11 @@ function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
 function flush(   i) {
     if (cur == "") return
     if (!closed) { hp = 0; nb = 0; ne = 0 }
-    printf "F\t%s\n", cur
     if (!hp) printf "X\t%s\tno-paths\tno paths key\n", cur
     else if (np == 0 && !pbad) printf "X\t%s\tno-paths\tpaths is empty\n", cur
     for (i = 1; i <= nb; i++) printf "X\t%s\tbad-list\t%s\n", cur, bad[i]
     for (i = 1; i <= ne; i++) print ent[i]
+    printf "F\t%s\n", cur
     seen[cur] = 1
 }
 function badl(key, why) { bad[++nb] = key ": " why; if (key == "paths") pbad = 1 }
@@ -2699,7 +2818,7 @@ state == "fm" {
 }
 END {
     flush()
-    for (i = 1; i < ARGC; i++) if (!(ARGV[i] in seen)) { printf "F\t%s\n", ARGV[i]; printf "X\t%s\tno-paths\tno paths key\n", ARGV[i] }
+    for (i = 1; i < ARGC; i++) if (!(ARGV[i] in seen)) { printf "X\t%s\tno-paths\tno paths key\n", ARGV[i]; printf "F\t%s\n", ARGV[i] }
 }'
 
 # lessons_check_entry <top> <entry>: whether a paths entry names something in
@@ -2735,7 +2854,7 @@ lessons_listed() {
 }
 
 lessons_check() {
-    local top file="" dirs d list="" raw t a b c det bk listed="" n=0 out="" abs
+    local top file="" dirs="" d list="" raw t a b c det bk listed="" n=0 out="" abs idx hits
     [ $# -le 1 ] || die_usage "usage: sidecar.sh lessons check [<lesson-file>]"
     in_repo || refuse "lessons check: not inside a git repository"
     top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || refuse "lessons check: cannot find the project's top level"
@@ -2760,6 +2879,8 @@ lessons_check() {
                 || refuse "lessons check: could not read the lesson headers"
         fi
     fi
+    idx="$(lessons_index "${dirs:-$(cmd_solutions_dirs)}" "$(cmd_related_solutions_dirs)")" \
+        || refuse "lessons check: could not list the lessons a link may name"
     bk="$(cmd_backend slices 2>/dev/null)" || bk=failed
     [ "$bk" != sidecar ] || listed="$(lessons_listed "$top")"
     while IFS=$'\t' read -r t a b c; do
@@ -2767,6 +2888,12 @@ lessons_check() {
             X) out="$out$b"$'\t'"$a"$'\t'"$c"$'\n'; n=$((n + 1)) ;;
             P) if ! det="$(lessons_check_entry "$top" "$b")"; then
                    out="${out}dead-path"$'\t'"$a"$'\t'"$det"$'\n'; n=$((n + 1))
+               fi ;;
+            L) hits="$(lessons_resolve_name "$c" "$idx")"
+               if [ -z "$hits" ]; then
+                   out="${out}dead-link"$'\t'"$a"$'\t'"$b: $c"$'\n'; n=$((n + 1))
+               elif [ "$(printf '%s\n' "$hits" | wc -l | tr -d ' ')" -gt 1 ]; then
+                   out="${out}ambiguous-link"$'\t'"$a"$'\t'"$b: $c ($(printf '%s\n' "$hits" | wc -l | tr -d ' ') files)"$'\n'; n=$((n + 1))
                fi ;;
             F) [ "$bk" = sidecar ] || continue
                case "$a" in /*) abs="$(abs_path "$a")" ;; *) abs="$top/$a" ;; esac

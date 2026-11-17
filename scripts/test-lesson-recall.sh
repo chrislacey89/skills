@@ -806,5 +806,88 @@ loose ends: 2" "$out"
     check "$sh: a sidecar lesson by its absolute path: clean" "loose ends: 0" "$out"
 done
 
+# -----------------------------------------------------------------------------
+section "replaces and related across the group (#751)"
+
+# Two projects in one solutions.system group. The member's sidecar holds a
+# lesson that replaces one of this project's lessons; nothing here may write
+# into the member's directory.
+mkproj
+MP="$P"
+runo "$MP" init --name member --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+MS="$out"
+[ -d "$MS" ] || fatal "init did not create the member's sidecar: $err"
+runo "$MP" config set system grp
+mkproj
+GRP="$P"
+runo "$GRP" init --name home --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+GS="$out"
+[ -d "$GS" ] || fatal "init did not create the home sidecar: $err"
+runo "$GRP" config set system grp
+mkdir -p "$GRP/lib"; : > "$GRP/lib/a.sh"
+lesson "$GRP" "x/old-2026-01-01.md" "Old" "paths: [lib/a.sh]"
+lesson "$GRP" "x/new-2026-02-01.md" "New" "paths: [lib]" "replaces: [old-2026-01-01.md]" "related: [peer-2026-01-01.md]"
+lesson "$GRP" "x/plain-2026-01-01.md" "Plain" "paths: [lib/a.sh]"
+lesson "$GRP" "y/dup-2026-01-01.md" "Dup one" "paths: [lib]"
+lesson "$GRP" "z/dup-2026-01-01.md" "Dup two" "paths: [lib]"
+lesson "$GRP" "x/links-2026-01-01.md" "Links" "paths: [lib]" "related: [nowhere-2026-01-01.md, dup-2026-01-01.md, peer-2026-01-01.md]"
+mkdir -p "$MS/solutions/m"
+printf -- '---\npaths: [svc]\nreplaces: [plain-2026-01-01.md]\n---\n\n# Member lesson\n' > "$MS/solutions/m/peer-2026-01-01.md"
+git -C "$MS" add solutions && git -C "$MS" commit -q -m "member lesson"
+runo "$GRP" related-solutions-dirs
+check "the group fixture: the member's store is a related dir" "$MS/solutions" "$out"
+msum() { (cd "$MS" && find . -path ./.git -prune -o -type f -exec cksum {} + | LC_ALL=C sort; git -C "$MS" rev-parse HEAD); }
+mbefore="$(msum)"
+
+runo "$GRP" lessons match lib/a.sh
+check "match: exits 0" 0 "$rc"
+check "match: replaced-by on a lesson another lesson replaces, here or in the group" \
+"exact${TAB}docs/solutions/x/old-2026-01-01.md${TAB}Old${TAB}replaced-by:new-2026-02-01.md
+exact${TAB}docs/solutions/x/plain-2026-01-01.md${TAB}Plain${TAB}replaced-by:peer-2026-01-01.md" "$(printf '%s\n' "$out" | grep '^exact')"
+check "match: a lesson nothing replaces keeps three fields" \
+"folder${TAB}docs/solutions/x/links-2026-01-01.md${TAB}Links" "$(printf '%s\n' "$out" | grep 'links-')"
+check "match: the member's lesson is not matched by path" 0 "$(printf '%s\n' "$out" | awk -F '\t' '$2 ~ /peer-/' | wc -l | tr -d ' ')"
+
+runo "$GRP" trace docs/solutions/x/new-2026-02-01.md
+check "trace: replaces and related lines after the existing ones" \
+"  replaces  $GRP/docs/solutions/x/old-2026-01-01.md
+  related  related project: $MS/solutions/m/peer-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  (replaces|related|replaced by)  ')"
+check "trace: the new lines come last" "  related  related project: $MS/solutions/m/peer-2026-01-01.md" "$(printf '%s\n' "$out" | tail -n 1)"
+runo "$GRP" trace docs/solutions/x/old-2026-01-01.md
+check "trace: replaced by, derived from the other lesson's replaces" \
+"  replaced by  $GRP/docs/solutions/x/new-2026-02-01.md" "$(printf '%s\n' "$out" | grep -E '^  replaced by  ')"
+runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md --json
+check "trace --json: replaced_by names the member's lesson" \
+"[{\"path\":\"$MS/solutions/m/peer-2026-01-01.md\",\"related_project\":true}]" "$(printf '%s' "$out" | jq -c .replaced_by)"
+runo "$GRP" trace docs/solutions/x/links-2026-01-01.md --json
+check "trace --json: related lists each name with what it resolves to" \
+"[{\"name\":\"nowhere-2026-01-01.md\",\"resolved\":[]},{\"name\":\"dup-2026-01-01.md\",\"resolved\":[{\"path\":\"$GRP/docs/solutions/y/dup-2026-01-01.md\",\"related_project\":false},{\"path\":\"$GRP/docs/solutions/z/dup-2026-01-01.md\",\"related_project\":false}]},{\"name\":\"peer-2026-01-01.md\",\"resolved\":[{\"path\":\"$MS/solutions/m/peer-2026-01-01.md\",\"related_project\":true}]}]" \
+    "$(printf '%s' "$out" | jq -c .related)"
+check "trace --json: no replaces key gives []" '[]' "$(printf '%s' "$out" | jq -c .replaces)"
+runo "$GRP" trace docs/solutions/x/links-2026-01-01.md
+check "trace: a name that resolves to nothing is MISSING" "  related  MISSING: nowhere-2026-01-01.md" \
+    "$(printf '%s\n' "$out" | grep 'MISSING: nowhere')"
+
+runo "$GRP" lessons check docs/solutions/x/links-2026-01-01.md
+check "check: dead-link and ambiguous-link for a lesson's names" \
+"dead-link${TAB}docs/solutions/x/links-2026-01-01.md${TAB}related: nowhere-2026-01-01.md
+ambiguous-link${TAB}docs/solutions/x/links-2026-01-01.md${TAB}related: dup-2026-01-01.md (2 files)
+unlisted${TAB}docs/solutions/x/links-2026-01-01.md${TAB}no work item lists it
+loose ends: 3" "$out"
+runo "$GRP" lessons check docs/solutions/x/new-2026-02-01.md
+check "check: names that resolve here and in the group are not loose" \
+"unlisted${TAB}docs/solutions/x/new-2026-02-01.md${TAB}no work item lists it
+loose ends: 1" "$out"
+check "no command wrote to the member's directory" "$mbefore" "$(msum)"
+
+# A lesson with no replaces or related, in a project with no group: output as
+# before this slice.
+mkproj
+lesson "$P" "x/solo-2026-01-01.md" "Solo" "paths: [a.sh]"
+runo "$P" lessons match a.sh
+check "no links anywhere: the match line has three fields" "exact${TAB}docs/solutions/x/solo-2026-01-01.md${TAB}Solo" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" trace docs/solutions/x/solo-2026-01-01.md
+check "no links anywhere: trace prints only the lesson line" "lesson  $P/docs/solutions/x/solo-2026-01-01.md" "$out"
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
