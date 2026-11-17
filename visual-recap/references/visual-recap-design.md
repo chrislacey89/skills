@@ -1835,7 +1835,8 @@ checkboxes carry no `data-feedback-id`.
 
 <script>
   // §17: reviewed state is per reader. Storage can be blocked or throw; the page counts without it.
-  const SIT_KEY = 'visual-recap:' + RECAP_SLUG + ':reviewed';
+  // RECAP_SLUG is not declared by every page; an undeclared name would throw at load, so fall back to the path.
+  const SIT_KEY = 'visual-recap:' + (typeof RECAP_SLUG === 'string' ? RECAP_SLUG : location.pathname) + ':reviewed';
   let reviewed = new Set();
   try { reviewed = new Set(JSON.parse(localStorage.getItem(SIT_KEY) || '[]')); } catch (_) {}
   function saveReviewed(){

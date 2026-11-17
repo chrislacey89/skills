@@ -85,7 +85,7 @@ else
     ids="$(awk -v s="data-sitting=\"$s\"" 'index($0, s) {on=1; next} on && /data-sitting=/ {exit} on' <<<"$example" | grep -oE 'data-reviewed="[^"]+"' | sed 's/^data-reviewed="//; s/"$//' | paste -sd, -)"
     printf '%s:%s\n' "$s" "$ids"
   done <<<"$sittings")"
-  run_node() { # run_node <script> <storage-mode: ok|throws>
+  run_node() { # run_node <script> <mode: ok|throws|noslug> (noslug: RECAP_SLUG left undeclared, storage working)
     SCRIPT="$1" MODEL="$model" MODE="$2" node -e '
       const model = process.env.MODEL.trim().split("\n").map(l => { const [name, ids] = l.split(":"); return { name, ids: ids.split(",") }; });
       const store = {};
@@ -107,7 +107,12 @@ else
       function load() {
         const p = page();
         let api;
-        try { api = new Function("document", "RECAP_SLUG", "localStorage", process.env.SCRIPT + "\nreturn { markReviewed };")(p.document, "t", good); }
+        const noslug = process.env.MODE === "noslug";
+        try {
+          api = noslug
+            ? new Function("document", "location", "localStorage", process.env.SCRIPT + "\nreturn { markReviewed };")(p.document, { pathname: "/t" }, good)
+            : new Function("document", "RECAP_SLUG", "localStorage", process.env.SCRIPT + "\nreturn { markReviewed };")(p.document, "t", good);
+        }
         catch (e) { return { error: String(e) }; }
         return { api, p };
       }
@@ -144,6 +149,12 @@ else
   out="$(run_node "$script" throws)"
   want "count 1 of $n0 reviewed" "$out" "storage throwing: the page loads and still counts"
   want "rail 1 of $n0 reviewed" "$out" "storage throwing: the rail line still tracks the sitting"
+  out="$(run_node "$script" noslug)"
+  want "count 1 of $n0 reviewed" "$out" "RECAP_SLUG undeclared: the page loads and still counts"
+  want "reload 1 of $n0 reviewed | box true" "$out" "RECAP_SLUG undeclared: reviewed state still survives a reload"
+  # self-test: an unguarded RECAP_SLUG read must fail the undeclared run
+  bare="$(sed -E "s/\(typeof RECAP_SLUG === 'string' \? RECAP_SLUG : location\.pathname\)/RECAP_SLUG/" <<<"$script")"
+  if [[ "$bare" != "$script" ]] && grep -q '^error ' <<<"$(run_node "$bare" noslug)"; then ok "self-test: an unguarded RECAP_SLUG fails the undeclared run"; else bad "self-test: removing the RECAP_SLUG guard went unnoticed"; fi
   # self-test: strip the guard from the read; the throwing run must now fail
   naked="$(sed -E 's/^(  )try \{ (reviewed = new Set\(JSON\.parse\(localStorage\.getItem\(SIT_KEY\) \|\| .\[\].\)\);) \} catch \(_\) \{\}$/\1\2/' <<<"$script")"
   if [[ "$naked" != "$script" ]] && grep -q '^error ' <<<"$(run_node "$naked" throws)"; then ok "self-test: an unguarded read fails the throwing run"; else bad "self-test: removing the read's try/catch went unnoticed"; fi
