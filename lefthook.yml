@@ -109,6 +109,8 @@ pre-push:
       run: bash scripts/test-lfg-marker.sh lfg/SKILL.md
     host-signal-containment-tests:
       run: bash scripts/test-host-signal-containment.sh
+    execute-worktree-handoff-tests:
+      run: bash scripts/test-execute-worktree-handoff.sh
     delta-review-scope-tests:
       run: bash scripts/test-delta-review-scope.sh
     prd-amendment-gate-tests:

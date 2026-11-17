@@ -313,6 +313,11 @@ jobs:
       - name: Run host-signal containment suite
         run: bash scripts/test-host-signal-containment.sh
 
+      # #782: /execute Step 0 hands a new worktree to a fresh session; EnterWorktree
+      # is only the fallback. Pins the printed hand-off and the fallback framing.
+      - name: Run execute worktree hand-off suite
+        run: bash scripts/test-execute-worktree-handoff.sh
+
       # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
       # from branch state by a block in Phase 1 step 4, and /fix-findings' menu
       # counts rounds from a commit line. Both are executable prose; this runs

@@ -312,11 +312,11 @@ one signal that the lock has been standing open.
 
 **This is the load-bearing step.** If the current working tree is a linked worktree, move the shell to the base checkout *now*, while the worktree still exists, so nothing is removed out from under the running shell. Pick the re-anchor mechanism that matches how the session got into the worktree:
 
-**If this same session entered the worktree via `EnterWorktree`** — the inflow `/execute` now uses (`pwd` reports a path under `.claude/worktrees/` and `EnterWorktree` was called earlier in *this* session) — re-anchor with the matching harness tool, not a bare `cd`:
+**If this same session entered the worktree via `EnterWorktree`** — `/execute` Step 0's fallback when no new session could be started (`pwd` reports a path under `.claude/worktrees/` and `EnterWorktree` was called earlier in *this* session) — re-anchor with the matching harness tool, not a bare `cd`:
 
 `ExitWorktree { action: "keep" }` restores the shell to the base checkout (the directory the session was in before `EnterWorktree`) and, per the tool's contract, will *not* remove a worktree entered via `path`. Use `keep`, never `remove`: the worktree's branch is what just merged, and Step 5/6 own its teardown and pruning. Removal stays in Step 5.
 
-**Otherwise** — a fresh `/closeout` session that did not itself call `EnterWorktree`, or a plain `git checkout -b` checkout with no worktree — re-anchor with a bare `cd` (`ExitWorktree` only operates on worktrees its own session entered, so it is a no-op here):
+**Otherwise** — a session that did not itself call `EnterWorktree` (the session `/execute` Step 0 hands off to, started inside the worktree, or a fresh `/closeout` session), or a plain `git checkout -b` checkout with no worktree — re-anchor with a bare `cd` (`ExitWorktree` only operates on worktrees its own session entered, so it is a no-op here):
 
 ```bash
 cd "$(git worktree list --porcelain | awk '/^worktree /{print $(2); exit}')"
@@ -329,7 +329,7 @@ If Step 1 showed the current tree *is* the base checkout (you were on a plain `g
 git switch <base-branch>
 ```
 
-Either way, confirm the shell is no longer inside the feature worktree before proceeding.
+Either way, confirm the shell is no longer inside the feature worktree before proceeding. A session that was started inside the worktree may find its shell back there on the next command; if a fresh `pwd` reports the worktree again, prefix each command in Steps 5–8 with `cd <base checkout> &&`, so no command runs inside the worktree it removes.
 
 ### 5. Remove the worktree (only if one was created — skip when isolation is host-owned, Step 0)
 
