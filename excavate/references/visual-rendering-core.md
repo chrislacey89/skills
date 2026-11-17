@@ -179,7 +179,7 @@ A minimal serializer (hand-roll per artifact; this is the shape, not a shipped l
 <button onclick="copyFeedback()">Copy feedback</button>
 <script>
   function buildBlob() {
-    const lines = ['## recap-feedback v1  (recap: ' + RECAP_SLUG + ')'];
+    const lines = ['## recap-feedback v1  (recap: ' + (typeof RECAP_SLUG === 'string' ? RECAP_SLUG : location.pathname) + ')'];
     document.querySelectorAll('[data-feedback-id]').forEach(el => {
       const id = el.dataset.feedbackId;
       const kind = el.dataset.feedbackKind;     // any kind registered in §4 above

@@ -172,6 +172,7 @@ else
       add(root, add(el("c-auth-ts-L42", "callout"), field("note", "reuse getSession()")));
       decorate(root);
       global.document = { querySelectorAll: s => all(root, c => c.attrs[key(s)]) };
+      global.location = { pathname: "/recaps/x.html" };
       global.RECAP_SLUG = "t";
       eval(process.env.SERIALIZER + "\nprocess.stdout.write(buildBlob());");
     ' 2>&1)" || { bad "serializer run failed: $out"; out=""; }
@@ -180,7 +181,18 @@ else
       want_line '- callout#c-session-ts-L33: needs-change — "keep the expiry check" — recall "the router calls it" — decision dc-server-side-sessions'
       want_line '- callout#c-auth-ts-L42: "reuse getSession()"'
       if grep -q 'c-session-ts-L40' <<<"$out"; then bad "serializer emitted a callout carrying only the author's decision reference"; else ok "serializer skips a callout carrying only the author's decision reference"; fi
+      want_line '## recap-feedback v1  (recap: t)'
     fi
+    # RECAP_SLUG undeclared: the header must fall back to the path, the same identity the sitting plan keys on.
+    hdr="$(SERIALIZER="$script" node -e '
+      global.document = { querySelectorAll: () => [] };
+      global.location = { pathname: "/recaps/x.html" };
+      eval(process.env.SERIALIZER + "\nprocess.stdout.write(buildBlob());");
+    ' 2>&1)" || hdr="run failed: $hdr"
+    if [ "$hdr" = '## recap-feedback v1  (recap: /recaps/x.html)' ]; then ok "serializer header falls back to location.pathname when RECAP_SLUG is undeclared"; else bad "serializer header with RECAP_SLUG undeclared: $hdr"; fi
+    guard="(typeof RECAP_SLUG === 'string' ? RECAP_SLUG : location.pathname)"
+    bare="${script/"$guard"/RECAP_SLUG}"
+    if [ "$bare" != "$script" ] && ! SERIALIZER="$bare" node -e 'global.document={querySelectorAll:()=>[]};global.location={pathname:"/p"};eval(process.env.SERIALIZER+"\nbuildBlob();")' >/dev/null 2>&1; then ok "self-test: an unguarded RECAP_SLUG read fails the undeclared run"; else bad "self-test: removing the RECAP_SLUG guard went unnoticed"; fi
   fi
 fi
 
