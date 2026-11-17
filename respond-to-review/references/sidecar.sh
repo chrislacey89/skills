@@ -80,14 +80,13 @@
 # list --range keeps only records whose commit is in the range, so a fold that
 # rewrites a SHA drops its record the way it drops the github trailer.
 #
-# lookups. <sidecar>/lookups/<slug>.jsonl holds one line per `lessons match
-# --record` run on a branch, {at, branch, phase, files, scanned, with_paths,
-# projects, matched, outcome}, written and committed by the command itself.
-# outcome is
-# matched, none, no-files, or failed; a failed lookup is recorded before its
-# nonzero exit. A detached HEAD or a missing sidecar records nothing and says
-# why on the receipt. Lesson names are private sidecar content: nothing copies
-# this file into a PR.
+# lookups. <sidecar>/lookups/<slug>.jsonl holds one line per recorded
+# `lessons match --record` run on a branch, {at, branch, phase, files,
+# scanned, with_paths, projects, matched, outcome}, written and committed by
+# the command itself. outcome is matched, none, no-files, or failed; a failed
+# lookup is recorded before its nonzero exit. A detached HEAD, a missing
+# sidecar, or a failed write records nothing and says why on the receipt.
+# Lesson names are private sidecar content: nothing copies this file into a PR.
 #
 # footprint. Scans commit messages, not the sidecar: a fixup!/squash!/amend!
 # subject, a Fix-Findings-Run: or Review-Thread: line, a W-<n> id, or /<skill>
