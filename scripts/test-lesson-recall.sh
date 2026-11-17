@@ -991,7 +991,7 @@ if [ "$(id -u)" -ne 0 ]; then
     runo "$GRP" trace docs/solutions/x/partial-2026-01-01.md
     check "trace: the index lists the same readable lesson (forward link resolves)" \
         "  related  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
-    check "trace: the unreadable file draws a warning, not a failure" 1 "$([ "$(printf '%s\n' "$err" | grep -c 'could not be read')" -ge 1 ] && echo 1 || echo 0)"
+    check "trace: the unreadable file draws exactly one warning per directory, not a failure" 1 "$(printf '%s\n' "$err" | grep -c 'could not be read')"
     # The index side: a home lesson whose related names the locked file resolves
     # through lessons_index, which must skip the file the scan skips, so the name
     # is MISSING (a find over every *.md would list it and resolve it).

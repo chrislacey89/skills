@@ -2347,7 +2347,9 @@ lesson_links() {
     local self="$1" own="$2" rel="$3" rec base idx key n name tag path rp
     base="${self##*/}"
     rec="$(awk "$LESSONS_SCAN_AWK" "$self")" || return 1
-    idx="$(lessons_index "$own" "$rel")" || return 1
+    # The scan below reads the same group folders and warns for them, so the
+    # index stays quiet here and a bad folder draws one warning per trace.
+    idx="$(LESSONS_GROUP_QUIET=1 lessons_index "$own" "$rel")" || return 1
     for key in replaces related; do
         if [ "$key" = replaces ]; then n="$(printf '%s' "$rec" | cut -f4)"; else n="$(printf '%s' "$rec" | cut -f5)"; fi
         while IFS= read -r name; do
@@ -2533,7 +2535,8 @@ lessons_scan() {
 # input it cannot open and skips its END block, which drops every lesson in the
 # batch). When anything could not be listed or read, a warning goes to stderr.
 # lessons_scan_group and lessons_index both read the group through this, so the
-# two readers agree on which lessons exist.
+# two readers agree on which lessons exist. A caller that reads the group through
+# both sets LESSONS_GROUP_QUIET=1 on the index call so the warning prints once.
 lessons_group_files() {
     local d="$1" st
     find "$d" -type f -name '*.md' -print0 2>/dev/null | {
@@ -2544,7 +2547,7 @@ lessons_group_files() {
         [ "$bad" -eq 0 ]
     }
     st=("${PIPESTATUS[@]}")
-    if [ "${st[0]}" -ne 0 ] || [ "${st[1]}" -ne 0 ]; then
+    if [ -z "${LESSONS_GROUP_QUIET:-}" ] && { [ "${st[0]}" -ne 0 ] || [ "${st[1]}" -ne 0 ]; }; then
         printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
     fi
     return 0
