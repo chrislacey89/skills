@@ -109,7 +109,7 @@ refuses "an empty endpoint" "$work/caller@base..feature" "$work/service@..featur
 refuses "a single scope" "$work/caller@base..feature"
 
 # --- 3. design: the seam block ----------------------------------------------
-N="$(sed -nE 's/^## ([0-9]+)\. Block: seam.*/\1/p' "$DESIGN" | head -1)"
+N="$(sed -nE 's/^## ([0-9]+)\. Block: seam.*/\1/p' "$DESIGN" | head -1 || true)"
 sec15=""
 [[ -n "$N" ]] && sec15="$(awk -v h="^## $N\\. Block: seam" '$0 ~ h {on=1; print; next} on&&/^## /{exit} on' "$DESIGN")"
 if [[ -n "$sec15" ]]; then ok "design has §$N Block: seam"; else bad "design has no '## <n>. Block: seam' section"; fi
