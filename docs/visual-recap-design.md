@@ -61,7 +61,9 @@ and specifically **do not adopt the visual language of the app under review** (i
 fonts, or chrome). A review instrument stays visually independent of its subject: the pull to
 theme the recap in a well-designed app's own aesthetic is strongest exactly where it does most
 harm, because it both destroys run-to-run constancy and sprays the subject's accent onto recap
-chrome that carries no diff meaning (Tufte: decoration exceeding the data).
+chrome that carries no diff meaning (Tufte: decoration exceeding the data). A palette the
+*reader* brings is a different thing, allowed under checks (*A reader palette*, at the end of
+this section).
 
 ```html
 <style>
@@ -255,6 +257,66 @@ Applied — one shell hunk exercising all six, as it appears inside a diff row:
 display 30px/600/−0.02em · stat 22px/680 tabular · title 15px/650 · body 14–16px/1.5–1.6 ·
 overline 11px/600 uppercase 0.16em · meta (mono) 11px · code (split) 12.5px/1.75 · code
 (before/after) 13px/1.9.
+
+**A reader palette: the reader's colors, never the subject's.** The ban above is on the
+*subject's* look, because the subject's palette says something about the change it is
+reviewing and it is the wrong thing. A reader's own palette, such as their editor theme, says
+nothing about the subject, and on a long review it is easier to read. Render one only when the
+reader supplies it: they asked, or their standing instructions name it. Keep the canonical
+block above verbatim and paste the reader palette **after** it, as an override block, under
+three checks:
+
+1. **Canonical names only.** It sets values for names the canonical block defines and adds
+   none. Syntax colors map onto the six `--sx-*` roles by the table above, never a seventh.
+2. **The same three-state shape.** A dark palette goes in both dark copies, identical; a light
+   one goes on `:root`. A palette for one theme leaves the other theme canonical.
+3. **The two-theme contrast check.** In each theme the palette touches, every text color left
+   on screen (`--fg`, `--fg-muted`, `--add`, `--del`, `--risk`, every `--flag-*` and `--sx-*`)
+   reaches 4.5:1 against every surface (`--bg`, `--bg-subtle`, `--bg-inset`, `--bg-elev`, and
+   the `--add-bg` / `--del-bg` washes over `--bg`), except the tokens the exception list at the
+   top of this file names. Measure the canonical tokens the palette leaves alone too: a new
+   `--bg` moves their contrast.
+
+The token-core check (`visual-rendering-core.md` §6) then reads a reader palette for its names
+and its contrast instead of its values. The example is an editor theme's dark-blue variant; its
+lowest ratio is `--flag-mech` at 4.76:1 on `--bg-inset`, and `--sx-c` sits under the dark
+exception.
+
+```html
+<style>
+  /* reader palette (§1, A reader palette): canonical names only, after the canonical block */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:hsl(210 47% 12%);
+      --bg-subtle:hsl(210 44% 14%);
+      --bg-inset:hsl(210 40% 19%);
+      --bg-elev:hsl(210 42% 16%);
+      --fg:hsl(210 49% 82%);
+      --fg-muted:hsl(210 24% 66%);
+      --sx-k:hsl(198 100% 50%);
+      --sx-f:hsl(180 100% 43%);
+      --sx-v:hsl(40 100% 79%);
+      --sx-s:hsl(96 66% 70%);
+      --sx-n:hsl(24 100% 75%);
+      --sx-c:hsl(200 13% 45%);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:hsl(210 47% 12%);
+    --bg-subtle:hsl(210 44% 14%);
+    --bg-inset:hsl(210 40% 19%);
+    --bg-elev:hsl(210 42% 16%);
+    --fg:hsl(210 49% 82%);
+    --fg-muted:hsl(210 24% 66%);
+    --sx-k:hsl(198 100% 50%);
+    --sx-f:hsl(180 100% 43%);
+    --sx-v:hsl(40 100% 79%);
+    --sx-s:hsl(96 66% 70%);
+    --sx-n:hsl(24 100% 75%);
+    --sx-c:hsl(200 13% 45%);
+  }
+</style>
+```
 
 ---
 

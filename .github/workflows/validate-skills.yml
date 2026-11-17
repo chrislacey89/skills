@@ -285,6 +285,12 @@ jobs:
       - name: Run recap generator checklist suite
         run: bash scripts/test-recap-generator-checklist.sh
 
+      # A reader-chosen palette is checked by names and contrast instead of
+      # values; this runs both checks on the design's example and self-tests
+      # each against a palette that must fail it (#764).
+      - name: Run reader palette contract suite
+        run: bash scripts/test-reader-palette-contract.sh
+
       # A committed instrument that fails while reporting normally is the defect
       # docs/solutions/testing-patterns/validate-the-instrument-not-only-the-
       # subject-2026-08-23.md recorded as prose. This is its mechanizable half:
