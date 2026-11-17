@@ -20,6 +20,12 @@
 #      format and the serializer agree.
 #   3. The design doc's §6 callout example carries `data-decision` on the card,
 #      and the serializer reads the same attribute name.
+#   4. The trail block exists where SKILL.md and core §3 point (design §15).
+#   5. Every entry in the §15 example is a dc- decision, cited with a source,
+#      and linked to at least one callout card. The detector is healthy at zero
+#      hits, so it is self-tested against perturbed copies of the real example.
+#   6. The links resolve both ways: each trail link names a real callout card
+#      in the design doc, and each data-decision names an entry the trail lists.
 
 set -euo pipefail
 
@@ -28,6 +34,7 @@ cd "$repo_root"
 
 DESIGN=docs/visual-recap-design.md
 CORE=docs/visual-rendering-core.md
+SKILL=visual-recap/SKILL.md
 
 pass=0
 fail=0
@@ -49,6 +56,53 @@ if grep -qE '^- callout#c-[a-z0-9-]+-L[0-9]+: .* — decision dc-[a-z0-9-]+$' <<
 else
   bad "core §4 format example has no callout line ending in a decision part"
 fi
+
+# --- 4. the trail block exists where the skill and the core point ----------
+if grep -qE '^## 15\. Block: decision trail' "$DESIGN"; then ok "design §15 is the decision trail"; else bad "design has no '## 15. Block: decision trail'"; fi
+if grep -qE '^\| \*\*decision trail\*\* \|' "$CORE"; then ok "core §3 table has a decision trail row"; else bad "core §3 table has no decision trail row"; fi
+if grep -qF 'decision trail' "$SKILL" && grep -qF 'visual-recap-design.md` §15' "$SKILL"; then
+  ok "SKILL.md names the decision trail and points at design §15"
+else
+  bad "SKILL.md does not point at the decision trail in design §15"
+fi
+
+# --- 5. every trail entry in the example is cited and linked ----------------
+# Prints "ok" when every <li class="dt-entry"> block carries a dc- feedback id of
+# kind decision, an .oc-cited span with an .oc-src source, and at least one link
+# to a callout card. Entries are the lines between <li … dt-entry> and </li>.
+entry_check() {
+  awk '
+    /<li [^>]*class="dt-entry"/ { open = 1; n++; id = ($0 ~ /data-feedback-id="dc-[a-z0-9-]+" data-feedback-kind="decision"/); src = 0; link = 0; next }
+    open && /class="oc-cited".*class="oc-src"/ { src = 1 }
+    open && /href="#callout-c-[a-z0-9-]+-L[0-9]+"/ { link = 1 }
+    open && /<\/li>/ { open = 0; if (!(id && src && link)) badn++ }
+    END { if (n >= 2 && !badn) print "ok"; else print "bad" }'
+}
+trail="$(awk '/^## 15\. Block: decision trail/{on=1} on&&/^```html$/{grab=1; next} grab&&/^```$/{exit} grab' "$DESIGN")"
+if [ -z "$trail" ]; then
+  bad "design §15 example not found"
+elif [ "$(entry_check <<<"$trail")" = ok ]; then
+  ok "design §15: every example entry is a dc- decision, cited with a source, and linked to a callout"
+else
+  bad "design §15: an example entry lacks its dc- id, its cited source, or its callout link"
+fi
+# self-test: strip every source; the detector must fail it
+if [ "$(entry_check <<<"${trail//class=\"oc-src\"/class=\"x\"}")" = bad ]; then ok "self-test: detector rejects an uncited entry"; else bad "self-test: detector accepted an uncited entry"; fi
+if [ "$(entry_check <<<"${trail//href=\"#callout-/href=\"#nowhere-}")" = bad ]; then ok "self-test: detector rejects an entry linked to no callout"; else bad "self-test: detector accepted an entry linked to no callout"; fi
+
+# --- 6. the links resolve both ways inside the design doc -------------------
+# Every callout a trail entry links to exists as a callout card, and every
+# data-decision on a callout card names an entry the trail example lists.
+while IFS= read -r target; do
+  [ -n "$target" ] || continue
+  if grep -qF "id=\"$target\" class=\"vr-callout\"" "$DESIGN"; then ok "trail link #$target resolves to a callout card"; else bad "trail link #$target resolves to no callout card"; fi
+done < <(grep -oE 'href="#callout-c-[a-z0-9-]+-L[0-9]+"' <<<"$trail" | sed 's/^href="#//; s/"$//' | sort -u)
+refs="$(grep -oE 'data-decision="dc-[a-z0-9-]+"' "$DESIGN" | sed 's/^data-decision="//; s/"$//' | sort -u)"
+[ -n "$refs" ] || bad "design has no data-decision reference to resolve"
+while IFS= read -r ref; do
+  [ -n "$ref" ] || continue
+  if grep -qF "id=\"trail-$ref\" class=\"dt-entry\" data-feedback-id=\"$ref\"" <<<"$trail"; then ok "data-decision=\"$ref\" names a trail entry"; else bad "data-decision=\"$ref\" names no trail entry"; fi
+done <<<"$refs"
 
 # --- 1. run the real serializer ---------------------------------------------
 if ! command -v node >/dev/null 2>&1; then
