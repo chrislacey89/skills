@@ -13,7 +13,7 @@ resolving to nothing. Forward-looking blocks live in this file and `/visual-reca
 them.
 
 **The document has two parts, and they are two rendering modes, not two layouts of one thing.**
-Everything numbered §1–§16 is **Part I — the scroll recap**: a single scrolling column for a
+Everything numbered §1–§17 is **Part I — the scroll recap**: a single scrolling column for a
 reviewer *auditing* a change. **Part II — the walkthrough deck** (§D1–§D9, at the end of this
 file) is a paged, one-idea-per-screen shell for a reviewer being *argued through* a change with a
 causal arc. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading
@@ -346,8 +346,9 @@ exception.
       <nav style="display:flex;flex-direction:column;margin-top:auto">
         <div style="font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s2)">Contents</div>
         <a href="#sec-overview" style="display:flex;align-items:center;gap:11px;padding:7px 0;text-decoration:none;font-size:13px;font-weight:500;color:var(--fg-muted)"><span style="width:2px;height:15px;background:var(--accent);border-radius:2px"></span><span style="font-family:var(--mono);font-size:11px;width:14px">01</span>Overview</a>
-        <!-- …then one entry per rendered section (seam, decision trail, files, contracts, diagram, wireframes, changes, compare, review), numbered in render order — same shape -->
+        <!-- …then one entry per rendered section (sitting plan, seam, decision trail, files, contracts, diagram, wireframes, changes, compare, review), numbered in render order — same shape -->
       </nav>
+      <!-- with a sitting plan (§17), its per-sitting progress indicator goes here -->
       <div style="display:flex;align-items:center;justify-content:flex-end;padding-top:var(--s4);border-top:1px solid var(--border)">
         <button onclick="toggleTheme()" style="display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border:1px solid var(--border-strong);border-radius:999px;background:var(--bg-elev);color:var(--fg);font-family:var(--sans);font-size:12px;font-weight:550;cursor:pointer">◐ Theme</button>
       </div>
@@ -355,7 +356,7 @@ exception.
 
     <!-- MAIN: one scrolling column, full width — no max-width; title and lede keep their own reading measure -->
     <main style="min-width:0;padding:var(--s8) var(--s7)">
-      <!-- the blocks of §3–§9, §12, §15's decision trail, and §16's seam drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
+      <!-- the blocks of §3–§9, §12, §15's decision trail, §16's seam, and §17's sitting plan drop in here (render only what the change needs), each separated by margin-top:var(--s8) -->
     </main>
   </div>
 </div>
@@ -1590,7 +1591,7 @@ and say what happens if nobody answers.
 **Scope note — §13's retrospective counterpart.** A decision card renders a commitment a plan
 has made. The trail renders the commitments a *finished diff carries out*, so a reviewer can
 tell a deliberate choice from an accident before reading the hunks. It sits right after the
-overview (§3), in scroll mode only (§16 orders it against the seam in a multi-repo recap); the
+overview (§3), in scroll mode only (§16 and §17 order it against the seam and the sitting plan); the
 deck argues its decisions screen by screen instead.
 
 **Every entry is cited; the code is derived.** What counts as a source, and why there is no
@@ -1661,8 +1662,8 @@ both sides enforce that must change together, an outcome one side keys by id whi
 returns an ordered list. Each repository's own blocks (§3–§9) read fine on their own. The seam
 block puts the two sides of one contract next to each other, so the disagreement is something
 the reader sees instead of something they have to remember from two pages back. **It is
-required in multi-repo mode** and comes right after the overview, before either repository's
-files. When the recap also carries a decision trail (§15), the seam comes first and the trail
+required in multi-repo mode** and comes right after the overview (and the sitting plan, §17,
+when there is one), before either repository's files. When the recap also carries a decision trail (§15), the seam comes first and the trail
 follows it: the seam is the reason the mode exists. A single-repo recap never renders it.
 
 It has two parts, always in this order:
@@ -1763,6 +1764,103 @@ is the finding's evidence that the gap is known, and a `planned` chip without on
 **When not to render a finding.** A row that agrees and duplicates nothing gets no finding: the
 comparison already shows it, and a finding per row rebuilds the table as prose. Render the rows
 where the sides disagree, or agree only by copy.
+
+---
+
+## 17. Block: sitting plan (scroll mode, a diff over one reading budget)
+
+**Scope note: the reading budget as structure, not advice.** The budget
+(`visual-rendering-core.md` §5) is a ceiling and a floor: about 100–300 lines of excerpt, 30–60
+minutes. A diff whose excerpts need more than one budget can still only be read as one long
+page, so the ceiling stays a suggestion. The sitting plan splits that page into **sittings**,
+each inside one budget, and lets the reader mark what they have read. Under one budget, skip
+it: a plan with one sitting is a table of contents. It comes right after the overview, ahead
+of the seam (§16) and the trail (§15), because it is the map of everything below it.
+
+**Group the hunks into sittings, in reading order.** The seam first (§16, in a multi-repo
+recap), then failure paths (errors, refusals, rollbacks), then concurrency (locks,
+transactions, ordering), then the remaining changes, then tests. Each sitting is complete:
+every hunk it names is rendered in full in its §6 card, never sampled (Cohen's rule, the same
+one §12 applies to a population). A sitting lists its hunks by the anchor of each hunk's first
+callout and states its size in excerpt lines, counted from the excerpts, not estimated.
+
+**Reviewed state belongs to the reader, in their browser.** Each hunk in a sitting carries a
+checkbox; checking it counts toward that sitting's `n of m reviewed`, shown on the sitting and
+again in the rail (§2), so the reader sees where they stopped before scrolling. The state is a
+per-reader convenience, so it is held in `localStorage` under the recap's slug, and every read
+and write is wrapped in `try`/`catch`: storage can be blocked, empty, or throw (a private
+window, cleared site data, a sandboxed preview). When it does, the page still counts within the
+visit and starts at zero next time. Never put reviewed state in the feedback serializer
+(`visual-rendering-core.md` §4): it is where the reader is, not what they think, and the
+checkboxes carry no `data-feedback-id`.
+
+```html
+<style>
+  /* sitting-plan primitives (§17): same tokens */
+  .st-list{list-style:none;margin:0;padding:0;display:grid;gap:var(--s3)}
+  .st{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);padding:var(--s3) var(--s4)}
+  .st-head{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:baseline}
+  .st-name{font-weight:600;color:var(--fg)}
+  .st-size,.st-count{font-family:var(--mono);font-size:11px;color:var(--fg-muted)}
+  .st-hunks{list-style:none;margin:var(--s2) 0 0;padding:0;display:grid;gap:4px;font-family:var(--mono);font-size:12px}
+  .st-hunks a{color:var(--accent)}
+</style>
+
+<section id="sec-sittings" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;Sitting plan</div>
+  <ol class="st-list">
+    <li id="sitting-failure-paths" class="st" data-sitting="failure-paths">
+      <div class="st-head"><span class="st-name">1 · Failure paths</span><span class="st-size">140 excerpt lines</span><span class="st-count" data-sitting-count>0 of 2 reviewed</span></div>
+      <ul class="st-hunks">
+        <li><label><input type="checkbox" data-reviewed="c-session-ts-L34" onchange="markReviewed(this)"> <a href="#callout-c-session-ts-L34">session.ts:34</a></label></li>
+        <li><label><input type="checkbox" data-reviewed="c-app-ts-L18" onchange="markReviewed(this)"> <a href="#callout-c-app-ts-L18">app.ts:18</a></label></li>
+      </ul>
+    </li>
+    <li id="sitting-session-store" class="st" data-sitting="session-store">
+      <div class="st-head"><span class="st-name">2 · The session store</span><span class="st-size">210 excerpt lines</span><span class="st-count" data-sitting-count>0 of 1 reviewed</span></div>
+      <ul class="st-hunks">
+        <li><label><input type="checkbox" data-reviewed="c-session-ts-L33" onchange="markReviewed(this)"> <a href="#callout-c-session-ts-L33">session.ts:33</a></label></li>
+      </ul>
+    </li>
+  </ol>
+</section>
+
+<!-- the rail's progress indicator: one line per sitting, under §2's Contents nav -->
+<div style="display:grid;gap:4px;margin-top:var(--s4);font-size:12px;color:var(--fg-muted)">
+  <div style="font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint)">Sittings</div>
+  <a href="#sitting-failure-paths" style="color:inherit;text-decoration:none">1 · Failure paths <span data-sitting-progress="failure-paths" style="font-family:var(--mono)">0 of 2 reviewed</span></a>
+  <a href="#sitting-session-store" style="color:inherit;text-decoration:none">2 · The session store <span data-sitting-progress="session-store" style="font-family:var(--mono)">0 of 1 reviewed</span></a>
+</div>
+
+<script>
+  // §17: reviewed state is per reader. Storage can be blocked or throw; the page counts without it.
+  const SIT_KEY = 'visual-recap:' + RECAP_SLUG + ':reviewed';
+  let reviewed = new Set();
+  try { reviewed = new Set(JSON.parse(localStorage.getItem(SIT_KEY) || '[]')); } catch (_) {}
+  function saveReviewed(){
+    try { localStorage.setItem(SIT_KEY, JSON.stringify([...reviewed])); } catch (_) {}
+  }
+  function renderSittings(){
+    document.querySelectorAll('[data-sitting]').forEach(st => {
+      const boxes = [...st.querySelectorAll('[data-reviewed]')];
+      boxes.forEach(b => { b.checked = reviewed.has(b.dataset.reviewed); });
+      const label = boxes.filter(b => b.checked).length + ' of ' + boxes.length + ' reviewed';
+      st.querySelector('[data-sitting-count]').textContent = label;
+      const rail = document.querySelector('[data-sitting-progress="' + st.dataset.sitting + '"]');
+      if (rail) rail.textContent = label;
+    });
+  }
+  function markReviewed(box){
+    if (box.checked) reviewed.add(box.dataset.reviewed); else reviewed.delete(box.dataset.reviewed);
+    saveReviewed();
+    renderSittings();
+  }
+  renderSittings();
+</script>
+```
+
+The example shows two sittings to keep the markup short. A real plan has as many as the
+budget needs, each one sized from its own excerpts.
 
 ---
 

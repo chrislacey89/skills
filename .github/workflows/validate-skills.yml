@@ -291,6 +291,12 @@ jobs:
       - name: Run reader palette contract suite
         run: bash scripts/test-reader-palette-contract.sh
 
+      # The sitting plan keeps per-reader state in browser storage; this runs
+      # its script under node with working storage and with storage that
+      # throws, and checks the example's links and rail lines (#762).
+      - name: Run sitting plan contract suite
+        run: bash scripts/test-sitting-plan-contract.sh
+
       # A committed instrument that fails while reporting normally is the defect
       # docs/solutions/testing-patterns/validate-the-instrument-not-only-the-
       # subject-2026-08-23.md recorded as prose. This is its mechanizable half:
