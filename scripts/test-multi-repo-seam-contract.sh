@@ -134,11 +134,13 @@ for chip in mismatch fragile planned; do
   if grep -q "class=\"sf-chip sf-$chip\"" <<<"$sec15"; then ok "seam example renders a $chip chip"; else bad "seam example has no sf-$chip chip"; fi
 done
 # Every finding (data-feedback-kind="seam-finding") cites both sides: two
-# .sf-cite spans inside it. Count per finding, not in sum.
+# .sf-cite spans inside it. Count per finding, not in sum. The END clause
+# prints the last finding when no closing comment follows it.
 cites="$(awk '
   /data-feedback-kind="seam-finding"/ { if (inf) print n; inf=1; n=0 }
   inf { n += gsub(/class="sf-cite"/, "&") }
   inf && /<!-- \/finding -->/ { print n; inf=0 }
+  END { if (inf) print n }
 ' <<<"$sec15")"
 nfind="$(grep -c 'data-feedback-kind="seam-finding"' <<<"$sec15" || true)"
 if [[ "$nfind" -ge 3 ]]; then ok "seam example has $nfind findings"; else bad "seam example has $nfind findings (< 3, one per chip)"; fi
