@@ -82,8 +82,8 @@
 #
 # lookups. <sidecar>/lookups/<slug>.jsonl holds one line per `lessons match
 # --record` run on a branch, {at, branch, phase, files, scanned, with_paths,
-# projects, matched, outcome}, written and committed by the command itself, so a
-# branch with no line is a branch where the lookup did not run. outcome is
+# projects, matched, outcome}, written and committed by the command itself.
+# outcome is
 # matched, none, no-files, or failed; a failed lookup is recorded before its
 # nonzero exit. A detached HEAD or a missing sidecar records nothing and says
 # why on the receipt. Lesson names are private sidecar content: nothing copies

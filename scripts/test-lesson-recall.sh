@@ -492,8 +492,7 @@ check "the template names no lesson lookup, receipt, run log, or lesson" "" "$le
 # -----------------------------------------------------------------------------
 section "the run log: --record writes one line per lookup"
 
-# The command writes the record itself, so a branch with no record is a branch
-# where the lookup did not run. The line's shape is PRD #747's locked contract.
+# The command writes the record itself. The line's shape is PRD #747's locked contract.
 mkproj
 LP="$P"
 runo "$LP" init --name logproj --mode owned --write sidecar --in-tree-path none --no-migrate-archive
