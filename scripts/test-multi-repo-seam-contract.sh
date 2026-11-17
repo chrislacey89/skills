@@ -106,6 +106,17 @@ else
 fi
 if grep -q 'base caller.ts\|base service.php' <<<"$out"; then bad "a log line from before the base leaked into a scope"; else ok "logs stop at each scope's base"; fi
 
+# The split is at the FIRST `@`: a head ref may itself hold one (a reflog ref), a repo path may not.
+# Splitting at the last `@` would cut `feature@{0}` to `{0}` and refuse a scope that works today.
+# The reflog is real: `feature` was created and committed on in $work/caller, so feature@{0} resolves.
+out_at="$(run_block "$work/caller@base..feature@{0}" "$work/service@base..feature" 2>&1)" && rc_at=0 || rc_at=$?
+got_at="$(grep -E '^== scope:|\| [0-9]+ ' <<<"$out_at" || true)"
+expect_at="== scope: $work/caller @ base...feature@{0}
+ caller.ts | 1 +
+== scope: $work/service @ base...feature
+ service.php | 1 +"
+if [[ $rc_at -eq 0 && "$got_at" == "$expect_at" ]]; then ok "a head ref holding @ (feature@{0}) splits at the first @ and prints its stat"; else bad "a scope whose head ref holds @ failed (exit $rc_at): $out_at"; fi
+
 refuses() { # refuses <label> <args...>
   local label="$1"; shift
   local o r
