@@ -87,6 +87,7 @@ Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a
 usage='write each scope as <repo-path>@<base>..<head>, with two dots'
 for scope in "$@"; do
   repo="${scope%%@*}"; range="${scope#*@}"
+  [ -n "$repo" ] || { echo "scope [$scope]: the repo path is empty; $usage; not guessing" >&2; exit 1; }
   case "$range" in
     *...*|"$scope") echo "scope [$scope]: $usage; not guessing" >&2; exit 1 ;;
     ?*..?*) ;;

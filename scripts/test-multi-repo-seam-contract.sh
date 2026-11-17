@@ -106,6 +106,7 @@ refuses "a ref the repo does not have" "$work/caller@base..feature" "$work/servi
 refuses "three dots" "$work/caller@base..feature" "$work/service@base...feature"
 refuses "a scope with no @" "$work/caller@base..feature" "$work/service"
 refuses "an empty endpoint" "$work/caller@base..feature" "$work/service@..feature"
+refuses "an empty repo path" "$work/caller@base..feature" "@base..feature"
 refuses "a single scope" "$work/caller@base..feature"
 
 # --- 3. design: the seam block ----------------------------------------------
