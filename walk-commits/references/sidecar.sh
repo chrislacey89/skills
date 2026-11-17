@@ -2565,7 +2565,10 @@ lessons_scan_group() {
         while IFS= read -r -d '' f; do files[${#files[@]}]="$f"; done < <(lessons_group_files "$d")
         # With no readable file, awk would read stdin: skip it.
         [ "${#files[@]}" -gt 0 ] || continue
-        awk "$LESSONS_SCAN_AWK" "${files[@]}" 2>/dev/null \
+        # xargs splits a very long list into batches, as find -exec {} + does
+        # for lessons_scan; the awk keeps no state across files, so each batch
+        # stands alone. Any awk failure makes xargs exit 123, so it still warns.
+        printf '%s\0' "${files[@]}" | xargs -0 awk "$LESSONS_SCAN_AWK" 2>/dev/null \
             || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
     done <<<"$1"
     return 0
