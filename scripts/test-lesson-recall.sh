@@ -1359,5 +1359,60 @@ related: [one-2026-01-01.md]
     check "$sh: write: then checks the lesson" "loose ends: 0" "$(printf '%s\n' "$out" | tail -n 1)"
 done
 
+# -----------------------------------------------------------------------------
+section "a group member folder larger than one awk argument list (ARG_MAX)"
+
+# lessons_scan_group hands a member folder's files to awk through xargs, which
+# splits them into batches. A single `awk "$PROG" "${files[@]}"` fails with
+# "Argument list too long" once the paths together pass ARG_MAX, and the failure
+# looks like an unreadable folder: no rows and a "could not be read" warning.
+# The fixture is sized from this machine's ARG_MAX and its real path length, so
+# it works where ARG_MAX is 1 MB (macOS) or 2 MB (Linux CI); the lessons are
+# written by one awk, not one process per file, and removed afterward.
+argmax="$(getconf ARG_MAX 2>/dev/null)"
+case "$argmax" in ''|*[!0-9]*) argmax=2097152 ;; esac
+mkproj
+BMP="$P"
+runo "$BMP" init --name bigmember --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+BMS="$out"
+[ -d "$BMS" ] || fatal "init did not create the big member's sidecar: $err"
+runo "$BMP" config set system biggrp
+mkproj
+BHP="$P"
+runo "$BHP" init --name bighome --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+[ -d "$out" ] || fatal "init did not create the big home sidecar: $err"
+runo "$BHP" config set system biggrp
+mkdir -p "$BHP/lib" "$BMS/solutions/big"
+: > "$BHP/lib/a.sh"
+lesson "$BHP" "x/target-2026-01-01.md" "Target" "paths: [lib/a.sh]"
+bigname="$(awk 'BEGIN { s = "n"; while (length(s) < 190) s = s "n"; print s }')"
+bigprefix="$BMS/solutions/big/$bigname"
+bigplen=$(( ${#bigprefix} + 12 ))   # the prefix, "-NNNNN.md" and the separator
+bigcount=$(( argmax / bigplen + 200 ))
+if [ "$bigcount" -gt 40000 ]; then
+    printf '  SKIP ARG_MAX %s needs %s lessons, over the 40000 cap\n' "$argmax" "$bigcount"
+else
+    bigstart="$(date +%s)"
+    awk -v n="$bigcount" -v pre="$bigprefix" -v mid="$((bigcount / 2))" 'BEGIN {
+        for (i = 1; i <= n; i++) {
+            f = sprintf("%s-%05d.md", pre, i)
+            printf "---\ntitle: \"Big %d\"\nvolatility: low\npaths: [svc]\n", i > f
+            if (i == mid) printf "replaces: [target-2026-01-01.md]\n" > f
+            printf "---\n\n# Big %d\n", i > f
+            close(f)
+        }
+    }'
+    bigmid="$(printf '%s-%05d.md' "$bigname" "$((bigcount / 2))")"
+    runo "$BHP" lessons match lib/a.sh
+    check "big folder: the group is bigger than ARG_MAX ($argmax) in path bytes" 1 \
+        "$([ $((bigcount * bigplen)) -gt "$argmax" ] && echo 1 || echo 0)"
+    check "big folder: match exits 0" 0 "$rc"
+    check "big folder: the home lesson is replaced-by the member lesson past the batch split" \
+        "exact${TAB}docs/solutions/x/target-2026-01-01.md${TAB}Target${TAB}replaced-by:$bigmid" "$(printf '%s\n' "$out" | grep '^exact')"
+    check "big folder: no could-not-be-read warning" 0 "$(printf '%s\n' "$err" | grep -c 'could not be read')"
+    printf '  (big-folder arm: %s lessons, %ss)\n' "$bigcount" "$(( $(date +%s) - bigstart ))"
+    rm -rf "$BMS/solutions/big"
+fi
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
