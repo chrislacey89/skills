@@ -133,7 +133,8 @@ else
   bad "core §6 forcing function does not separate the two cases, or does not point at design §1 (*A reader palette*)"
 fi
 if grep -qF '**A reader palette: the reader' <<<"$sec1"; then ok "design §1 has the 'A reader palette' section core points at"; else bad "design §1 has no 'A reader palette' section"; fi
-if grep -F 'Confirm the token core is canonical' "$SKILL" | grep -qF '`references/visual-rendering-core.md` §6'; then ok "SKILL.md §5 points at core §6 for the reader palette"; else bad "SKILL.md §5 does not point at core §6"; fi
+skill_ff="$(grep -F 'Confirm the token core is canonical' "$SKILL" || true)"
+if grep -qF '`references/visual-rendering-core.md` §6' <<<"$skill_ff"; then ok "SKILL.md §5 points at core §6 for the reader palette"; else bad "SKILL.md §5 does not point at core §6"; fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]
