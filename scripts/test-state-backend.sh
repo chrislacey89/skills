@@ -185,17 +185,23 @@ fi
 
 # Files jq parses without a syntax error but cannot answer a key lookup from:
 # an empty file holds no JSON value at all, a "keys" that is a number cannot be
-# searched, and a file holding two values has no one answer (`jq -e` exits on
+# searched, a "keys" that is a string would be searched as a substring by
+# `index` (claiming any key it contains, and reading as a clean miss for one it
+# does not), `false` would pass `// []` as an empty list, and a file holding
+# two values has no one answer (`jq -e` exits on
 # the last value it reads, so with the key's value first the file read as a
 # clean miss). Each could be this repo's sidecar, so each is refused like a
 # corrupt file rather than read as "no key here", which would answer github.
 # Both value orders run, so a check that only looks at the first value, or
 # only the last, fails one of them. A lookup that reads the file once for
 # every key must keep them all.
-for shape in empty keys-not-array key-value-first key-value-last; do
+for shape in empty keys-not-array keys-is-string-holding-key keys-is-string-without-key keys-is-false key-value-first key-value-last; do
     case "$shape" in
         empty) : > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
         keys-not-array) printf '{"schema": 2, "keys": 7}\n' > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
+        keys-is-string-holding-key) printf '{"schema": 2, "keys": "remote:github.com/acme/corrupt and more"}\n' > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
+        keys-is-string-without-key) printf '{"schema": 2, "keys": "something-else"}\n' > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
+        keys-is-false) printf '{"schema": 2, "keys": false}\n' > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
         key-value-first) { cat "$tmp/corrupt-good.json"; echo '{}'; } > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
         key-value-last) { echo '{}'; cat "$tmp/corrupt-good.json"; } > "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json" ;;
     esac
