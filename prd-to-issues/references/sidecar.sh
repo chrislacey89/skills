@@ -2570,7 +2570,7 @@ lessons_scan_group() {
         [ "${#files[@]}" -gt 0 ] || continue
         # xargs splits a very long list into batches, as find -exec {} + does
         # for lessons_scan; the awk keeps no state across files, so each batch
-        # stands alone. Any awk failure makes xargs exit 123, so it still warns.
+        # stands alone. Any awk failure makes xargs exit nonzero, so it still warns.
         printf '%s\0' "${files[@]}" | xargs -0 awk "$LESSONS_SCAN_AWK" 2>/dev/null \
             || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
     done <<<"$1"
