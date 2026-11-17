@@ -79,6 +79,8 @@ if [[ -z "$unguarded" ]]; then ok "every localStorage access sits inside a try";
 
 if ! command -v node >/dev/null 2>&1; then
   echo "SKIP script run: node not on PATH"
+elif [[ -z "$sittings" ]]; then
+  echo "SKIP script run: no sittings to run it against (already failed above)"
 else
   # One JSON line per sitting: name and its reviewed ids, read from the example.
   model="$(while IFS= read -r s; do
