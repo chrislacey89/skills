@@ -512,6 +512,19 @@ line gets a numbered `.vr-marker`; clicking it activates its callout (see §10).
 Stable ids per `visual-rendering-core.md` §4: callout cards and their markers share a
 `data-feedback-id="c-<file-slug>-L<line>"`.
 
+**Excerpt the unit under discussion, and mark what the excerpt skips.** Two rules keep an
+excerpt honest about what it leaves out:
+
+- **Scope it to the method, not the file.** For a new file, or a hunk inside a long function,
+  excerpt the function or method the callouts discuss, from its signature to its closing line.
+  The rest of the file is in the file tree with its ±count (§4); reproducing it spends the
+  reading budget (`visual-rendering-core.md` §5) on lines nobody annotated.
+- **A jump in line numbers gets a gap row.** When one pane holds lines that are not adjacent
+  (two hunks, or a hunk and its distant context), put a `.vr-gap` row between them naming the
+  skipped range. Without it, 33 followed by 37 reads as two adjacent lines, and the reader
+  takes the excerpt for the whole function. Each pane marks its own gaps, so a gap can sit on
+  one side only.
+
 **A load-bearing callout names the decision it serves.** When the recap opens with a decision
 trail (§15), give the callout card an optional `data-decision="dc-<slug>"` naming the trail
 entry it carries out, and say so on the card's meta line as a link back to the entry
@@ -542,6 +555,8 @@ no listed decision: an unlinked callout is information, not a fault.
         <div style="padding:var(--s2) 0">
           <!-- a removed line: --del spine + --del-bg wash -->
           <div style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid var(--del);background:var(--del-bg)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">33</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">  <span style="color:var(--sx-k)">if</span> (!currentToken) {</code></div>
+          <!-- a gap row: the line numbers jump, so say which lines the excerpt skips -->
+          <div class="vr-gap" data-gap="34-36" style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid transparent;background:var(--bg-subtle)"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">⋯</span><span style="padding:1px var(--s3);font-family:var(--sans);font-size:11px;font-style:italic;color:var(--fg-muted)">lines 34–36 not shown</span></div>
           <!-- a context line: transparent spine, no wash -->
           <div style="display:grid;grid-template-columns:36px 1fr;border-left:2px solid transparent"><span style="text-align:right;padding:1px var(--s2);font-family:var(--mono);font-size:12px;color:var(--fg-faint);user-select:none">37</span><code style="font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre;padding:1px var(--s3);color:var(--fg)">}</code></div>
         </div>

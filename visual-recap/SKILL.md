@@ -137,7 +137,7 @@ Two things change, and both are load-bearing. **The Grounding Rule inverts** —
 Build the structural inputs mechanically, before writing a single sentence:
 
 - **Topology:** the file list and per-file ±LOC from `git diff --stat`.
-- **Hunks:** the actual before/after text and line numbers from `git diff`/`git show` — copied verbatim into the annotated-diff blocks.
+- **Hunks:** the actual before/after text and line numbers from `git diff`/`git show` — copied verbatim into the annotated-diff blocks. Excerpt the method under discussion rather than the whole file, and mark every jump in line numbers with a gap row (`references/visual-recap-design.md` §6).
 - **Commits:** hashes and touched files from `git log`/`git show`.
 
 Run secret-redaction over every hunk at this step (per the core), before any of it reaches the HTML.
@@ -195,6 +195,16 @@ Write the file to a **transient** path — gitignored `.context/` or `mktemp` �
 **Confirm the token core is canonical, not the reviewed app's aesthetic (forcing function).** Before presenting, verify the artifact's §1 token block (the light block and both dark copies) is the canonical `references/visual-recap-design.md` §1 set — canonical variable names and values — and **not** a palette, font stack, or chrome re-derived from the app under review. This is the deviation most likely to occur on a well-designed downstream app and the most harmful when it does: the neutral instrument adopts its subject's brand and loses run-to-run constancy. It is a checked step, not stated hope (core §6).
 
 **Confirm the code rows are colored (forcing function, chrislacey89/skills#395).** Before presenting, count the applied `var(--sx-…)` spans (or confirm the highlight.js wiring is present) against the code cells in the diff and before/after blocks. Code cells with neither is the defect, not a style choice. The `--sx-*` definitions being in `:root` proves nothing: that block is copied verbatim whether or not anything uses it. A row left plain on purpose (a construct with no role in §1's table) is fine; a whole artifact left plain is not, and "the rows were generated" is not a reason.
+
+**Confirm no template placeholder is left (forcing function).** When a generator script or a template built the file, search the artifact for leftover placeholders with a pattern, never a bare `{{`: JSX (`style={{…}}`) and many template languages put `{{` in correct output, so a bare-brace search either fires on every such line or gets waved off.
+
+```bash
+# visual-recap: placeholder check
+ARTIFACT="<artifact>.html"
+if grep -nE '\{\{[A-Z_]+\}\}' "$ARTIFACT"; then echo "template placeholders left in $ARTIFACT; fill them before presenting" >&2; exit 1; fi
+```
+
+Name your own placeholders in that shape, capitals and underscores only (`{{TITLE}}`, `{{SESSION_HUNK}}`), so this one pattern finds them.
 
 The CSS diagram primitive needs no render check — it has no parse grammar and no CDN.
 **For every Mermaid figure**, **confirm it renders without a

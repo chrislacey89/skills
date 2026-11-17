@@ -103,6 +103,8 @@ pre-push:
       run: bash scripts/test-decision-trail-contract.sh
     multi-repo-seam-contract-tests:
       run: bash scripts/test-multi-repo-seam-contract.sh
+    recap-generator-checklist-tests:
+      run: bash scripts/test-recap-generator-checklist.sh
     post-review-edit-lock-tests:
       run: bash scripts/test-post-review-edit-lock.sh
     skill-frontmatter-loads-tests:
