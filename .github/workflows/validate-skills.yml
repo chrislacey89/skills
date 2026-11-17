@@ -267,6 +267,12 @@ jobs:
       - name: Run recall callout contract suite
         run: bash scripts/test-recall-callout-contract.sh
 
+      # /visual-recap's multi-repo mode documents a block an agent runs in two
+      # repositories at once; this runs it against two planted repos, and pins
+      # the seam block's both-sides citation rule (#761).
+      - name: Run multi-repo seam contract suite
+        run: bash scripts/test-multi-repo-seam-contract.sh
+
       # A committed instrument that fails while reporting normally is the defect
       # docs/solutions/testing-patterns/validate-the-instrument-not-only-the-
       # subject-2026-08-23.md recorded as prose. This is its mechanizable half:
