@@ -72,7 +72,7 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;
     /* radii */
     --r1:5px;--r2:8px;--r3:14px;
-    /* light theme (default) */
+    /* light — used unless the system is dark or the page pins dark */
     --bg:hsl(225 30% 99%);
     --bg-subtle:hsl(225 28% 97%);
     --bg-inset:hsl(225 24% 95%);
@@ -390,7 +390,7 @@ spine cannot express, and the pack was teaching authors away from them. So §6's
 must still read identically offline; a **diagram figure** may degrade, and must say so on its
 own face. chrislacey89/skills#129's render-confirm gate is retained unchanged (core §7).
 
-**Every Mermaid figure carries a visible degrade note.** Not once in a footer — beside the
+**Every Mermaid figure carries a visible degrade note, except where `visual-rendering-core.md` §6 says otherwise.** Not once in a footer — beside the
 figure, where a reader who jumped straight to it will see it:
 
 ```html
