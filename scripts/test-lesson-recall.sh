@@ -120,6 +120,18 @@ runo "$P" lessons match lib/y.sh
 check "a pointer written ./lib/ is the folder lib" \
     "folder${TAB}docs/solutions/testing/g-2026-01-01.md${TAB}Trailing slash" "$(printf '%s\n' "$out" | head -n 1)"
 
+# Context anchors name a file with a line or a range after it
+# (`init-pipeline/scripts/sidecar.sh:1277`, `scripts/test-x.sh:120-131`).
+# A folder pointer matches whatever follows it, so only an exact pointer can
+# tell whether the suffix was removed.
+lesson "$P" "testing/h-2026-01-01.md" "Exact file" "paths: [tools/run.sh]"
+runo "$P" lessons match tools/run.sh:1277
+check "a path with a :line suffix matches as the path" \
+    "exact${TAB}docs/solutions/testing/h-2026-01-01.md${TAB}Exact file" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match tools/run.sh:120-131
+check "a path with a :start-end suffix matches as the path" \
+    "exact${TAB}docs/solutions/testing/h-2026-01-01.md${TAB}Exact file" "$(printf '%s\n' "$out" | head -n 1)"
+
 # -----------------------------------------------------------------------------
 section "order: exact first, then folders deepest first"
 
@@ -145,6 +157,17 @@ check "several files: a lesson matched by any of them is printed" \
 "folder${TAB}docs/solutions/c/middle-2026-01-01.md${TAB}Middle
 folder${TAB}docs/solutions/a/shallow-2026-01-01.md${TAB}Shallow
 folder${TAB}docs/solutions/e/both-2026-01-01.md${TAB}Both kinds" "$(printf '%s\n' "$out" | sed '$d')"
+
+# A lesson with several folder pointers ranks by the deepest one that matches,
+# not the first one listed: "Two folders" lists src first, but its src/core/io
+# pointer puts it above "One folder" at src/core.
+mkproj
+lesson "$P" "a/two-2026-01-01.md" "Two folders" "paths: [src, src/core/io]"
+lesson "$P" "b/one-2026-01-01.md" "One folder" "paths: [src/core]"
+runo "$P" lessons match src/core/io/x.sh
+check "several folder pointers: ranked by the deepest that matches" \
+"folder${TAB}docs/solutions/a/two-2026-01-01.md${TAB}Two folders
+folder${TAB}docs/solutions/b/one-2026-01-01.md${TAB}One folder" "$(printf '%s\n' "$out" | sed '$d')"
 
 # -----------------------------------------------------------------------------
 section "no match, and lessons with no paths"
@@ -197,6 +220,31 @@ lessons: 0 matched, 2 scanned, 1 with paths" "$(printf '%s\n' "$out" | sed 's/, 
 done
 
 # -----------------------------------------------------------------------------
+section "real lessons as fixtures: title, CRLF, quotes"
+
+# Copied from this repo's own corpus, so the reader meets real input: this
+# lesson has `# ` comment lines inside its code blocks after its title. Each
+# copy gains one paths line after volatility.
+REAL="$repo_root/docs/solutions/testing-patterns/mutate-the-oracle-not-only-the-subject-2026-08-19.md"
+[ -f "$REAL" ] || fatal "the real-lesson fixture is gone: $REAL"
+[ "$(grep -c '^# ' "$REAL")" -gt 1 ] || fatal "the real-lesson fixture no longer has a # line after its title"
+REAL_TITLE="$(grep -m 1 '^# ' "$REAL" | sed 's/^# //')"
+mkproj
+mkdir -p "$P/docs/solutions/real"
+awk '{ print } /^volatility:/ { print "paths: [real/plain.sh]" }' "$REAL" > "$P/docs/solutions/real/plain-2026-08-19.md"
+awk '{ printf "%s\r\n", $0 } /^volatility:/ { printf "paths: [real/crlf.sh]\r\n" }' "$REAL" > "$P/docs/solutions/real/crlf-2026-08-19.md"
+awk '{ print } /^volatility:/ { print "paths: [\"real/quoted.sh\"]" }' "$REAL" > "$P/docs/solutions/real/quoted-2026-08-19.md"
+runo "$P" lessons match real/plain.sh
+check "a real lesson's title is its first # heading, not a later code comment" \
+    "exact${TAB}docs/solutions/real/plain-2026-08-19.md${TAB}$REAL_TITLE" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match real/crlf.sh
+check "the same lesson with CRLF line endings: found, title clean" \
+    "exact${TAB}docs/solutions/real/crlf-2026-08-19.md${TAB}$REAL_TITLE" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match real/quoted.sh
+check "a quoted paths entry matches the bare path" \
+    "exact${TAB}docs/solutions/real/quoted-2026-08-19.md${TAB}$REAL_TITLE" "$(printf '%s\n' "$out" | head -n 1)"
+
+# -----------------------------------------------------------------------------
 section "a store that cannot be read"
 
 if [ "$(id -u)" -eq 0 ]; then
@@ -218,12 +266,26 @@ else
     check "an unreadable lesson file: nothing on stdout" "" "$out"
     chmod 644 "$P/docs/solutions/y/b-2026-01-01.md"
 fi
+# With no sidecar, the project is named for its main checkout, so every
+# worktree of one project reports the same name and not its own folder's.
+mkproj
+lesson "$P" "x/wt-2026-01-01.md" "In a worktree" "paths: [a.sh]"
+git -C "$P" add docs && git -C "$P" commit -q -m "lesson"
+git -C "$P" worktree add -q "$tmp/wt-feature-branch" -b feature-branch
+runo "$tmp/wt-feature-branch" lessons match a.sh
+check "in a worktree with no sidecar: projects names the main checkout" \
+    "projects: $(basename "$P")" "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, \(projects: [^,]*\),.*/\1/')"
+
 mkproj
 runo "$tmp" lessons match scripts/a.sh
 check "outside a repository: exits nonzero" 1 "$rc"
 check "outside a repository: nothing on stdout" "" "$out"
-runo "$P" lessons match --record start
+runo "$P" lessons match --bogus
 check "an unknown flag: exits 2" 2 "$rc"
+runo "$P" lessons match a.sh --record
+check "--record with no phase: exits 2" 2 "$rc"
+runo "$P" lessons match a.sh --record later
+check "--record with a phase other than start or changed: exits 2" 2 "$rc"
 runo "$P" lessons
 check "no sub-verb: exits 2" 2 "$rc"
 runo "$P" lessons match "$(printf 'scripts/a.sh\nlib/b.sh')"
@@ -352,7 +414,7 @@ lib/one.sh" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
     check "$sh: several files, one blank line: exits 0" 0 "$rc"
     check "$sh: each file is its own argument" \
 "exact${TAB}docs/solutions/x/hit-2026-04-04.md${TAB}Hit
-lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), recorded: no" "$out"
+lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), recorded: no: no sidecar resolves" "$out"
     out="$(cd "$BP" && TEST_FILES="" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
     check "$sh: no file list: exits 0" 0 "$rc"
     check "$sh: no file list: says no file list was given" "no file list given; nothing to match" \
@@ -361,6 +423,182 @@ lessons: 1 matched, 1 scanned, 1 with paths, projects: $(basename "$BP"), record
     if [ "$rc" -ne 0 ] && [ -z "$out" ]; then ok "$sh: a failed lookup exits nonzero with nothing on stdout"
     else bad "$sh: a failed lookup exits nonzero with nothing on stdout" "rc=$rc out=[$out]"; fi
 done
+
+# -----------------------------------------------------------------------------
+section "/execute's lookup blocks record their phase"
+
+# One project with a sidecar, a base branch, and a slice branch that changed
+# two files. The Step 1 block records phase start for the files it is given;
+# the Step 4 block records phase changed for the files the branch changed.
+mkproj
+XP="$P"
+runo "$XP" init --name blocks --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+XS="$out"
+[ -d "$XS" ] || fatal "init did not create a sidecar: $err"
+runo "$XP" config set base_ref main
+[ "$rc" -eq 0 ] || fatal "config set base_ref main failed: $err"
+lesson "$XP" "x/changed-2026-06-06.md" "Changed" "paths: [lib]"
+git -C "$XP" add docs && git -C "$XP" commit -q -m "lesson"
+git -C "$XP" checkout -q -b slice/one
+mkdir -p "$XP/lib"
+printf 'a\n' > "$XP/lib/one.sh"; printf 'b\n' > "$XP/top.txt"
+git -C "$XP" add lib top.txt && git -C "$XP" commit -q -m "slice work"
+XLOG="$XS/lookups/slice%2Fone.jsonl"
+cblock="$(awk '/^<!-- sidecar-read: execute-lessons-changed -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$EXECUTE")"
+[ -n "$cblock" ] || fatal "execute/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: execute-lessons-changed -->"
+ok "execute/SKILL.md carries the lessons-changed block"
+cscript="$(printf '%s\n' "$cblock" | sed -e "s|^SC=.*|SC=\"$SC\"|")"
+# The Step 4 block sits in Tier 1, after the slice-range diff it reuses.
+cline="$(grep -n '^<!-- sidecar-read: execute-lessons-changed -->$' "$EXECUTE" | cut -d: -f1)"
+t1line="$(grep -n '^#### Tier 1: Static Verification' "$EXECUTE" | cut -d: -f1)"
+t2line="$(grep -n '^#### Tier 2: Command Verification' "$EXECUTE" | cut -d: -f1)"
+if [ -n "$t1line" ] && [ -n "$t2line" ] && [ "$t1line" -lt "$cline" ] && [ "$cline" -lt "$t2line" ]; then
+    ok "the lessons-changed block sits in Step 4 Tier 1"
+else
+    bad "the lessons-changed block sits in Step 4 Tier 1" "tier1=$t1line block=$cline tier2=$t2line"
+fi
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    : > "$XLOG" 2>/dev/null || { mkdir -p "$XS/lookups"; : > "$XLOG"; }
+    out="$(cd "$XP" && TEST_FILES="lib/one.sh" "${runner[@]}" "$lscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: Step 1 block with a sidecar: exits 0" 0 "$rc"
+    check "$sh: Step 1 block: recorded: yes" "recorded: yes" "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
+    check "$sh: Step 1 block: the record's phase is start" start "$(tail -n 1 "$XLOG" | jq -r .phase)"
+    out="$(cd "$XP" && "${runner[@]}" "$cscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: Step 4 block: exits 0" 0 "$rc"
+    check "$sh: Step 4 block: prints the lesson for the changed file" \
+        "folder${TAB}docs/solutions/x/changed-2026-06-06.md${TAB}Changed" "$(printf '%s\n' "$out" | head -n 1)"
+    check "$sh: Step 4 block: the record's phase is changed" changed "$(tail -n 1 "$XLOG" | jq -r .phase)"
+    check "$sh: Step 4 block: the record names the files the slice changed" '["lib/one.sh","top.txt"]' \
+        "$(tail -n 1 "$XLOG" | jq -c '.files | sort')"
+done
+
+# -----------------------------------------------------------------------------
+section "the Review Notes template carries no lookup output"
+
+# Review Notes go into the PR body, which other people read; lesson names are
+# private sidecar content. The template is extracted as /execute ships it.
+notes="$(awk '/^```markdown$/ { inb = 1; buf = ""; next }
+              inb && /^```$/ { if (buf ~ /## Review Notes/) { printf "%s", buf; exit } inb = 0; next }
+              inb { buf = buf $0 "\n" }' "$EXECUTE")"
+[ -n "$notes" ] || fatal "execute/SKILL.md has no markdown block carrying ## Review Notes"
+ok "execute/SKILL.md carries the Review Notes template"
+leaks="$(printf '%s\n' "$notes" | grep -nE 'lessons match|lessons: [0-9]|recorded: (yes|no)|lookups/|^(exact|folder)	|docs/solutions/' || true)"
+check "the template names no lesson lookup, receipt, run log, or lesson" "" "$leaks"
+
+# -----------------------------------------------------------------------------
+section "the run log: --record writes one line per lookup"
+
+# The command writes the record itself, so a branch with no record is a branch
+# where the lookup did not run. The line's shape is PRD #747's locked contract.
+mkproj
+LP="$P"
+runo "$LP" init --name logproj --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+LS="$out"
+[ -d "$LS" ] || fatal "init did not create a sidecar: $err"
+git -C "$LP" checkout -q -b feat/x
+lesson "$LP" "x/hit-2026-05-05.md" "Logged" "paths: [a/b.sh]"
+LOG="$LS/lookups/feat%2Fx.jsonl"
+lhead="$(git -C "$LS" rev-parse HEAD)"
+runo "$LP" lessons match a/b.sh other/c.sh --record start
+check "--record start: exits 0" 0 "$rc"
+check "--record start: the receipt says recorded: yes" \
+    "lessons: 1 matched, 1 scanned, 1 with paths, projects: logproj, recorded: yes" "$(printf '%s\n' "$out" | tail -n 1)"
+check "--record start: one line in lookups/<branch-slug>.jsonl" 1 "$(wc -l < "$LOG" 2>/dev/null | tr -d ' ')"
+check "the record carries exactly the contract's keys" \
+    '["at","branch","files","matched","outcome","phase","projects","scanned","with_paths"]' \
+    "$(jq -c 'keys' "$LOG" 2>/dev/null)"
+check "the record's values" \
+    '{"branch":"feat/x","phase":"start","files":["a/b.sh","other/c.sh"],"scanned":1,"with_paths":1,"projects":["logproj"],"matched":["hit-2026-05-05.md"],"outcome":"matched"}' \
+    "$(jq -c 'del(.at)' "$LOG" 2>/dev/null)"
+if jq -e '.at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")' "$LOG" >/dev/null 2>&1; then
+    ok "the record's at is an ISO 8601 UTC time"
+else bad "the record's at is an ISO 8601 UTC time" "$(cat "$LOG" 2>/dev/null)"; fi
+check "the record is committed in the sidecar" "" "$(git -C "$LS" status --porcelain)"
+if [ "$(git -C "$LS" rev-parse HEAD)" != "$lhead" ]; then ok "the sidecar's HEAD moved by the record's commit"
+else bad "the sidecar's HEAD moved by the record's commit" "HEAD is still $lhead"; fi
+
+lhead="$(git -C "$LS" rev-parse HEAD)"
+runo "$LP" lessons match a/b.sh
+check "without --record: the receipt still says recorded: no" \
+    "lessons: 1 matched, 1 scanned, 1 with paths, projects: logproj, recorded: no" "$(printf '%s\n' "$out" | tail -n 1)"
+check "without --record: the log is unchanged" 1 "$(wc -l < "$LOG" | tr -d ' ')"
+check "without --record: the sidecar's HEAD has not moved" "$lhead" "$(git -C "$LS" rev-parse HEAD)"
+
+git -C "$LP" checkout -q --detach
+runo "$LP" lessons match a/b.sh --record start
+check "detached HEAD: exits 0" 0 "$rc"
+check "detached HEAD: still prints the match" \
+    "exact${TAB}docs/solutions/x/hit-2026-05-05.md${TAB}Logged" "$(printf '%s\n' "$out" | head -n 1)"
+check "detached HEAD: recorded: no, with the reason" \
+    "lessons: 1 matched, 1 scanned, 1 with paths, projects: logproj, recorded: no: HEAD is detached" \
+    "$(printf '%s\n' "$out" | tail -n 1)"
+check "detached HEAD: the sidecar's HEAD has not moved" "$lhead" "$(git -C "$LS" rev-parse HEAD)"
+git -C "$LP" checkout -q feat/x
+
+runo "$LP" lessons match --record start
+check "--record start with no paths: exits 0" 0 "$rc"
+check "--record start with no paths: records outcome no-files" no-files "$(tail -n 1 "$LOG" | jq -r .outcome)"
+check "--record start with no paths: records no files" '[]' "$(tail -n 1 "$LOG" | jq -c .files)"
+
+# An append cut off before its newline: the next record must not be glued onto
+# it, and the file must hold complete lines only.
+printf '%s' '{"at":"2026-01-01T00:00:00Z","branch":"feat/x","phase":"st' >> "$LOG"
+runo "$LP" lessons match a/b.sh --record changed
+check "after an interrupted append: exits 0" 0 "$rc"
+check "after an interrupted append: the file ends in a newline" 0a "$(tail -c 1 "$LOG" | od -An -tx1 | tr -d ' ')"
+if jq -e . "$LOG" >/dev/null 2>&1; then ok "after an interrupted append: every line parses as JSON"
+else bad "after an interrupted append: every line parses as JSON" "$(cat "$LOG")"; fi
+check "after an interrupted append: the new record is the last line" changed "$(tail -n 1 "$LOG" | jq -r .phase)"
+check "after an interrupted append: the partial line is gone" 0 "$(grep -c '"phase":"st$' "$LOG")"
+
+# A lookup that fails while --record is set: nonzero exit, nothing on stdout,
+# and a record whose outcome is failed, so the log never reads it as "none".
+if [ "$(id -u)" -ne 0 ]; then
+    lesson "$LP" "y/locked-2026-05-05.md" "Locked" "paths: [a/b.sh]"
+    chmod 000 "$LP/docs/solutions/y/locked-2026-05-05.md"
+    nlines="$(wc -l < "$LOG" | tr -d ' ')"
+    runo "$LP" lessons match a/b.sh --record changed
+    check "unreadable lesson with --record: exits 1" 1 "$rc"
+    check "unreadable lesson with --record: nothing on stdout" "" "$out"
+    check "unreadable lesson with --record: one record appended" "$((nlines + 1))" "$(wc -l < "$LOG" | tr -d ' ')"
+    check "unreadable lesson with --record: its outcome is failed" failed "$(tail -n 1 "$LOG" | jq -r .outcome)"
+    case "$err" in *"recorded as failed"*) ok "unreadable lesson with --record: stderr says it was recorded" ;;
+        *) bad "unreadable lesson with --record: stderr says it was recorded" "stderr: $err" ;; esac
+    chmod 644 "$LP/docs/solutions/y/locked-2026-05-05.md"
+    rm -f "$LP/docs/solutions/y/locked-2026-05-05.md"
+fi
+
+# The matching step failing, with the header scan intact. The shim fails only
+# the matcher's awk call, which is the one given -F.
+fshim="$tmp/failshim"
+mkdir -p "$fshim"
+realawk="$(command -v awk)"
+printf '#!/bin/sh\n[ "$1" = -F ] && { echo "awk: forced failure" >&2; exit 2; }\nexec "%s" "$@"\n' "$realawk" > "$fshim/awk"
+chmod +x "$fshim/awk"
+nlines="$(wc -l < "$LOG" | tr -d ' ')"
+out="$(cd "$LP" && PATH="$fshim:$PATH" "$BASH" "$SC" lessons match a/b.sh --record changed 2>"$tmp/stderr")"; rc=$?
+err="$(cat "$tmp/stderr")"
+check "a failing match step: exits 1" 1 "$rc"
+check "a failing match step: nothing on stdout, never the no-match line" "" "$out"
+check "a failing match step: its record's outcome is failed" failed "$(tail -n 1 "$LOG" | jq -r .outcome)"
+check "a failing match step: one record appended" "$((nlines + 1))" "$(wc -l < "$LOG" | tr -d ' ')"
+out="$(cd "$LP" && PATH="$fshim:$PATH" "$BASH" "$SC" lessons match a/b.sh 2>"$tmp/stderr")"; rc=$?
+check "a failing match step without --record: exits 1" 1 "$rc"
+check "a failing match step without --record: nothing on stdout" "" "$out"
+
+mkproj
+git -C "$P" checkout -q -b feat/y
+lesson "$P" "x/nosc-2026-05-05.md" "No sidecar" "paths: [a/b.sh]"
+runo "$P" lessons match a/b.sh --record start
+check "no sidecar: exits 0" 0 "$rc"
+check "no sidecar: still prints the match" \
+    "exact${TAB}docs/solutions/x/nosc-2026-05-05.md${TAB}No sidecar" "$(printf '%s\n' "$out" | head -n 1)"
+check "no sidecar: recorded: no, with the reason" "recorded: no: no sidecar resolves" \
+    "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

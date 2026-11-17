@@ -49,7 +49,7 @@
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
 #   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|closed|all>]
-#   sidecar.sh lessons match <path>...   (the lessons whose paths name these files or a folder above them; read-only)
+#   sidecar.sh lessons match <path>... [--record <start|changed>]   (the lessons whose paths name these files or a folder above them; --record appends the run to lookups/)
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
@@ -74,6 +74,15 @@
 # list prints the same three fields whether or not a record carries work.
 # list --range keeps only records whose commit is in the range, so a fold that
 # rewrites a SHA drops its record the way it drops the github trailer.
+#
+# lookups. <sidecar>/lookups/<slug>.jsonl holds one line per `lessons match
+# --record` run on a branch, {at, branch, phase, files, scanned, with_paths,
+# projects, matched, outcome}, written and committed by the command itself, so a
+# branch with no line is a branch where the lookup did not run. outcome is
+# matched, none, no-files, or failed; a failed lookup is recorded before its
+# nonzero exit. A detached HEAD or a missing sidecar records nothing and says
+# why on the receipt. Lesson names are private sidecar content: nothing copies
+# this file into a PR.
 #
 # footprint. Scans commit messages, not the sidecar: a fixup!/squash!/amend!
 # subject, a Fix-Findings-Run: or Review-Thread: line, a W-<n> id, or /<skill>
@@ -2494,15 +2503,88 @@ FILENAME == ARGV[1] { if ($0 != "") q[++nq] = canon($0); next }
     else printf "1%06d\tfolder\t%s\t%s\n", 999999 - best, $1, $2
 }
 END { printf "~\t%d\t%d\t%d\n", matched, scanned, with }'
+# lessons_record <sidecar> <branch> <phase> <outcome> <files> <scanned> <with>
+#   <project> <matched>: append one run-log line to
+# <sidecar>/lookups/<branch-slug>.jsonl and commit it. <files> and <matched>
+# are newline-separated. The new file is built beside the old one and renamed
+# over it, so an interrupted write leaves the old file whole; a trailing line
+# with no newline, left by any earlier writer, is dropped, so the file holds
+# only complete lines.
+lessons_record() {
+    local sc="$1" branch="$2" phase="$3" outcome="$4" asked="$5" scanned="$6" with="$7" project="$8" matched="$9"
+    local rel f tmp line
+    rel="lookups/$(branch_slug "$branch").jsonl"
+    f="$sc/$rel"
+    line="$(jq -cn --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg b "$branch" --arg p "$phase" \
+        --arg fs "$asked" --argjson s "$scanned" --argjson w "$with" --arg pj "$project" \
+        --arg m "$matched" --arg o "$outcome" \
+        '{at: $at, branch: $b, phase: $p,
+          files: ($fs | split("\n") | map(select(length > 0))),
+          scanned: $s, with_paths: $w, projects: [$pj],
+          matched: ($m | split("\n") | map(select(length > 0))), outcome: $o}')" || return 1
+    mkdir -p "$sc/lookups" || return 1
+    tmp="$(mktemp "$sc/lookups/.record.XXXXXX")" || return 1
+    if [ -s "$f" ]; then
+        if [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ]; then
+            cat "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        else
+            sed '$d' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        fi
+    fi
+    printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    commit_paths "$sc" "sidecar: lesson lookup $phase on $branch" "$rel" >/dev/null || return 1
+}
+
+# lessons_try_record <outcome> <scanned> <with> <matched>: record this lookup
+# and print the receipt's recorded value. It reads lessons_match's sc, branch,
+# phase, q, and name, which bash's dynamic scope makes visible here.
+lessons_try_record() {
+    if [ -z "$sc" ]; then
+        printf 'no: no sidecar resolves'
+    elif [ -z "$branch" ]; then
+        printf 'no: HEAD is detached'
+    elif lessons_record "$sc" "$branch" "$phase" "$1" "$q" "$2" "$3" "$name" "$4"; then
+        printf 'yes'
+    else
+        printf 'no: the run log could not be written'
+    fi
+}
+
+# lessons_fail <why>: the failed outcome. Records it when --record was given,
+# then exits 1 with nothing on stdout.
+lessons_fail() {
+    local note="" r
+    rm -rf "$tmpd"
+    if [ -n "$phase" ]; then
+        r="$(lessons_try_record failed 0 0 "")"
+        case "$r" in
+            yes) note=" (recorded as failed)" ;;
+            *) note=" (not recorded: ${r#no: })" ;;
+        esac
+    fi
+    refuse "lessons match: $1; nothing was matched$note"
+}
+
 lessons_match() {
     local top prefix arg q="" name dirs first scan tmpd line key kind lpath title m=0 s=0 w=0 rows=""
+    local phase="" sc="" branch="" recorded="no" outcome names=""
     in_repo || refuse "lessons match: not inside a git repository"
     top="$(pgit rev-parse --show-toplevel)" || refuse "lessons match: cannot find the project's top level"
     prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons match: cannot find the project's top level"
-    for arg in "$@"; do
+    while [ $# -gt 0 ]; do
+        arg="$1"; shift
         case "$arg" in
+            --record)
+                [ $# -ge 1 ] || die_usage "lessons match: --record needs start or changed"
+                case "$1" in start|changed) phase="$1" ;; *) die_usage "lessons match: --record takes start or changed, not: $1" ;; esac
+                shift; continue ;;
             --*) die_usage "lessons match: unknown argument: $arg" ;;
             *$'\n'*) die_usage "lessons match: an argument holds a newline; pass one path per argument" ;;
+        esac
+        # A Context anchor names a line or a range after the path: path:12, path:12-40.
+        if [[ "$arg" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then arg="${BASH_REMATCH[1]}"; fi
+        case "$arg" in
             "$top") arg="" ;;
             "$top"/*) arg="${arg#"$top"/}" ;;
             /*) refuse "lessons match: $arg is outside the project at $top" ;;
@@ -2514,33 +2596,41 @@ lessons_match() {
     cd "$top" || refuse "lessons match: cannot enter $top"
     tmpd="$(mktemp -d)" || refuse "lessons match: cannot create a temp directory"
     scan="$tmpd/scan"
-    if ! dirs="$(cmd_solutions_dirs)" || ! lessons_scan "$dirs" > "$scan"; then
-        rm -rf "$tmpd"; refuse "lessons match: could not read the lesson headers; nothing was matched"
-    fi
+    [ -z "$phase" ] || branch="$(pgit symbolic-ref --short -q HEAD)" || branch=""
+    dirs="$(cmd_solutions_dirs)" || lessons_fail "could not list the lesson directories"
     # The project read: the sidecar's name when solutions-dirs led with one,
-    # else this checkout's directory name.
+    # else the main checkout's directory name, which every worktree shares.
     first="${dirs%%$'\n'*}"
     case "$first" in
-        "$SIDECAR_ROOT"/*/solutions) name="${first%/solutions}"; name="${name##*/}" ;;
-        *) name="${top##*/}" ;;
+        "$SIDECAR_ROOT"/*/solutions) sc="${first%/solutions}"; name="${sc##*/}" ;;
+        *) name="$(main_checkout)" || name="$top"; name="${name##*/}" ;;
     esac
+    lessons_scan "$dirs" > "$scan" || lessons_fail "could not read the lesson headers"
     printf '%s\n' "$q" > "$tmpd/q"
-    if ! awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$scan" | LC_ALL=C sort > "$tmpd/rows"; then
-        rm -rf "$tmpd"; refuse "lessons match: could not match the lesson headers"
-    fi
+    # Each step is checked on its own: a pipeline reports only its last
+    # command's status, and a matcher that failed must never print as a
+    # lookup that found nothing.
+    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$scan" > "$tmpd/raw" || lessons_fail "could not match the lesson headers"
+    LC_ALL=C sort "$tmpd/raw" > "$tmpd/rows" || lessons_fail "could not sort the matches"
+    key=""
     while IFS=$'\t' read -r key kind lpath title; do
-        if [ "$key" = "~" ]; then m="$kind"; s="$lpath"; w="$title"; continue; fi
+        if [ "$key" = "~" ]; then m="$kind"; s="$lpath"; w="$title"; break; fi
         rows="$rows$kind"$'\t'"$lpath"$'\t'"$title"$'\n'
+        names="$names${lpath##*/}"$'\n'
     done < "$tmpd/rows"
+    [ "$key" = "~" ] || lessons_fail "the matcher printed no receipt"
     rm -rf "$tmpd"
-    if [ -z "$q" ]; then
-        printf 'no file list given; nothing to match\n'
-    elif [ -z "$rows" ]; then
-        printf 'no lesson points at these files\n'
-    else
-        printf '%s' "$rows"
+    if [ -z "$q" ]; then outcome=no-files
+    elif [ -z "$rows" ]; then outcome=none
+    else outcome=matched
     fi
-    printf 'lessons: %s matched, %s scanned, %s with paths, projects: %s, recorded: no\n' "$m" "$s" "$w" "$name"
+    [ -z "$phase" ] || recorded="$(lessons_try_record "$outcome" "$s" "$w" "$names")"
+    case "$outcome" in
+        no-files) printf 'no file list given; nothing to match\n' ;;
+        none) printf 'no lesson points at these files\n' ;;
+        *) printf '%s' "$rows" ;;
+    esac
+    printf 'lessons: %s matched, %s scanned, %s with paths, projects: %s, recorded: %s\n' "$m" "$s" "$w" "$name" "$recorded"
 }
 
 cmd_lessons() {

@@ -504,14 +504,14 @@ while IFS= read -r f; do
 done <<EOF
 $FILES
 EOF
-bash "$SC" lessons match "$@"
+bash "$SC" lessons match "$@" --record start
 ```
 
 - **`exact` and `folder` lines** name a lesson and its title, the files it names exactly first, then the folders it names, deepest first. Read each one before the keyword search. A folder line on a busy folder can be a lesson about something else in that folder: read its title first and skip what does not apply.
 - **`no lesson points at these files`** and **`no file list given; nothing to match`** mean the lookup ran and found nothing. The keyword search below still runs.
-- **The `lessons:` receipt** counts the lessons scanned and how many carry `paths`. A count of `0 with paths` means no lesson can be found this way yet, not that none applies.
+- **The `lessons:` receipt** counts the lessons scanned and how many carry `paths`. A count of `0 with paths` means no lesson can be found this way yet, not that none applies. Its last field says whether the command wrote this run to the sidecar's run log: `recorded: yes`, or `recorded: no:` and the reason. The command writes that record itself; nothing in this skill writes or edits it.
 
-A nonzero exit means the lesson headers could not be read; nothing was matched, and the empty result is not a no-match. In an AFK iteration, stop and relay its stderr. In a HITL run, show the line to the user and continue to the keyword search.
+A nonzero exit means the lesson headers could not be read; nothing was matched, and the empty result is not a no-match. The command records the run as failed when it can. In either mode, relay its stderr, continue to the keyword search, and say in the slice's closing summary that the lesson lookup failed.
 
 Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it). Set `KW` to the keyword to look for:
 
@@ -646,6 +646,24 @@ git diff -U0 "$BASE_REF...HEAD" | grep -E '^-[^-]' | grep -E '(^|[^[:alnum:]_])(
 ```
 
 It is a candidate list, not a gate: a match is a line to read, and an empty list skips the sweep. For each removed guard, write down the condition it enforced, then either name where that condition is enforced now or say it is retired on purpose. Back each "enforced now" with a test that sends the guarded input, such as the nonzero exit that is not a miss. "The new owner is the single source" does not answer it.
+
+**Look up the lessons that point at the files this slice changed.** Step 1 looked up the files the slice planned to touch; this looks up the ones it did, once per slice, over the same range the sweeps above diff. The names come from [`git diff --name-only`](https://git-scm.com/docs/git-diff#Documentation/git-diff.txt---name-only):
+
+<!-- sidecar-read: execute-lessons-changed -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+CHANGED="$(git diff --name-only "$BASE_REF...HEAD")" || { echo "git diff failed: lesson lookup not run" >&2; exit 1; }
+set --
+while IFS= read -r f; do
+  [ -n "$f" ] && set -- "$@" "$f"
+done <<EOF
+$CHANGED
+EOF
+bash "$SC" lessons match "$@" --record changed
+```
+
+Read each lesson it prints that Step 1 did not, and check the slice against it before Step 5. Its output reads as Step 1's does, and so does a nonzero exit: relay it, carry on, and say in the closing summary that the lookup failed.
 
 #### Tier 2: Command Verification
 - Tests pass (not just "no test failures" — confirm tests actually exist and ran)
@@ -857,6 +875,8 @@ rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.td
 Hand it to the reviewer instead, as a `## Review Notes` block in the PR body. GitHub-native, survives a fresh session, no new filesystem state. **`/execute` composes the notes; `/pre-merge` writes them** — on both the author-mode and loop-mode handoffs, pass the block to `/pre-merge`, which emits it into the body at Phase 2 alongside the rest of the PR template. `/pre-merge` owns PR creation, and `/execute` should not start writing PR bodies to deliver a block the very next step is already opening the body to write.
 
 **The notes must be checkable, not trusted.** The reviewer's entire picture of this change comes from the diff plus these notes — and the notes are authored by the agent whose work is under review. A fresh context buys independence from *rationalization* and buys nothing against *misreporting* (Leveson: no control system performs better than its measuring channel). So record **which verification commands ran and their exit status**, in a form the reviewer can re-run. Never assert a conclusion the reviewer has to take on faith: "Tier 2.5 verified" is exactly the claim that cannot be checked.
+
+**Lesson lookups stay out of the notes.** Never copy `lessons match` output, a lesson's name, or a line of the sidecar's run log into the Review Notes or anywhere else in the PR. Lessons are private sidecar content, and on a guest repo the PR is read by other people.
 
 ```markdown
 ## Review Notes
