@@ -99,10 +99,10 @@ pre-push:
       run: bash scripts/test-decision-card-grounding.sh
     recall-callout-contract-tests:
       run: bash scripts/test-recall-callout-contract.sh
-    decision-trail-contract-tests:
-      run: bash scripts/test-decision-trail-contract.sh
     multi-repo-seam-contract-tests:
       run: bash scripts/test-multi-repo-seam-contract.sh
+    decision-trail-contract-tests:
+      run: bash scripts/test-decision-trail-contract.sh
     recap-generator-checklist-tests:
       run: bash scripts/test-recap-generator-checklist.sh
     reader-palette-contract-tests:

@@ -273,12 +273,6 @@ jobs:
       - name: Run decision trail contract suite
         run: bash scripts/test-decision-trail-contract.sh
 
-      # /visual-recap's multi-repo mode documents a block an agent runs in two
-      # repositories at once; this runs it against two planted repos, and pins
-      # the seam block's both-sides citation rule (#761).
-      - name: Run multi-repo seam contract suite
-        run: bash scripts/test-multi-repo-seam-contract.sh
-
       # /visual-recap's generator checklist: the placeholder check runs against
       # planted files, and the design's excerpt example marks every line-number
       # jump with a gap row (#765).
@@ -306,11 +300,18 @@ jobs:
         run: bash scripts/test-pipefail-safe-matchers.sh
 
       # ubuntu-latest ships without zsh. The post-review edit lock, state
-      # backend, and prd-to-issues suites below run extracted skill blocks under
+      # backend, prd-to-issues, and multi-repo seam suites below run extracted skill blocks under
       # zsh and fail under CI rather than skipping that arm, so the shell is
       # installed before any of them runs.
       - name: Install zsh
         run: sudo apt-get update && sudo apt-get install -y zsh
+
+      # /visual-recap's multi-repo mode documents a block an agent runs in two
+      # repositories at once; this runs it against two planted repos, and pins
+      # the seam block's both-sides citation rule (#761). It runs the block
+      # under zsh too, so it sits after the zsh install.
+      - name: Run multi-repo seam contract suite
+        run: bash scripts/test-multi-repo-seam-contract.sh
 
       # #327's lock is one hook clause plus four runnable blocks in four files,
       # and nothing executed any of it: `rg -l review-stamped scripts/` and
