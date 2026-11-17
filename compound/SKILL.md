@@ -541,6 +541,52 @@ Use the `volatility` field to drive review cadence instead of a blanket schedule
 
 During review, check each document's **Shelf Life** section. If the expiration condition has been met, delete the document. If the document describes a workaround for a design problem that has since been fixed, delete it — stale workarounds are worse than no documentation.
 
+## Backfill `paths` on Older Lessons (Guided Pass)
+
+Lessons saved before the `paths` field existed cannot be found by file. This pass fills in `paths` and `related` on them, one lesson at a time, each confirmed by a person. Run it only when the user asks for it by name; nothing else in the pipeline enters it.
+
+**Where it runs.** On its own docs-only branch when the lessons are in the project tree, so the edits are reviewed like any other docs change; as sidecar commits when the lessons are in the sidecar; and never during a slice, because a backfill edit on a feature branch would ride a PR about something else. It edits only this project's own stores, never a lesson in another project of the group.
+
+**List the lessons with no `paths`.** `lessons check` reads this project's own stores:
+
+<!-- sidecar-read: compound-guided-list -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" lessons check | awk -F '\t' '$1 == "no-paths" { print $2 }'
+```
+
+**For each lesson in that list, one per turn:** show its title and the lines the proposal prints, then ask the closed question *write as shown, edit, or skip*, the per-item confirm `/excavate` § 7 uses. Never present several lessons to approve at once.
+
+<!-- sidecar-read: compound-guided-propose -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the lesson's path>"
+bash "$SC" lessons propose "$LESSON"
+```
+
+The proposal draws `paths` from the lesson's `components` entries that name an existing file or folder, and `related` from the lessons its `## Related` section and `Sibling docs:` line cite. It never proposes `replaces`: only a person can say one lesson took another's place, and the user may add one under *edit*. `components` and `technologies` are read, never changed.
+
+**On *write as shown* or an edit**, write the confirmed lines after `volatility`, replacing any `paths` or `related` line the lesson already has, then check the lesson. On *skip*, write nothing and move to the next lesson.
+
+<!-- sidecar-write: compound-guided-write -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the lesson's path>"
+PATHS_LINE="<the confirmed paths line>"
+RELATED_LINE="<the confirmed related line>"
+TMP="$(mktemp "$LESSON.XXXXXX")" || exit 1
+awk -v p="$PATHS_LINE" -v r="$RELATED_LINE" '
+  NR == 1 && $0 == "---" { fm = 1; print; next }
+  fm && ($0 ~ /^paths:/ || $0 ~ /^related:/) { next }
+  fm && $0 == "---" { if (!done) { print p; print r; done = 1 } fm = 0; print; next }
+  { print }
+  fm && /^volatility:/ && !done { print p; print r; done = 1 }
+' "$LESSON" > "$TMP" && mv "$TMP" "$LESSON" || { rm -f "$TMP"; exit 1; }
+bash "$SC" lessons check "$LESSON"
+```
+
+Commit each written lesson where it lives: with `git` on the docs-only branch for an in-tree lesson, or with `bash "$SC" commit -- "$LESSON" -m "<subject>"` for a sidecar lesson, as Phase 5's sidecar branch does.
+
 ## Handoff
 
 - **Expected input:** a durable lesson worth reusing — known at PR time (the in-PR default) or surfacing during/after merge (the post-merge fallback), plus solved bugs or meaningful lessons from implementation, QA, or review

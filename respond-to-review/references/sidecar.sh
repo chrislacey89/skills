@@ -54,6 +54,7 @@
 #   sidecar.sh lessons audit [--branch <name>]   (self-check, coverage, group, loose ends, and per-branch runs; --branch prints that branch's runs line only; read-only)
 #   sidecar.sh lessons flag <lesson-file> --for <path> --reason <text>   (records in lesson-flags.jsonl that a returned lesson does not apply; never edits it)
 #   sidecar.sh lessons flag <lesson-file> --keep <entry>   (records that a person kept the flagged entry, which settles its flags)
+#   sidecar.sh lessons propose <lesson-file>   (the paths and related lines /compound's guided pass offers for an older lesson; never replaces; read-only)
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
@@ -3210,12 +3211,73 @@ lessons_flag() {
     printf 'flagged: %s %s for %s\n' "$name" "$entry" "$for"
 }
 
+# lessons propose <lesson-file>: the paths and related lines /compound's
+# guided pass shows for a lesson saved before paths existed, read-only. paths
+# holds each components entry that names an existing file or folder in the
+# project tree, in order, once, without a leading ./ or a trailing /; an entry with a wildcard, comma, space,
+# bracket, or quote, or one outside the tree, is left out. related holds each
+# .md name lesson_cites extracts from "## Related" and "Sibling docs:" that
+# resolves to a lesson here or in the group, as a file name, once. It never
+# proposes replaces: only a person can say one lesson took another's place.
+lessons_propose() {
+    local file top raw dirs="" d self comps e n out="" seen=$'\n' idx lines kind tok res b rel="" rseen=$'\n'
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh lessons propose <lesson-file>"
+    file="$1"
+    [ -f "$file" ] || refuse "lessons propose: no such lesson file: $file"
+    in_repo || refuse "lessons propose: not inside a git repository"
+    self="$(abs_path "$file")"
+    top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || refuse "lessons propose: cannot find the project's top level"
+    cd "$top" || refuse "lessons propose: cannot enter $top"
+    comps="$(awk '
+        { sub(/\r$/, "") }
+        NR == 1 && $0 != "---" { exit }
+        NR > 1 && $0 == "---" { exit }
+        /^components:/ { v = substr($0, 12); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+                         if (v ~ /^\[.*\]$/) print substr(v, 2, length(v) - 2); exit }' "$self")" \
+        || refuse "lessons propose: could not read $file"
+    while IFS= read -r e; do
+        e="${e#"${e%%[![:space:]]*}"}"; e="${e%"${e##*[![:space:]]}"}"
+        case "$e" in \"*\") e="${e#\"}"; e="${e%\"}" ;; esac
+        [ -n "$e" ] || continue
+        case "$e" in *[\*\?\[\]\"\ ,]*|/*) continue ;; esac
+        while :; do case "$e" in ./*) e="${e#./}" ;; */) e="${e%/}" ;; *) break ;; esac; done
+        [ -n "$e" ] || continue
+        lessons_check_entry "$top" "$e" >/dev/null || continue
+        case "$seen" in *$'\n'"$e"$'\n'*) continue ;; esac
+        seen="$seen$e"$'\n'
+        out="${out:+$out, }$e"
+    done <<<"$(printf '%s' "$comps" | tr ',' '\n')"
+    raw="$(cmd_solutions_dirs)" || refuse "lessons propose: could not list the lesson directories"
+    while IFS= read -r d; do
+        [ -n "$d" ] || continue
+        case "$d" in /*) ;; *) d="$top/$d" ;; esac
+        [ -d "$d" ] || continue
+        dirs="${dirs:+$dirs$'\n'}$(cd "$d" && pwd -P)"
+    done <<<"$raw"
+    idx="$(lessons_index "$raw" "$(cmd_related_solutions_dirs)")" || refuse "lessons propose: could not list the lessons"
+    lines="$(lesson_cites "$self" "$top" "$dirs")"
+    while IFS=$'\t' read -r kind tok res; do
+        case "$kind" in
+            C) b="${res##*/}" ;;
+            M) b="${tok%%#*}"; b="${b##*/}" ;;
+            *) continue ;;
+        esac
+        case "$b" in *.md) ;; *) continue ;; esac
+        [ "$b" != "${self##*/}" ] || continue
+        [ -n "$(lessons_resolve_name "$b" "$idx")" ] || continue
+        case "$rseen" in *$'\n'"$b"$'\n'*) continue ;; esac
+        rseen="$rseen$b"$'\n'
+        rel="${rel:+$rel, }$b"
+    done <<<"$lines"
+    printf 'paths: [%s]\nrelated: [%s]\n' "$out" "$rel"
+}
+
 cmd_lessons() {
     local sub="${1:-}"
     [ $# -gt 0 ] && shift
     case "$sub" in
-        match|check|audit|flag) ;;
-        *) die_usage "usage: sidecar.sh lessons <match|check|audit|flag> ..." ;;
+        match|check|audit|flag|propose) ;;
+        *) die_usage "usage: sidecar.sh lessons <match|check|audit|flag|propose> ..." ;;
     esac
     "lessons_$sub" "$@"
 }

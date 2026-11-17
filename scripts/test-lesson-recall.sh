@@ -1133,5 +1133,104 @@ for marker in execute-lessons-start execute-lessons-changed; do
         *) bad "$marker: the prose after the block names lessons flag" "not found" ;; esac
 done
 
+# -----------------------------------------------------------------------------
+section "lessons propose (#754)"
+
+mkproj
+PP="$P"
+mkdir -p "$PP/scripts/sub" "$PP/lib"
+: > "$PP/scripts/sub/run.sh"; : > "$PP/lib/x.sh"
+mkdir -p "$PP/docs/solutions/a" "$PP/docs/solutions/b"
+cat > "$PP/docs/solutions/a/old-2026-01-01.md" <<'EOF'
+---
+date: 2026-01-01
+category: a
+problem_type: a long free-text problem type: with a colon, and commas
+components: [scripts, scripts/sub/run.sh, sidecar.sh, "lib/*.sh", lib/x.sh, scripts/, scripts, "has space", ./lib]
+technologies: [bash]
+volatility: stable
+---
+
+# Old lesson
+
+Body.
+
+## Related
+
+- [Sibling](../b/sib-2026-01-02.md)
+- `docs/solutions/b/gone-2026-01-03.md`
+- [Another sibling](sib-2026-01-02.md)
+
+## Rule Scope
+
+- **Sibling docs:** `../b/third-2026-01-04.md`
+EOF
+lesson "$PP" "b/sib-2026-01-02.md" "Sib"
+lesson "$PP" "b/third-2026-01-04.md" "Third"
+OLD="$PP/docs/solutions/a/old-2026-01-01.md"
+osum="$(cksum < "$OLD")"
+runo "$PP" lessons propose docs/solutions/a/old-2026-01-01.md
+check "propose: exits 0" 0 "$rc"
+check "propose: existing components as paths in order, normalized, no duplicates or wildcards; resolved related names" \
+"paths: [scripts, scripts/sub/run.sh, lib/x.sh, lib]
+related: [sib-2026-01-02.md, third-2026-01-04.md]" "$out"
+check "propose: never a replaces line" 0 "$(printf '%s\n' "$out" | grep -c '^replaces:')"
+check "propose: the lesson file is byte-identical" "$osum" "$(cksum < "$OLD")"
+lesson "$PP" "b/bare-2026-01-05.md" "Bare"
+runo "$PP" lessons propose docs/solutions/b/bare-2026-01-05.md
+check "propose with nothing to propose: empty lists" "paths: []
+related: []" "$out"
+runo "$PP" lessons propose docs/solutions/b/none.md
+check "propose on a missing file: exits 1" 1 "$rc"
+
+section "/compound's guided pass, run as written (#754)"
+
+gp_block() {
+    awk -v m="<!-- $1 -->" '$0 == m { on = 1; next }
+         on && /^```bash$/ { inb = 1; next }
+         inb && /^```$/ { exit }
+         inb { print }' "$COMPOUND"
+}
+glist="$(gp_block 'sidecar-read: compound-guided-list')"
+gprop="$(gp_block 'sidecar-read: compound-guided-propose')"
+gwrite="$(gp_block 'sidecar-write: compound-guided-write')"
+[ -n "$glist" ] || fatal "compound/SKILL.md has no guided-list block"
+[ -n "$gprop" ] || fatal "compound/SKILL.md has no guided-propose block"
+[ -n "$gwrite" ] || fatal "compound/SKILL.md has no guided-write block"
+ok "compound/SKILL.md carries the guided pass's three blocks"
+glist="$(printf '%s\n' "$glist" | sed -e "s|^SC=.*|SC=\"$SC\"|")"
+gprop="$(printf '%s\n' "$gprop" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e 's|^LESSON=.*|LESSON="$TEST_LESSON"|')"
+gwrite="$(printf '%s\n' "$gwrite" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e 's|^LESSON=.*|LESSON="$TEST_LESSON"|' \
+    -e 's|^PATHS_LINE=.*|PATHS_LINE="$TEST_PATHS"|' -e 's|^RELATED_LINE=.*|RELATED_LINE="$TEST_RELATED"|')"
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    mkproj
+    GPP="$P"
+    mkdir -p "$GPP/lib"; : > "$GPP/lib/x.sh"
+    lesson "$GPP" "a/one-2026-01-01.md" "One" "components: [lib/x.sh]"
+    lesson "$GPP" "a/two-2026-01-01.md" "Two" "paths: []" "related: [one-2026-01-01.md]"
+    lesson "$GPP" "a/done-2026-01-01.md" "Done" "paths: [lib]"
+    out="$(cd "$GPP" && "${runner[@]}" "$glist" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: list: exits 0" 0 "$rc"
+    check "$sh: list: the lessons with no paths, one per line" \
+"docs/solutions/a/one-2026-01-01.md
+docs/solutions/a/two-2026-01-01.md" "$out"
+    out="$(cd "$GPP" && TEST_LESSON="docs/solutions/a/one-2026-01-01.md" "${runner[@]}" "$gprop" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: propose: prints the proposal" "paths: [lib/x.sh]
+related: []" "$out"
+    out="$(cd "$GPP" && TEST_LESSON="docs/solutions/a/two-2026-01-01.md" TEST_PATHS="paths: [lib/x.sh]" TEST_RELATED="related: [one-2026-01-01.md]" \
+        "${runner[@]}" "$gwrite" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: write: exits 0" 0 "$rc"
+    check "$sh: write: the confirmed lines replace the old ones, right after volatility" \
+"---
+title: \"Two\"
+volatility: low
+paths: [lib/x.sh]
+related: [one-2026-01-01.md]
+---" "$(sed -n '1,6p' "$GPP/docs/solutions/a/two-2026-01-01.md")"
+    check "$sh: write: the body is untouched" "# Two" "$(sed -n '8p' "$GPP/docs/solutions/a/two-2026-01-01.md")"
+    check "$sh: write: then checks the lesson" "loose ends: 0" "$(printf '%s\n' "$out" | tail -n 1)"
+done
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
