@@ -1488,6 +1488,119 @@ and say what happens if nobody answers.
 
 ---
 
+## 15. Block: seam (multi-repo mode)
+
+**Scope note: the block for the line between two repositories.** A multi-repo recap
+(`/visual-recap` §1, one `<repo-path>@<base>..<head>` scope per repository) exists for the
+findings no single-repo recap can hold: a status value spelled differently on each side, a cap
+both sides enforce that must change together, an outcome one side keys by id while the other
+returns an ordered list. Each repository's own blocks (§3–§9) read fine on their own. The seam
+block puts the two sides of one contract next to each other, so the disagreement is something
+the reader sees instead of something they have to remember from two pages back. **It is
+required in multi-repo mode** and comes right after the overview, before either repository's
+files. A single-repo recap never renders it.
+
+It has two parts, always in this order:
+
+1. **The comparison**: one table per contract that crosses the seam (a route, a queue message,
+   an event). One row per field, error code, or limit, with what the sending side puts on the
+   wire beside what the accepting side checks. A row whose sides disagree carries
+   `data-agree="no"` and the `--del` wash; agreeing rows stay unwashed, so the disagreement is
+   the only thing that stands out (Tufte: the smallest effective difference).
+2. **The findings**: the comparison shows *what* differs; a finding says *why it matters*. Each
+   one takes exactly one chip:
+   - **`mismatch`**: the sides disagree today. A value one sends that the other rejects, a field
+     one requires that the other never sends, a limit that differs.
+   - **`fragile`**: the sides agree today, but only because the same fact is written twice. A cap
+     enforced on both sides, an enum copied rather than shared. Change one and the other breaks
+     with nothing failing at build time.
+   - **`planned`**: a mismatch a later slice or issue already covers. It still renders, because
+     a reader who sees the disagreement in the comparison and no finding for it cannot tell a
+     known gap from a missed one. It cites the slice or issue that covers it.
+
+**Every row and every finding cites a line on both sides.** Each cite is
+`<repo>:<path>:<line>`, read at that scope's head with `git -C <repo> show <head>:<path>`, and
+the line may be one the diff never touched: the accepting side's validator is often unchanged
+code, and it is exactly the code the reader needs. This is the Grounding Rule
+(`visual-rendering-core.md` §1) applied per side; the model still writes only the finding's
+note. **A finding you can cite on one side only is not a seam finding.** It is an ordinary
+callout in that repository's §6 block. When a side does not handle the field at all, its cell
+says so (`not sent`, `not checked`) and cites the line where it would have to be: the request
+builder, the validation rules.
+
+**Ids.** The comparison carries `seam-<contract-slug>` (`seam-post-refunds`) and each finding
+`sf-<finding-slug>` (`sf-status-spelling`), both registered in `visual-rendering-core.md` §4.
+Slug the finding by its subject, never by its chip: a `planned` finding that a later run finds
+fixed keeps its id, so the reviewer's note still attaches to it.
+
+```html
+<style>
+  /* seam primitives (§15): same tokens, no new palette */
+  .sm{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden}
+  .sm-head,.sm-row{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1fr) minmax(0,1fr);
+    gap:var(--s3);padding:6px var(--s4);align-items:start}
+  .sm-head{font-size:11px;font-weight:600;color:var(--fg-muted);border-bottom:1px solid var(--border)}
+  .sm-row{font-family:var(--mono);font-size:12.5px;color:var(--fg);border-left:2px solid transparent}
+  .sm-row[data-agree="no"]{border-left-color:var(--del);background:var(--del-bg)}
+  .sm-cite,.sf-cite{display:block;font-size:11px;color:var(--fg-muted)}
+  .sf{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);
+    padding:var(--s4);margin-top:var(--s3)}
+  .sf-chip{border:1px solid currentColor;border-radius:999px;padding:2px 9px;
+    font-size:10px;font-weight:600;margin-right:var(--s2)}
+  .sf-mismatch{color:var(--del)} .sf-fragile{color:var(--risk)} .sf-planned{color:var(--fg-muted)}
+  .sf-sides{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--s3);
+    margin-top:var(--s3);font-family:var(--mono)}
+  .sf-note{display:block;width:100%;box-sizing:border-box;margin-top:var(--s3);padding:4px 7px;
+    border-radius:var(--r1);border:1px solid var(--border);background:var(--bg);color:var(--fg);
+    font-family:var(--sans);font-size:11.5px}
+</style>
+```
+
+```html
+<section id="sec-seam" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
+  <div style="font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);margin-bottom:var(--s4)"><span style="font-family:var(--mono);color:var(--accent)">02</span> &nbsp;The seam: web → billing</div>
+
+  <div class="sm" data-feedback-id="seam-post-refunds" data-feedback-kind="seam">
+    <div class="sm-head"><span>POST /refunds</span><span>web sends</span><span>billing accepts</span></div>
+    <div class="sm-row" data-agree="no"><span>status</span><span>'CANCELED'<span class="sm-cite">web:src/refunds/client.ts:41</span></span><span>in: pending, cancelled<span class="sm-cite">billing:app/Http/Requests/RefundRequest.php:22</span></span></div>
+    <div class="sm-row"><span>items</span><span>array · max 50<span class="sm-cite">web:src/refunds/limits.ts:3</span></span><span>array · max:50<span class="sm-cite">billing:app/Http/Requests/RefundRequest.php:24</span></span></div>
+    <div class="sm-row" data-agree="no"><span>200 outcomes</span><span>reads Record&lt;id, Outcome&gt;<span class="sm-cite">web:src/refunds/client.ts:58</span></span><span>returns Outcome[] (ordered)<span class="sm-cite">billing:app/Http/Controllers/RefundController.php:37</span></span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Note on this contract…"></textarea>
+  </div>
+
+  <div class="sf" data-feedback-id="sf-status-spelling" data-feedback-kind="seam-finding">
+    <span class="sf-chip sf-mismatch">mismatch</span><b>Every canceled refund fails validation.</b>
+    web sends the American spelling and billing's rule lists the British one, so the request is a 422 before any refund logic runs.
+    <div class="sf-sides"><span class="sf-cite">web:src/refunds/client.ts:41</span><span class="sf-cite">billing:app/Http/Requests/RefundRequest.php:22</span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Your note…"></textarea>
+  </div><!-- /finding -->
+
+  <div class="sf" data-feedback-id="sf-items-cap" data-feedback-kind="seam-finding">
+    <span class="sf-chip sf-fragile">fragile</span><b>The 50-item cap is written twice.</b>
+    Both sides agree today. Raise one and the other rejects or truncates, and no build or test in either repository fails.
+    <div class="sf-sides"><span class="sf-cite">web:src/refunds/limits.ts:3</span><span class="sf-cite">billing:app/Http/Requests/RefundRequest.php:24</span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Your note…"></textarea>
+  </div><!-- /finding -->
+
+  <div class="sf" data-feedback-id="sf-outcome-shape" data-feedback-kind="seam-finding">
+    <span class="sf-chip sf-planned">planned</span><b>web reads outcomes by id; billing returns a list.</b>
+    Slice 3 of the PRD switches web to the ordered list, so this disagreement is known and scheduled, not missed.
+    <div class="sf-sides"><span class="sf-cite">web:src/refunds/client.ts:58</span><span class="sf-cite">billing:app/Http/Controllers/RefundController.php:37</span></div>
+    <textarea class="sf-note" data-feedback-note placeholder="Your note…"></textarea>
+  </div><!-- /finding -->
+</section>
+```
+
+The `planned` finding's covering slice belongs in its note, linked when it has a URL; that link
+is the finding's evidence that the gap is known, and a `planned` chip without one is an
+`asserted` claim (`visual-rendering-core.md` §1) wearing a settled chip's color.
+
+**When not to render a finding.** A row that agrees and duplicates nothing gets no finding: the
+comparison already shows it, and a finding per row rebuilds the table as prose. Render the rows
+where the sides disagree, or agree only by copy.
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
