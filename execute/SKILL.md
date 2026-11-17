@@ -167,7 +167,7 @@ echo "host_owned=$host_owned"
 
 `CODESPACES` and `REMOTE_CONTAINERS` carry no path to compare and are read for presence; they are container-scoped, so a shell that sees them is inside the container whose repos they describe. The same block appears in `/closeout`, `/lfg`, and `/init-pipeline`, byte-identical, pinned by `scripts/test-host-signal-containment.sh` in the pack's own repo.
 
-When standing down: **skip worktree creation and `EnterWorktree`, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so most of the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. **Its git-hooks item is the exception and still applies.** Hosts provision *tracked* files plus dependencies; git hooks live in `.git/hooks`, which is per-worktree and untracked, so a host-provisioned workspace characteristically has none. Check that item even when standing down. Continue to recording where the slice starts, below.
+When standing down: **skip worktree creation and the hand-off below, and work in place on the current branch.** The numbered rules below are already satisfied — in particular **rule 3 does not apply** (a host-provisioned branch is neither base nor task-named, but it is not stale; do not nest a worktree and do not stop). The host has already seeded git-ignored config and dependencies, so most of the "Worktree setup checklist" is informational only — spot-check `.env.local`/deps if a command fails, but do not re-provision. **Its git-hooks item is the exception and still applies.** Hosts provision *tracked* files plus dependencies; git hooks live in `.git/hooks`, which is per-worktree and untracked, so a host-provisioned workspace characteristically has none. Check that item even when standing down. Continue to recording where the slice starts, below. The exception is a session the hand-off below started in a worktree this pipeline created: it stands down from creating anything, but runs the whole checklist (see **Re-entry** under the hand-off).
 
 This stand-down is deliberately *asymmetric* with `/closeout`'s teardown check. Inflow only needs to answer *"am I already isolated?"* — generic detection (toplevel ≠ primary) and the env-var hint each settle that. The outflow question — *"who owns teardown?"* — is stricter and cannot rely on the generic heuristic alone, because a pipeline-made worktree also satisfies toplevel ≠ primary; `/closeout` keys off the explicit setting or host env var only.
 
@@ -184,14 +184,27 @@ The **appropriate base** is the repo's own base branch by default — whatever `
 
 Derive the branch name from the task: e.g., `issue-5-landing-page`, `landing-page`, or the issue slug. Do not reuse branch names from previous work.
 
-**Enter the worktree as a session (when you created a worktree).** Creating the worktree is not the same as the session *running inside* it — `wt switch --create` resets the shell cwd back to the project root after each command, so without a further step the session stays anchored at the original checkout and the reported cwd lies about where work is happening. After creating the worktree, enter it with the harness `EnterWorktree` tool so the session's working directory genuinely *is* the worktree:
+**Hand off to a fresh session in the worktree (when you created a worktree).** This paragraph and the list under it are the one statement of how a session gets into the worktree Step 0 creates; other files point here. Creating the worktree does not put this session inside it: `wt switch --create` resets the shell cwd back to the project root after each command. Do not move this session in with Claude Code's `EnterWorktree` tool by default. A session moved that way runs under the harness's worktree-isolation guard, which refuses many of the pack's own documented commands (a nested `$(git rev-parse --git-dir)`, marker `touch` blocks, multi-line blocks that mix `git` or `gh` with loops or command substitution) as too complex to verify (chrislacey89/skills#782, chrislacey89/skills#693). A session *started* inside the worktree is not isolated that way, and its working directory is the worktree from its first command.
 
-- Call `EnterWorktree { path: <absolute-worktree-path> }`. The path must already appear in `git worktree list` for this repo (it will, because you just created it). This persistently switches the session into the worktree.
-- Keep the creation step exactly as above — `wt switch --create` / `git worktree add` runs the worktrunk `pre-start` hooks that seed `.env.local` and dependencies. `EnterWorktree` only switches the cwd; it does not run those hooks. Create first (to seed env/deps), then enter.
-- This puts the knowledge in the world, not the head: the cwd tells the truth about where edits and commits land (a watching operator can see it), and there is no per-command `cd` prefix to forget — eliminating the slip class where one un-prefixed command writes to the wrong tree.
-- The **Plain git** option (`git checkout -b`, no worktree) creates the branch in the current checkout — there is no worktree to enter, so skip `EnterWorktree` and work in place.
+- Create the worktree exactly as above. `wt switch --create` / `git worktree add` runs the worktrunk `pre-start` hooks that seed `.env.local` and dependencies; the hand-off does not replace them.
+- Print the hand-off and stop. Give the human the folder to start a new session in, and what to type there to resume, with the real path, branch, and issue or work item filled in:
 
-**AFK / headless fallback.** If `EnterWorktree` is unavailable (headless runs, AFK Ralph, cron), fall back to cwd-prefix discipline: the shell cwd resets to the project root after every Bash command, so prefix every Bash call in this session with `cd <absolute-worktree-path> &&`. Use this only when the harness tool is genuinely unavailable — it is the old workaround, retained for environments without the native mechanism.
+  ```
+  cd <absolute-worktree-path>
+  ```
+
+  ```
+  /execute <issue number or W-n>
+  ```
+
+  Tell them to start Claude Code in that folder with whatever command they usually launch it with (for example `claude`). Do not print a launcher yourself: this session cannot see how the human starts Claude Code, and a different launcher can start a different account or permission mode than the one they work in.
+
+  Name the branch in the same message. Then end this run of `/execute`: no edits, commits, marker files, or sidecar writes from this session. The new session does all of them, starting with the setup checklist and the slice's `start_sha` below.
+- **Re-entry.** The new session reaches this Step 0 again, already inside the worktree, and must continue rather than hand off a second time. It does, because nothing is created: under `auto`, the stand-down above fires on its toplevel-not-primary signal, and under `pipeline`, rule 1 finds the branch named for this task, so rules 2 and 3 create nothing and there is no new worktree to hand off. A worktree this pipeline created was not seeded by a host, so in that session run the whole Worktree setup checklist below, not the stand-down's reduced reading of it.
+- **Fallback: `EnterWorktree`, only when the human says no new session can be started.** Call `EnterWorktree { path: <absolute-worktree-path> }` (the path is in `git worktree list`, since you just created it) and continue in this session. Expect the guard to refuse some documented blocks; run a refused block as separate simple commands rather than rewriting it.
+- The **Plain git** option (`git checkout -b`, no worktree) creates the branch in the current checkout. There is no worktree, so there is no hand-off: work in place.
+
+**AFK / headless.** Headless runs (AFK Ralph, cron) have no human to start a new session, so they neither hand off nor call `EnterWorktree`. They keep cwd-prefix discipline: the shell cwd resets to the project root after every Bash command, so prefix every Bash call in this session with `cd <absolute-worktree-path> &&`.
 
 This worktree's teardown is owned by `/closeout` at the pipeline tail — after the PR merges, `/closeout` re-anchors the shell to the base checkout, removes the worktree, and prunes the merged branch. `/execute` is the inflow side of the worktree lifecycle; `/closeout` is the outflow. Step 6 cleanup below removes only the `.tdd-*` markers — it deliberately does not remove the worktree.
 
@@ -216,7 +229,7 @@ install = "pnpm install"
 
 - [ ] Git-ignored config copied — `.env.local` (and any other `.env.*`, `*.local`, or project-specific ignored config) exists in the worktree
 - [ ] Dependencies installed — install command (`pnpm install`, `npm ci`, etc.) ran without error in the worktree
-- [ ] Session is inside the worktree — `pwd` reports the worktree path because you entered it via `EnterWorktree { path }` (not the project root). In the AFK/headless fallback only, this item instead means the `cd <absolute-worktree-path> &&` prefix is being applied to every Bash call
+- [ ] Session is inside the worktree — `pwd` reports the worktree path (not the project root) because this session was started there by the hand-off, or, in the fallback only, entered it with `EnterWorktree { path }`. In an AFK/headless run, this item instead means the `cd <absolute-worktree-path> &&` prefix is being applied to every Bash call
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, and `.claude/.lfg-active` do not exist in the worktree (fresh slate; Step 3 creates one)
@@ -508,10 +521,12 @@ bash "$SC" lessons match "$@" --record start
 ```
 
 - **`exact` and `folder` lines** name a lesson and its title, the files it names exactly first, then the folders it names, deepest first. Read each one before the keyword search. A folder line on a busy folder can be a lesson about something else in that folder: read its title first and skip what does not apply.
+- **`replaced-by:` and `flags:` fields** may follow the title. `replaced-by:` names a lesson that replaces this one: read that one too, and prefer it where they disagree. `flags:<n>` counts open flags, records that an earlier reader found the lesson did not apply; read the lesson anyway, because a flag can be wrong.
+- **A lesson that has nothing to say about this slice** gets flagged, after you have read it: `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" lessons flag "<the lesson's path>" --for "<the file it was returned for>" --reason "<one line: why it does not apply here>"`, then move on. Never edit the lesson, its `paths`, or its links: only a person changes those, and a flag changes nothing in the lesson and does not stop it from being returned. In a HITL run, the user may flag one as well. The flag and its reason stay in the sidecar and, like the rest of the lookup, never go into the Review Notes or the PR.
 - **`no lesson points at these files`** and **`no file list given; nothing to match`** mean the lookup ran and found nothing. The keyword search below still runs.
 - **The `lessons:` receipt** counts the lessons scanned and how many carry `paths`. A count of `0 with paths` means no lesson can be found this way yet, not that none applies. Its last field says whether the command wrote this run to the sidecar's run log: `recorded: yes`, or `recorded: no:` and the reason. The command writes that record itself; nothing in this skill writes or edits it.
 
-A nonzero exit means the lesson headers could not be read; nothing was matched, and the empty result is not a no-match. The command records the run as failed when it can. In either mode, relay its stderr, continue to the keyword search, and say in the slice's closing summary that the lesson lookup failed.
+A nonzero exit means the lookup failed, for one of the causes [references/state-backend.md](references/state-backend.md) § Lesson recall lists; nothing was matched, and the empty result is not a no-match. The command records the run as failed when it can. In either mode, relay its stderr, continue to the keyword search, and say in the slice's closing summary that the lesson lookup failed.
 
 Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it). Set `KW` to the keyword to look for:
 
@@ -663,7 +678,7 @@ EOF
 bash "$SC" lessons match "$@" --record changed
 ```
 
-Read each lesson it prints that Step 1 did not, and check the slice against it before Step 5. Its output reads as Step 1's does, and so does a nonzero exit: relay it, carry on, and say in the closing summary that the lookup failed.
+Read each lesson it prints that Step 1 did not, and check the slice against it before Step 5. Its output reads as Step 1's does, and so does a nonzero exit: relay it, carry on, and say in the closing summary that the lookup failed. A lesson that has nothing to say about this slice is flagged with `lessons flag` as Step 1 says, and never edited.
 
 #### Tier 2: Command Verification
 - Tests pass (not just "no test failures" — confirm tests actually exist and ran)

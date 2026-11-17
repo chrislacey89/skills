@@ -88,7 +88,7 @@ The same suite pins the one-value rule for the per-file read: a file holding two
 
 - PR #742 (one jq per resolve), review finding C1, fix `ae7a932`.
 - Fixed in #745 (issue #743): the per-file read had the same blind spot within one file. `jq -e` evaluates every value in its input and exits on the last, so a `sidecar.json` holding two values answered from whichever came second: a miss (and `github`) with the key's value first, a hit with it last. `owners_of` and `scan_or_jq_has` now read through `file_lists_key`, which slurps the file (`jq -e -s`) and errors unless it holds exactly one value. `scripts/test-state-backend.sh` pins both orders (`key-value-first`, `key-value-last`). This was the compat-default failure from the sibling entry above.
-- Still open, same family: a `sidecar.json` whose `keys` is a string is searched as a substring by `index`, so it claims any key it contains, and one that does not contain the key reads as a miss. Both readers share it, since `.keys // []` passes a string through.
+- Fixed in issue #746, same family: a `sidecar.json` whose `keys` was a string was searched as a substring by `index`, so it claimed any key it contained, and one that did not contain the key read as a miss; `keys: false` passed `// []` as an empty list. Both readers now read `keys` through `keys_list`, which errors unless it is absent, `null`, or an array. `scripts/test-state-backend.sh` pins the string (holding and not holding the key) and `false` shapes.
 
 ## Shelf Life
 

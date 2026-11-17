@@ -145,6 +145,19 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
    **On a delta re-run, the delta is the subject and the tree is still readable.** Brief each Phase 3 reviewer with the findings the post-stamp commits claim to close — the earlier readout in this session, the ledger if loop-mode wrote one (where [references/state-backend.md](references/state-backend.md) § Where the review's records live says), or the commit messages themselves — with the `/fix-findings` breaker verdicts when there are any, and with the `bash "$SC" profile` output, verbatim, that Phase 3's contract hands every reviewer. The first question per commit is whether the fix closes its finding at every site the finding named, which is the Fix Completeness dimension; the second is what the new text contradicts nearby, which is the census in `references/restated-claims.md`. Both need the surrounding tree, and the checklist's context contract already grants it; the scope narrows what the review is *about*, never what the reviewer may open.
 
+5. **Read whether this branch has a lesson lookup on record.** `/execute` looks up the lessons that point at a slice's files, and the lookup command records each run in the sidecar itself; [references/state-backend.md](references/state-backend.md) § Lesson recall lists the cases where a run that happened goes unrecorded. This reads that record and writes nothing:
+   <!-- sidecar-read: pre-merge-lessons -->
+   ```bash
+   SC="<this skill's directory>/references/sidecar.sh"
+   BRANCH="$(git branch --show-current)"
+   if [ -z "$BRANCH" ]; then
+     echo "lesson lookup: not checked, HEAD is detached"
+   else
+     bash "$SC" lessons audit --branch "$BRANCH" || echo "lesson lookup: not checked, sidecar.sh lessons audit failed"
+   fi
+   ```
+   Keep the line it prints for Phase 4. It names no lesson, and [references/state-backend.md](references/state-backend.md) § Lesson recall says what each line means.
+
 **Reviewer-mode (`--pr <number>`):**
 
 1. **Fetch the PR and its diff:**
@@ -450,6 +463,8 @@ When ready, merge the PR at <PR-URL>.
 ```
 
 **This block is the last review action author-mode takes.** Finish the rest of Phase 4 below, then hand back at the `## Handoff` next-step menu (`references/next-step-menu.md`) — that menu is where what-happens-to-a-finding gets decided, and the user picks, not this session.
+
+**Lesson lookup line.** Print the line Phase 1 step 5 kept, once, after the three tiers and outside them, in author-mode and loop-mode. It is information, not a finding: it carries no number or tier, never blocks, is not a ledger row, and is never written into the PR body or a PR comment.
 
 **Scope Notes (only when a PRD with slice issues was provided):**
 

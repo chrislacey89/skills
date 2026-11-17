@@ -103,6 +103,12 @@ pre-push:
       run: bash scripts/test-multi-repo-seam-contract.sh
     decision-trail-contract-tests:
       run: bash scripts/test-decision-trail-contract.sh
+    recap-generator-checklist-tests:
+      run: bash scripts/test-recap-generator-checklist.sh
+    reader-palette-contract-tests:
+      run: bash scripts/test-reader-palette-contract.sh
+    sitting-plan-contract-tests:
+      run: bash scripts/test-sitting-plan-contract.sh
     post-review-edit-lock-tests:
       run: bash scripts/test-post-review-edit-lock.sh
     skill-frontmatter-loads-tests:
@@ -111,6 +117,8 @@ pre-push:
       run: bash scripts/test-lfg-marker.sh lfg/SKILL.md
     host-signal-containment-tests:
       run: bash scripts/test-host-signal-containment.sh
+    execute-worktree-handoff-tests:
+      run: bash scripts/test-execute-worktree-handoff.sh
     delta-review-scope-tests:
       run: bash scripts/test-delta-review-scope.sh
     prd-amendment-gate-tests:

@@ -273,6 +273,24 @@ jobs:
       - name: Run decision trail contract suite
         run: bash scripts/test-decision-trail-contract.sh
 
+      # /visual-recap's generator checklist: the placeholder check runs against
+      # planted files, and the design's excerpt example marks every line-number
+      # jump with a gap row (#765).
+      - name: Run recap generator checklist suite
+        run: bash scripts/test-recap-generator-checklist.sh
+
+      # A reader-chosen palette is checked by names and contrast instead of
+      # values; this runs both checks on the design's example and self-tests
+      # each against a palette that must fail it (#764).
+      - name: Run reader palette contract suite
+        run: bash scripts/test-reader-palette-contract.sh
+
+      # The sitting plan keeps per-reader state in browser storage; this runs
+      # its script under node with working storage and with storage that
+      # throws, and checks the example's links and rail lines (#762).
+      - name: Run sitting plan contract suite
+        run: bash scripts/test-sitting-plan-contract.sh
+
       # A committed instrument that fails while reporting normally is the defect
       # docs/solutions/testing-patterns/validate-the-instrument-not-only-the-
       # subject-2026-08-23.md recorded as prose. This is its mechanizable half:
@@ -319,6 +337,11 @@ jobs:
       # across all four sites and executes it against a leaked-var scenario.
       - name: Run host-signal containment suite
         run: bash scripts/test-host-signal-containment.sh
+
+      # #782: /execute Step 0 hands a new worktree to a fresh session; EnterWorktree
+      # is only the fallback. Pins the printed hand-off and the fallback framing.
+      - name: Run execute worktree hand-off suite
+        run: bash scripts/test-execute-worktree-handoff.sh
 
       # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
       # from branch state by a block in Phase 1 step 4, and /fix-findings' menu

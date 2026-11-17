@@ -492,8 +492,7 @@ check "the template names no lesson lookup, receipt, run log, or lesson" "" "$le
 # -----------------------------------------------------------------------------
 section "the run log: --record writes one line per lookup"
 
-# The command writes the record itself, so a branch with no record is a branch
-# where the lookup did not run. The line's shape is PRD #747's locked contract.
+# The command writes the record itself. The line's shape is PRD #747's locked contract.
 mkproj
 LP="$P"
 runo "$LP" init --name logproj --mode owned --write sidecar --in-tree-path none --no-migrate-archive
@@ -599,6 +598,824 @@ check "no sidecar: still prints the match" \
     "exact${TAB}docs/solutions/x/nosc-2026-05-05.md${TAB}No sidecar" "$(printf '%s\n' "$out" | head -n 1)"
 check "no sidecar: recorded: no, with the reason" "recorded: no: no sidecar resolves" \
     "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
+
+# -----------------------------------------------------------------------------
+section "review fixes: a failure listing the lesson directories is recorded"
+
+# The sidecar is resolved before any step that can fail, so a listing failure
+# under --record is recorded as failed and never reads "no sidecar resolves".
+# solutions-dirs fails when it cannot create the sidecar's solutions/: the
+# sidecar is made read-only with solutions/ gone, and lookups/ kept writable.
+if [ "$(id -u)" -ne 0 ]; then
+    mkproj
+    FP="$P"
+    runo "$FP" init --name listfail --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+    FS="$out"
+    [ -d "$FS" ] || fatal "init did not create a sidecar: $err"
+    git -C "$FP" checkout -q -b feat/l
+    mkdir -p "$FS/lookups"
+    rmdir "$FS/solutions" 2>/dev/null || rm -rf "$FS/solutions"
+    chmod 555 "$FS"
+    runo "$FP" lessons match a/b.sh --record start
+    chmod 755 "$FS"
+    check "listing fails with --record: exits 1" 1 "$rc"
+    check "listing fails with --record: nothing on stdout" "" "$out"
+    case "$err" in *"could not list the lesson directories"*"(recorded as failed)"*) ok "listing fails with --record: stderr says it was recorded as failed" ;;
+        *) bad "listing fails with --record: stderr says it was recorded as failed" "stderr: $err" ;; esac
+    check "listing fails with --record: the record's outcome is failed" failed \
+        "$(tail -n 1 "$FS/lookups/feat%2Fl.jsonl" 2>/dev/null | jq -r .outcome)"
+    check "listing fails with --record: the record names the sidecar's project" '["listfail"]' \
+        "$(tail -n 1 "$FS/lookups/feat%2Fl.jsonl" 2>/dev/null | jq -c .projects)"
+fi
+
+section "review fixes: guards that need a test that fails without them"
+
+# The matcher's awk runs for real and prints its receipt, then exits nonzero:
+# the receipt guard alone would take that as a complete result.
+mkproj
+GP="$P"
+lesson "$GP" "x/g-2026-01-01.md" "Guarded" "paths: [a/b.sh]"
+rshim="$tmp/receiptshim"
+mkdir -p "$rshim"
+printf '#!/bin/sh\nif [ "$1" = -F ]; then "%s" "$@"; exit 3; fi\nexec "%s" "$@"\n' "$(command -v awk)" "$(command -v awk)" > "$rshim/awk"
+chmod +x "$rshim/awk"
+out="$(cd "$GP" && PATH="$rshim:$PATH" "$BASH" "$SC" lessons match a/b.sh 2>"$tmp/stderr")"; rc=$?
+err="$(cat "$tmp/stderr")"
+check "a matcher that prints its receipt then fails: exits 1" 1 "$rc"
+check "a matcher that prints its receipt then fails: nothing on stdout" "" "$out"
+
+# The run log's directory cannot be written: the receipt says so, and no line
+# is added.
+if [ "$(id -u)" -ne 0 ]; then
+    mkproj
+    WP="$P"
+    runo "$WP" init --name nowrite --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+    WS="$out"
+    [ -d "$WS" ] || fatal "init did not create a sidecar: $err"
+    git -C "$WP" checkout -q -b feat/w
+    lesson "$WP" "x/w-2026-01-01.md" "Unwritten" "paths: [a/b.sh]"
+    mkdir -p "$WS/lookups"
+    printf '%s\n' '{"at":"2026-01-01T00:00:00Z"}' > "$WS/lookups/feat%2Fw.jsonl"
+    chmod 555 "$WS/lookups"
+    runo "$WP" lessons match a/b.sh --record start
+    chmod 755 "$WS/lookups"
+    check "an unwritable lookups/: exits 0" 0 "$rc"
+    check "an unwritable lookups/: the receipt says the log could not be written" \
+        "recorded: no: the run log could not be written" "$(printf '%s\n' "$out" | tail -n 1 | sed 's/.*, recorded: /recorded: /')"
+    check "an unwritable lookups/: no line is added" 1 "$(wc -l < "$WS/lookups/feat%2Fw.jsonl" | tr -d ' ')"
+fi
+
+# -----------------------------------------------------------------------------
+section "lessons check: loose ends (#750)"
+
+# lessons check reports and never edits: every lesson file is compared byte
+# for byte before and after.
+mkproj
+CP="$P"
+mkdir -p "$CP/lib/sub" "$CP/tools"
+: > "$CP/lib/sub/real.sh"
+: > "$CP/tools/t.sh"
+lesson "$CP" "a/nokey-2026-01-01.md" "No paths key"
+lesson "$CP" "a/empty-2026-01-01.md" "Empty paths" "paths: []"
+lesson "$CP" "b/good-2026-01-01.md" "Good" "paths: [lib/sub/real.sh, tools/]"
+lesson "$CP" "b/dead-2026-01-01.md" "Dead path" "paths: [lib/sub/real.sh, lib/gone.sh, ../outside.sh]"
+lesson "$CP" "c/multi-2026-01-01.md" "Multi-line" "paths:" "  - lib/sub/real.sh"
+lesson "$CP" "c/space-2026-01-01.md" "Space entry" "paths: [\"lib/a b.sh\", tools]"
+lesson "$CP" "c/comma-2026-01-01.md" "Comma entry" "paths: [\"lib/a,b.sh\"]"
+lesson "$CP" "c/bracket-2026-01-01.md" "Bracket entry" "paths: [[tools]]"
+lesson "$CP" "c/related-2026-01-01.md" "Bad related" "paths: [tools]" "related: not-a-list.md"
+before="$(cd "$CP" && find docs -type f -exec cksum {} + | LC_ALL=C sort)"
+runo "$CP" lessons check
+check "check: exits 0" 0 "$rc"
+check "check: one line per loose end in lesson order, unlisted n/a, then the total" \
+"no-paths${TAB}docs/solutions/a/empty-2026-01-01.md${TAB}paths is empty
+no-paths${TAB}docs/solutions/a/nokey-2026-01-01.md${TAB}no paths key
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}lib/gone.sh
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}../outside.sh (outside the project tree)
+bad-list${TAB}docs/solutions/c/bracket-2026-01-01.md${TAB}paths: an entry holds a comma, space, or bracket: [tools]
+bad-list${TAB}docs/solutions/c/comma-2026-01-01.md${TAB}paths: an entry holds a comma, space, or bracket: lib/a,b.sh
+bad-list${TAB}docs/solutions/c/multi-2026-01-01.md${TAB}paths: not a one-line bracket list
+bad-list${TAB}docs/solutions/c/related-2026-01-01.md${TAB}related: not a one-line bracket list
+bad-list${TAB}docs/solutions/c/space-2026-01-01.md${TAB}paths: an entry holds a comma, space, or bracket: lib/a b.sh
+unlisted: n/a
+loose ends: 9" "$out"
+check "check: every lesson file is byte-identical" "$before" "$(cd "$CP" && find docs -type f -exec cksum {} + | LC_ALL=C sort)"
+
+runo "$CP" lessons check docs/solutions/b/dead-2026-01-01.md
+check "check <file>: exits 0" 0 "$rc"
+check "check <file>: that lesson only" \
+"dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}lib/gone.sh
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}../outside.sh (outside the project tree)
+unlisted: n/a
+loose ends: 2" "$out"
+runo "$CP/docs" lessons check solutions/b/good-2026-01-01.md
+check "check <file> from a subdirectory: a clean lesson" \
+"unlisted: n/a
+loose ends: 0" "$out"
+runo "$CP" lessons check docs/solutions/none.md
+check "check <file> that does not exist: exits 1" 1 "$rc"
+check "check <file> that does not exist: nothing on stdout" "" "$out"
+runo "$CP" lessons check a b
+check "check with two files: exits 2" 2 "$rc"
+
+# An unterminated frontmatter lends nothing to the next file in either order.
+for order in first last; do
+    mkproj
+    if [ "$order" = first ]; then u="a-open-2026-01-01.md"; else u="z-open-2026-01-01.md"; fi
+    mkdir -p "$P/docs/solutions/r" "$P/x"
+    : > "$P/x/real.sh"
+    printf -- '---\ntitle: "Open"\npaths: [only/gone.sh]\n\n# Open\n' > "$P/docs/solutions/r/$u"
+    lesson "$P" "r/b-tail-2026-01-01.md" "Tail" "paths: [x/real.sh]"
+    runo "$P" lessons check
+    check "check, unterminated $order: the open file has no paths, the next is clean" \
+"no-paths${TAB}docs/solutions/r/$u${TAB}no paths key
+unlisted: n/a
+loose ends: 1" "$out"
+done
+
+# An unreadable store: the check did not run, so it exits nonzero.
+if [ "$(id -u)" -ne 0 ]; then
+    mkproj
+    lesson "$P" "y/b-2026-01-01.md" "Unreadable" "paths: [a]"
+    chmod 000 "$P/docs/solutions/y/b-2026-01-01.md"
+    runo "$P" lessons check
+    check "check over an unreadable lesson: exits 1" 1 "$rc"
+    check "check over an unreadable lesson: nothing on stdout" "" "$out"
+    chmod 644 "$P/docs/solutions/y/b-2026-01-01.md"
+fi
+
+section "lessons check: unlisted on the sidecar backend (#750)"
+
+# A guest sidecar answers sidecar for backend slices; a lesson no work item
+# lists is reported, one a work item lists is not.
+mkproj
+UP="$P"
+runo "$UP" init --name unlisted --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+US="$out"
+[ -d "$US" ] || fatal "init did not create a sidecar: $err"
+runo "$UP" backend slices
+check "the guest fixture answers sidecar for backend slices" sidecar "$out"
+mkdir -p "$UP/lib"; : > "$UP/lib/x.sh"
+lesson "$UP" "a/listed-2026-01-01.md" "Listed" "paths: [lib/x.sh]"
+lesson "$UP" "a/loose-2026-01-01.md" "Loose" "paths: [lib/x.sh]"
+mkdir -p "$US/solutions/s"
+printf -- '---\npaths: [lib/x.sh]\n---\n\n# Side\n' > "$US/solutions/s/side-2026-01-01.md"
+printf 'slice body\n' > "$tmp/body"
+runo "$UP" work create --kind slice --body-file "$tmp/body"
+wid="$out"
+runo "$UP" work lesson "$wid" docs/solutions/a/listed-2026-01-01.md
+runo "$UP" work lesson "$wid" "$US/solutions/s/side-2026-01-01.md"
+runo "$UP" lessons check
+check "sidecar backend: one unlisted line, for the lesson no work item lists" \
+"unlisted${TAB}docs/solutions/a/loose-2026-01-01.md${TAB}no work item lists it
+loose ends: 1" "$out"
+runo "$UP" lessons check docs/solutions/a/listed-2026-01-01.md
+check "sidecar backend: a listed lesson checked alone is clean" "loose ends: 0" "$out"
+
+section "/compound Phase 5's lessons-check block, run as written (#750)"
+
+COMPOUND="$repo_root/compound/SKILL.md"
+kblock="$(awk '/^<!-- sidecar-read: compound-lessons-check -->$/ { on = 1; next }
+               on && /^```bash$/ { inb = 1; next }
+               inb && /^```$/ { exit }
+               inb { print }' "$COMPOUND")"
+[ -n "$kblock" ] || fatal "compound/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: compound-lessons-check -->"
+ok "compound/SKILL.md carries the lessons-check block"
+case "$kblock" in *'LESSON='*) ;; *) fatal "the lessons-check block sets no LESSON" ;; esac
+kscript="$(printf '%s\n' "$kblock" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e 's|^LESSON=.*|LESSON="$TEST_LESSON"|')"
+# It sits in Phase 5, after the work-item block that follows the save.
+kline="$(grep -n '^<!-- sidecar-read: compound-lessons-check -->$' "$COMPOUND" | cut -d: -f1)"
+wline="$(grep -n '^<!-- work-lesson: compound -->$' "$COMPOUND" | cut -d: -f1)"
+p6line="$(grep -n '^### Phase 6' "$COMPOUND" | cut -d: -f1)"
+if [ -n "$wline" ] && [ -n "$p6line" ] && [ "$wline" -lt "$kline" ] && [ "$kline" -lt "$p6line" ]; then
+    ok "the block sits in Phase 5 after the work-item block"
+else
+    bad "the block sits in Phase 5 after the work-item block" "work-lesson=$wline check=$kline phase6=$p6line"
+fi
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    out="$(cd "$CP" && TEST_LESSON="docs/solutions/b/dead-2026-01-01.md" "${runner[@]}" "$kscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: exits 0" 0 "$rc"
+    check "$sh: prints the check for the lesson it was given" \
+"dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}lib/gone.sh
+dead-path${TAB}docs/solutions/b/dead-2026-01-01.md${TAB}../outside.sh (outside the project tree)
+unlisted: n/a
+loose ends: 2" "$out"
+    out="$(cd "$UP" && TEST_LESSON="$US/solutions/s/side-2026-01-01.md" "${runner[@]}" "$kscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: a sidecar lesson by its absolute path: clean" "loose ends: 0" "$out"
+done
+
+# -----------------------------------------------------------------------------
+section "replaces and related across the group (#751)"
+
+# Two projects in one solutions.system group. The member's sidecar holds a
+# lesson that replaces one of this project's lessons; nothing here may write
+# into the member's directory.
+mkproj
+MP="$P"
+runo "$MP" init --name member --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+MS="$out"
+[ -d "$MS" ] || fatal "init did not create the member's sidecar: $err"
+runo "$MP" config set system grp
+mkproj
+GRP="$P"
+runo "$GRP" init --name home --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+GS="$out"
+[ -d "$GS" ] || fatal "init did not create the home sidecar: $err"
+runo "$GRP" config set system grp
+mkdir -p "$GRP/lib"; : > "$GRP/lib/a.sh"
+lesson "$GRP" "x/old-2026-01-01.md" "Old" "paths: [lib/a.sh]"
+lesson "$GRP" "x/new-2026-02-01.md" "New" "paths: [lib]" "replaces: [old-2026-01-01.md]" "related: [peer-2026-01-01.md]"
+lesson "$GRP" "x/plain-2026-01-01.md" "Plain" "paths: [lib/a.sh]"
+lesson "$GRP" "y/dup-2026-01-01.md" "Dup one" "paths: [lib]"
+lesson "$GRP" "z/dup-2026-01-01.md" "Dup two" "paths: [lib]"
+lesson "$GRP" "x/links-2026-01-01.md" "Links" "paths: [lib]" "related: [nowhere-2026-01-01.md, dup-2026-01-01.md, peer-2026-01-01.md]"
+mkdir -p "$MS/solutions/m"
+printf -- '---\npaths: [svc]\nreplaces: [plain-2026-01-01.md]\n---\n\n# Member lesson\n' > "$MS/solutions/m/peer-2026-01-01.md"
+git -C "$MS" add solutions && git -C "$MS" commit -q -m "member lesson"
+runo "$GRP" related-solutions-dirs
+check "the group fixture: the member's store is a related dir" "$MS/solutions" "$out"
+msum() { (cd "$MS" && find . -path ./.git -prune -o -type f -exec cksum {} + | LC_ALL=C sort; git -C "$MS" rev-parse HEAD); }
+mbefore="$(msum)"
+
+runo "$GRP" lessons match lib/a.sh
+check "match: exits 0" 0 "$rc"
+check "match: replaced-by on a lesson another lesson replaces, here or in the group" \
+"exact${TAB}docs/solutions/x/old-2026-01-01.md${TAB}Old${TAB}replaced-by:new-2026-02-01.md
+exact${TAB}docs/solutions/x/plain-2026-01-01.md${TAB}Plain${TAB}replaced-by:peer-2026-01-01.md" "$(printf '%s\n' "$out" | grep '^exact')"
+check "match: a lesson nothing replaces keeps three fields" \
+"folder${TAB}docs/solutions/x/links-2026-01-01.md${TAB}Links" "$(printf '%s\n' "$out" | grep 'links-')"
+check "match: the member's lesson is not matched by path" 0 "$(printf '%s\n' "$out" | awk -F '\t' '$2 ~ /peer-/' | wc -l | tr -d ' ')"
+
+runo "$GRP" trace docs/solutions/x/new-2026-02-01.md
+check "trace: replaces and related lines after the existing ones" \
+"  replaces  $GRP/docs/solutions/x/old-2026-01-01.md
+  related  related project: $MS/solutions/m/peer-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  (replaces|related|replaced by)  ')"
+check "trace: the new lines come last" "  related  related project: $MS/solutions/m/peer-2026-01-01.md" "$(printf '%s\n' "$out" | tail -n 1)"
+runo "$GRP" trace docs/solutions/x/old-2026-01-01.md
+check "trace: replaced by, derived from the other lesson's replaces" \
+"  replaced by  $GRP/docs/solutions/x/new-2026-02-01.md" "$(printf '%s\n' "$out" | grep -E '^  replaced by  ')"
+runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md --json
+check "trace --json: replaced_by names the member's lesson" \
+"[{\"path\":\"$MS/solutions/m/peer-2026-01-01.md\",\"related_project\":true}]" "$(printf '%s' "$out" | jq -c .replaced_by)"
+runo "$GRP" trace docs/solutions/x/links-2026-01-01.md --json
+check "trace --json: related lists each name with what it resolves to" \
+"[{\"name\":\"nowhere-2026-01-01.md\",\"resolved\":[]},{\"name\":\"dup-2026-01-01.md\",\"resolved\":[{\"path\":\"$GRP/docs/solutions/y/dup-2026-01-01.md\",\"related_project\":false},{\"path\":\"$GRP/docs/solutions/z/dup-2026-01-01.md\",\"related_project\":false}]},{\"name\":\"peer-2026-01-01.md\",\"resolved\":[{\"path\":\"$MS/solutions/m/peer-2026-01-01.md\",\"related_project\":true}]}]" \
+    "$(printf '%s' "$out" | jq -c .related)"
+check "trace --json: no replaces key gives []" '[]' "$(printf '%s' "$out" | jq -c .replaces)"
+runo "$GRP" trace docs/solutions/x/links-2026-01-01.md
+check "trace: a name that resolves to nothing is MISSING" "  related  MISSING: nowhere-2026-01-01.md" \
+    "$(printf '%s\n' "$out" | grep 'MISSING: nowhere')"
+
+# A wildcard entry in related is a name, never a pattern: it must not expand
+# against the files in the current folder.
+lesson "$GRP" "x/glob-2026-01-01.md" "Glob" "paths: [lib]" "related: [*]"
+runo "$GRP" trace docs/solutions/x/glob-2026-01-01.md --json
+check "trace --json: a * entry in related is not expanded against the cwd" \
+    '[{"name":"*","resolved":[]}]' "$(printf '%s' "$out" | jq -c .related)"
+rm -f "$GRP/docs/solutions/x/glob-2026-01-01.md"
+
+runo "$GRP" lessons check docs/solutions/x/links-2026-01-01.md
+check "check: dead-link and ambiguous-link for a lesson's names" \
+"dead-link${TAB}docs/solutions/x/links-2026-01-01.md${TAB}related: nowhere-2026-01-01.md
+ambiguous-link${TAB}docs/solutions/x/links-2026-01-01.md${TAB}related: dup-2026-01-01.md (2 files)
+unlisted${TAB}docs/solutions/x/links-2026-01-01.md${TAB}no work item lists it
+loose ends: 3" "$out"
+runo "$GRP" lessons check docs/solutions/x/new-2026-02-01.md
+check "check: names that resolve here and in the group are not loose" \
+"unlisted${TAB}docs/solutions/x/new-2026-02-01.md${TAB}no work item lists it
+loose ends: 1" "$out"
+check "no command wrote to the member's directory" "$mbefore" "$(msum)"
+
+# A lesson with no replaces or related, in a project with no group: output as
+# before this slice.
+mkproj
+lesson "$P" "x/solo-2026-01-01.md" "Solo" "paths: [a.sh]"
+runo "$P" lessons match a.sh
+check "no links anywhere: the match line has three fields" "exact${TAB}docs/solutions/x/solo-2026-01-01.md${TAB}Solo" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" trace docs/solutions/x/solo-2026-01-01.md
+check "no links anywhere: trace prints only the lesson line" "lesson  $P/docs/solutions/x/solo-2026-01-01.md" "$out"
+# -----------------------------------------------------------------------------
+section "lessons audit (#752)"
+
+# A project in a group with one readable member, one related link that matches
+# nothing, and run logs for four branches.
+mkproj
+AM="$P"
+runo "$AM" init --name amember --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+runo "$AM" config set system agrp
+mkproj
+AP="$P"
+runo "$AP" init --name audited --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+AS="$out"
+[ -d "$AS" ] || fatal "init did not create a sidecar: $err"
+runo "$AP" config set system agrp
+mkdir -p "$AP/lib"; : > "$AP/lib/a.sh"
+lesson "$AP" "x/one-2026-01-01.md" "One" "paths: [lib/a.sh]"
+lesson "$AP" "x/two-2026-01-01.md" "Two" "paths: [lib/gone.sh]"
+lesson "$AP" "x/three-2026-01-01.md" "Three"
+git -C "$AP" add docs lib && git -C "$AP" commit -q -m "lessons"
+for b in both start changed bad; do
+    git -C "$AP" checkout -q -b "feat/$b" main
+    case "$b" in
+        both) runo "$AP" lessons match lib/a.sh --record start; runo "$AP" lessons match lib/a.sh --record changed ;;
+        start) runo "$AP" lessons match lib/a.sh --record start ;;
+        changed) runo "$AP" lessons match lib/a.sh --record changed ;;
+        bad) mkdir -p "$AS/lookups"
+             printf '%s\n' '{"at":"2026-01-01T00:00:00Z","branch":"feat/bad","phase":"start","files":[],"scanned":0,"with_paths":0,"projects":["audited"],"matched":[],"outcome":"failed"}' > "$AS/lookups/feat%2Fbad.jsonl"
+             git -C "$AS" add lookups && git -C "$AS" commit -q -m "failed run" ;;
+    esac
+done
+git -C "$AP" checkout -q main
+asum() { (cd "$1" && find . -path ./.git -prune -o -type f -exec cksum {} + | LC_ALL=C sort; git -C "$1" rev-parse HEAD; git -C "$1" status --porcelain); }
+# One unreadable member store must not turn off this project's own lookups.
+if [ "$(id -u)" -ne 0 ]; then
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons match lib/a.sh --record start
+    chmod 755 "$MS/solutions/m"
+    check "match: an unreadable group member still matches the home lessons, exit 0" 0 "$rc"
+    check "match: the home lesson is printed" 1 "$(printf '%s\n' "$out" | grep -c '^exact.*plain-2026-01-01')"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "trace: an unreadable group member still traces, exit 0" 0 "$rc"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons check
+    chmod 755 "$MS/solutions/m"
+    check "check: an unreadable group member still checks, exit 0" 0 "$rc"
+    # A member lesson in a readable folder still resolves while a sibling folder is unreadable.
+    mkdir -p "$MS/solutions/r"
+    printf -- '---\npaths: [svc]\nreplaces: [plain-2026-01-01.md]\n---\n\n# Ready\n' > "$MS/solutions/r/ready-2026-01-01.md"
+    git -C "$MS" add solutions && git -C "$MS" commit -q -m "readable member lesson"
+    lesson "$GRP" "x/partial-2026-01-01.md" "Partial" "paths: [lib]" "related: [ready-2026-01-01.md]"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" trace docs/solutions/x/partial-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "trace: a member lesson in a readable folder resolves beside an unreadable one" \
+        "  related  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
+    check "trace: no MISSING for it" 0 "$(printf '%s\n' "$out" | grep -c MISSING)"
+    # The group scan's partial output survives the unreadable sibling: the readable
+    # member's replaces still backlinks to the home lesson (lessons_trace) and
+    # still marks it replaced-by in match.
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "trace: a readable member's replaces backlinks beside an unreadable folder" \
+        "  replaced by  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  replaced by  ')"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons match lib/a.sh
+    chmod 755 "$MS/solutions/m"
+    check "match: replaced-by from a readable member survives an unreadable folder" \
+        "exact${TAB}docs/solutions/x/plain-2026-01-01.md${TAB}Plain${TAB}replaced-by:ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep '^exact.*plain-')"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons check docs/solutions/x/partial-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "check: no false dead-link for a name in a readable member folder" 0 "$(printf '%s\n' "$out" | grep -c '^dead-link')"
+    # One unreadable FILE inside a readable member folder drops only itself: awk
+    # stops at the first input it cannot open, so a batched read would lose the
+    # readable lessons beside it, and find's order is not controllable, so several
+    # readable lessons sit around the locked one, each replacing the home lesson,
+    # so whichever the batched read would have dropped shows as a missing backlink.
+    for nm in aaa mmm zzz "with space"; do
+        printf -- '---\npaths: [svc]\nreplaces: [plain-2026-01-01.md]\n---\n\n# Sibling %s\n' "$nm" > "$MS/solutions/r/$nm-2026-01-01.md"
+    done
+    printf -- '---\npaths: [svc]\n---\n\n# Locked\n' > "$MS/solutions/r/locked-2026-01-01.md"
+    chmod 000 "$MS/solutions/r/locked-2026-01-01.md"
+    runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md
+    check "trace: every readable member lesson in the folder backlinks, the locked one does not" \
+        5 "$(printf '%s\n' "$out" | grep -c '^  replaced by  related project: .*/solutions/r/')"
+    runo "$GRP" lessons match lib/a.sh
+    check "match: replaced-by names every readable lesson beside the unreadable file" \
+        5 "$(printf '%s\n' "$out" | grep '^exact.*plain-' | tr ',' '\n' | grep -c -E 'ready-2026|aaa-2026|mmm-2026|zzz-2026|with space-2026')"
+    runo "$GRP" trace docs/solutions/x/partial-2026-01-01.md
+    check "trace: the index lists the same readable lesson (forward link resolves)" \
+        "  related  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
+    check "trace: the unreadable file draws exactly one warning per directory, not a failure" 1 "$(printf '%s\n' "$err" | grep -c 'could not be read')"
+    # The index side: a home lesson whose related names the locked file resolves
+    # through lessons_index, which must skip the file the scan skips, so the name
+    # is MISSING (a find over every *.md would list it and resolve it).
+    lesson "$GRP" "x/lockref-2026-01-01.md" "Lockref" "paths: [lib]" "related: [locked-2026-01-01.md]"
+    runo "$GRP" trace docs/solutions/x/lockref-2026-01-01.md
+    check "trace: the index leaves the unreadable file out (forward link is MISSING)" \
+        "  related  MISSING: locked-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
+    rm -f "$GRP/docs/solutions/x/lockref-2026-01-01.md"
+    chmod 644 "$MS/solutions/r/locked-2026-01-01.md"
+    rm -f "$MS/solutions/r/"{aaa,mmm,zzz,"with space",locked}-2026-01-01.md
+    rm -f "$GRP/docs/solutions/x/partial-2026-01-01.md"
+    git -C "$MS" rm -q -r solutions/r && git -C "$MS" commit -q -m "drop readable member lesson"
+    # The project's OWN store stays strict through lessons_index: propose reads no other
+    # directory before it, so an unreadable own folder must fail there, not be skipped.
+    mkdir -p "$GRP/docs/solutions/own-locked"
+    chmod 000 "$GRP/docs/solutions/own-locked"
+    runo "$GRP" lessons propose docs/solutions/x/plain-2026-01-01.md
+    chmod 755 "$GRP/docs/solutions/own-locked"
+    check "propose: an unreadable folder in the project's own store fails, nonzero" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+    check "propose: the failure names the lesson listing" 1 "$(printf '%s\n' "$err" | grep -c 'could not list the lessons')"
+    runo "$GRP" lessons propose docs/solutions/x/plain-2026-01-01.md
+    check "propose: readable again, exit 0" 0 "$rc"
+    rmdir "$GRP/docs/solutions/own-locked"
+fi
+
+sbefore="$(asum "$AS")"; pbefore="$(asum "$AP")"
+runo "$AP" lessons audit
+check "audit: exits 0" 0 "$rc"
+check "audit: its sections, in order" \
+"self-check: pass
+coverage: 2 of 3 lessons carry paths
+group: amember readable
+loose ends: 5
+runs: feat/bad failed
+runs: feat/both both
+runs: feat/changed changed-only
+runs: feat/start start-only" "$out"
+check "audit writes nothing to the sidecar" "$sbefore" "$(asum "$AS")"
+check "audit writes nothing to the project" "$pbefore" "$(asum "$AP")"
+runo "$AP" lessons audit --branch feat/start
+check "audit --branch: that branch's runs line only" "runs: feat/start start-only" "$out"
+runo "$AP" lessons audit --branch feat/none
+check "audit --branch with no log: says so" "no lesson lookup recorded for this branch" "$out"
+check "audit --branch with no log: exits 0" 0 "$rc"
+runo "$AP" lessons audit --bogus
+check "audit with an unknown flag: exits 2" 2 "$rc"
+
+# A member whose sidecar.json cannot be read is unreadable; a related key that
+# matches no sidecar is unreadable too.
+if [ "$(id -u)" -ne 0 ]; then
+    jq '.solutions.related = ["root:0000000000000000000000000000000000000000"]' "$AS/sidecar.json" > "$tmp/sj" && cp "$tmp/sj" "$AS/sidecar.json"
+    chmod 000 "$tmp/sidecars/amember/sidecar.json"
+    runo "$AP" lessons audit
+    chmod 644 "$tmp/sidecars/amember/sidecar.json"
+    check "audit: an unreadable member and a dead related key are unreadable" \
+"group: amember unreadable
+group: root:0000000000000000000000000000000000000000 unreadable" "$(printf '%s\n' "$out" | grep '^group: ')"
+    git -C "$AS" checkout -q -- sidecar.json
+fi
+
+# No lesson carries paths: the self-check could not run, never pass.
+mkproj
+runo "$P" init --name nopaths --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+lesson "$P" "x/bare-2026-01-01.md" "Bare"
+runo "$P" lessons audit
+check "no lesson carries paths: self-check could not run, with the reason" \
+    "self-check: could-not-run: no lesson carries paths" "$(printf '%s\n' "$out" | head -n 1)"
+check "no lesson carries paths: coverage is 0" "coverage: 0 of 1 lessons carry paths" "$(printf '%s\n' "$out" | sed -n 2p)"
+check "no logs at all: one runs line says none" "runs: none recorded" "$(printf '%s\n' "$out" | tail -n 1)"
+
+# No sidecar: nothing is recorded, and audit --branch says so.
+mkproj
+lesson "$P" "x/a-2026-01-01.md" "A" "paths: [a.sh]"
+runo "$P" lessons audit --branch main
+check "no sidecar: audit --branch says lookups are not recorded" "lookups are not recorded: no sidecar" "$out"
+runo "$P" lessons audit
+check "no sidecar: the self-check still runs" "self-check: pass" "$(printf '%s\n' "$out" | head -n 1)"
+check "no sidecar: the runs line says lookups are not recorded" "runs: lookups are not recorded: no sidecar" "$(printf '%s\n' "$out" | tail -n 1)"
+
+# [QA-RELI] The self-check runs the real matcher. A fixture copy of sidecar.sh
+# whose matcher never matches must print FAIL, never pass.
+broken="$tmp/broken-sidecar.sh"
+sed -e 's/if (q\[j\] == e) sc = 1000000/if (0) sc = 1000000/' \
+    -e 's/else if (index(q\[j\], e "\/") == 1) sc = depth/else if (0) sc = depth/' "$SC" > "$broken"
+cmp -s "$SC" "$broken" && fatal "the matcher mutation changed nothing in $SC"
+out="$(cd "$AP" && "$BASH" "$broken" lessons audit 2>"$tmp/stderr")"; rc=$?
+case "$(printf '%s\n' "$out" | head -n 1)" in
+    "self-check: FAIL: "*) ok "a broken matcher: self-check FAIL" ;;
+    *) bad "a broken matcher: self-check FAIL" "got: $(printf '%s\n' "$out" | head -n 1)" ;;
+esac
+
+section "/pre-merge's lessons block, run as written (#752)"
+
+PREMERGE="$repo_root/pre-merge/SKILL.md"
+pblock="$(awk '/^ *<!-- sidecar-read: pre-merge-lessons -->$/ { on = 1; next }
+               on && /^ *```bash$/ { inb = 1; next }
+               inb && /^ *```$/ { exit }
+               inb { print }' "$PREMERGE")"
+[ -n "$pblock" ] || fatal "pre-merge/SKILL.md has no \`\`\`bash block after <!-- sidecar-read: pre-merge-lessons -->"
+ok "pre-merge/SKILL.md carries the lessons block"
+pscript="$(printf '%s\n' "$pblock" | sed -e "s|^\( *\)SC=.*|\1SC=\"$SC\"|")"
+pl="$(grep -n 'sidecar-read: pre-merge-lessons' "$PREMERGE" | cut -d: -f1)"
+p1="$(grep -n '^### Phase 1' "$PREMERGE" | cut -d: -f1)"
+p2="$(grep -n '^### Phase 2' "$PREMERGE" | cut -d: -f1)"
+if [ -n "$p1" ] && [ -n "$p2" ] && [ "$p1" -lt "$pl" ] && [ "$pl" -lt "$p2" ]; then ok "the block sits in Phase 1"
+else bad "the block sits in Phase 1" "phase1=$p1 block=$pl phase2=$p2"; fi
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    git -C "$AP" checkout -q feat/both
+    out="$(cd "$AP" && "${runner[@]}" "$pscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: on a branch with both lookups: exits 0" 0 "$rc"
+    check "$sh: prints the branch's runs line" "runs: feat/both both" "$out"
+    git -C "$AP" checkout -q main
+    out="$(cd "$AP" && "${runner[@]}" "$pscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: on a branch with no record: says so" "no lesson lookup recorded for this branch" "$out"
+    git -C "$AP" checkout -q --detach
+    out="$(cd "$AP" && "${runner[@]}" "$pscript" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: on a detached HEAD: exits 0" 0 "$rc"
+    git -C "$AP" checkout -q main
+done
+
+# -----------------------------------------------------------------------------
+section "lessons flag (#753)"
+
+mkproj
+FLP="$P"
+runo "$FLP" init --name flagged --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+FLS="$out"
+[ -d "$FLS" ] || fatal "init did not create a sidecar: $err"
+mkdir -p "$FLP/lib/core"; : > "$FLP/lib/core/a.sh"
+lesson "$FLP" "x/broad-2026-01-01.md" "Broad" "paths: [lib, lib/core/a.sh]"
+lesson "$FLP" "x/newer-2026-02-01.md" "Newer" "paths: [docs]" "replaces: [broad-2026-01-01.md]"
+git -C "$FLP" add docs lib && git -C "$FLP" commit -q -m "lessons"
+git -C "$FLP" checkout -q -b feat/f
+FLAGS="$FLS/lesson-flags.jsonl"
+BROAD="$FLP/docs/solutions/x/broad-2026-01-01.md"
+lsum="$(cksum < "$BROAD")"
+fhead="$(git -C "$FLS" rev-parse HEAD)"
+runo "$FLP" lessons match lib/other.sh --record start
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/other.sh --reason "about the core folder only"
+check "flag: exits 0" 0 "$rc"
+check "flag: one line in lesson-flags.jsonl" 1 "$(wc -l < "$FLAGS" 2>/dev/null | tr -d ' ')"
+check "flag: the line carries exactly the contract's keys" '["at","branch","entry","for","lesson","reason"]' "$(jq -c keys "$FLAGS" 2>/dev/null)"
+check "flag: the line's values; entry is the paths entry that matched" \
+    '{"branch":"feat/f","lesson":"broad-2026-01-01.md","entry":"lib","for":"lib/other.sh","reason":"about the core folder only"}' \
+    "$(jq -c 'del(.at)' "$FLAGS" 2>/dev/null)"
+check "flag: committed in the sidecar" "" "$(git -C "$FLS" status --porcelain)"
+if [ "$(git -C "$FLS" rev-parse HEAD)" != "$fhead" ]; then ok "flag: the sidecar's HEAD moved"; else bad "flag: the sidecar's HEAD moved" "still $fhead"; fi
+check "flag: the lesson file is byte-identical" "$lsum" "$(cksum < "$BROAD")"
+check "flag: nothing changed in the project tree" "" "$(git -C "$FLP" status --porcelain)"
+runo "$FLP" lessons match lib/other.sh
+check "match after a flag: the lesson is still returned, with replaced-by then flags:1" \
+    "folder${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md${TAB}flags:1" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$FLP" lessons match lib/core/a.sh
+check "match through another entry: the open flag on the lesson still counts" \
+    "exact${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md${TAB}flags:1" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$FLP" lessons audit
+check "audit: one flags line, after the runs lines" \
+    "flags: broad-2026-01-01.md returned 1 flagged 1 latest: about the core folder only" "$(printf '%s\n' "$out" | tail -n 1)"
+check "audit: the flags line follows the runs lines" "runs: feat/f start-only" "$(printf '%s\n' "$out" | tail -n 2 | head -n 1)"
+
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/core/a.sh --reason "second look"
+runo "$FLP" lessons audit
+check "audit: two open flags, the latest reason" \
+    "flags: broad-2026-01-01.md returned 1 flagged 2 latest: second look" "$(printf '%s\n' "$out" | tail -n 1)"
+
+# --keep settles the flags on that entry; the other entry's flag stays open.
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --keep lib
+check "keep: exits 0" 0 "$rc"
+check "keep: the keep line's values" '{"lesson":"broad-2026-01-01.md","entry":"lib","settled":"kept"}' \
+    "$(tail -n 1 "$FLAGS" | jq -c 'del(.at)')"
+runo "$FLP" lessons match lib/other.sh
+check "after keep: the kept entry's flag is settled" \
+    "folder${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md${TAB}flags:1" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+# Removing the flagged entry from the lesson settles its flag.
+sed -i.bak 's|^paths: \[lib, lib/core/a.sh\]$|paths: [lib]|' "$BROAD" && rm -f "$BROAD.bak"
+runo "$FLP" lessons match lib/other.sh
+check "after the entry is removed: no flags field" \
+    "folder${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$FLP" lessons audit
+check "after the entry is removed: no flags line" 0 "$(printf '%s\n' "$out" | grep -c '^flags: ')"
+# A flag raised again after a keep is open again.
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/x.sh --reason "again"
+runo "$FLP" lessons match lib/x.sh
+check "a flag after a keep is open" "flags:1" "$(printf '%s\n' "$out" | head -n 1 | awk -F '\t' '{ print $NF }')"
+git -C "$FLP" checkout -q -- docs
+
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for elsewhere/z.sh --reason "nope"
+check "flag for a path no entry matches: exits 1" 1 "$rc"
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/x.sh
+check "flag with no reason: exits 2" 2 "$rc"
+runo "$FLP" lessons flag docs/solutions/x/missing.md --for lib/x.sh --reason "r"
+check "flag on a file that does not exist: exits 1" 1 "$rc"
+# A path that lessons match accepts, flag accepts: both collapse ".." and "//".
+mkdir -p "$FLP/sub"
+runo "$FLP/sub" lessons match ../lib//core/a.sh
+check "flag from a subfolder: match returns the lesson for the ../ and // path" "exact" "$(printf '%s\n' "$out" | head -n 1 | cut -f1)"
+runo "$FLP/sub" lessons flag ../docs/solutions/x/broad-2026-01-01.md --for ../lib//core/a.sh --reason "dotdot"
+check "flag from a subfolder with ../ and //: exits 0" 0 "$rc"
+check "flag from a subfolder with ../ and //: the exact entry is recorded" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .entry)"
+
+mkproj
+lesson "$P" "x/solo-2026-01-01.md" "Solo" "paths: [a.sh]"
+runo "$P" lessons flag docs/solutions/x/solo-2026-01-01.md --for a.sh --reason "r"
+check "no sidecar: flag refuses" 1 "$rc"
+case "$err" in *"docs/solutions/x/solo-2026-01-01.md"*) ok "no sidecar: the refusal names the lesson file to edit by hand" ;;
+    *) bad "no sidecar: the refusal names the lesson file to edit by hand" "stderr: $err" ;; esac
+
+# A flag on a group member's lesson is recorded here and changes nothing there.
+mkproj
+GMP="$P"
+runo "$GMP" init --name gmember --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+GMS="$out"
+runo "$GMP" config set system fgrp
+runo "$FLP" config set system fgrp
+mkdir -p "$GMS/solutions/m"
+printf -- '---\npaths: [lib]\n---\n\n# Member\n' > "$GMS/solutions/m/mem-2026-01-01.md"
+git -C "$GMS" add solutions && git -C "$GMS" commit -q -m "member lesson"
+gsum() { (cd "$GMS" && find . -path ./.git -prune -o -type f -exec cksum {} + | LC_ALL=C sort; git -C "$GMS" rev-parse HEAD); }
+gbefore="$(gsum)"
+nflags="$(wc -l < "$FLAGS" | tr -d ' ')"
+runo "$FLP" lessons flag "$GMS/solutions/m/mem-2026-01-01.md" --for lib/a.sh --reason "not ours"
+check "flag on a member's lesson: exits 0" 0 "$rc"
+check "flag on a member's lesson: recorded in this project's sidecar" "$((nflags + 1))" "$(wc -l < "$FLAGS" | tr -d ' ')"
+check "flag on a member's lesson: the member's directory is unchanged" "$gbefore" "$(gsum)"
+
+# One unreadable member store must not turn this project's own flags line into
+# could-not-run: the group part of the audit is best effort, the own part strict.
+if [ "$(id -u)" -ne 0 ]; then
+    runo "$FLP" lessons audit
+    fl_ok="$(printf '%s\n' "$out" | grep -c '^flags: broad-2026-01-01.md ')"
+    chmod 000 "$GMS/solutions/m"
+    runo "$FLP" lessons audit
+    chmod 755 "$GMS/solutions/m"
+    check "audit: an unreadable group member still exits 0" 0 "$rc"
+    check "audit: an unreadable group member leaves this project's open flags line" "$fl_ok" \
+        "$(printf '%s\n' "$out" | grep -c '^flags: broad-2026-01-01.md ')"
+    check "audit: an open flags line exists to keep" 1 "$fl_ok"
+    check "audit: an unreadable group member is not a flags could-not-run" 0 "$(printf '%s\n' "$out" | grep -c '^flags: could-not-run')"
+    case "$err" in *"some lessons in the group directory"*"could not be read"*) ok "audit: the unreadable member is named in a warning" ;;
+        *) bad "audit: the unreadable member is named in a warning" "stderr: $err" ;; esac
+fi
+
+section "/execute's lookup blocks say when to flag (#753)"
+
+# The prose after each block, up to the next block or heading, names the flag
+# verb and says the lesson is never edited.
+for marker in execute-lessons-start execute-lessons-changed; do
+    after="$(awk -v m="<!-- sidecar-read: $marker -->" '$0 == m { on = 1; next }
+             on && /^```$/ { inb++; next }
+             on && inb >= 1 && (/^<!-- / || /^#/) { exit }
+             on && inb >= 1 { print }' "$EXECUTE")"
+    case "$after" in *"lessons flag"*) ok "$marker: the prose after the block names lessons flag" ;;
+        *) bad "$marker: the prose after the block names lessons flag" "not found" ;; esac
+done
+
+# -----------------------------------------------------------------------------
+section "lessons propose (#754)"
+
+mkproj
+PP="$P"
+mkdir -p "$PP/scripts/sub" "$PP/lib"
+: > "$PP/scripts/sub/run.sh"; : > "$PP/lib/x.sh"
+mkdir -p "$PP/docs/solutions/a" "$PP/docs/solutions/b"
+cat > "$PP/docs/solutions/a/old-2026-01-01.md" <<'EOF'
+---
+date: 2026-01-01
+category: a
+problem_type: a long free-text problem type: with a colon, and commas
+components: [scripts, scripts/sub/run.sh, sidecar.sh, "lib/*.sh", lib/x.sh, scripts/, scripts, "has space", ./lib]
+technologies: [bash]
+volatility: stable
+---
+
+# Old lesson
+
+Body.
+
+## Related
+
+- [Sibling](../b/sib-2026-01-02.md)
+- `docs/solutions/b/gone-2026-01-03.md`
+- [Another sibling](sib-2026-01-02.md)
+
+## Rule Scope
+
+- **Sibling docs:** `../b/third-2026-01-04.md`
+EOF
+lesson "$PP" "b/sib-2026-01-02.md" "Sib"
+lesson "$PP" "b/third-2026-01-04.md" "Third"
+OLD="$PP/docs/solutions/a/old-2026-01-01.md"
+osum="$(cksum < "$OLD")"
+runo "$PP" lessons propose docs/solutions/a/old-2026-01-01.md
+check "propose: exits 0" 0 "$rc"
+check "propose: existing components as paths in order, normalized, no duplicates or wildcards; resolved related names" \
+"paths: [scripts, scripts/sub/run.sh, lib/x.sh, lib]
+related: [sib-2026-01-02.md, third-2026-01-04.md]" "$out"
+check "propose: never a replaces line" 0 "$(printf '%s\n' "$out" | grep -c '^replaces:')"
+check "propose: the lesson file is byte-identical" "$osum" "$(cksum < "$OLD")"
+lesson "$PP" "b/bare-2026-01-05.md" "Bare"
+runo "$PP" lessons propose docs/solutions/b/bare-2026-01-05.md
+check "propose with nothing to propose: empty lists" "paths: []
+related: []" "$out"
+runo "$PP" lessons propose docs/solutions/b/none.md
+check "propose on a missing file: exits 1" 1 "$rc"
+
+section "/compound's guided pass, run as written (#754)"
+
+gp_block() {
+    awk -v m="<!-- $1 -->" '$0 == m { on = 1; next }
+         on && /^```bash$/ { inb = 1; next }
+         inb && /^```$/ { exit }
+         inb { print }' "$COMPOUND"
+}
+glist="$(gp_block 'sidecar-read: compound-guided-list')"
+gprop="$(gp_block 'sidecar-read: compound-guided-propose')"
+gwrite="$(gp_block 'sidecar-write: compound-guided-write')"
+[ -n "$glist" ] || fatal "compound/SKILL.md has no guided-list block"
+[ -n "$gprop" ] || fatal "compound/SKILL.md has no guided-propose block"
+[ -n "$gwrite" ] || fatal "compound/SKILL.md has no guided-write block"
+ok "compound/SKILL.md carries the guided pass's three blocks"
+glist="$(printf '%s\n' "$glist" | sed -e "s|^SC=.*|SC=\"$SC\"|")"
+gprop="$(printf '%s\n' "$gprop" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e 's|^LESSON=.*|LESSON="$TEST_LESSON"|')"
+gwrite="$(printf '%s\n' "$gwrite" | sed -e "s|^SC=.*|SC=\"$SC\"|" -e 's|^LESSON=.*|LESSON="$TEST_LESSON"|' \
+    -e 's|^PATHS_LINE=.*|PATHS_LINE="$TEST_PATHS"|' -e 's|^RELATED_LINE=.*|RELATED_LINE="$TEST_RELATED"|')"
+for sh in $block_shells; do
+    if [ "$sh" = zsh ]; then runner=(zsh -f -c); else runner=("$BASH" -c); fi
+    mkproj
+    GPP="$P"
+    mkdir -p "$GPP/lib"; : > "$GPP/lib/x.sh"
+    lesson "$GPP" "a/one-2026-01-01.md" "One" "components: [lib/x.sh]"
+    lesson "$GPP" "a/two-2026-01-01.md" "Two" "paths: []" "related: [one-2026-01-01.md]"
+    lesson "$GPP" "a/done-2026-01-01.md" "Done" "paths: [lib]"
+    out="$(cd "$GPP" && "${runner[@]}" "$glist" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: list: exits 0" 0 "$rc"
+    check "$sh: list: the lessons with no paths, one per line" \
+"docs/solutions/a/one-2026-01-01.md
+docs/solutions/a/two-2026-01-01.md" "$out"
+    # A failed `lessons check` must not read as "nothing to backfill".
+    if [ "$(id -u)" -ne 0 ]; then
+        chmod 000 "$GPP/docs/solutions/a/done-2026-01-01.md"
+        out="$(cd "$GPP" && "${runner[@]}" "$glist" 2>"$tmp/stderr")"; rc=$?
+        chmod 644 "$GPP/docs/solutions/a/done-2026-01-01.md"
+        check "$sh: list: a failed lessons check exits nonzero" 1 "$rc"
+        check "$sh: list: a failed lessons check says so, not an empty list" "lessons check failed; nothing listed" "$out"
+    fi
+    out="$(cd "$GPP" && TEST_LESSON="docs/solutions/a/one-2026-01-01.md" "${runner[@]}" "$gprop" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: propose: prints the proposal" "paths: [lib/x.sh]
+related: []" "$out"
+    out="$(cd "$GPP" && TEST_LESSON="docs/solutions/a/two-2026-01-01.md" TEST_PATHS="paths: [lib/x.sh]" TEST_RELATED="related: [one-2026-01-01.md]" \
+        "${runner[@]}" "$gwrite" 2>"$tmp/stderr")"; rc=$?
+    check "$sh: write: exits 0" 0 "$rc"
+    check "$sh: write: the confirmed lines replace the old ones, right after volatility" \
+"---
+title: \"Two\"
+volatility: low
+paths: [lib/x.sh]
+related: [one-2026-01-01.md]
+---" "$(sed -n '1,6p' "$GPP/docs/solutions/a/two-2026-01-01.md")"
+    check "$sh: write: the body is untouched" "# Two" "$(sed -n '8p' "$GPP/docs/solutions/a/two-2026-01-01.md")"
+    check "$sh: write: then checks the lesson" "loose ends: 0" "$(printf '%s\n' "$out" | tail -n 1)"
+done
+
+# -----------------------------------------------------------------------------
+section "a group member folder larger than one awk argument list (ARG_MAX)"
+
+# lessons_scan_group hands a member folder's files to awk through xargs, which
+# splits them into batches. A single `awk "$PROG" "${files[@]}"` fails with
+# "Argument list too long" once the paths together pass ARG_MAX, and the failure
+# looks like an unreadable folder: no rows and a "could not be read" warning.
+# The fixture is sized from this machine's ARG_MAX and its real path length, so
+# it works where ARG_MAX is 1 MB (macOS) or 2 MB (Linux CI); the lessons are
+# written by one awk, not one process per file, and removed afterward.
+argmax="$(getconf ARG_MAX 2>/dev/null)"
+case "$argmax" in ''|*[!0-9]*) argmax=2097152 ;; esac
+mkproj
+BMP="$P"
+runo "$BMP" init --name bigmember --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+BMS="$out"
+[ -d "$BMS" ] || fatal "init did not create the big member's sidecar: $err"
+runo "$BMP" config set system biggrp
+mkproj
+BHP="$P"
+runo "$BHP" init --name bighome --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+[ -d "$out" ] || fatal "init did not create the big home sidecar: $err"
+runo "$BHP" config set system biggrp
+mkdir -p "$BHP/lib" "$BMS/solutions/big"
+: > "$BHP/lib/a.sh"
+lesson "$BHP" "x/target-2026-01-01.md" "Target" "paths: [lib/a.sh]"
+bigname="$(awk 'BEGIN { s = "n"; while (length(s) < 190) s = s "n"; print s }')"
+bigprefix="$BMS/solutions/big/$bigname"
+bigplen=$(( ${#bigprefix} + 10 ))   # the prefix, "-NNNNN.md" (9) and the NUL separator (1)
+bigcount=$(( argmax / bigplen + 200 ))
+if [ "$bigcount" -gt 40000 ]; then
+    printf '  SKIP ARG_MAX %s needs %s lessons, over the 40000 cap\n' "$argmax" "$bigcount"
+else
+    bigstart="$(date +%s)"
+    awk -v n="$bigcount" -v pre="$bigprefix" -v mid="$((bigcount / 2))" 'BEGIN {
+        for (i = 1; i <= n; i++) {
+            f = sprintf("%s-%05d.md", pre, i)
+            printf "---\ntitle: \"Big %d\"\nvolatility: low\npaths: [svc]\n", i > f
+            if (i == mid) printf "replaces: [target-2026-01-01.md]\n" > f
+            printf "---\n\n# Big %d\n", i > f
+            close(f)
+        }
+    }'
+    bigmid="$(printf '%s-%05d.md' "$bigname" "$((bigcount / 2))")"
+    runo "$BHP" lessons match lib/a.sh
+    # Measured, not recomputed from the sizing sum: printf is a builtin, so the glob
+    # of the real files reaches no exec and cannot itself hit E2BIG.
+    bigbytes="$(printf '%s\0' "$BMS"/solutions/big/*.md | wc -c | tr -d ' ')"
+    check "big folder: the member folder's real path bytes ($bigbytes) exceed ARG_MAX ($argmax)" 1 \
+        "$([ "$bigbytes" -gt "$argmax" ] && echo 1 || echo 0)"
+    check "big folder: match exits 0" 0 "$rc"
+    check "big folder: the home lesson is replaced-by a lesson in the over-ARG_MAX member folder" \
+        "exact${TAB}docs/solutions/x/target-2026-01-01.md${TAB}Target${TAB}replaced-by:$bigmid" "$(printf '%s\n' "$out" | grep '^exact')"
+    check "big folder: no could-not-be-read warning" 0 "$(printf '%s\n' "$err" | grep -c 'could not be read')"
+    printf '  (big-folder arm: %s lessons, %ss)\n' "$bigcount" "$(( $(date +%s) - bigstart ))"
+    rm -rf "$BMS/solutions/big"
+fi
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

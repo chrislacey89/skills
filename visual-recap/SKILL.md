@@ -54,13 +54,13 @@ The skip gate cuts filler — but a change that *passes* the gate owes the revie
 
 ## The shared rendering core
 
-All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so artifacts come out consistent run-to-run. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. Read the core and the part your mode selects, before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
+All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so artifacts come out consistent run-to-run. That doc has two parts, and they are two **modes**, not two layouts: **Part I (§1–§17)** is the scrolling recap; **Part II (§D1–§D9)** is the walkthrough deck. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. Read the core and the part your mode selects, before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
 
 When a *choice* is what needs rendering rather than a change — three or more mutually exclusive options, each carrying three or more attributes, not orderable on one axis — the block is the **options-comparison** (`references/visual-recap-design.md` §11), and its threshold and its relationship to the `AskUserQuestion` menu live in `references/next-step-menu.md`. That block is forward-looking, so its grounding rule differs: each cell is cited with its source or visibly marked asserted (`references/visual-rendering-core.md` §1, *Forward-looking blocks*).
 
 Two rules from the core are load-bearing and worth restating here:
 
-- **The Grounding Rule.** Every structured value — paths, line numbers, hunk text, ±counts, commit hashes — is mechanically derived from the real diff (`git show`, `git diff`, `git diff --stat`), copied not retyped. The model writes **prose only** (callout notes, hunk intent summaries, change flags). A confidently-wrong recap is more dangerous than plain text because a reviewer who trusts the summary skips the line it got wrong. Visual emphasis must not exceed the real change (Tufte, Lie Factor ≤ 1).
+- **The Grounding Rule.** Every structured value — paths, line numbers, hunk text, ±counts, commit hashes — is mechanically derived from the real diff (`git show`, `git diff`, `git diff --stat`), copied not retyped. The model writes **prose only** (callout notes, hunk intent summaries, change flags); the blocks that are cited or model-authored instead are listed in core §1. A confidently-wrong recap is more dangerous than plain text because a reviewer who trusts the summary skips the line it got wrong. Visual emphasis must not exceed the real change (Tufte, Lie Factor ≤ 1).
 - **Secret-redaction runs before any HTML is written.** Mask values for `*_KEY` / `*_SECRET` / `*_TOKEN` / credentialed URIs / PEM blocks — keep the key, mask the value — and note once in the overview if anything was masked. The artifact is portable; a leaked secret in a copied file is unrecoverable.
 
 ## Process
@@ -78,17 +78,17 @@ git log --oneline --no-merges "$BASE_REF..HEAD"
 
 Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a PR, resolve its head/base with `gh pr view <n>`. The `git diff` is three-dot (diff from the merge base) while the `git log` stays two-dot — swapping the diff to two-dot reports deletions for base-side work this branch never touched, and the Grounding Rule above stakes this skill on those ±counts being real.
 
-**Multi-repo mode: one feature across two or more repositories.** When a feature spans a caller and the service it calls, the findings worth the most sit between them: a status value spelled differently on each side, a cap both sides enforce, an id-keyed map on one side against an ordered list on the other. Two single-repo recaps each read fine and never show any of it. So take every repository in one recap, one scope each, written `<repo-path>@<base>..<head>`, where `<repo-path>` is a local checkout and the two refs exist in it. For a PR in each repository, read its base and head with `gh pr view <n>` in that checkout first. The block checks every scope before it diffs any (the refs resolve and share a merge base, which the three-dot diff needs), so a bad one stops the run with nothing half-printed:
+**Multi-repo mode: one feature across two or more repositories.** When a feature spans a caller and the service it calls, the findings worth the most sit between them: a status value spelled differently on each side, a cap both sides enforce, an id-keyed map on one side against an ordered list on the other. Two single-repo recaps each read fine and never show any of it. So take every repository in one recap, one scope each, written `<repo-path>@<base>..<head>`, where `<repo-path>` is a local checkout and the two refs exist in it. Write the scopes into the block's `set --` line, replacing both placeholders and adding one string per further repository. For a PR in each repository, read its base and head with `gh pr view <n>` in that checkout first. The block checks every scope before it diffs any, so a bad one stops the run with nothing half-printed:
 
 ```bash
 # visual-recap: multi-scope resolve
-# Replace the placeholder scopes on the next line, one quoted argument per scope, split at the first `@`.
+# Fill in one scope per repository: <repo-path>@<base>..<head>, split at the first `@`.
 set -- "<repo-path>@<base>..<head>" "<repo-path>@<base>..<head>"
 [ "$#" -ge 2 ] || { echo "multi-repo mode needs two or more scopes; use the single-repo block above" >&2; exit 1; }
 usage='write each scope as <repo-path>@<base>..<head>, with two dots'
 for scope in "$@"; do
   repo="${scope%%@*}"; range="${scope#*@}"
-  [ -n "$repo" ] || { echo "scope [$scope]: the repo path is empty; $usage; not guessing" >&2; exit 1; }
+  [ -n "$repo" ] || { echo "scope [$scope]: the repo path is empty; not guessing" >&2; exit 1; }
   case "$range" in
     *...*|"$scope") echo "scope [$scope]: $usage; not guessing" >&2; exit 1 ;;
     ?*..?*) ;;
@@ -97,8 +97,8 @@ for scope in "$@"; do
   { git -C "$repo" rev-parse --verify --quiet "${range%%..*}^{commit}" &&
     git -C "$repo" rev-parse --verify --quiet "${range#*..}^{commit}"; } >/dev/null ||
     { echo "scope [$scope]: a ref does not resolve in $repo; not guessing" >&2; exit 1; }
-  git -C "$repo" merge-base "${range%%..*}" "${range#*..}" >/dev/null 2>&1 ||
-    { echo "scope [$scope]: the two refs share no merge base in $repo (unrelated histories, or a shallow clone); not guessing" >&2; exit 1; }
+  git -C "$repo" merge-base "${range%%..*}" "${range#*..}" >/dev/null ||
+    { echo "scope [$scope]: the two refs share no merge base in $repo; not guessing" >&2; exit 1; }
 done
 for scope in "$@"; do
   repo="${scope%%@*}"; range="${scope#*@}"
@@ -109,7 +109,7 @@ for scope in "$@"; do
 done
 ```
 
-The diff is three-dot and the log two-dot inside each scope, for the reason the single-repo block gives. Every path, line, and count the recap prints is derived from its own scope and labeled with its repository (`<repo>:<path>:<line>`), because two repositories routinely share file names. The skip gate reads the scopes together, and a multi-repo recap **must carry the seam section** (`references/visual-recap-design.md` §16), right after the overview: what each side sends and accepts, side by side, and the findings only both sides together show, each chipped `mismatch`, `fragile`, or `planned` and citing a line on both sides. A recap of several repositories without it is two single-repo recaps stapled together, the thing this mode exists to replace. Multi-repo mode renders as the scroll; the deck has no seam markup yet.
+The diff is three-dot and the log two-dot inside each scope, for the reason the single-repo block gives. Every path, line, and count the recap prints is derived from its own scope and labeled with its repository (`<repo>:<path>:<line>`), because two repositories routinely share file names. The skip gate reads the scopes together, and a multi-repo recap **must carry the seam section**; its placement, its parts, and its citation rule are in `references/visual-recap-design.md` §16. A recap of several repositories without it is two single-repo recaps stapled together, the thing this mode exists to replace. Multi-repo mode renders as the scroll; the deck has no seam markup yet.
 
 **Scope the whole work unit.** When invoked mid-session after work has already happened, the default scope is everything the session produced — the original implementation plus follow-up fixes, tests, and doc updates — not just the most recent edit. Exclude unrelated dirty work that predates the session. When regenerating a recap after feedback, keep the broad scope; never narrow it to just the latest fix unless asked.
 
@@ -119,7 +119,7 @@ The diff is three-dot and the log two-dot inside each scope, for the reason the 
 
 > **Is there one story the screens advance? → the deck. Is the reviewer auditing parallel hunks? → the scroll.**
 
-- **Scroll recap** (`references/visual-recap-design.md` Part I, §1–§12) — a single scrolling column. Take it when the reviewer's job is to check a topology: which files moved, which contracts changed, which hunks are load-bearing. They already hold the *why* and need the *where*.
+- **Scroll recap** (`references/visual-recap-design.md` Part I, §1–§17) — a single scrolling column. Take it when the reviewer's job is to check a topology: which files moved, which contracts changed, which hunks are load-bearing. They already hold the *why* and need the *where*.
 - **Walkthrough deck** (`references/visual-recap-design.md` Part II, §D1–§D9) — one idea per screen, paged, with a grouped rail and the arc **premise → the changes → the mechanism → aftermath**. Take it when the change has a causal arc and the *why* has to land before any hunk means anything: a sweep with one thesis, a chain of moves that depend on each other, a review's own story.
 
 When both fit, take the scroll — it is the cheaper artifact. Two rules bound the deck and are not negotiable (§D2): **no comparison may span screens**, and **never page a population** — N near-identical instances of one cause are the finding, so they go co-visible in one screen, never one per screen.
@@ -137,7 +137,7 @@ Two things change, and both are load-bearing. **The Grounding Rule inverts** —
 Build the structural inputs mechanically, before writing a single sentence:
 
 - **Topology:** the file list and per-file ±LOC from `git diff --stat`.
-- **Hunks:** the actual before/after text and line numbers from `git diff`/`git show` — copied verbatim into the annotated-diff blocks.
+- **Hunks:** the actual before/after text and line numbers from `git diff`/`git show` — copied verbatim into the annotated-diff blocks. Excerpt the method under discussion rather than the whole file, and mark every jump in line numbers with a gap row (`references/visual-recap-design.md` §6).
 - **Commits:** hashes and touched files from `git log`/`git show`.
 
 Run secret-redaction over every hunk at this step (per the core), before any of it reaches the HTML.
@@ -151,24 +151,24 @@ Run secret-redaction over every hunk at this step (per the core), before any of 
 - **No** → the default block-type-major layout (`references/visual-recap-design.md` §3–§9). Files are rows in the file tree; you pick the 3–8 that carry the change.
 - **Yes** → the **per-unit series** (`references/visual-recap-design.md` §12): one real `<section>` per site, each with its own before/after pair, lede, and typed notes, plus the required all-units matrix. Render it *instead of* sampling the sites into a file tree.
 
-**The 3–8 budget governs depth, never population.** It caps how much you annotate *within* a unit; it does not cap how many units you render. For a sweep the population *is* the finding — five sites fixed, one deliberately exempt, two nearly missed — and sampling destroys the only distinction that matters, because a documented exception then reads exactly like an oversight. Cohen's rule for an oversized review has the same shape: split it into **complete** sessions, never sample one.
+**The 3–8 budget governs depth, never population.** It caps how much you annotate *within* a unit; it does not cap how many units you render. For a sweep the population *is* the finding — five sites fixed, one deliberately exempt, two nearly missed — and sampling destroys the only distinction that matters, because a documented exception then reads exactly like an oversight. Cohen's rule for an oversized review has the same shape: split it into **complete** sessions, never sample one. When the excerpts need more than one reading budget, render that split as a **sitting plan** (`references/visual-recap-design.md` §17).
 
 **The prose bar.** Under the Grounding Rule the model authors *only* prose — which makes prose the entire authored layer of a recap, and until now the only authored layer in the pack with no stated bar. Hold it to **`references/writing-for-humans.md`**: its revision bar (strip clutter, cut the warm-up, Bar/Beach Test, active verbs, concrete nouns, short-not-shallow) and its *what counts vs. what doesn't* test — the words must carry the **mental model** the grounded blocks cannot show, not a narrativized restatement of the hunk beside them. That doc's *shape* is written for issue and PR bodies; what carries over here is the bar and the mental-model test, not a `## Summary` section.
 
 Write for someone who has worked in this project for a couple of weeks: they know the language and the repo's shape, and they do not know this change. Gloss a domain term the diff introduces on first use.
 
-**A reader still learning the framework gets the framework layer, opt-in.** Turn it on when the reader asks, or their standing instructions say they are learning the framework the diff uses. Leave it off otherwise. It adds `framework` callouts on the lines that run by convention: what calls the line, when, and what happens if it fails, each linked to the framework's own docs. It also adds a lifecycle figure for what runs before the handler and a table of the framework features the diff relies on. The rules are in `references/visual-rendering-core.md` §3, and the markup is in `references/visual-recap-design.md` §6.
-
 This bar governs **per-unit prose** — every lede, intent summary, and callout note — where a length cap does not reach. A cap on one global slot says nothing about the twenty short ledes in a per-unit series (`references/visual-recap-design.md` §12), and length was never the failure anyway: an agent narrating a diff it just wrote is the maximally cursed narrator. Hinds found experts underestimate a novice's task time by roughly 2.5×, and that prompting them to recall their own novice struggles did *not* improve the estimate — which is why the instrument here has to be a checkable bar rather than an exhortation to empathize.
+
+**A reader still learning the framework gets the framework layer, opt-in.** It adds `framework` callouts on the lines that run by convention, a lifecycle figure for what runs before the handler, and a table of the framework features the diff relies on. When to turn it on and the rules it follows are in `references/visual-rendering-core.md` §3; the markup is in `references/visual-recap-design.md` §6.
 
 Then write the parts the model owns — and only these:
 
 - The **overview**: 1–3 sentences of "what this change is," the scale, and the reading mode (evolution vs. maintenance) for a small change; up to 3 short paragraphs for a large one — the objective, the key decisions visible in the diff, and the risks a reviewer should weigh. Intent first, either way.
-- In scroll mode, a **decision trail** after the overview: the 5–8 commitments the diff carries out, each cited to where it was decided (the PRD or issue body, a review thread) and linked to the callouts that implement it. Each of those load-bearing callouts names its entry back with `data-decision`. You choose which decisions make the list; you never author a decision you cannot cite. With fewer than three, name them in the overview instead (`references/visual-recap-design.md` §15).
+- In scroll mode, a **decision trail**: the commitments the diff carries out, each cited and linked to the callouts that implement it. You choose which decisions make the list; how many, where it sits, and the linking markup are in `references/visual-recap-design.md` §15, and what counts as a source is in `references/visual-rendering-core.md` §1.
 - A **change flag** per file (`new` / `moved` / `load-bearing` / `mechanical` / `risky`).
 - A one-line **intent summary** above each annotated hunk.
 - Callouts on **3–8 key files/hunks** — each key file gets its intent summary and a few high-signal callouts anchored to real line ranges, with excerpts focused (~150 lines max each) and the whole recap inside the reading budget (Cohen/Rigby: ~100–300 LOC of excerpts, 30–60 min). **This is a depth budget, never a population cap:** it bounds how much you annotate *within* a unit, and it does not bound how many units a per-unit series (`references/visual-recap-design.md` §12) renders. A recap that callouts every hunk has rebuilt the diff the reviewer was going to scroll anyway; a recap with one callout for a 40-file change is the thin recap the floor forbids.
-- When the framework layer is on, a **`framework` callout** per framework mechanism the diff relies on, in addition to the 3–8 change callouts. Each one asks first (what calls this line, when, what happens if it fails), gives the reader a field to answer in, and keeps the answer collapsed until they open it. When their feedback comes back with `recall "…"` lines, compare each attempt with the answer and tell them where it differed.
+- When the framework layer is on, its **`framework` callouts**, its **lifecycle figure**, and its **features table** (`references/visual-recap-design.md` §6), each stage and row cited per `references/visual-rendering-core.md` §1. When the reader's feedback comes back with `recall "…"` lines, compare each attempt with the answer and tell them where it differed (core §3).
 - A one-sentence **compatibility note** beside each contract card that needs one (breaking / risky / non-breaking, and for whom).
 
 When the diff changes a **schema or API surface**, the resulting contract is the headline, not the source: render a **data-model card** per changed entity and an **api-endpoint card** per changed route (`references/visual-recap-design.md` §8) — per-field change flags, struck-through `was:` prior types, grounded in the real migration/route diff. Keep the literal SQL/handler hunk for when the exact statement still matters.
@@ -192,9 +192,19 @@ Write the file to a **transient** path — gitignored `.context/` or `mktemp` �
 
 ### 5. Open, review, and round-trip the feedback
 
-**Confirm the token core is canonical, not the reviewed app's aesthetic (forcing function).** Before presenting, verify the artifact's §1 token block (the light block and both dark copies) is the canonical `references/visual-recap-design.md` §1 set — canonical variable names and values — and **not** a palette, font stack, or chrome re-derived from the app under review. This is the deviation most likely to occur on a well-designed downstream app and the most harmful when it does: the neutral instrument adopts its subject's brand and loses run-to-run constancy. It is a checked step, not stated hope (core §6).
+**Confirm the token core is canonical, not the reviewed app's aesthetic (forcing function).** Before presenting, verify the artifact's §1 token block (the light block and both dark copies) is the canonical `references/visual-recap-design.md` §1 set — canonical variable names and values — and **not** a palette, font stack, or chrome re-derived from the app under review. A palette the *reader* supplied is allowed, and is checked for names and contrast instead of values (`references/visual-rendering-core.md` §6). This is the deviation most likely to occur on a well-designed downstream app and the most harmful when it does: the neutral instrument adopts its subject's brand and loses run-to-run constancy. It is a checked step, not stated hope (core §6).
 
 **Confirm the code rows are colored (forcing function, chrislacey89/skills#395).** Before presenting, count the applied `var(--sx-…)` spans (or confirm the highlight.js wiring is present) against the code cells in the diff and before/after blocks. Code cells with neither is the defect, not a style choice. The `--sx-*` definitions being in `:root` proves nothing: that block is copied verbatim whether or not anything uses it. A row left plain on purpose (a construct with no role in §1's table) is fine; a whole artifact left plain is not, and "the rows were generated" is not a reason.
+
+**Confirm no template placeholder is left (forcing function).** When a generator script or a template built the file, search the artifact for leftover placeholders with a pattern, never a bare `{{`: JSX (`style={{…}}`) and many template languages put `{{` in correct output, so a bare-brace search either fires on every such line or gets waved off.
+
+```bash
+# visual-recap: placeholder check
+ARTIFACT="<artifact>.html"
+if grep -nE '\{\{[A-Z_]+\}\}' "$ARTIFACT"; then echo "template placeholders left in $ARTIFACT; fill them before presenting" >&2; exit 1; fi
+```
+
+Name your own placeholders in that shape, capitals and underscores only (`{{TITLE}}`, `{{SESSION_HUNK}}`), so this one pattern finds them.
 
 The CSS diagram primitive needs no render check — it has no parse grammar and no CDN.
 **For every Mermaid figure**, **confirm it renders without a
@@ -229,6 +239,6 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 ## Handoff
 
 - **Expected input:** either a finished change to comprehend — a branch range, a PR number, or a working diff, plus the base branch to diff against — or a plan to render forward: a shaped PRD issue, a research artifact, or a proposal whose decisions and architecture a reader has to grasp before slices get cut. No upstream artifact is required for the diff case, though a linked PRD or slice issue helps frame intent.
-- **Produces:** a transient, self-contained interactive HTML artifact in the selected mode — a **scrolling recap** (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites) or a **walkthrough deck** (premise → changes → mechanism → aftermath, one idea per screen, before/after panes inside the screen) — or, for a plan, the **forward-looking blocks**: decision cards for the commitments it makes, an options-comparison for a fork it has not settled, and the architecture it implies, every field cited or visibly asserted. Diagrams render as a CSS spine when trivial and Mermaid-via-CDN when multi-stage or behavioral. Plus the reader's feedback, copied back where the artifact is handed off, with durable items promoted to GitHub PR review comments (diff case) or to the PRD issue body (plan case). A comprehension surface and a decision, not a committed file.
+- **Produces:** a transient, self-contained interactive HTML artifact in the selected mode — a **scrolling recap** (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites, a decision trail of the commitments a finished diff carries out, a sitting plan when the excerpts exceed one reading budget) or a **walkthrough deck** (premise → changes → mechanism → aftermath, one idea per screen, before/after panes inside the screen) — or, for a plan, the **forward-looking blocks**: decision cards for the commitments it makes, an options-comparison for a fork it has not settled, and the architecture it implies, every field cited or visibly asserted. Diagrams render as a CSS spine when trivial and Mermaid-via-CDN when multi-stage or behavioral. Plus the reader's feedback, copied back where the artifact is handed off, with durable items promoted to GitHub PR review comments (diff case) or to the PRD issue body (plan case). A comprehension surface and a decision, not a committed file.
 - **Reconnects at:** the `/pre-merge` → merge boundary for a diff — run it before approving, then merge once the change is understood, and `/compound` if a durable lesson emerged. For a plan, the `/write-a-prd` → `/prd-to-issues` boundary: run it when the PRD is shaped and someone who was not in the shaping session has to react before slices get cut.
 - **What comes next:** the user merges, or decomposes the plan (or pauses on unresolved items). `/visual-recap` does not invoke anything.
