@@ -868,6 +868,14 @@ runo "$GRP" trace docs/solutions/x/links-2026-01-01.md
 check "trace: a name that resolves to nothing is MISSING" "  related  MISSING: nowhere-2026-01-01.md" \
     "$(printf '%s\n' "$out" | grep 'MISSING: nowhere')"
 
+# A wildcard entry in related is a name, never a pattern: it must not expand
+# against the files in the current folder.
+lesson "$GRP" "x/glob-2026-01-01.md" "Glob" "paths: [lib]" "related: [*]"
+runo "$GRP" trace docs/solutions/x/glob-2026-01-01.md --json
+check "trace --json: a * entry in related is not expanded against the cwd" \
+    '[{"name":"*","resolved":[]}]' "$(printf '%s' "$out" | jq -c .related)"
+rm -f "$GRP/docs/solutions/x/glob-2026-01-01.md"
+
 runo "$GRP" lessons check docs/solutions/x/links-2026-01-01.md
 check "check: dead-link and ambiguous-link for a lesson's names" \
 "dead-link${TAB}docs/solutions/x/links-2026-01-01.md${TAB}related: nowhere-2026-01-01.md

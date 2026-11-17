@@ -2351,14 +2351,15 @@ lesson_links() {
     idx="$(lessons_index "$own" "$rel")" || return 1
     for key in replaces related; do
         if [ "$key" = replaces ]; then n="$(printf '%s' "$rec" | cut -f4)"; else n="$(printf '%s' "$rec" | cut -f5)"; fi
-        for name in $(printf '%s' "$n" | tr ',' '\n'); do
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
             printf 'N\t%s\t%s\n' "$key" "$name"
             while IFS=$'\t' read -r tag path; do
                 [ -n "$path" ] || continue
                 [ "${path##*/}" = "$name" ] || continue
                 printf 'R\t%s\t%s\t%s\t%s\n' "$key" "$name" "$tag" "$path"
             done <<<"$idx"
-        done
+        done <<<"$(printf '%s' "$n" | tr ',' '\n')"
     done
     for tag in own rel; do
         if [ "$tag" = own ]; then rp="$(lessons_scan "$own")" || return 1
