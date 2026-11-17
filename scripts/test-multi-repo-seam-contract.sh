@@ -18,6 +18,13 @@
 # cites a line on both sides. A finding that cites one side is a single-repo
 # note, and the block exists for what only both sides together show.
 #
+# SHELLS. An agent pastes the block into its Bash tool, which is zsh on macOS,
+# and zsh reads an unquoted expansion differently from bash (no word splitting).
+# The suite therefore re-runs itself once per shell, each arm on fresh fixtures,
+# the way scripts/test-prd-to-issues-sidecar-branch.sh does
+# (docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md).
+# A missing zsh prints a visible SKIP locally and fails the suite when CI is set.
+#
 # WHAT IT PINS, extracted from the real files rather than restated:
 #   1. The block, given two scopes, prints each scope's own diff-stat and log,
 #      from its own repository, in the order given.
@@ -32,6 +39,21 @@
 #      carries, so a renumber at merge time that misses a pointer fails here.
 
 set -euo pipefail
+
+if [[ -z "${SEAM_SHELL:-}" ]]; then
+  arms_rc=0
+  SEAM_SHELL=bash bash "$0" || arms_rc=1
+  if command -v zsh >/dev/null 2>&1; then
+    SEAM_SHELL=zsh bash "$0" || arms_rc=1
+  elif [[ -n "${CI:-}" ]]; then
+    printf '\nFAIL zsh arm: zsh is not on PATH and CI is set, so the block was not run under zsh\n'
+    arms_rc=1
+  else
+    printf '\nSKIP zsh arm: zsh is not on PATH, so the block was not run under zsh\n'
+  fi
+  exit "$arms_rc"
+fi
+printf '\n##### block runs under: %s #####\n' "$SEAM_SHELL"
 
 # A git hook runs with GIT_DIR exported. Without this, the fixture repos below
 # re-initialize and commit into the repository the hook points at (#429;
@@ -86,7 +108,7 @@ run_block() {
   while IFS= read -r line; do
     if [[ "$line" == 'set -- '* ]]; then src+="$argline"$'\n'; else src+="$line"$'\n'; fi
   done <<<"$block"
-  bash -c "$src"
+  "$SEAM_SHELL" -c "$src"
 }
 
 out="$(run_block "$work/caller@base..feature" "$work/service@base..feature" 2>&1)" && rc=0 || rc=$?
