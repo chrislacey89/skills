@@ -402,8 +402,11 @@ section "§14's open question is a question, not a graded claim"
 # ---------------------------------------------------------------------------
 # §14 exists because the core registered an id shape with no block behind it.
 # Two claims it makes are checkable and both are easy to reverse by accident.
-s14="$(extract "$DESIGN" '^## 14\. Block: open question' "^## Do's and Don'ts")"
+# The end anchor is §15 when it exists, else Do's and Don'ts: §15 (#766) landed after §14,
+# and the old "^## Do's" anchor swallowed §15's cited trail entries as §14 grading.
+s14="$(extract "$DESIGN" '^## 14\. Block: open question' "^## (15\\. |Do's and Don'ts)")"
 [ -n "$s14" ] || fatal "§14 extracted to 0 lines from $DESIGN — the heading moved."
+grep -qF 'class="dt-entry"' <<<"$s14" && fatal "§14's span reaches into §15 — the end anchor is too far."
 s14_html="$(printf '%s\n' "$s14" | awk '/^```/ { fence = !fence; next } fence { print }')"
 [ -n "$s14_html" ] || fatal "§14 contains no fenced code blocks."
 

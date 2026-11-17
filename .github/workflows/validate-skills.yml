@@ -267,6 +267,12 @@ jobs:
       - name: Run recall callout contract suite
         run: bash scripts/test-recall-callout-contract.sh
 
+      # A callout names the decision-trail entry it serves; core §4's serializer
+      # carries that reference. This runs the serializer under node and checks
+      # the trail example's links and citations resolve.
+      - name: Run decision trail contract suite
+        run: bash scripts/test-decision-trail-contract.sh
+
       # /visual-recap's multi-repo mode documents a block an agent runs in two
       # repositories at once; this runs it against two planted repos, and pins
       # the seam block's both-sides citation rule (#761).
