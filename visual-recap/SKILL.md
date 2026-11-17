@@ -54,7 +54,7 @@ The skip gate cuts filler — but a change that *passes* the gate owes the revie
 
 ## The shared rendering core
 
-All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so artifacts come out consistent run-to-run. That doc has two parts, and they are two **modes**, not two layouts: **Part I (§1–§12)** is the scrolling recap; **Part II (§D1–§D9)** is the walkthrough deck. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. Read the core and the part your mode selects, before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
+All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so artifacts come out consistent run-to-run. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. Read the core and the part your mode selects, before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
 
 When a *choice* is what needs rendering rather than a change — three or more mutually exclusive options, each carrying three or more attributes, not orderable on one axis — the block is the **options-comparison** (`references/visual-recap-design.md` §11), and its threshold and its relationship to the `AskUserQuestion` menu live in `references/next-step-menu.md`. That block is forward-looking, so its grounding rule differs: each cell is cited with its source or visibly marked asserted (`references/visual-rendering-core.md` §1, *Forward-looking blocks*).
 
@@ -77,6 +77,39 @@ git log --oneline --no-merges "$BASE_REF..HEAD"
 ```
 
 Do not hardcode `main` — detect the base (this repo itself uses `prod`). For a PR, resolve its head/base with `gh pr view <n>`. The `git diff` is three-dot (diff from the merge base) while the `git log` stays two-dot — swapping the diff to two-dot reports deletions for base-side work this branch never touched, and the Grounding Rule above stakes this skill on those ±counts being real.
+
+**Multi-repo mode: one feature across two or more repositories.** When a feature spans a caller and the service it calls, the findings worth the most sit between them: a status value spelled differently on each side, a cap both sides enforce, an id-keyed map on one side against an ordered list on the other. Two single-repo recaps each read fine and never show any of it. So take every repository in one recap, one scope each, written `<repo-path>@<base>..<head>`, where `<repo-path>` is a local checkout and the two refs exist in it. For a PR in each repository, read its base and head with `gh pr view <n>` in that checkout first. The block checks every scope before it diffs any (the refs resolve and share a merge base, which the three-dot diff needs), so a bad one stops the run with nothing half-printed:
+
+```bash
+# visual-recap: multi-scope resolve
+# Replace the placeholder scopes on the next line, one quoted argument per scope, split at the first `@`.
+set -- "<repo-path>@<base>..<head>" "<repo-path>@<base>..<head>"
+[ "$#" -ge 2 ] || { echo "multi-repo mode needs two or more scopes; use the single-repo block above" >&2; exit 1; }
+usage='write each scope as <repo-path>@<base>..<head>, with two dots'
+for scope in "$@"; do
+  repo="${scope%%@*}"; range="${scope#*@}"
+  [ -n "$repo" ] || { echo "scope [$scope]: the repo path is empty; $usage; not guessing" >&2; exit 1; }
+  case "$range" in
+    *...*|"$scope") echo "scope [$scope]: $usage; not guessing" >&2; exit 1 ;;
+    ?*..?*) ;;
+    *) echo "scope [$scope]: $usage; not guessing" >&2; exit 1 ;;
+  esac
+  { git -C "$repo" rev-parse --verify --quiet "${range%%..*}^{commit}" &&
+    git -C "$repo" rev-parse --verify --quiet "${range#*..}^{commit}"; } >/dev/null ||
+    { echo "scope [$scope]: a ref does not resolve in $repo; not guessing" >&2; exit 1; }
+  git -C "$repo" merge-base "${range%%..*}" "${range#*..}" >/dev/null 2>&1 ||
+    { echo "scope [$scope]: the two refs share no merge base in $repo (unrelated histories, or a shallow clone); not guessing" >&2; exit 1; }
+done
+for scope in "$@"; do
+  repo="${scope%%@*}"; range="${scope#*@}"
+  base="${range%%..*}"; head="${range#*..}"
+  echo "== scope: $repo @ $base...$head"
+  git -C "$repo" diff --stat "$base...$head"
+  git -C "$repo" log --oneline --no-merges "$base..$head"
+done
+```
+
+The diff is three-dot and the log two-dot inside each scope, for the reason the single-repo block gives. Every path, line, and count the recap prints is derived from its own scope and labeled with its repository (`<repo>:<path>:<line>`), because two repositories routinely share file names. The skip gate reads the scopes together, and a multi-repo recap **must carry the seam section** (`references/visual-recap-design.md` §16), right after the overview: what each side sends and accepts, side by side, and the findings only both sides together show, each chipped `mismatch`, `fragile`, or `planned` and citing a line on both sides. A recap of several repositories without it is two single-repo recaps stapled together, the thing this mode exists to replace. Multi-repo mode renders as the scroll; the deck has no seam markup yet.
 
 **Scope the whole work unit.** When invoked mid-session after work has already happened, the default scope is everything the session produced — the original implementation plus follow-up fixes, tests, and doc updates — not just the most recent edit. Exclude unrelated dirty work that predates the session. When regenerating a recap after feedback, keep the broad scope; never narrow it to just the latest fix unless asked.
 
