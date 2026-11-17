@@ -2581,18 +2581,23 @@ FILENAME == ARGV[2] {
     if ($3 == "") next
     with++
     np = split($3, ps, ",")
-    best = -1
+    best = -1; be = ""
     for (i = 1; i <= np; i++) {
         e = norm(ps[i])
         if (e == "") continue
         depth = split(e, segs, "/")
         for (j = 1; j <= nq; j++) {
-            if (q[j] == e) best = 1000000
-            else if (index(q[j], e "/") == 1 && depth > best) best = depth
+            if (q[j] == e) sc = 1000000
+            else if (index(q[j], e "/") == 1) sc = depth
+            else continue
+            if (sc > best) { best = sc; be = ps[i] }
         }
     }
     if (best < 0) next
     matched++
+    # With -v want=1 the row is the paths entry the lesson matched through, as
+    # lessons flag records it, so the rule for a hit lives in this program only.
+    if (want != "") { printf "E\t%s\n", be; next }
     b = $1; sub(/.*\//, "", b)
     extra = (b in rb) ? "\treplaced-by:" rb[b] : ""
     if (b in fn) {
@@ -3178,7 +3183,7 @@ lessons_flag_append() {
 }
 
 lessons_flag() {
-    local file="" for="" reason="" keep="" has_reason=0 has_keep=0 top prefix sc name rec ps e n best=-1 entry="" d at branch line
+    local file="" for="" reason="" keep="" has_reason=0 has_keep=0 top prefix sc name rec tmpd entry="" at branch line
     [ $# -ge 1 ] || die_usage "usage: sidecar.sh lessons flag <lesson-file> (--for <path> --reason <text> | --keep <entry>)"
     file="$1"; shift
     while [ $# -gt 0 ]; do
@@ -3222,18 +3227,14 @@ lessons_flag() {
     esac
     while :; do case "$for" in ./*) for="${for#./}" ;; *) break ;; esac; done
     rec="$(awk "$LESSONS_SCAN_AWK" "$file")" || refuse "lessons flag: could not read $file"
-    ps="$(printf '%s' "$rec" | cut -f3)"
-    for e in $(printf '%s' "$ps" | tr ',' '\n'); do
-        n="$e"
-        while :; do case "$n" in ./*) n="${n#./}" ;; *) break ;; esac; done
-        while :; do case "$n" in */) n="${n%/}" ;; *) break ;; esac; done
-        [ -n "$n" ] || continue
-        if [ "$for" = "$n" ]; then entry="$e"; break; fi
-        case "$for" in
-            "$n"/*) d="$(printf '%s' "$n" | tr -cd '/' | wc -c | tr -d ' ')"
-                    if [ "$d" -gt "$best" ]; then best="$d"; entry="$e"; fi ;;
-        esac
-    done
+    tmpd="$(mktemp -d)" || refuse "lessons flag: cannot create a temp directory"
+    printf '%s\n' "$for" > "$tmpd/q"
+    printf '%s\n' "$rec" > "$tmpd/rec"
+    : > "$tmpd/none"
+    entry="$(awk -F '\t' -v want=1 "$LESSONS_MATCH_AWK" "$tmpd/q" "$tmpd/none" "$tmpd/none" "$tmpd/rec")" \
+        || { rm -rf "$tmpd"; refuse "lessons flag: could not match $file"; }
+    rm -rf "$tmpd"
+    entry="$(printf '%s\n' "$entry" | sed -n 's/^E\t//p' | head -n 1)"
     [ -n "$entry" ] || refuse "lessons flag: no paths entry in $file matches $for, so it was not returned for it"
     branch="$(pgit symbolic-ref --short -q HEAD)" || branch=""
     line="$(jq -cn --arg at "$at" --arg b "$branch" --arg l "$name" --arg e "$entry" --arg f "$for" --arg r "$reason" \

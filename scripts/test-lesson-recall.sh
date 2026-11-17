@@ -996,8 +996,8 @@ check "no sidecar: the runs line says lookups are not recorded" "runs: lookups a
 # [QA-RELI] The self-check runs the real matcher. A fixture copy of sidecar.sh
 # whose matcher never matches must print FAIL, never pass.
 broken="$tmp/broken-sidecar.sh"
-sed -e 's/if (q\[j\] == e) best = 1000000/if (0) best = 1000000/' \
-    -e 's/else if (index(q\[j\], e "\/") == 1 \&\& depth > best) best = depth/else if (0) best = depth/' "$SC" > "$broken"
+sed -e 's/if (q\[j\] == e) sc = 1000000/if (0) sc = 1000000/' \
+    -e 's/else if (index(q\[j\], e "\/") == 1) sc = depth/else if (0) sc = depth/' "$SC" > "$broken"
 cmp -s "$SC" "$broken" && fatal "the matcher mutation changed nothing in $SC"
 out="$(cd "$AP" && "$BASH" "$broken" lessons audit 2>"$tmp/stderr")"; rc=$?
 case "$(printf '%s\n' "$out" | head -n 1)" in
@@ -1111,6 +1111,13 @@ runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/x.sh
 check "flag with no reason: exits 2" 2 "$rc"
 runo "$FLP" lessons flag docs/solutions/x/missing.md --for lib/x.sh --reason "r"
 check "flag on a file that does not exist: exits 1" 1 "$rc"
+# A path that lessons match accepts, flag accepts: both collapse ".." and "//".
+mkdir -p "$FLP/sub"
+runo "$FLP/sub" lessons match ../lib//core/a.sh
+check "flag from a subfolder: match returns the lesson for the ../ and // path" "exact" "$(printf '%s\n' "$out" | head -n 1 | cut -f1)"
+runo "$FLP/sub" lessons flag ../docs/solutions/x/broad-2026-01-01.md --for ../lib//core/a.sh --reason "dotdot"
+check "flag from a subfolder with ../ and //: exits 0" 0 "$rc"
+check "flag from a subfolder with ../ and //: the exact entry is recorded" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .entry)"
 
 mkproj
 lesson "$P" "x/solo-2026-01-01.md" "Solo" "paths: [a.sh]"
