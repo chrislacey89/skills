@@ -946,7 +946,7 @@ if [ "$(id -u)" -ne 0 ]; then
     check "check: an unreadable group member still checks, exit 0" 0 "$rc"
     # A member lesson in a readable folder still resolves while a sibling folder is unreadable.
     mkdir -p "$MS/solutions/r"
-    printf -- '---\npaths: [svc]\n---\n\n# Ready\n' > "$MS/solutions/r/ready-2026-01-01.md"
+    printf -- '---\npaths: [svc]\nreplaces: [plain-2026-01-01.md]\n---\n\n# Ready\n' > "$MS/solutions/r/ready-2026-01-01.md"
     git -C "$MS" add solutions && git -C "$MS" commit -q -m "readable member lesson"
     lesson "$GRP" "x/partial-2026-01-01.md" "Partial" "paths: [lib]" "related: [ready-2026-01-01.md]"
     chmod 000 "$MS/solutions/m"
@@ -955,6 +955,19 @@ if [ "$(id -u)" -ne 0 ]; then
     check "trace: a member lesson in a readable folder resolves beside an unreadable one" \
         "  related  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
     check "trace: no MISSING for it" 0 "$(printf '%s\n' "$out" | grep -c MISSING)"
+    # The group scan's partial output survives the unreadable sibling: the readable
+    # member's replaces still backlinks to the home lesson (lessons_trace) and
+    # still marks it replaced-by in match.
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "trace: a readable member's replaces backlinks beside an unreadable folder" \
+        "  replaced by  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  replaced by  ')"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons match lib/a.sh
+    chmod 755 "$MS/solutions/m"
+    check "match: replaced-by from a readable member survives an unreadable folder" \
+        "exact${TAB}docs/solutions/x/plain-2026-01-01.md${TAB}Plain${TAB}replaced-by:ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep '^exact.*plain-')"
     chmod 000 "$MS/solutions/m"
     runo "$GRP" lessons check docs/solutions/x/partial-2026-01-01.md
     chmod 755 "$MS/solutions/m"
