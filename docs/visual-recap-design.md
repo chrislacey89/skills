@@ -91,7 +91,7 @@ chrome that carries no diff meaning (Tufte: decoration exceeding the data).
     --del-bg:hsl(356 84% 97%);
     --risk:hsl(32 90% 42%);
     --mark-bg:hsla(255 78% 58% / 0.10);
-    /* file change-type flags — five calm, distinct hues */
+    /* file change-type flags — five calm, distinct hues (--flag-fw below is not one of them) */
     --flag-new:hsl(212 78% 50%);
     --flag-moved:hsl(265 60% 58%);
     --flag-load:hsl(28 84% 46%);
@@ -614,14 +614,14 @@ that one as a lone `good` half.
 
 ### The framework callout (opt-in, for a reader learning the framework)
 
-The rule is `visual-rendering-core.md` §3: off by default, on per reader, one callout per
-mechanism, the docs link as the citation. A `framework` callout is a §6 callout with three
+When to turn the layer on and the rules its callouts follow are `visual-rendering-core.md` §3;
+this section is the markup. A `framework` callout is a §6 callout with three
 differences: its kind label is `framework` in `--flag-fw`, its note is three labeled lines
 (**called by**, **when**, **if it fails**), and it ends with a link to the framework's docs
 page. It keeps the callout's `c-<file-slug>-L<line>` id and `data-feedback-kind="callout"`,
 and its line marker is the usual numbered `.vr-marker`.
 
-It renders question first (core §3, *ask first, then reveal*): the three questions, then a
+It renders question first (core §3): the three questions, then a
 `data-feedback-recall` field for the reader's answer, then the labeled lines and the docs
 link inside a closed `<details>`. The order on the page is the order of the attempt, so the
 field sits above the reveal. Keep the questions the same three on every framework callout;
@@ -638,11 +638,11 @@ the reader learns to answer them, and the author compares like with like.
     <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--flag-fw)">Show the answer</summary>
     <dl style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px var(--s3);margin:0;font-size:13px;line-height:1.5">
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">called by</dt>
-      <dd style="margin:0;color:var(--fg);text-wrap:pretty">Express, for every request whose path starts with <code style="font-family:var(--mono)">/api</code>.</dd>
+      <dd style="margin:0;color:var(--fg);text-wrap:pretty">Express, for every request whose path is <code style="font-family:var(--mono)">/api</code> or starts with <code style="font-family:var(--mono)">/api/</code> (whole path segments, so <code style="font-family:var(--mono)">/apiary</code> does not match).</dd>
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">when</dt>
       <dd style="margin:0;color:var(--fg);text-wrap:pretty">Before any route handler under <code style="font-family:var(--mono)">/api</code>, in the order the <code style="font-family:var(--mono)">app.use</code> calls appear.</dd>
       <dt style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--flag-fw);padding-top:3px">if it fails</dt>
-      <dd style="margin:0;color:var(--fg);text-wrap:pretty">It calls <code style="font-family:var(--mono)">next(err)</code>, Express skips the remaining handlers, and the error handler sends the response. The route handler never runs.</dd>
+      <dd style="margin:0;color:var(--fg);text-wrap:pretty">It calls <code style="font-family:var(--mono)">next(err)</code>, Express skips the remaining handlers, and the error handler sends the response. The route handler never runs. (<a href="https://expressjs.com/en/guide/error-handling.html" style="color:var(--flag-fw)">Express docs: Error handling ↗</a>)</dd>
     </dl>
     <a href="https://expressjs.com/en/guide/using-middleware.html" style="display:inline-block;margin-top:var(--s2);font-size:12px;color:var(--flag-fw)">Express docs: Using middleware ↗</a>
     </details>
@@ -660,8 +660,8 @@ the callout doesn't need §11's stylesheet:
 `<span style="border:1px solid var(--risk);color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);border-radius:999px;padding:1px 7px;font-family:var(--sans);font-size:10px;font-weight:600;margin-left:6px">asserted</span>`.
 Never link a page that doesn't describe the mechanism just to fill the slot.
 
-**On a line that already has a change callout,** the framework note nests inside that card
-under its note line, like the typed note-pair above: one bordered half in `--flag-fw`, with
+**On a line that already has a change callout** (core §3), the framework note nests inside that
+card under its note line, like the typed note-pair above: one bordered half in `--flag-fw`, with
 the same questions, recall field, and collapsed answer. The card keeps its own kind label and
 id, and the serializer reports the attempt on the card's line.
 
@@ -670,7 +670,9 @@ the framework's request lifecycle (middleware, a validation hook, an authorizati
 an injected argument), add one figure showing what runs, in order, before the handler the
 diff touched. It is usually a trivial spine, so it takes the §5 CSS primitive. Mark each
 stage the diff touched with `.is-accent`, and give every stage that has a framework callout
-the callout's number, so the figure and the cards point at each other. The figure answers the
+the callout's number, so the figure and the cards point at each other; a stage the diff touched
+with only a change callout gets the accent and no number. A stage the diff did not touch cites the
+line that registers it, per `visual-rendering-core.md` §1. The figure answers the
 callouts' *when*, so place it after the hunk whose callouts it numbers: read there, it checks
 the reader's answers instead of handing them out.
 
@@ -680,11 +682,11 @@ the reader's answers instead of handing them out.
     <div class="fc">
       <div class="fc-node is-muted"><div class="fc-title">request</div><div class="fc-sub">GET /api/session</div></div>
       <div class="fc-conn"><div class="fc-line"></div><div class="fc-tip">▼</div></div>
-      <div class="fc-node is-muted"><div class="fc-title">express.json()</div><div class="fc-sub">parses the body · not in this diff</div></div>
+      <div class="fc-node is-muted"><div class="fc-title">express.json()</div><div class="fc-sub">app.ts:12 · parses the body · not in this diff</div></div>
       <div class="fc-conn"><div class="fc-line"></div><div class="fc-tip">▼</div></div>
       <div class="fc-node is-accent"><span class="fc-step">callout 2</span><div class="fc-title">authGuard</div><div class="fc-sub">app.ts:18 · next(err) here skips everything below</div></div>
       <div class="fc-conn"><div class="fc-line"></div><div class="fc-tip">▼</div></div>
-      <div class="fc-node is-accent"><span class="fc-step">callout 1</span><div class="fc-title">route handler</div><div class="fc-sub">session.ts:33 · the code the diff changed</div></div>
+      <div class="fc-node is-accent"><div class="fc-title">route handler</div><div class="fc-sub">session.ts:33 · the code the diff changed</div></div>
     </div>
   </div>
   <figcaption style="margin-top:var(--s3);font-size:12px;color:var(--fg-muted)">Fig 2 · What Express runs before <code style="font-family:var(--mono)">GET /api/session</code> reaches its handler. Accented stages are in this diff.</figcaption>
