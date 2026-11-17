@@ -2040,8 +2040,9 @@ never invokes it — same rule as every other cross-skill seam in the pack.
 
 Deck diagrams are usually the picture of *the whole mechanism before and after* — labeled edges,
 fan-outs, styled failure and guard nodes, two graphs the reader compares. That is the
-multi-stage/behavioral case, so the default is **Mermaid via CDN with the visible degrade note**
-(`visual-rendering-core.md` §5, §6; markup and label-safety in §5 above). The `.fc-*` primitive
+multi-stage/behavioral case, so the default is **Mermaid via CDN with the visible degrade note**,
+except where `visual-rendering-core.md` §6 says otherwise (`visual-rendering-core.md` §5, §6;
+markup and label-safety in §5 above). The `.fc-*` primitive
 stays the right answer for a trivial spine, and is the *recommended* answer when the review
 context is known to be offline.
 

@@ -26,13 +26,15 @@
 #   4. COVERAGE — every light token except the layout-only ones (`--sans`,
 #      `--mono`, `--s<n>`, `--r<n>`) is also defined in both dark copies, so a
 #      new light color cannot land without a dark value. Each `--flag-*` color is
-#      reported by name (#769). Names are read from every declaration, including
-#      packed lines such as `--s1:4px;--s2:8px;`. Before this, deleting `--flag-fw`
+#      reported by name (#769). Names are read from every `;`-separated field
+#      after `/* … */` comments are stripped, so packed lines such as
+#      `--s1:4px;--s2:8px;`, a name after a same-line comment, and a name with
+#      `_` or uppercase all count. Before this, deleting `--flag-fw`
 #      from both dark copies still passed, and dark pages fell back to the light
 #      value (#772).
 #
 # The native-Mermaid exception is prose, and a grep over prose passes a sentence
-# that reverses it, so it is not pinned here; core §6 is its one statement (#772,
+# that reverses it, so it is not pinned here; core §6 and design §5 both state it (#772,
 # docs/solutions/testing-patterns/prose-contract-tests-are-restated-claims-2026-08-27.md).
 
 set -euo pipefail
@@ -102,11 +104,21 @@ else
 fi
 
 # names <declarations> — every custom-property name declared, one per line,
-# sorted. Splits on `;` first, so each name on a packed line counts.
+# sorted. Strips `/* … */` comments (they can span lines), then splits on `;`,
+# so each name on a packed line or after a comment counts. Custom-property
+# names are case-sensitive and may carry `_`, so the class admits both.
 names() {
-    printf '%s\n' "$1" | tr ';' '\n' | sed -E 's/^[[:space:]]+//' \
-        | grep -oE '^--[a-z0-9-]+:' | sed 's/:$//' | sort -u || true
+    printf '%s\n' "$1" | perl -0pe 's{/\*.*?\*/}{}gs' | tr ';' '\n' | sed -E 's/^[[:space:]]+//' \
+        | grep -oE '^--[A-Za-z0-9_-]+:' | sed 's/:$//' | sort -u || true
 }
+# self-test: the reader's own claims about names(), on a planted declaration list
+probe="$(names '  --s1:4px;--s2:8px; /* note; --gone:1px */ --after-comment:red;
+  --Mixed_Case:blue; /* a comment
+  across lines */ --wrapped:green;')"
+want="$(printf '%s\n' --Mixed_Case --after-comment --s1 --s2 --wrapped | sort -u)"
+check "self-test: names() reads packed, post-comment, and _/uppercase names and skips commented ones" \
+    "names() read: $(printf '%s' "$probe" | tr '\n' ' ')" test "$probe" = "$want"
+
 light_names="$(names "$light")"
 guarded_names="$(names "$guarded")"
 dark_names="$(names "$attr")"
