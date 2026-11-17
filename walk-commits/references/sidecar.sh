@@ -2363,7 +2363,7 @@ lesson_links() {
     done
     for tag in own rel; do
         if [ "$tag" = own ]; then rp="$(lessons_scan "$own")" || return 1
-        else rp="$(lessons_scan_group "$rel")" || return 1; fi
+        else rp="$(lessons_scan_group "$rel")"; fi
         while IFS=$'\t' read -r path _ _ n _; do
             if ! { [ -n "$n" ] && [ "$path" != "$self" ]; }; then continue; fi
             case ",$n," in *",$base,"*) printf 'B\t%s\t%s\n' "$tag" "$path" ;; esac
@@ -2722,7 +2722,7 @@ lessons_match() {
     # The group's lessons are read for their replaces only: their paths name
     # files in another checkout, so they are never matched here.
     rdirs="$(cmd_related_solutions_dirs)" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not list the group's lesson directories"
-    lessons_scan_group "$rdirs" > "$tmpd/rscan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the group's lesson headers"
+    lessons_scan_group "$rdirs" > "$tmpd/rscan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not write the group's lesson headers"
     cat "$tmpd/rscan" "$scan" > "$tmpd/reps" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson headers"
     printf '%s\n' "$q" > "$tmpd/q"
     # Each step is checked on its own: a pipeline reports only its last
