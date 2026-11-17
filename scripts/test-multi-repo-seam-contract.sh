@@ -127,11 +127,11 @@ refuses "a single scope" "$work/caller@base..feature"
 
 # --- 3. design: the seam block ----------------------------------------------
 N="$(sed -nE 's/^## ([0-9]+)\. Block: seam.*/\1/p' "$DESIGN" | head -1 || true)"
-sec15=""
-[[ -n "$N" ]] && sec15="$(awk -v h="^## $N\\. Block: seam" '$0 ~ h {on=1; print; next} on&&/^## /{exit} on' "$DESIGN")"
-if [[ -n "$sec15" ]]; then ok "design has §$N Block: seam"; else bad "design has no '## <n>. Block: seam' section"; fi
+sec_seam=""
+[[ -n "$N" ]] && sec_seam="$(awk -v h="^## $N\\. Block: seam" '$0 ~ h {on=1; print; next} on&&/^## /{exit} on' "$DESIGN")"
+if [[ -n "$sec_seam" ]]; then ok "design has §$N Block: seam"; else bad "design has no '## <n>. Block: seam' section"; fi
 for chip in mismatch fragile planned; do
-  if grep -q "class=\"sf-chip sf-$chip\"" <<<"$sec15"; then ok "seam example renders a $chip chip"; else bad "seam example has no sf-$chip chip"; fi
+  if grep -q "class=\"sf-chip sf-$chip\"" <<<"$sec_seam"; then ok "seam example renders a $chip chip"; else bad "seam example has no sf-$chip chip"; fi
 done
 # Every finding (data-feedback-kind="seam-finding") cites both sides: two
 # .sf-cite spans inside it. Count per finding, not in sum.
@@ -139,13 +139,13 @@ cites="$(awk '
   /data-feedback-kind="seam-finding"/ { if (inf) print n; inf=1; n=0 }
   inf { n += gsub(/class="sf-cite"/, "&") }
   inf && /<!-- \/finding -->/ { print n; inf=0 }
-' <<<"$sec15")"
-nfind="$(grep -c 'data-feedback-kind="seam-finding"' <<<"$sec15" || true)"
+' <<<"$sec_seam")"
+nfind="$(grep -c 'data-feedback-kind="seam-finding"' <<<"$sec_seam" || true)"
 if [[ "$nfind" -ge 3 ]]; then ok "seam example has $nfind findings"; else bad "seam example has $nfind findings (< 3, one per chip)"; fi
 if [[ -n "$cites" ]] && ! grep -qvx 2 <<<"$cites"; then ok "every seam finding cites exactly two sides"; else bad "a seam finding does not cite both sides; per-finding cite counts: $(tr '\n' ' ' <<<"$cites")"; fi
 # The comparison table: every row cites both sides too.
-rows="$(grep -c 'class="sm-row"' <<<"$sec15" || true)"
-rowcites="$({ grep 'class="sm-row"' <<<"$sec15" || true; } | awk '{ print gsub(/class="sm-cite"/, "&") }' | sort -u | tr '\n' ' ')"
+rows="$(grep -c 'class="sm-row"' <<<"$sec_seam" || true)"
+rowcites="$({ grep 'class="sm-row"' <<<"$sec_seam" || true; } | awk '{ print gsub(/class="sm-cite"/, "&") }' | sort -u | tr '\n' ' ')"
 if [[ "$rows" -ge 2 && "$rowcites" == "2 " ]]; then ok "every comparison row ($rows) cites both sides"; else bad "comparison rows: $rows, per-row cite counts: $rowcites"; fi
 
 # --- 4. core registration ----------------------------------------------------
@@ -153,7 +153,7 @@ if grep -qE '^\| \*\*seam\*\* \|' "$CORE"; then ok "core §3 table lists the sea
 for id in 'seam-<contract-slug>' 'sf-<finding-slug>'; do
   if grep -qF "→ \`$id\`" "$CORE"; then ok "core §4 registers $id"; else bad "core §4 does not register $id"; fi
 done
-bad_ids="$(grep -oE 'data-feedback-id="[^"]*"' <<<"$sec15" | grep -vE '"(seam|sf)-[a-z0-9-]+"' || true)"
+bad_ids="$(grep -oE 'data-feedback-id="[^"]*"' <<<"$sec_seam" | grep -vE '"(seam|sf)-[a-z0-9-]+"' || true)"
 if [[ -z "$bad_ids" ]]; then ok "seam ids all take a registered seam-/sf- shape"; else bad "seam ids outside the registry: $bad_ids"; fi
 
 # --- 5. skill pointer --------------------------------------------------------
