@@ -552,7 +552,8 @@ Lessons saved before the `paths` field existed cannot be found by file. This pas
 <!-- sidecar-read: compound-guided-list -->
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-bash "$SC" lessons check | awk -F '\t' '$(1) == "no-paths" { print $(2) }'
+OUT="$(bash "$SC" lessons check)" || { echo "lessons check failed; nothing listed"; exit 1; }
+printf '%s\n' "$OUT" | awk -F '\t' '$(1) == "no-paths" { print $(2) }'
 ```
 
 **For each lesson in that list, one per turn:** show its title and the lines the proposal prints, then ask the closed question *write as shown, edit, or skip*, the per-item confirm `/excavate` § 7 uses. Never present several lessons to approve at once.

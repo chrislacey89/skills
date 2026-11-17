@@ -1239,6 +1239,14 @@ for sh in $block_shells; do
     check "$sh: list: the lessons with no paths, one per line" \
 "docs/solutions/a/one-2026-01-01.md
 docs/solutions/a/two-2026-01-01.md" "$out"
+    # A failed `lessons check` must not read as "nothing to backfill".
+    if [ "$(id -u)" -ne 0 ]; then
+        chmod 000 "$GPP/docs/solutions/a/done-2026-01-01.md"
+        out="$(cd "$GPP" && "${runner[@]}" "$glist" 2>"$tmp/stderr")"; rc=$?
+        chmod 644 "$GPP/docs/solutions/a/done-2026-01-01.md"
+        check "$sh: list: a failed lessons check exits nonzero" 1 "$rc"
+        check "$sh: list: a failed lessons check says so, not an empty list" "lessons check failed; nothing listed" "$out"
+    fi
     out="$(cd "$GPP" && TEST_LESSON="docs/solutions/a/one-2026-01-01.md" "${runner[@]}" "$gprop" 2>"$tmp/stderr")"; rc=$?
     check "$sh: propose: prints the proposal" "paths: [lib/x.sh]
 related: []" "$out"
