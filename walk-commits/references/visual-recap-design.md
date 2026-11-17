@@ -13,7 +13,7 @@ resolving to nothing. Forward-looking blocks live in this file and `/visual-reca
 them.
 
 **The document has two parts, and they are two rendering modes, not two layouts of one thing.**
-Everything numbered §1–§12 is **Part I — the scroll recap**: a single scrolling column for a
+Everything numbered §1–§16 is **Part I — the scroll recap**: a single scrolling column for a
 reviewer *auditing* a change. **Part II — the walkthrough deck** (§D1–§D9, at the end of this
 file) is a paged, one-idea-per-screen shell for a reviewer being *argued through* a change with a
 causal arc. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading
@@ -1500,7 +1500,8 @@ and say what happens if nobody answers.
 **Scope note — §13's retrospective counterpart.** A decision card renders a commitment a plan
 has made. The trail renders the commitments a *finished diff carries out*, so a reviewer can
 tell a deliberate choice from an accident before reading the hunks. It sits right after the
-overview (§3), in scroll mode only; the deck argues its decisions screen by screen instead.
+overview (§3), in scroll mode only (§16 orders it against the seam in a multi-repo recap); the
+deck argues its decisions screen by screen instead.
 
 **Every entry is cited; the code is derived.** The Grounding Rule
 (`visual-rendering-core.md` §1) is unchanged. An entry quotes where the decision was made: the
@@ -1573,7 +1574,8 @@ returns an ordered list. Each repository's own blocks (§3–§9) read fine on t
 block puts the two sides of one contract next to each other, so the disagreement is something
 the reader sees instead of something they have to remember from two pages back. **It is
 required in multi-repo mode** and comes right after the overview, before either repository's
-files. A single-repo recap never renders it.
+files. When the recap also carries a decision trail (§15), the seam comes first and the trail
+follows it: the seam is the reason the mode exists. A single-repo recap never renders it.
 
 It has two parts, always in this order:
 
