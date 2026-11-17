@@ -314,6 +314,8 @@ related: [<lesson file name>, ...]
 [What change would make this solution unnecessary? E.g., "When Ably SDK v3 ships built-in auth" or "When we refactor the auth module per RFC #42". If this is an enduring principle, write "Evergreen — no expiration condition."]
 ```
 
+**Propose `paths` from the files the branch changed.** `paths` is how `/execute` finds this lesson again by file, whatever words a later task uses. List the files the branch changed with `git diff --name-only "$BASE_REF...HEAD"`, where `BASE_REF` is what `bash "$SC" base-ref` prints (`SC` as in Phase 5), keep the ones the lesson's text names, and write them relative to the project's top level, a folder in place of its files when the lesson is about the whole folder. Show the proposed line to the user with the rest of the entry; it is written only as they confirm or edit it, and `[]` when nothing fits. `replaces` and `related` name other lessons by file name, and are `[]` unless the user names one. Each list is one line in brackets, and no entry may hold a comma, a space, or a bracket.
+
 **Adjust the template to fit the content.** Not every solution needs every section. A simple bug fix might just need Problem, Root Cause, Solution, and Prevention. An architectural decision might skip Symptoms and emphasize Key Decision. Don't pad sections that have nothing to say.
 
 ### Phase 4: Check for Overlaps
@@ -462,6 +464,17 @@ echo "work item: $W"
 
 The list counts closed items too, because the slice may already be closed when `/compound` runs on its own branch. `work lesson` adds a path once, so running the block again changes nothing.
 
+**Check the saved lesson for loose ends.** Run this after the work-item block, on any of the three paths, with `LESSON` set to the entry's path as above. It reads the lesson and changes nothing:
+
+<!-- sidecar-read: compound-lessons-check -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the entry's path>"
+bash "$SC" lessons check "$LESSON"
+```
+
+Each line before the `loose ends:` total names one loose end; [references/state-backend.md](references/state-backend.md) § Lesson recall lists the kinds. Show the lines to the user; a fix is an edit to the lesson they confirm, then a commit on the same path the entry took. The check never blocks the capture, and a nonzero exit means it could not read the lesson: relay its stderr and go on to Phase 6.
+
 ### Phase 6: Report
 
 Tell the user what was captured, then print the closing block that matches the path you took. On the `sidecar` backend, add the `work item:` line Phase 5's work-item block printed below the `Mechanism:` line.
@@ -527,6 +540,53 @@ Use the `volatility` field to drive review cadence instead of a blanket schedule
 - **`evergreen`** (fundamental principles) — review annually
 
 During review, check each document's **Shelf Life** section. If the expiration condition has been met, delete the document. If the document describes a workaround for a design problem that has since been fixed, delete it — stale workarounds are worse than no documentation.
+
+## Backfill `paths` on Older Lessons (Guided Pass)
+
+Lessons saved before the `paths` field existed cannot be found by file. This pass fills in `paths` and `related` on them, one lesson at a time, each confirmed by a person. Run it only when the user asks for it by name; nothing else in the pipeline enters it.
+
+**Where it runs.** On its own docs-only branch when the lessons are in the project tree, so the edits are reviewed like any other docs change; as sidecar commits when the lessons are in the sidecar; and never during a slice, because a backfill edit on a feature branch would ride a PR about something else. It edits only this project's own stores, never a lesson in another project of the group.
+
+**List the lessons with no `paths`.** `lessons check` reads this project's own stores:
+
+<!-- sidecar-read: compound-guided-list -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+bash "$SC" lessons check | awk -F '\t' '$(1) == "no-paths" { print $(2) }'
+```
+
+**For each lesson in that list, one per turn:** show its title and the lines the proposal prints, then ask the closed question *write as shown, edit, or skip*, the per-item confirm `/excavate` § 7 uses. Never present several lessons to approve at once.
+
+<!-- sidecar-read: compound-guided-propose -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the lesson's path>"
+bash "$SC" lessons propose "$LESSON"
+```
+
+The proposal draws `paths` from the lesson's `components` entries that name an existing file or folder, and `related` from the lessons its `## Related` section and `Sibling docs:` line cite. It never proposes `replaces`: only a person can say one lesson took another's place, and the user may add one under *edit*. `components` and `technologies` are read, never changed.
+
+**On *write as shown* or an edit**, write the confirmed lines after `volatility`, replacing any `paths` or `related` line the lesson already has, then check the lesson. On *skip*, write nothing and move to the next lesson.
+
+<!-- sidecar-write: compound-guided-write -->
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+LESSON="<the lesson's path>"
+PATHS_LINE="<the confirmed paths line>"
+RELATED_LINE="<the confirmed related line>"
+bash "$SC" require "$LESSON" --from "/compound guided pass" >/dev/null || exit 1
+TMP="$(mktemp "$LESSON.XXXXXX")" || exit 1
+awk -v p="$PATHS_LINE" -v r="$RELATED_LINE" '
+  NR == 1 && $(0) == "---" { fm = 1; print; next }
+  fm && ($(0) ~ /^paths:/ || $(0) ~ /^related:/) { next }
+  fm && $(0) == "---" { if (!done) { print p; print r; done = 1 } fm = 0; print; next }
+  { print }
+  fm && /^volatility:/ && !done { print p; print r; done = 1 }
+' "$LESSON" > "$TMP" && mv "$TMP" "$LESSON" || { rm -f "$TMP"; exit 1; }
+bash "$SC" lessons check "$LESSON"
+```
+
+Commit each written lesson where it lives: with `git` on the docs-only branch for an in-tree lesson, or with `bash "$SC" commit -- "$LESSON" -m "<subject>"` for a sidecar lesson, as Phase 5's sidecar branch does.
 
 ## Handoff
 

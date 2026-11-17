@@ -519,10 +519,12 @@ bash "$SC" lessons match "$@" --record start
 ```
 
 - **`exact` and `folder` lines** name a lesson and its title, the files it names exactly first, then the folders it names, deepest first. Read each one before the keyword search. A folder line on a busy folder can be a lesson about something else in that folder: read its title first and skip what does not apply.
+- **`replaced-by:` and `flags:` fields** may follow the title. `replaced-by:` names a lesson that replaces this one: read that one too, and prefer it where they disagree. `flags:<n>` counts open flags, records that an earlier reader found the lesson did not apply; read the lesson anyway, because a flag can be wrong.
+- **A lesson that has nothing to say about this slice** gets flagged, after you have read it: `SC="<this skill's directory>/references/sidecar.sh"; bash "$SC" lessons flag "<the lesson's path>" --for "<the file it was returned for>" --reason "<one line: why it does not apply here>"`, then move on. Never edit the lesson, its `paths`, or its links: only a person changes those, and a flag changes nothing in the lesson and does not stop it from being returned. In a HITL run, the user may flag one as well. The flag and its reason stay in the sidecar and, like the rest of the lookup, never go into the Review Notes or the PR.
 - **`no lesson points at these files`** and **`no file list given; nothing to match`** mean the lookup ran and found nothing. The keyword search below still runs.
 - **The `lessons:` receipt** counts the lessons scanned and how many carry `paths`. A count of `0 with paths` means no lesson can be found this way yet, not that none applies. Its last field says whether the command wrote this run to the sidecar's run log: `recorded: yes`, or `recorded: no:` and the reason. The command writes that record itself; nothing in this skill writes or edits it.
 
-A nonzero exit means the lesson headers could not be read; nothing was matched, and the empty result is not a no-match. The command records the run as failed when it can. In either mode, relay its stderr, continue to the keyword search, and say in the slice's closing summary that the lesson lookup failed.
+A nonzero exit means the lookup failed, for one of the causes [references/state-backend.md](references/state-backend.md) § Lesson recall lists; nothing was matched, and the empty result is not a no-match. The command records the run as failed when it can. In either mode, relay its stderr, continue to the keyword search, and say in the slice's closing summary that the lesson lookup failed.
 
 Consult `docs/solutions/` and the sidecar for relevant past solutions before starting implementation. `sidecar.sh solutions-dirs` prints the directories to search and owns that policy (its header states it). Set `KW` to the keyword to look for:
 
@@ -674,7 +676,7 @@ EOF
 bash "$SC" lessons match "$@" --record changed
 ```
 
-Read each lesson it prints that Step 1 did not, and check the slice against it before Step 5. Its output reads as Step 1's does, and so does a nonzero exit: relay it, carry on, and say in the closing summary that the lookup failed.
+Read each lesson it prints that Step 1 did not, and check the slice against it before Step 5. Its output reads as Step 1's does, and so does a nonzero exit: relay it, carry on, and say in the closing summary that the lookup failed. A lesson that has nothing to say about this slice is flagged with `lessons flag` as Step 1 says, and never edited.
 
 #### Tier 2: Command Verification
 - Tests pass (not just "no test failures" — confirm tests actually exist and ran)
