@@ -1018,5 +1018,120 @@ for sh in $block_shells; do
     git -C "$AP" checkout -q main
 done
 
+# -----------------------------------------------------------------------------
+section "lessons flag (#753)"
+
+mkproj
+FLP="$P"
+runo "$FLP" init --name flagged --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+FLS="$out"
+[ -d "$FLS" ] || fatal "init did not create a sidecar: $err"
+mkdir -p "$FLP/lib/core"; : > "$FLP/lib/core/a.sh"
+lesson "$FLP" "x/broad-2026-01-01.md" "Broad" "paths: [lib, lib/core/a.sh]"
+lesson "$FLP" "x/newer-2026-02-01.md" "Newer" "paths: [docs]" "replaces: [broad-2026-01-01.md]"
+git -C "$FLP" add docs lib && git -C "$FLP" commit -q -m "lessons"
+git -C "$FLP" checkout -q -b feat/f
+FLAGS="$FLS/lesson-flags.jsonl"
+BROAD="$FLP/docs/solutions/x/broad-2026-01-01.md"
+lsum="$(cksum < "$BROAD")"
+fhead="$(git -C "$FLS" rev-parse HEAD)"
+runo "$FLP" lessons match lib/other.sh --record start
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/other.sh --reason "about the core folder only"
+check "flag: exits 0" 0 "$rc"
+check "flag: one line in lesson-flags.jsonl" 1 "$(wc -l < "$FLAGS" 2>/dev/null | tr -d ' ')"
+check "flag: the line carries exactly the contract's keys" '["at","branch","entry","for","lesson","reason"]' "$(jq -c keys "$FLAGS" 2>/dev/null)"
+check "flag: the line's values; entry is the paths entry that matched" \
+    '{"branch":"feat/f","lesson":"broad-2026-01-01.md","entry":"lib","for":"lib/other.sh","reason":"about the core folder only"}' \
+    "$(jq -c 'del(.at)' "$FLAGS" 2>/dev/null)"
+check "flag: committed in the sidecar" "" "$(git -C "$FLS" status --porcelain)"
+if [ "$(git -C "$FLS" rev-parse HEAD)" != "$fhead" ]; then ok "flag: the sidecar's HEAD moved"; else bad "flag: the sidecar's HEAD moved" "still $fhead"; fi
+check "flag: the lesson file is byte-identical" "$lsum" "$(cksum < "$BROAD")"
+check "flag: nothing changed in the project tree" "" "$(git -C "$FLP" status --porcelain)"
+runo "$FLP" lessons match lib/other.sh
+check "match after a flag: the lesson is still returned, with replaced-by then flags:1" \
+    "folder${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md${TAB}flags:1" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$FLP" lessons match lib/core/a.sh
+check "match through another entry: the open flag on the lesson still counts" \
+    "exact${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md${TAB}flags:1" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$FLP" lessons audit
+check "audit: one flags line, after the runs lines" \
+    "flags: broad-2026-01-01.md returned 1 flagged 1 latest: about the core folder only" "$(printf '%s\n' "$out" | tail -n 1)"
+check "audit: the flags line follows the runs lines" "runs: feat/f start-only" "$(printf '%s\n' "$out" | tail -n 2 | head -n 1)"
+
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/core/a.sh --reason "second look"
+runo "$FLP" lessons audit
+check "audit: two open flags, the latest reason" \
+    "flags: broad-2026-01-01.md returned 1 flagged 2 latest: second look" "$(printf '%s\n' "$out" | tail -n 1)"
+
+# --keep settles the flags on that entry; the other entry's flag stays open.
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --keep lib
+check "keep: exits 0" 0 "$rc"
+check "keep: the keep line's values" '{"lesson":"broad-2026-01-01.md","entry":"lib","settled":"kept"}' \
+    "$(tail -n 1 "$FLAGS" | jq -c 'del(.at)')"
+runo "$FLP" lessons match lib/other.sh
+check "after keep: the kept entry's flag is settled" \
+    "folder${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md${TAB}flags:1" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+# Removing the flagged entry from the lesson settles its flag.
+sed -i.bak 's|^paths: \[lib, lib/core/a.sh\]$|paths: [lib]|' "$BROAD" && rm -f "$BROAD.bak"
+runo "$FLP" lessons match lib/other.sh
+check "after the entry is removed: no flags field" \
+    "folder${TAB}docs/solutions/x/broad-2026-01-01.md${TAB}Broad${TAB}replaced-by:newer-2026-02-01.md" \
+    "$(printf '%s\n' "$out" | head -n 1)"
+runo "$FLP" lessons audit
+check "after the entry is removed: no flags line" 0 "$(printf '%s\n' "$out" | grep -c '^flags: ')"
+# A flag raised again after a keep is open again.
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/x.sh --reason "again"
+runo "$FLP" lessons match lib/x.sh
+check "a flag after a keep is open" "flags:1" "$(printf '%s\n' "$out" | head -n 1 | awk -F '\t' '{ print $NF }')"
+git -C "$FLP" checkout -q -- docs
+
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for elsewhere/z.sh --reason "nope"
+check "flag for a path no entry matches: exits 1" 1 "$rc"
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for lib/x.sh
+check "flag with no reason: exits 2" 2 "$rc"
+runo "$FLP" lessons flag docs/solutions/x/missing.md --for lib/x.sh --reason "r"
+check "flag on a file that does not exist: exits 1" 1 "$rc"
+
+mkproj
+lesson "$P" "x/solo-2026-01-01.md" "Solo" "paths: [a.sh]"
+runo "$P" lessons flag docs/solutions/x/solo-2026-01-01.md --for a.sh --reason "r"
+check "no sidecar: flag refuses" 1 "$rc"
+case "$err" in *"docs/solutions/x/solo-2026-01-01.md"*) ok "no sidecar: the refusal names the lesson file to edit by hand" ;;
+    *) bad "no sidecar: the refusal names the lesson file to edit by hand" "stderr: $err" ;; esac
+
+# A flag on a group member's lesson is recorded here and changes nothing there.
+mkproj
+GMP="$P"
+runo "$GMP" init --name gmember --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+GMS="$out"
+runo "$GMP" config set system fgrp
+runo "$FLP" config set system fgrp
+mkdir -p "$GMS/solutions/m"
+printf -- '---\npaths: [lib]\n---\n\n# Member\n' > "$GMS/solutions/m/mem-2026-01-01.md"
+git -C "$GMS" add solutions && git -C "$GMS" commit -q -m "member lesson"
+gsum() { (cd "$GMS" && find . -path ./.git -prune -o -type f -exec cksum {} + | LC_ALL=C sort; git -C "$GMS" rev-parse HEAD); }
+gbefore="$(gsum)"
+nflags="$(wc -l < "$FLAGS" | tr -d ' ')"
+runo "$FLP" lessons flag "$GMS/solutions/m/mem-2026-01-01.md" --for lib/a.sh --reason "not ours"
+check "flag on a member's lesson: exits 0" 0 "$rc"
+check "flag on a member's lesson: recorded in this project's sidecar" "$((nflags + 1))" "$(wc -l < "$FLAGS" | tr -d ' ')"
+check "flag on a member's lesson: the member's directory is unchanged" "$gbefore" "$(gsum)"
+
+section "/execute's lookup blocks say when to flag (#753)"
+
+# The prose after each block, up to the next block or heading, names the flag
+# verb and says the lesson is never edited.
+for marker in execute-lessons-start execute-lessons-changed; do
+    after="$(awk -v m="<!-- sidecar-read: $marker -->" '$0 == m { on = 1; next }
+             on && /^```$/ { inb++; next }
+             on && inb >= 1 && (/^<!-- / || /^#/) { exit }
+             on && inb >= 1 { print }' "$EXECUTE")"
+    case "$after" in *"lessons flag"*) ok "$marker: the prose after the block names lessons flag" ;;
+        *) bad "$marker: the prose after the block names lessons flag" "not found" ;; esac
+done
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

@@ -52,6 +52,8 @@
 #   sidecar.sh lessons match <path>... [--record <start|changed>]   (the lessons whose paths name these files or a folder above them; --record appends the run to lookups/)
 #   sidecar.sh lessons check [<lesson-file>]   (loose ends, one "<kind><TAB><lesson><TAB><detail>" line each, then "loose ends: <n>"; read-only)
 #   sidecar.sh lessons audit [--branch <name>]   (self-check, coverage, group, loose ends, and per-branch runs; --branch prints that branch's runs line only; read-only)
+#   sidecar.sh lessons flag <lesson-file> --for <path> --reason <text>   (records in lesson-flags.jsonl that a returned lesson does not apply; never edits it)
+#   sidecar.sh lessons flag <lesson-file> --keep <entry>   (records that a person kept the flagged entry, which settles its flags)
 #   sidecar.sh trace <W-n | path-to-a-lesson-file> [--json]   (a record's neighbors, both directions, one hop; read-only)
 #
 # backend. The routing rule is docs/state-backend.md's: prds and slices go to
@@ -2539,6 +2541,9 @@ function canon(s,   n, a, i, k, st, out) {
 FILENAME == ARGV[1] { if ($0 != "") q[++nq] = canon($0); next }
 # The second file is every scanned lesson, here and in the group: whatever its
 # replaces names is replaced by it. Derived on each run, never stored.
+# The third file is the open-flag summary: lesson name, entry, count. A flag
+# counts only while its entry is still in the lesson, checked below.
+FILENAME == ARGV[3] { fl[$1, $2] = $3; fn[$1] = fn[$1] SUBSEP $2; next }
 FILENAME == ARGV[2] {
     if ($4 == "") next
     b = $1; sub(/.*\//, "", b)
@@ -2569,6 +2574,13 @@ FILENAME == ARGV[2] {
     matched++
     b = $1; sub(/.*\//, "", b)
     extra = (b in rb) ? "\treplaced-by:" rb[b] : ""
+    if (b in fn) {
+        nf = 0
+        ne = split($3 "," $4 "," $5, es, ",")
+        for (i = 1; i <= ne; i++) if (es[i] != "" && ((b, es[i]) in fl) && !((b, es[i]) in cnt)) { cnt[b, es[i]] = 1; nf += fl[b, es[i]] }
+        for (k in cnt) delete cnt[k]
+        if (nf > 0) extra = extra "\tflags:" nf
+    }
     if (best == 1000000) printf "0000000\texact\t%s\t%s%s\n", $1, $2, extra
     else printf "1%06d\tfolder\t%s\t%s%s\n", 999999 - best, $1, $2, extra
 }
@@ -2688,7 +2700,8 @@ lessons_match() {
     # Each step is checked on its own: a pipeline reports only its last
     # command's status, and a matcher that failed must never print as a
     # lookup that found nothing.
-    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$tmpd/reps" "$scan" > "$tmpd/raw" \
+    lessons_flag_summary "$sc" > "$tmpd/flags" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson flags"
+    awk -F '\t' "$LESSONS_MATCH_AWK" "$tmpd/q" "$tmpd/reps" "$tmpd/flags" "$scan" > "$tmpd/raw" \
         || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not match the lesson headers"
     LC_ALL=C sort "$tmpd/raw" > "$tmpd/rows" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not sort the matches"
     # A row is "<sort key><TAB><the match line>"; the receipt's key is "~".
@@ -2916,7 +2929,7 @@ lessons_check() {
 }
 
 # lessons audit: whether recall is working, read-only. Sections in order:
-# self-check, coverage, group, loose ends, runs. Each line starts with its
+# self-check, coverage, group, loose ends, runs, flags. Each line starts with its
 # label. --branch prints only that branch's runs line, which /pre-merge shows.
 # The run classes come from the run log's phase and outcome: a phase counts
 # when its outcome is not failed, and a branch whose every record failed is
@@ -2995,6 +3008,36 @@ lessons_audit_group() {
     done <<<"$rel"
 }
 
+# lessons_audit_flags <sidecar> <own dirs>: one line per lesson with an open
+# flag, "flags: <name> returned <r> flagged <f> latest: <reason>", in name
+# order. <r> counts the run-log records whose matched names the lesson; <f> the
+# open flags, whose entries are checked against the lesson as it is now, here
+# or in the group.
+lessons_audit_flags() {
+    local sc="$1" own="$2" sum all files=() f ret lname entry cnt fat reason es
+    sum="$(lessons_flag_summary "$sc")" || return 1
+    [ -n "$sum" ] || return 0
+    all="$(lessons_scan "$own")" || return 1
+    all="$all"$'\n'"$(lessons_scan "$(cmd_related_solutions_dirs 2>/dev/null)")" || return 1
+    for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
+    ret=""
+    if [ "${#files[@]}" -gt 0 ]; then
+        ret="$(jq -Rrn '[inputs | fromjson? | objects | .matched[]? | strings] | group_by(.)[] | "\(.[0])\t\(length)"' "${files[@]}")" || return 1
+    fi
+    while IFS=$'\t' read -r lname entry cnt fat reason; do
+        [ -n "$lname" ] || continue
+        # The lesson's entries now: every file with that name, all three lists.
+        es="$(printf '%s\n' "$all" | awk -F '\t' -v n="$lname" '{ b = $1; sub(/.*\//, "", b) } b == n { printf ",%s,%s,%s,", $3, $4, $5 }')"
+        case "$es" in *",$entry,"*) printf '%s\t%s\t%s\t%s\n' "$lname" "$cnt" "$fat" "$reason" ;; esac
+    done <<<"$sum" | LC_ALL=C sort -t "$(printf '\t')" -k1,1 -k3,3 \
+    | awk -F '\t' -v ret="$ret" '
+        BEGIN { n = split(ret, rl, "\n"); for (i = 1; i <= n; i++) { split(rl[i], p, "\t"); r[p[1]] = p[2] } }
+        $1 != cur { if (cur != "") out(); cur = $1; f = 0 }
+        { f += $2; latest = $4 }
+        function out() { printf "flags: %s returned %d flagged %d latest: %s\n", cur, r[cur] + 0, f, latest }
+        END { if (cur != "") out() }'
+}
+
 lessons_audit() {
     local branch="" has_branch=0 top sc dirs scan lesson entry res rc s=0 p=0 l pth fld3
     while [ $# -gt 0 ]; do
@@ -3048,16 +3091,131 @@ lessons_audit() {
     l="$( (lessons_check) 2>/dev/null | tail -n 1)"
     case "$l" in "loose ends: "*) printf '%s\n' "$l" ;; *) printf 'loose ends: could-not-run\n' ;; esac
     if [ -z "$sc" ]; then printf 'runs: lookups are not recorded: no sidecar\n'
-    else lessons_audit_runs "$sc"
+    else
+        lessons_audit_runs "$sc"
+        lessons_audit_flags "$sc" "$dirs" || printf 'flags: could-not-run: the flags or the lessons could not be read\n'
     fi
+}
+
+# lesson flags. <sidecar>/lesson-flags.jsonl holds one line per flag,
+# {at, branch, lesson, entry, for, reason}, and per keep, {at, lesson, entry,
+# settled: "kept"}. A flag is open while its entry is still in the lesson's
+# paths, replaces, or related, and no later keep line names the same lesson and
+# entry. A flag never edits a lesson and never stops it from being returned.
+#
+# LESSONS_FLAGS_JQ reads the flags file and prints, per lesson and entry with
+# flags after its last keep, "<lesson><TAB><entry><TAB><count><TAB><latest at>
+# <TAB><latest reason>". Whether the entry is still in the lesson is the
+# caller's check, against the lesson as it is now.
+# shellcheck disable=SC2016  # jq program text
+LESSONS_FLAGS_JQ='
+[inputs | fromjson? | objects | select((.lesson | type == "string") and (.entry | type == "string"))]
+| to_entries | group_by([.value.lesson, .value.entry])[]
+| . as $g
+| ([$g[] | select(.value.settled == "kept") | .key] | max // -1) as $k
+| [$g[] | select(.key > $k and (.value.settled == null))] as $open
+| select($open | length > 0)
+| [$g[0].value.lesson, $g[0].value.entry, ($open | length | tostring),
+   ($open[-1].value.at // "" | tostring),
+   ($open[-1].value.reason // "" | tostring | gsub("[\t\n\r]"; " "))]
+| join("\t")'
+
+# lessons_flag_summary <sidecar>: LESSONS_FLAGS_JQ over the flags file, or
+# nothing when there is no sidecar or no file.
+lessons_flag_summary() {
+    [ -n "$1" ] && [ -f "$1/lesson-flags.jsonl" ] || return 0
+    jq -Rrn "$LESSONS_FLAGS_JQ" "$1/lesson-flags.jsonl"
+}
+
+# lessons_flag_append <sidecar> <json line> <msg>: append one complete line to
+# the flags file and commit it, the way lessons_record writes the run log.
+lessons_flag_append() {
+    local sc="$1" line="$2" f tmp
+    f="$sc/lesson-flags.jsonl"
+    tmp="$(mktemp "$sc/.lesson-flags.XXXXXX")" || return 1
+    if [ -s "$f" ]; then
+        if [ "$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')" = 0a ]; then
+            cat "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        else
+            sed '$d' "$f" > "$tmp" || { rm -f "$tmp"; return 1; }
+        fi
+    fi
+    printf '%s\n' "$line" >> "$tmp" || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$f" || { rm -f "$tmp"; return 1; }
+    commit_paths "$sc" "$3" lesson-flags.jsonl >/dev/null
+}
+
+lessons_flag() {
+    local file="" for="" reason="" keep="" has_reason=0 has_keep=0 top prefix sc name rec ps e n best=-1 entry="" d at branch line
+    [ $# -ge 1 ] || die_usage "usage: sidecar.sh lessons flag <lesson-file> (--for <path> --reason <text> | --keep <entry>)"
+    file="$1"; shift
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --for) [ $# -ge 2 ] || die_usage "lessons flag: --for needs a path"; for="$2"; shift 2 ;;
+            --reason) [ $# -ge 2 ] || die_usage "lessons flag: --reason needs a text"; reason="$2"; has_reason=1; shift 2 ;;
+            --keep) [ $# -ge 2 ] || die_usage "lessons flag: --keep needs an entry"; keep="$2"; has_keep=1; shift 2 ;;
+            *) die_usage "lessons flag: unknown argument: $1" ;;
+        esac
+    done
+    if [ "$has_keep" -eq 1 ]; then
+        [ -z "$for" ] && [ "$has_reason" -eq 0 ] || die_usage "lessons flag: --keep takes no --for or --reason"
+        [ -n "$keep" ] || die_usage "lessons flag: --keep needs an entry"
+    else
+        [ -n "$for" ] && [ "$has_reason" -eq 1 ] && [ -n "$reason" ] \
+            || die_usage "usage: sidecar.sh lessons flag <lesson-file> (--for <path> --reason <text> | --keep <entry>)"
+    fi
+    [ -f "$file" ] || refuse "lessons flag: no such lesson file: $file"
+    in_repo || refuse "lessons flag: not inside a git repository"
+    sc="$(do_resolve 2>/dev/null)" \
+        || refuse "lessons flag: no sidecar resolves, so there is nowhere to record a flag; to narrow or remove the link, edit $file by hand"
+    name="${file##*/}"
+    at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [ "$has_keep" -eq 1 ]; then
+        line="$(jq -cn --arg at "$at" --arg l "$name" --arg e "$keep" '{at: $at, lesson: $l, entry: $e, settled: "kept"}')" \
+            || refuse "lessons flag: could not build the keep line"
+        lessons_flag_append "$sc" "$line" "sidecar: lesson flag kept on $name" || refuse "lessons flag: could not write $sc/lesson-flags.jsonl"
+        printf 'kept: %s %s\n' "$name" "$keep"
+        return 0
+    fi
+    # The entry is the paths entry through which the lesson matches the path:
+    # an exact entry first, else the deepest folder above it, as lessons match
+    # ranks them.
+    top="$(pgit rev-parse --show-toplevel)" || refuse "lessons flag: cannot find the project's top level"
+    prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons flag: cannot find the project's top level"
+    if [[ "$for" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then for="${BASH_REMATCH[1]}"; fi
+    case "$for" in
+        "$top"/*) for="${for#"$top"/}" ;;
+        /*) refuse "lessons flag: $for is outside the project at $top" ;;
+        *) for="$prefix$for" ;;
+    esac
+    while :; do case "$for" in ./*) for="${for#./}" ;; *) break ;; esac; done
+    rec="$(awk "$LESSONS_SCAN_AWK" "$file")" || refuse "lessons flag: could not read $file"
+    ps="$(printf '%s' "$rec" | cut -f3)"
+    for e in $(printf '%s' "$ps" | tr ',' '\n'); do
+        n="$e"
+        while :; do case "$n" in ./*) n="${n#./}" ;; *) break ;; esac; done
+        while :; do case "$n" in */) n="${n%/}" ;; *) break ;; esac; done
+        [ -n "$n" ] || continue
+        if [ "$for" = "$n" ]; then entry="$e"; break; fi
+        case "$for" in
+            "$n"/*) d="$(printf '%s' "$n" | tr -cd '/' | wc -c | tr -d ' ')"
+                    if [ "$d" -gt "$best" ]; then best="$d"; entry="$e"; fi ;;
+        esac
+    done
+    [ -n "$entry" ] || refuse "lessons flag: no paths entry in $file matches $for, so it was not returned for it"
+    branch="$(pgit symbolic-ref --short -q HEAD)" || branch=""
+    line="$(jq -cn --arg at "$at" --arg b "$branch" --arg l "$name" --arg e "$entry" --arg f "$for" --arg r "$reason" \
+        '{at: $at, branch: $b, lesson: $l, entry: $e, for: $f, reason: $r}')" || refuse "lessons flag: could not build the flag line"
+    lessons_flag_append "$sc" "$line" "sidecar: lesson flag on $name" || refuse "lessons flag: could not write $sc/lesson-flags.jsonl"
+    printf 'flagged: %s %s for %s\n' "$name" "$entry" "$for"
 }
 
 cmd_lessons() {
     local sub="${1:-}"
     [ $# -gt 0 ] && shift
     case "$sub" in
-        match|check|audit) ;;
-        *) die_usage "usage: sidecar.sh lessons <match|check|audit> ..." ;;
+        match|check|audit|flag) ;;
+        *) die_usage "usage: sidecar.sh lessons <match|check|audit|flag> ..." ;;
     esac
     "lessons_$sub" "$@"
 }
