@@ -944,6 +944,23 @@ if [ "$(id -u)" -ne 0 ]; then
     runo "$GRP" lessons check
     chmod 755 "$MS/solutions/m"
     check "check: an unreadable group member still checks, exit 0" 0 "$rc"
+    # A member lesson in a readable folder still resolves while a sibling folder is unreadable.
+    mkdir -p "$MS/solutions/r"
+    printf -- '---\npaths: [svc]\n---\n\n# Ready\n' > "$MS/solutions/r/ready-2026-01-01.md"
+    git -C "$MS" add solutions && git -C "$MS" commit -q -m "readable member lesson"
+    lesson "$GRP" "x/partial-2026-01-01.md" "Partial" "paths: [lib]" "related: [ready-2026-01-01.md]"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" trace docs/solutions/x/partial-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "trace: a member lesson in a readable folder resolves beside an unreadable one" \
+        "  related  related project: $MS/solutions/r/ready-2026-01-01.md" "$(printf '%s\n' "$out" | grep -E '^  related  ')"
+    check "trace: no MISSING for it" 0 "$(printf '%s\n' "$out" | grep -c MISSING)"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons check docs/solutions/x/partial-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "check: no false dead-link for a name in a readable member folder" 0 "$(printf '%s\n' "$out" | grep -c '^dead-link')"
+    rm -f "$GRP/docs/solutions/x/partial-2026-01-01.md"
+    git -C "$MS" rm -q -r solutions/r && git -C "$MS" commit -q -m "drop readable member lesson"
 fi
 
 sbefore="$(asum "$AS")"; pbefore="$(asum "$AP")"

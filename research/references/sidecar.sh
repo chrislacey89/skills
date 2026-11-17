@@ -2528,14 +2528,15 @@ lessons_scan() {
 }
 
 # lessons_scan_group <dirs>: lessons_scan over the group's directories, best
-# effort: a member directory that cannot be read is skipped with a warning, so
-# one bad folder in another project never turns off this project's lookups.
+# effort: lessons that cannot be read in a member directory are left out with a
+# warning, and the readable ones stay, so one bad folder in another project
+# never turns off this project's lookups. lessons_index keeps the same rule.
 lessons_scan_group() {
     local d
-    for d in $1; do
+    while IFS= read -r d; do
         [ -n "$d" ] || continue
-        lessons_scan "$d" 2>/dev/null || printf 'sidecar.sh: cannot read the group directory %s; skipped\n' "$d" >&2
-    done
+        lessons_scan "$d" 2>/dev/null || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
+    done <<<"$1"
     return 0
 }
 
@@ -2764,8 +2765,8 @@ lessons_match() {
 # lessons_index <own dirs> <group dirs>: one line per lesson file, "own<TAB>
 # <path>" for the project's stores and "rel<TAB><path>" for the group's, from
 # one find per directory, each directory's lines in path order. A directory that does not exist holds no lessons; an
-# own one that cannot be read fails the index, a group member's is skipped with
-# a warning.
+# own one that cannot be read fails the index, a group member's keeps the
+# lessons it could read and warns.
 lessons_index() {
     local d tag l rc=0
     for tag in own rel; do
@@ -2777,7 +2778,7 @@ lessons_index() {
                 l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} +)" || rc=1
             else
                 l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} + 2>/dev/null)" \
-                    || { printf 'sidecar.sh: cannot read the group directory %s; skipped\n' "$d" >&2; l=""; }
+                    || printf 'sidecar.sh: some lessons in the group directory %s could not be read\n' "$d" >&2
             fi
             [ -z "$l" ] || printf '%s\n' "$l" | LC_ALL=C sort
         done
