@@ -3088,9 +3088,8 @@ lessons_audit_flags() {
     sum="$(lessons_flag_summary "$sc")" || return 1
     [ -n "$sum" ] || return 0
     all="$(lessons_scan "$own")" || return 1
-    # The group is best effort, like lessons_scan_group everywhere else: an
-    # unreadable member is skipped with a warning and this project's own
-    # flags still print. The project's own store above stays strict.
+    # The group is read best effort; lessons_scan_group's comment states the
+    # rule. The project's own store above stays strict.
     all="$all"$'\n'"$(lessons_scan_group "$(cmd_related_solutions_dirs 2>/dev/null)")"
     for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
     ret=""
