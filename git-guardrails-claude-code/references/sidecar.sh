@@ -419,14 +419,22 @@ current_keys() {
     mc="$(main_checkout)" && [ -n "$mc" ] && printf 'path:%s\n' "$(lower "$mc")"
 }
 
+# keys_list, the one reading of a sidecar.json "keys" both ownership readers
+# share: absent or null is an empty list, an array is itself, and any other
+# shape is an error, so the file is refused like a corrupt one. `// []` alone
+# let a string through to `index`, which searches a string as a substring
+# (claiming any key it contains, and a clean miss for one it does not), and
+# read `false` as an empty list (chrislacey89/skills#746).
+KEYS_LIST_JQ='def keys_list: if . == null then [] elif type == "array" then . else error("keys is \(type), not an array") end; '
+
 # file_lists_key <file> <key>: jq's status for whether <file>'s "keys" holds
 # <key>: 0 yes, 1 no, anything else unread. --slurp reads the whole file as an
 # array of its values, so a file holding no value or several is an error rather
 # than an answer from whichever value jq read last.
 file_lists_key() {
-    jq -e -s --arg k "$2" '
+    jq -e -s --arg k "$2" "$KEYS_LIST_JQ"'
         if length != 1 then error("holds \(length) JSON values, not one")
-        else (.[0].keys // []) | index($k) != null end' "$1" >/dev/null 2>&1
+        else .[0].keys | keys_list | index($k) != null end' "$1" >/dev/null 2>&1
 }
 
 # Sidecar directories whose sidecar.json carries key $1, one per line.
@@ -506,7 +514,7 @@ owners_of() {
 # when every sidecar is plainly readable, so it never has an unread file to
 # report: on anything owners_of names (a root it cannot list, a directory it
 # cannot enter, a sidecar.json that is not a regular file, one holding no JSON
-# value or several (each file is parsed on its own, so a value split across two files is corrupt in both), or a "keys" jq cannot search, such as a number) it records
+# value or several (each file is parsed on its own, so a value split across two files is corrupt in both), or a "keys" that is not an array) it records
 # nothing, and owners_of reads file by file and names the problem as before. The answer is
 # the sidecars as they were when it ran, so a caller runs scan_clear before it
 # writes a sidecar.json. Within a $(...) the answer is inherited, never filled.
@@ -545,11 +553,11 @@ owners_scan() {
             jqargs+=(--rawfile "f$i" "$f" --arg "p$i" "$f")
             i=$((i + 1))
         done
-        out="$(jq -n -r --argjson n "${#files[@]}" '
+        out="$(jq -n -r --argjson n "${#files[@]}" "$KEYS_LIST_JQ"'
             $ARGS.named as $a
             | [range(0; $n) | {f: $a["p\(.)"], d: ($a["f\(.)"] | fromjson)}]
             | ("N\t\(length)"),
-              (.[] | .f as $f | ((.d.keys // []) as $k
+              (.[] | .f as $f | ((.d.keys | keys_list) as $k
                 | $ARGS.positional[] as $x | select(($k | index($x)) != null)
                 | "H\t\($x)\t\($f | rtrimstr("/sidecar.json"))"))' "${jqargs[@]}" --args "$@" 2>/dev/null)" || return 0
         first="${out%%$'\n'*}"
