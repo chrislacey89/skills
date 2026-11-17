@@ -2364,7 +2364,7 @@ lesson_links() {
         if [ "$tag" = own ]; then rp="$(lessons_scan "$own")" || return 1
         else rp="$(lessons_scan_group "$rel")" || return 1; fi
         while IFS=$'\t' read -r path _ _ n _; do
-            [ -n "$n" ] && [ "$path" != "$self" ] || continue
+            if ! { [ -n "$n" ] && [ "$path" != "$self" ]; }; then continue; fi
             case ",$n," in *",$base,"*) printf 'B\t%s\t%s\n' "$tag" "$path" ;; esac
         done <<<"$rp"
     done
@@ -3195,11 +3195,12 @@ lessons_flag() {
         esac
     done
     if [ "$has_keep" -eq 1 ]; then
-        [ -z "$for" ] && [ "$has_reason" -eq 0 ] || die_usage "lessons flag: --keep takes no --for or --reason"
+        if ! { [ -z "$for" ] && [ "$has_reason" -eq 0 ]; }; then die_usage "lessons flag: --keep takes no --for or --reason"; fi
         [ -n "$keep" ] || die_usage "lessons flag: --keep needs an entry"
     else
-        [ -n "$for" ] && [ "$has_reason" -eq 1 ] && [ -n "$reason" ] \
-            || die_usage "usage: sidecar.sh lessons flag <lesson-file> (--for <path> --reason <text> | --keep <entry>)"
+        if ! { [ -n "$for" ] && [ "$has_reason" -eq 1 ] && [ -n "$reason" ]; }; then
+            die_usage "usage: sidecar.sh lessons flag <lesson-file> (--for <path> --reason <text> | --keep <entry>)"
+        fi
     fi
     [ -f "$file" ] || refuse "lessons flag: no such lesson file: $file"
     in_repo || refuse "lessons flag: not inside a git repository"
