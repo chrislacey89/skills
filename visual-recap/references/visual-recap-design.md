@@ -1044,7 +1044,8 @@ Worked example — a share popover gaining a "Copy link" action, as a §7 column
 Three tiny handlers — theme toggle, callout active-state, review verdict. No framework,
 no state library; if this grows routing or a store it has become the app the surface exists
 to avoid (`visual-rendering-core.md` §4). The §4 `copyFeedback()` serializer is separate and
-unchanged.
+unchanged. The one addition is §17's sitting-plan script, present only when a recap carries
+a sitting plan; it counts reviewed hunks per reader and keeps nothing a viewer shares.
 
 There is deliberately **no** handler that swaps which state is on screen. Every block here
 renders all of its states as real elements in the document, so comparison is a glance or a
