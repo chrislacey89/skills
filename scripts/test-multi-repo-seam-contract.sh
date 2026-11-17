@@ -148,6 +148,15 @@ refuses() { # refuses <label> <args...>
 refuses "a ref the repo does not have" "$work/caller@base..feature" "$work/service@base..nope"
 refuses "three dots" "$work/caller@base..feature" "$work/service@base...feature"
 refuses "a scope with no @" "$work/caller@base..feature" "$work/service"
+# A relative path holding `..` (`./../service`) matches the `?*..?*` arm as if it were a range, so only the
+# "$scope" (no-@) arm sends it to the usage message; without the arm a later ref guard still refuses it, but
+# with a different message. Pin the message, and run from a cwd where the path would otherwise resolve.
+rel_out="$(cd "$work/caller" && run_block "$work/caller@base..feature" "./../service" 2>&1)" && rel_rc=0 || rel_rc=$?
+if [[ $rel_rc -ne 0 ]] && grep -q 'write each scope as <repo-path>@<base>..<head>' <<<"$rel_out" && ! grep -q '^== scope:' <<<"$rel_out"; then
+  ok "a relative path holding .. with no @ is refused with the usage message"
+else
+  bad "a relative path holding .. with no @ was not refused with the usage message (exit $rel_rc): $rel_out"
+fi
 refuses "an empty endpoint" "$work/caller@base..feature" "$work/service@..feature"
 refuses "an empty repo path" "$work/caller@base..feature" "@base..feature"
 # Both refs resolve here; only the merge base is missing, so only that guard can refuse it.
