@@ -922,6 +922,23 @@ for b in both start changed bad; do
 done
 git -C "$AP" checkout -q main
 asum() { (cd "$1" && find . -path ./.git -prune -o -type f -exec cksum {} + | LC_ALL=C sort; git -C "$1" rev-parse HEAD; git -C "$1" status --porcelain); }
+# One unreadable member store must not turn off this project's own lookups.
+if [ "$(id -u)" -ne 0 ]; then
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons match lib/a.sh --record start
+    chmod 755 "$MS/solutions/m"
+    check "match: an unreadable group member still matches the home lessons, exit 0" 0 "$rc"
+    check "match: the home lesson is printed" 1 "$(printf '%s\n' "$out" | grep -c '^exact.*plain-2026-01-01')"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" trace docs/solutions/x/plain-2026-01-01.md
+    chmod 755 "$MS/solutions/m"
+    check "trace: an unreadable group member still traces, exit 0" 0 "$rc"
+    chmod 000 "$MS/solutions/m"
+    runo "$GRP" lessons check
+    chmod 755 "$MS/solutions/m"
+    check "check: an unreadable group member still checks, exit 0" 0 "$rc"
+fi
+
 sbefore="$(asum "$AS")"; pbefore="$(asum "$AP")"
 runo "$AP" lessons audit
 check "audit: exits 0" 0 "$rc"

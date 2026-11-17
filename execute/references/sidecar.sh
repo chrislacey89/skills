@@ -2362,7 +2362,7 @@ lesson_links() {
     done
     for tag in own rel; do
         if [ "$tag" = own ]; then rp="$(lessons_scan "$own")" || return 1
-        else rp="$(lessons_scan "$rel")" || return 1; fi
+        else rp="$(lessons_scan_group "$rel")" || return 1; fi
         while IFS=$'\t' read -r path _ _ n _; do
             [ -n "$n" ] && [ "$path" != "$self" ] || continue
             case ",$n," in *",$base,"*) printf 'B\t%s\t%s\n' "$tag" "$path" ;; esac
@@ -2524,6 +2524,18 @@ lessons_scan() {
     [ -n "$list" ] || return 0
     # shellcheck disable=SC2086  # split on IFS (newlines): a dir may hold spaces
     find $list -type f -name '*.md' -exec awk "$LESSONS_SCAN_AWK" {} +
+}
+
+# lessons_scan_group <dirs>: lessons_scan over the group's directories, best
+# effort: a member directory that cannot be read is skipped with a warning, so
+# one bad folder in another project never turns off this project's lookups.
+lessons_scan_group() {
+    local d
+    for d in $1; do
+        [ -n "$d" ] || continue
+        lessons_scan "$d" 2>/dev/null || printf 'sidecar.sh: cannot read the group directory %s; skipped\n' "$d" >&2
+    done
+    return 0
 }
 
 # lessons match: which lessons' `paths` name the given files. A pointer matches
@@ -2703,7 +2715,7 @@ lessons_match() {
     # The group's lessons are read for their replaces only: their paths name
     # files in another checkout, so they are never matched here.
     rdirs="$(cmd_related_solutions_dirs)" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not list the group's lesson directories"
-    lessons_scan "$rdirs" > "$tmpd/rscan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the group's lesson headers"
+    lessons_scan_group "$rdirs" > "$tmpd/rscan" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the group's lesson headers"
     cat "$tmpd/rscan" "$scan" > "$tmpd/reps" || lessons_fail "$tmpd" "$sc" "$branch" "$phase" "$q" "$name" "could not read the lesson headers"
     printf '%s\n' "$q" > "$tmpd/q"
     # Each step is checked on its own: a pipeline reports only its last
@@ -2745,8 +2757,9 @@ lessons_match() {
 
 # lessons_index <own dirs> <group dirs>: one line per lesson file, "own<TAB>
 # <path>" for the project's stores and "rel<TAB><path>" for the group's, from
-# one find per directory, each directory's lines in path order. A directory that does not exist holds no lessons; one
-# that cannot be read fails the index.
+# one find per directory, each directory's lines in path order. A directory that does not exist holds no lessons; an
+# own one that cannot be read fails the index, a group member's is skipped with
+# a warning.
 lessons_index() {
     local d tag l rc=0
     for tag in own rel; do
@@ -2754,7 +2767,12 @@ lessons_index() {
         for d in $3; do
             [ -n "$d" ] || continue
             [ -e "$d" ] || continue
-            l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} +)" || rc=1
+            if [ "$tag" = own ]; then
+                l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} +)" || rc=1
+            else
+                l="$(find "$d" -type f -name '*.md' -exec printf "$tag"'\t%s\n' {} + 2>/dev/null)" \
+                    || { printf 'sidecar.sh: cannot read the group directory %s; skipped\n' "$d" >&2; l=""; }
+            fi
             [ -z "$l" ] || printf '%s\n' "$l" | LC_ALL=C sort
         done
     done
