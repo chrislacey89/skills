@@ -1624,8 +1624,10 @@ git -C "$remote_sandbox/work" push -q origin --delete issue-9-widget \
 
 # Polarity 2b — a DIFFERENT branch whose name merely ends in the feature branch
 # (x/issue-9-widget) is on the remote. A short pattern matches it by ref tail and
-# would read "still on the remote"; the check must be exact (refs/heads/<branch>)
-# and still exit 2 for the deleted feature branch.
+# would read "still on the remote"; the full refs/heads/<branch> form avoids that
+# and must still exit 2 for the deleted feature branch. It narrows the match but
+# is not exact: ls-remote patterns still match by ref tail (see the note in
+# test-delta-review-scope.sh).
 git -C "$remote_sandbox/work" push -q origin issue-9-widget:refs/heads/x/issue-9-widget \
     || fatal "could not push x/issue-9-widget to the fixture remote"
 suffix_status=0
