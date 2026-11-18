@@ -96,7 +96,8 @@ human to dispose of findings, so there is no valid input.
   not to every slice on the branch. On the `github` backend there is none, and
   the count covers the branch.
 - **The sibling slice's branch, for a stacked PR**: the one `/pre-merge` put
-  in its `BASE_BRANCH=` placeholders. Step 1's fixup-target and fold-trial
+  in its `BASE_BRANCH=` placeholders, or the one `/respond-to-review` Step 5
+  reads from the PR's base branch. Step 1's fixup-target and fold-trial
   blocks take it in theirs, so they measure from where the fold rebases.
 
 If a number the human gave does not correspond to a finding, say which numbers
