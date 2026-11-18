@@ -1624,6 +1624,10 @@ pm_text="$(cat "$repo_root/pre-merge/review-checklist.md")"
 contains "pre-merge's docs/solutions dimension asks solutions-dirs" 'bash "$SC" solutions-dirs' "$pm_text"
 # shellcheck disable=SC2016  # literal pattern
 lacks "pre-merge restates no in_tree_path-none skip" 'unless it is `none`' "$pm_text"
+# #507: the same guards the /execute and /write-a-prd blocks carry, so the
+# checklist cannot put the old derivation back beside the verb.
+lacks "pre-merge's docs/solutions dimension derives no path itself" "path solutions" "$pm_text"
+lacks "pre-merge reads no solutions.in_tree_path itself" 'config get solutions.in_tree_path' "$pm_text"
 cc_text="$(cat "$repo_root/correct-course/SKILL.md")"
 # shellcheck disable=SC2016  # literal patterns
 contains "correct-course's stale-artifact check asks solutions-dirs" 'bash "$SC" solutions-dirs' "$cc_text"
