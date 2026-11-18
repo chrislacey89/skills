@@ -106,7 +106,7 @@ Then read the PR's state. The client may already have merged it, so this decides
 ```bash
 PR_STATE="$(gh pr view <number> --json state -q .state)" || { echo "closeout aborted: cannot read the PR's state" >&2; exit 1; }
 case "$PR_STATE" in
-  MERGED) echo "route: already merged (skip Step 2 and the merge; run the lock release, the work close, and the teardown)" ;;
+  MERGED) echo "route: already merged (Step 2 narrows to its fully-pushed check, skip the merge; run the lock release, the work close, and the teardown)" ;;
   OPEN) echo "route: full" ;;
   *) echo "closeout aborted: the PR is $PR_STATE: closed without merging, nothing to close out" >&2; exit 1 ;;
 esac

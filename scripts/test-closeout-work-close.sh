@@ -215,9 +215,16 @@ route CLOSED
 check "CLOSED: the route block stops" 1 "$rc"
 check "CLOSED: it says why" 1 "$(grep -c 'closed without merging' "$tmp/stderr")"
 
-# The skill prose gives MERGED its own route past Step 2 and the merge.
+# The skill prose gives MERGED its own route: Step 2 narrows to the fully-pushed check, and the merge is skipped.
 # shellcheck disable=SC2016  # the needles are the skill's literal text
-check "Step 2 keeps the fully-pushed check on a MERGED PR" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the first checkbox, that the feature branch is fully pushed, still holds' "$CO")"
+check "Step 2 keeps the fully-pushed check on a MERGED PR, and stops when it fails" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the first checkbox, that the feature branch is fully pushed, still holds.*If it fails, stop and report it\.' "$CO")"
+# The route line the agent prints must not tell it to skip Step 2 wholesale, and
+# the prose after the block must say Step 2 narrows instead.
+route MERGED
+check "MERGED: the printed route does not skip Step 2 wholesale" 0 "$(grep -c 'skip Step 2' <<<"$out")"
+check "MERGED: the printed route keeps Step 2's fully-pushed check" 1 "$(grep -c 'Step 2 narrows to its fully-pushed check' <<<"$out")"
+# shellcheck disable=SC2016
+check "the prose after the route block says Step 2 narrows to its fully-pushed check" 1 "$(grep -c '^On `route: already merged`.*Step 2 narrows to its fully-pushed check' "$CO")"
 # shellcheck disable=SC2016
 check "Step 3 skips the merge on a MERGED PR" 1 "$(grep -c 'If the PR already reports `MERGED`, skip the merge' "$CO")"
 
