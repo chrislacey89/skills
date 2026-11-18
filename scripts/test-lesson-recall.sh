@@ -1050,6 +1050,13 @@ if [ "$(id -u)" -ne 0 ]; then
 "group: amember unreadable
 group: root:0000000000000000000000000000000000000000 unreadable" "$(printf '%s\n' "$out" | grep '^group: ')"
     git -C "$AS" checkout -q -- sidecar.json
+    # A dangling symlink where a sidecar directory should be is unreadable too.
+    ln -s "$tmp/nowhere" "$tmp/sidecars/zdangling"
+    runo "$AP" lessons audit
+    rm -f "$tmp/sidecars/zdangling"
+    check "audit: a dangling sidecar-directory symlink is unreadable" \
+"group: amember readable
+group: zdangling unreadable" "$(printf '%s\n' "$out" | grep '^group: ')"
 fi
 
 # No lesson carries paths: the self-check could not run, never pass.
@@ -1416,6 +1423,61 @@ else
     printf '  (big-folder arm: %s lessons, %ss)\n' "$bigcount" "$(( $(date +%s) - bigstart ))"
     rm -rf "$BMS/solutions/big"
 fi
+
+section "a refused directory listing stops check, propose and audit"
+
+# A malformed solutions or solutions.related in the project's own sidecar: the
+# listing's refusal must stop each verb with a nonzero exit, never a false
+# dead-link or a report built from an empty group. A sidecar with no related
+# key is an empty group and still runs.
+mkproj
+RFP="$P"
+runo "$RFP" init --name refusal --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+RFS="$out"
+[ -d "$RFS" ] || fatal "init did not create a sidecar: $err"
+mkdir -p "$RFP/lib"; : > "$RFP/lib/a.sh"
+lesson "$RFP" "x/l-2026-01-01.md" "L" "paths: [lib]" "related: [m-2026-01-02.md]"
+lesson "$RFP" "x/m-2026-01-02.md" "M" "paths: [lib/a.sh]"
+git -C "$RFP" add docs lib && git -C "$RFP" commit -q -m "lessons"
+git -C "$RFP" checkout -q -b feat/r
+runo "$RFP" lessons match lib/other.sh --record start
+runo "$RFP" lessons flag docs/solutions/x/l-2026-01-01.md --for lib/other.sh --reason "r"
+cp "$RFS/sidecar.json" "$tmp/refusal.json"
+LF="docs/solutions/x/l-2026-01-01.md"
+runo "$RFP" lessons check "$LF"
+check "no related key: check of a file exits 0" 0 "$rc"
+check "no related key: check of a file reports no dead-link" 0 "$(printf '%s\n' "$out" | grep -c '^dead-link')"
+runo "$RFP" lessons propose "$LF"
+check "no related key: propose exits 0" 0 "$rc"
+runo "$RFP" lessons audit
+check "no related key: audit exits 0" 0 "$rc"
+for bad_json in '.solutions.related = "oops"' '.solutions = "str"'; do
+    jq "$bad_json" "$tmp/refusal.json" > "$RFS/sidecar.json"
+    for verb in "check $LF" "check" "propose $LF" "audit"; do
+        # shellcheck disable=SC2086  # the verb and its argument split on purpose
+        runo "$RFP" lessons $verb
+        if [ "$verb" = audit ] && [ "$bad_json" = '.solutions.related = "oops"' ]; then
+            # Only the group listing fails: the audit still finishes, and its
+            # flags section says it could not run, with the usual exit status.
+            check "[$bad_json] lessons audit: exits 0" 0 "$rc"
+            check "[$bad_json] lessons audit: flags could-not-run" 1 "$(printf '%s\n' "$out" | grep -c '^flags: could-not-run')"
+            case "$err" in *"solutions.related"*) ok "[$bad_json] lessons audit: reason on stderr" ;; *) bad "[$bad_json] lessons audit: reason on stderr" "stderr [$err]" ;; esac
+        elif [ "$rc" -ne 0 ]; then ok "[$bad_json] lessons $verb: exits nonzero"; else bad "[$bad_json] lessons $verb: exits nonzero" "rc=0, stdout [$out]"; fi
+        case "$out" in *dead-link*) bad "[$bad_json] lessons $verb: no false dead-link" "$out" ;; *) ok "[$bad_json] lessons $verb: no false dead-link" ;; esac
+    done
+done
+cp "$tmp/refusal.json" "$RFS/sidecar.json"
+
+# Only cmd_solutions_dirs fails here: with sidecar.json valid, the related
+# listing succeeds, so the refuse after the project's own listing is the only
+# thing that can stop a single-file check from printing a false dead-link.
+if [ -d "$RFS/solutions" ]; then mv "$RFS/solutions" "$tmp/refusal-solutions"; else rm -f "$RFS/solutions"; fi
+: > "$RFS/solutions"
+runo "$RFP" lessons check "$LF"
+if [ "$rc" -ne 0 ]; then ok "unlistable own solutions dir: check of a file exits nonzero"; else bad "unlistable own solutions dir: check of a file exits nonzero" "rc=0, stdout [$out]"; fi
+case "$out" in *dead-link*) bad "unlistable own solutions dir: check of a file reports no dead-link" "$out" ;; *) ok "unlistable own solutions dir: check of a file reports no dead-link" ;; esac
+rm -f "$RFS/solutions"
+[ ! -d "$tmp/refusal-solutions" ] || mv "$tmp/refusal-solutions" "$RFS/solutions"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

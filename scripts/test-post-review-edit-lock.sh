@@ -925,6 +925,12 @@ if ! ( cd "$stamprepo" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_RO
         bash "$sidecar_sh" init --name lock --mode guest --write sidecar --in-tree-path none --no-migrate-archive ) >/dev/null 2>&1; then
     fatal "could not init a sidecar for the stamp scratch repo"
 fi
+# A declared base no fallback would guess (#605): a block that wrote a literal
+# BASE_REF=main instead of asking base-ref would then record the wrong base.
+git -C "$stamprepo" branch -f lock-base HEAD >/dev/null 2>&1
+( cd "$stamprepo" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" \
+    bash "$sidecar_sh" config set base_ref lock-base ) >/dev/null 2>&1 \
+    || fatal "could not declare base_ref lock-base in the stamp scratch sidecar"
 run_sidecar_stamp_block
 assert_eq 0 "$sidecar_block_status" "with a sidecar, the sidecar stamp block runs through to the flag"
 if [ -f "$stamprepo/$stamp_rel" ]; then
@@ -936,12 +942,31 @@ sidecar_read="$(cd "$stamprepo" && SKILL_KIT_SIDECAR_ROOT="$sc_root" bash "$side
 assert_eq "$(git -C "$stamprepo" rev-parse HEAD)" "$sidecar_read" "…and the stamp it committed reads back as the head it reviewed"
 # The block runs in its own shell, so it must ask base-ref itself (#597): a stamp that
 # records an empty base_ref is the failure this pins.
+# #605: equal to what base-ref prints in the same fixture, not merely non-empty.
 sidecar_stamp_base="$(jq -r '.base_ref // empty' "$sc_root"/lock/reviews/*.json 2>/dev/null | head -n1 || true)"
-if [ -n "$sidecar_stamp_base" ]; then
-    assert_eq "non-empty" "non-empty" "…and the stamp records a non-empty base_ref"
-else
-    assert_eq "non-empty" "empty" "…and the stamp records a non-empty base_ref"
+sidecar_base_ref="$(cd "$stamprepo" && SKILL_KIT_SIDECAR_ROOT="$sc_root" bash "$sidecar_sh" base-ref 2>/dev/null)" || sidecar_base_ref=""
+[ -n "$sidecar_base_ref" ] || fatal "sidecar.sh base-ref printed nothing in the stamp scratch repo"
+assert_eq "$sidecar_base_ref" "$sidecar_stamp_base" "…and the stamp records the base_ref sidecar.sh base-ref prints"
+rm -f "$stamprepo/$stamp_rel"
+
+# #605: with the placeholder empty and base-ref failing, the block must stop
+# before the stamp: a swallowed failure (`|| true`) would write a stamp with an
+# empty base and set the flag. base-ref fails for real here: an empty declared
+# base_ref is refused.
+rm -f "$sc_root"/lock/reviews/*.json
+jq '.base_ref = ""' "$sc_root/lock/sidecar.json" > "$scratch/lock-sidecar.json" && mv "$scratch/lock-sidecar.json" "$sc_root/lock/sidecar.json"
+if ( cd "$stamprepo" && SKILL_KIT_SIDECAR_ROOT="$sc_root" bash "$sidecar_sh" base-ref ) >/dev/null 2>&1; then
+    fatal "fixture precondition: base-ref should fail on an empty declared base_ref"
 fi
+run_sidecar_stamp_block
+assert_eq 1 "$sidecar_block_status" "with base-ref failing, the sidecar stamp block aborts"
+assert_eq "" "$(ls "$sc_root"/lock/reviews/*.json 2>/dev/null || true)" "…and writes no reviews/*.json"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "no flag" "flag written" "…and leaves no $stamp_rel behind"
+else
+    assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
+fi
+git -C "$sc_root/lock" checkout -q -- sidecar.json
 rm -f "$stamprepo/$stamp_rel"
 
 # A stacked PR's sibling branch, filled into the placeholder, is what the stamp records (#604).
@@ -1190,9 +1215,22 @@ section "10. neither flag can be committed into this repo"
 # this pack tolerates filesystem state at all. A committed copy would hold the
 # lock shut, or hold it open, across every future branch — so this is measured
 # with git's own matcher rather than by reading .gitignore.
+#
+# The repo's .gitignore text is copied into a FRESH scratch repo created with an
+# EMPTY template, and git is asked there, so nothing else on the machine can
+# answer for a deleted entry: not the real repo's `.git/info/exclude` (#375),
+# not a git template directory's `info/exclude`, and, with
+# `-c core.excludesFile=/dev/null`, not a global excludes file naming
+# `.claude/`. Asking the real repo would pass here while failing on a clean clone.
+
+empty_template="$scratch/empty-template-10"
+ignore_probe="$scratch/ignore-probe-10"
+mkdir -p "$empty_template" "$ignore_probe"
+git init -q --template="$empty_template" "$ignore_probe" || fatal "could not git init a scratch repo for section 10"
+cp "$repo_root/.gitignore" "$ignore_probe/.gitignore" || fatal "could not copy .gitignore into the scratch repo"
 
 for flag in "$stamp_rel" "$fixer_rel"; do
-    if git check-ignore -q "$flag"; then
+    if git -C "$ignore_probe" -c core.excludesFile=/dev/null check-ignore -q -- "$flag"; then
         assert_eq "ignored" "ignored" "$flag is ignored by this repo"
     else
         assert_eq "ignored" "tracked" "$flag is ignored by this repo"

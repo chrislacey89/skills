@@ -112,7 +112,10 @@
 #   1. <path> as given, relative to the current directory. A leading "~/" is
 #      expanded to $HOME; "~user/" and a bare "~" are left alone, so they are
 #      looked up literally and miss. A "#anchor" suffix is stripped when <path>
-#      does not exist with it, so name.md#section finds name.md.
+#      does not exist with it, so name.md#section finds name.md. So is a line
+#      suffix that is all line numbers (":12", ":12-20", ":12+", ":12, 30-31"),
+#      so name.md:12 finds name.md. A real name holding ":12" wins over the stripped
+#      name at every step below too, not only here.
 #   2. beside the referrer: dirname(<referrer>)/<path>, for a relative <path>.
 #   3. for a bare name (no "/"): <name> in each sibling category folder, that is
 #      dirname(dirname(<referrer>))/*/<name>, in glob (alphabetical) order. A name
@@ -164,7 +167,8 @@
 #
 # solutions-dirs policy. The directories a reader searches for lessons, one per
 # line: the sidecar's solutions/ (created if absent), then the project's
-# solutions.in_tree_path unless it is "none", then docs/solutions when that
+# solutions.in_tree_path unless it is "none" (leading "./" and trailing "/"
+# stripped), then docs/solutions when that
 # directory exists in the tree and is not already listed (a /excavate PR commits
 # there whatever in_tree_path says). With no sidecar it prints docs/solutions
 # alone. In-tree entries are relative to the current directory.
@@ -456,9 +460,9 @@ file_lists_key() {
 # matches a path under a directory it cannot search, so a sidecar directory at
 # mode 000 or 444 used to drop out of the scan and read as a miss, which
 # `backend` answers with `github` (chrislacey89/skills#542). A directory that
-# cannot be entered is unread, like a corrupt file, and so is a sidecar.json
-# that is present but not a regular file; a directory with no sidecar.json is
-# skipped.
+# cannot be entered is unread, like a corrupt file, and so are a sidecar.json
+# that is present but not a regular file and an entry that is a symlink to
+# nothing; a directory with no sidecar.json is skipped.
 #
 # The loop below starts one jq per sidecar for each key it is asked about. A
 # caller about to ask about several keys runs owners_scan first, which answers
@@ -472,14 +476,20 @@ owners_of() {
         return 0
     fi
     # A root that exists but cannot be listed and entered hides every sidecar
-    # in it; only a root that does not exist at all is a miss.
-    if [ -e "$SIDECAR_ROOT" ] && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
+    # in it, and so does a symlink to nothing at the root path: only a
+    # root path that holds nothing at all is a miss.
+    if { [ -e "$SIDECAR_ROOT" ] || [ -L "$SIDECAR_ROOT" ]; } && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
         printf 'sidecar.sh: cannot list %s; refusing to treat it as a miss\n' "$SIDECAR_ROOT" >&2
         return 2
     fi
-    for d in "$SIDECAR_ROOT"/*/; do
+    for d in "$SIDECAR_ROOT"/*; do
+        # A symlink to nothing never matched the */ this loop used to walk, so
+        # it read as a miss; it is present and unreadable.
+        if [ -L "$d" ] && [ ! -e "$d" ]; then
+            unread="${unread:+$unread$'\n'}$d (a symlink to nothing)"
+            continue
+        fi
         [ -d "$d" ] || continue
-        d="${d%/}"
         f="$d/sidecar.json"
         if [ ! -x "$d" ]; then
             unread="${unread:+$unread$'\n'}$d (cannot enter the directory)"
@@ -519,7 +529,7 @@ owners_of() {
 # sidecars, held in SCAN_HITS as "H<TAB>key<TAB>dir" lines. It answers only
 # when every sidecar is plainly readable, so it never has an unread file to
 # report: on anything owners_of names (a root it cannot list, a directory it
-# cannot enter, a sidecar.json that is not a regular file, one holding no JSON
+# cannot enter, a symlink to nothing, a sidecar.json that is not a regular file, one holding no JSON
 # value or several (each file is parsed on its own, so a value split across two files is corrupt in both), or a "keys" that is not an array) it records
 # nothing, and owners_of reads file by file and names the problem as before. The answer is
 # the sidecars as they were when it ran, so a caller runs scan_clear before it
@@ -535,9 +545,9 @@ owners_scan() {
         keyset="$keyset$k"$'\n'
     done
     [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ] || return 0
-    for d in "$SIDECAR_ROOT"/*/; do
+    for d in "$SIDECAR_ROOT"/*; do
+        if [ -L "$d" ] && [ ! -e "$d" ]; then return 0; fi
         [ -d "$d" ] || continue
-        d="${d%/}"
         f="$d/sidecar.json"
         [ -x "$d" ] || return 0
         if [ ! -f "$f" ]; then
@@ -591,9 +601,13 @@ label_ok() { case "$1" in ''|.*|*/*|*[!a-z0-9._-]*) return 1 ;; esac; }
 # identity, so a sidecar it cannot read is only named on stderr and skipped.
 system_labels() {
     local d f label
-    for d in "$SIDECAR_ROOT"/*/; do
+    for d in "$SIDECAR_ROOT"/*; do
+        # A dangling symlink is not a directory, and could be a member: name it.
+        if [ -L "$d" ] && [ ! -e "$d" ]; then
+            printf 'sidecar.sh: cannot read %s (dangling symlink); skipped\n' "$d" >&2
+            continue
+        fi
         [ -d "$d" ] || continue
-        d="${d%/}"
         f="$d/sidecar.json"
         if [ ! -x "$d" ]; then
             printf 'sidecar.sh: cannot read %s (cannot enter the directory); skipped\n' "$d" >&2
@@ -712,6 +726,17 @@ $k"
     printf '%s\n' "$hit"
 }
 
+# One meaning for solutions.in_tree_path in every reader: a leading "./" and a
+# trailing "/" stripped, so docs/solutions/ and ./docs/solutions are
+# docs/solutions. Written by init, applied again on config get and in
+# solutions-dirs so a sidecar written before this existed agrees too.
+norm_in_tree_path() {
+    local itp="$1"
+    while [ "${itp#./}" != "$itp" ] && [ "$itp" != "./" ]; do itp="${itp#./}"; done
+    while [ "${#itp}" -gt 1 ] && [ "${itp%/}" != "$itp" ]; do itp="${itp%/}"; done
+    printf '%s' "$itp"
+}
+
 cmd_init() {
     local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind forge_write migrate=1 aliases=""
     while [ $# -gt 0 ]; do
@@ -732,6 +757,7 @@ cmd_init() {
     case "$mode" in owned|guest) ;; *) die_usage "init: --mode must be owned or guest" ;; esac
     case "$write" in sidecar|in-tree|ask) ;; *) die_usage "init: --write must be sidecar, in-tree, or ask" ;; esac
     [ -n "$itp" ] || die_usage "init: --in-tree-path is required (a path, or none)"
+    itp="$(norm_in_tree_path "$itp")"
     if [ "$write" != "sidecar" ] && [ "$itp" = "none" ]; then
         die_usage "init: --write $write needs an in-tree path, not none"
     fi
@@ -895,7 +921,13 @@ cmd_config() {
         get)
             [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
             sc="$(do_resolve)" || exit 1
-            jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+            if [ "$2" = "solutions.in_tree_path" ]; then
+                local itp
+                itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")" || exit 1
+                [ -z "$itp" ] || { norm_in_tree_path "$itp"; printf '\n'; }
+            else
+                jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+            fi
             ;;
         set)
             [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>|design <json>>"
@@ -1305,8 +1337,12 @@ cmd_solutions_dirs() {
     if sc="$(do_resolve 2>"$err")"; then
         cat "$err" >&2
         mkdir -p "$sc/solutions" || { rm -f "$err"; refuse "solutions-dirs: cannot create $sc/solutions"; }
+        itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")" \
+            || { rm -f "$err"; refuse "solutions-dirs: cannot read solutions.in_tree_path from $sc/sidecar.json"; }
         printf '%s\n' "$sc/solutions"
-        itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
+        # Normalized before the dedupe below: docs/solutions/ and
+        # ./docs/solutions name the same directory as docs/solutions.
+        itp="$(norm_in_tree_path "$itp")"
         case "$itp" in ''|none) ;; *) printf '%s\n' "$itp"; seen="$itp" ;; esac
     else
         sc=""
@@ -1469,39 +1505,65 @@ cmd_require() {
     printf '%s\n' "$hit"
 }
 
+# cited_probe <path>: step 1 of the header's "require resolution order", the
+# path as given with "~/" expanded and a #anchor or :line suffix stripped when
+# the path does not exist with it.
+cited_probe() {
+    # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
+    local probe="$1"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
+    # A link may carry a section anchor (name.md#section); look up the file.
+    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
+    # An anchor may carry a line suffix (path:12, :12-20, :12+, :12, 30-31);
+    # look up the file. Only a suffix that is all line numbers is stripped, and
+    # only when the path does not exist with it, so a real name holding a
+    # colon is still found as named.
+    if [ ! -e "$probe" ] && [[ "$probe" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
+        probe="${BASH_REMATCH[1]}"
+    fi
+    printf '%s\n' "$probe"
+}
+
 # resolve_cited <path> <referrer>: require's lookup, shared with trace. Prints
 # the physical path of the first candidate that exists, or returns 1; the order
 # is the header's "require resolution order", and the duplicate-category
 # warning goes to stderr here so both callers print it.
 resolve_cited() {
-    local path="$1" from="$2"
-    # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
-    local probe="$path"
+    local path="$1" from="$2" probe raw c
+    probe="$(cited_probe "$path")"
+    # The path as written (with "~/" expanded), tried before the stripped form at
+    # every step: a real file named "log:12" beside the referrer must beat "log".
+    raw="$path"
     # shellcheck disable=SC2088  # the literal ~ is the point
-    case "$path" in "~/"*) probe="$HOME/${path#"~/"}" ;; esac
-    # A link may carry a section anchor (name.md#section); look up the file.
-    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
+    case "$raw" in "~/"*) raw="$HOME/${raw#"~/"}" ;; esac
     # A relative link inside a lesson is relative to the lesson's own folder, so when
     # --from names an existing file, also try the path beside it.
-    if [ ! -e "$probe" ] && [ -f "$from" ]; then
-        case "$probe" in /*) ;; *) [ -e "$(dirname "$from")/$probe" ] && probe="$(dirname "$from")/$probe" ;; esac
+    if [ ! -e "$probe" ] && [ ! -e "$raw" ] && [ -f "$from" ]; then
+        for c in "$raw" "$probe"; do
+            case "$c" in /*) ;; *) [ -e "$(dirname "$from")/$c" ] && { probe="$(dirname "$from")/$c"; break; } ;; esac
+        done
     fi
     # A bare name may also live in a sibling category folder (<store>/<category>/<name>.md),
-    # so look one level up and across, never deeper.
+    # so look one level up and across, never deeper. The name as written is tried
+    # before the stripped one.
     if [ ! -e "$probe" ] && [ -f "$from" ]; then
-        case "$probe" in
-            /*|*/*) ;;
-            *) local cand first="" hits=""
-               for cand in "$(dirname "$(dirname "$from")")"/*/"$probe"; do
-                   [ -e "$cand" ] || continue
-                   [ -n "$first" ] || first="$cand"
-                   hits="${hits:+$hits }$cand"
-               done
-               if [ -n "$first" ]; then
-                   [ "$hits" = "$first" ] || printf 'sidecar.sh: warning: %s is in more than one category folder: %s; using %s\n' "$probe" "$hits" "$first" >&2
-                   probe="$first"
-               fi ;;
-        esac
+        for c in "$raw" "$probe"; do
+            case "$c" in
+                /*|*/*) ;;
+                *) local cand first="" hits=""
+                   for cand in "$(dirname "$(dirname "$from")")"/*/"$c"; do
+                       [ -e "$cand" ] || continue
+                       [ -n "$first" ] || first="$cand"
+                       hits="${hits:+$hits }$cand"
+                   done
+                   if [ -n "$first" ]; then
+                       [ "$hits" = "$first" ] || printf 'sidecar.sh: warning: %s is in more than one category folder: %s; using %s\n' "$c" "$hits" "$first" >&2
+                       probe="$first"
+                       break
+                   fi ;;
+            esac
+        done
     fi
     [ -e "$probe" ] || return 1
     # A hit may be beside the referrer or in a sibling category, not where the
@@ -2373,7 +2435,7 @@ lesson_links() {
 }
 
 trace_lesson() {
-    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel="" rdirs links
+    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel="" rdirs rerr links
     [ -f "$file" ] || refuse "trace: no such work item or file: $file"
     self="$(abs_path "$file")"
     # solutions-dirs names in-tree dirs relative to the cwd, so it is asked from
@@ -2384,7 +2446,7 @@ trace_lesson() {
     raw="docs/solutions"
     if in_repo; then
         top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || top=""
-        raw="$(cd "${top:-.}" && cmd_solutions_dirs)"
+        raw="$(cd "${top:-.}" && cmd_solutions_dirs)" || refuse "trace: could not list the lesson directories"
     fi
     while IFS= read -r d; do
         [ -n "$d" ] || continue
@@ -2437,7 +2499,12 @@ trace_lesson() {
     # replaces, related, and replaced by, resolved across the project's stores
     # and its group's, read-only. Appended after every existing key.
     rdirs=""
-    if in_repo; then rdirs="$(cd "${top:-.}" && cmd_related_solutions_dirs 2>/dev/null)" || rdirs=""; fi
+    if in_repo; then
+        rerr="$(mktemp)" || refuse "trace: cannot create a temp file"
+        rdirs="$(cd "${top:-.}" && cmd_related_solutions_dirs 2>"$rerr")" \
+            || { cat "$rerr" >&2; rm -f "$rerr"; refuse "trace: could not list the related lesson directories"; }
+        rm -f "$rerr"
+    fi
     links="$(lesson_links "$self" "$dirs" "$rdirs")" || refuse "trace: could not read the lessons $self links to"
     # shellcheck disable=SC2016  # $-names are jq variables
     out="$(printf '%s\n' "$links" | jq -Rnc --argjson base "$out" '
@@ -2822,17 +2889,12 @@ lessons_index() {
     return "$rc"
 }
 
-# lessons_resolve_name <lesson file name> [<index>]: one line per lesson file
-# with that base name, across the directories solutions-dirs and
-# related-solutions-dirs print, a group member's prefixed "related project: ".
-# No line means no lesson has the name. Links are names, never paths, so a
-# name holding "/" resolves to nothing. With no index, one is built here.
+# lessons_resolve_name <lesson file name> <index>: one line per lesson file
+# with that base name in the index lessons_index printed, a group member's
+# prefixed "related project: ". No line means no lesson has the name. Links
+# are names, never paths, so a name holding "/" resolves to nothing.
 lessons_resolve_name() {
-    local want="$1" idx tag path
-    if [ $# -ge 2 ]; then idx="$2"
-    else
-        idx="$(lessons_index "$(cmd_solutions_dirs)" "$(cmd_related_solutions_dirs)")" || return 1
-    fi
+    local want="$1" idx="$2" tag path
     case "$want" in ''|*/*) return 0 ;; esac
     while IFS=$'\t' read -r tag path; do
         [ "${path##*/}" = "$want" ] || continue
@@ -2939,7 +3001,7 @@ lessons_listed() {
 
 # shellcheck disable=SC2120  # its argument comes through cmd_lessons' "lessons_$sub" dispatch
 lessons_check() {
-    local top file="" dirs="" d list="" raw t a b c det bk listed="" n=0 out="" abs idx hits
+    local top file="" dirs="" d list="" raw t a b c det bk listed="" n=0 out="" abs idx hits rdirs
     [ $# -le 1 ] || die_usage "usage: sidecar.sh lessons check [<lesson-file>]"
     in_repo || refuse "lessons check: not inside a git repository"
     top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || refuse "lessons check: cannot find the project's top level"
@@ -2964,7 +3026,11 @@ lessons_check() {
                 || refuse "lessons check: could not read the lesson headers"
         fi
     fi
-    idx="$(lessons_index "${dirs:-$(cmd_solutions_dirs)}" "$(cmd_related_solutions_dirs)")" \
+    # Each listing is read on its own line so its refusal is not lost in
+    # argument position; a single-file check has no dirs yet.
+    [ -n "$dirs" ] || dirs="$(cmd_solutions_dirs)" || refuse "lessons check: could not list the lesson directories"
+    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons check: could not list the related lesson directories"
+    idx="$(lessons_index "$dirs" "$rdirs")" \
         || refuse "lessons check: could not list the lessons a link may name"
     bk="$(cmd_backend slices 2>/dev/null)" || bk=failed
     [ "$bk" != sidecar ] || listed="$(lessons_listed "$top")"
@@ -3056,9 +3122,13 @@ lessons_audit_group() {
     own="$(jq -r '.solutions.system // "" | strings' "$sc/sidecar.json" 2>/dev/null)" || own=""
     rel="$(jq -r '.solutions.related // [] | .[]? | strings' "$sc/sidecar.json" 2>/dev/null)" || rel=""
     if [ -n "$own" ]; then
-        for d in "$SIDECAR_ROOT"/*/; do
+        for d in "$SIDECAR_ROOT"/*; do
+            # A dangling symlink is not a directory, and could be a member: unreadable.
+            if [ -L "$d" ] && [ ! -e "$d" ]; then
+                lessons_group_line "$d" "${d##*/}" unreadable
+                continue
+            fi
             [ -d "$d" ] || continue
-            d="${d%/}"
             [ "$d" != "$sc" ] || continue
             f="$d/sidecar.json"
             if [ ! -x "$d" ] || { [ -e "$f" ] && ! label="$(jq -r '.solutions.system // "" | strings' "$f" 2>/dev/null)"; }; then
@@ -3089,13 +3159,15 @@ lessons_audit_group() {
 # open flags, whose entries are checked against the lesson as it is now, here
 # or in the group.
 lessons_audit_flags() {
-    local sc="$1" own="$2" sum all files=() f ret lname entry cnt fat reason es
+    local sc="$1" own="$2" sum all rdirs files=() f ret lname entry cnt fat reason es
     sum="$(lessons_flag_summary "$sc")" || return 1
     [ -n "$sum" ] || return 0
     all="$(lessons_scan "$own")" || return 1
-    # The group is read best effort; lessons_scan_group's comment states the
-    # rule. The project's own store above stays strict.
-    all="$all"$'\n'"$(lessons_scan_group "$(cmd_related_solutions_dirs 2>/dev/null)")"
+    # A refused listing of the group's directories returns 1 here, so the
+    # caller prints "flags: could-not-run"; the listing's own refusal
+    # message is already on stderr.
+    rdirs="$(cmd_related_solutions_dirs)" || return 1
+    all="$all"$'\n'"$(lessons_scan_group "$rdirs")"
     for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
     ret=""
     if [ "${#files[@]}" -gt 0 ]; then
@@ -3293,7 +3365,7 @@ lessons_flag() {
 # resolves to a lesson here or in the group, as a file name, once. It never
 # proposes replaces: only a person can say one lesson took another's place.
 lessons_propose() {
-    local file top raw dirs="" d self comps e n out="" seen=$'\n' idx lines kind tok res b rel="" rseen=$'\n'
+    local file top raw dirs="" d self comps e n out="" seen=$'\n' idx lines kind tok res b rel="" rseen=$'\n' rdirs
     [ $# -eq 1 ] || die_usage "usage: sidecar.sh lessons propose <lesson-file>"
     file="$1"
     [ -f "$file" ] || refuse "lessons propose: no such lesson file: $file"
@@ -3327,7 +3399,8 @@ lessons_propose() {
         [ -d "$d" ] || continue
         dirs="${dirs:+$dirs$'\n'}$(cd "$d" && pwd -P)"
     done <<<"$raw"
-    idx="$(lessons_index "$raw" "$(cmd_related_solutions_dirs)")" || refuse "lessons propose: could not list the lessons"
+    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons propose: could not list the related lesson directories"
+    idx="$(lessons_index "$raw" "$rdirs")" || refuse "lessons propose: could not list the lessons"
     lines="$(lesson_cites "$self" "$top" "$dirs")"
     while IFS=$'\t' read -r kind tok res; do
         case "$kind" in

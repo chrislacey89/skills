@@ -105,6 +105,10 @@ J="$SIDECAR/sidecar.json"
 check "sidecar.json declares schema 2" 2 "$(jq -r .schema "$J")"
 check "solutions.write is recorded" ask "$(jq -r .solutions.write "$J")"
 check "solutions.in_tree_path is recorded" docs/adr "$(jq -r .solutions.in_tree_path "$J")"
+ITPN="$tmp/itp-norm"
+mkrepo "$ITPN"
+(cd "$ITPN" && SKILL_KIT_SIDECAR_ROOT="$tmp/itp-norm-root" bash "$SC" init --name itpn --mode guest --write ask --in-tree-path ./docs/solutions/ --no-migrate-archive >/dev/null 2>&1)
+check "init stores in_tree_path normalized" docs/solutions "$(jq -r .solutions.in_tree_path "$tmp/itp-norm-root/itpn/sidecar.json")"
 check "sidecar.json carries a root: key" 1 "$(jq '[.keys[] | select(startswith("root:"))] | length' "$J")"
 check "sidecar.json carries the main checkout's path: key" \
     "path:$(printf '%s' "$PROJ" | tr '[:upper:]' '[:lower:]')" "$(jq -r '.keys[] | select(startswith("path:"))' "$J")"
@@ -258,6 +262,34 @@ out=$(cd "$tmp" && bash "$SC" require "sibling.md#why" --from "lessons/a/entry.m
 check "require strips a #anchor and finds the file" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "nowhere.md#why" --from "lessons/a/entry.md" 2>&1); rc=$?
 check "require on an absent name with an anchor reports the path as given" "1:MISSING: nowhere.md#why (referenced by lessons/a/entry.md)" "$rc:$out"
+# #577: a path:line anchor (the form a third of filed Context anchors use)
+# names the file before the line suffix, in each form the census found.
+for form in "sibling.md:12" "sibling.md:12-20" "sibling.md:12+" "sibling.md:12, 30-31"; do
+    out=$(cd "$tmp" && bash "$SC" require "$form" --from "lessons/a/entry.md" 2>&1); rc=$?
+    check "require strips a line suffix and finds the file: $form" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
+done
+out=$(cd "$tmp" && bash "$SC" require "nowhere.md:12" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require on an absent name with a line suffix reports the path as given" "1:MISSING: nowhere.md:12 (referenced by lessons/a/entry.md)" "$rc:$out"
+out=$(cd "$tmp" && bash "$SC" require "sibling.md:12x" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require strips only a line-number suffix, not any colon-digit tail" "1:MISSING: sibling.md:12x (referenced by lessons/a/entry.md)" "$rc:$out"
+# A real file whose name holds ":<digits>" is found as named, not as its prefix.
+mkdir -p "$tmp/colon"; : > "$tmp/colon/log"; : > "$tmp/colon/log:12"
+out=$(cd "$tmp" && bash "$SC" require "colon/log:12" --from "PRD #1" 2>&1); rc=$?
+check "require finds an existing file whose name contains a colon as named" "0:$tmp/colon/log:12" "$rc:$out"
+
+mkdir -p "$tmp/colonsib/lessons/a"; : > "$tmp/colonsib/lessons/a/entry.md"; : > "$tmp/colonsib/lessons/a/log:12"
+out=$(cd "$tmp/colonsib" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require finds a colon-named file beside the referrer" "0:$tmp/colonsib/lessons/a/log:12" "$rc:$out"
+: > "$tmp/colonsib/lessons/a/log"
+out=$(cd "$tmp/colonsib" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require prefers the colon-named sibling over a sibling with the stripped name" "0:$tmp/colonsib/lessons/a/log:12" "$rc:$out"
+# Step 3 (a sibling category folder) also tries the name as written before the stripped one.
+mkdir -p "$tmp/colonsib3/lessons/a" "$tmp/colonsib3/lessons/b"; : > "$tmp/colonsib3/lessons/a/entry.md"; : > "$tmp/colonsib3/lessons/b/log:12"
+out=$(cd "$tmp/colonsib3" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require finds a colon-named file in a sibling category folder" "0:$tmp/colonsib3/lessons/b/log:12" "$rc:$out"
+: > "$tmp/colonsib3/lessons/b/log"
+out=$(cd "$tmp/colonsib3" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require prefers the colon-named file over the stripped name in a sibling category folder" "0:$tmp/colonsib3/lessons/b/log:12" "$rc:$out"
 # shellcheck disable=SC2088  # literal ~user and ~ are the inputs under test
 out=$(HOME="$tmp/home" bash "$SC" require "~user/r/a.md" --from "PRD #1" 2>&1); rc=$?
 # shellcheck disable=SC2088
@@ -408,6 +440,29 @@ run "$GUEST" commit -- "$RES/note.md" -m "test: note"
 check "a direct commit from the guest project succeeds" 0 "$rc"
 check "git status --porcelain in the project is empty" "" "$(git -C "$GUEST" status --porcelain)"
 check "no file under the project's .git changed" "$GUEST_BEFORE" "$(fingerprint "$GUEST")"
+
+# #541 item 1: docs/state-backend.md says no verb writes to the project's tree
+# or its .git; backend and stamp are pinned here beside init and commit. A new
+# remote first, so the reads below also take the path where do_resolve appends
+# an alias and commits it in the sidecar, the one place a read commits.
+git -C "$GUEST" remote add mirror https://github.com/acme/guest-mirror.git
+GUEST_BEFORE="$(fingerprint "$GUEST")"
+gbranch="$(git -C "$GUEST" branch --show-current)"
+ghead="$(git -C "$GUEST" rev-parse HEAD)"
+for a in prds slices stamp; do
+    runo "$GUEST" backend "$a"
+    check "backend $a on the guest project answers sidecar" "0 sidecar" "$rc $out"
+done
+check "a backend read appended the new remote as an alias in the sidecar" 1 \
+    "$(jq '[.keys[] | select(. == "remote:github.com/acme/guest-mirror")] | length' "$GSC/sidecar.json")"
+runo "$GUEST" stamp write "$gbranch" "$ghead"
+check "stamp write on the guest project succeeds" 0 "$rc"
+runo "$GUEST" stamp read "$gbranch"
+check "stamp read on the guest project returns the head" "0 $ghead" "$rc $out"
+runo "$GUEST" stamp clear "$gbranch"
+check "stamp clear on the guest project succeeds" 0 "$rc"
+check "backend and stamp leave git status --porcelain in the project empty" "" "$(git -C "$GUEST" status --porcelain)"
+check "backend and stamp change no file under the project's .git" "$GUEST_BEFORE" "$(fingerprint "$GUEST")"
 
 # -----------------------------------------------------------------------------
 section "resolve refuses to add an alias another sidecar owns"
@@ -684,6 +739,13 @@ check "a refused @{-1} leaves the key as it was" develop "$(jq -r .base_ref "$BS
 brun "$BR/clone" config set base_ref v1
 check "config set refuses a tag name" 1 "$rc"
 check "a refused tag leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
+# #605: the hand-edit path below refuses these for base-ref; the setter must
+# refuse them too, so a revision expression never reaches the key.
+for expr in 'develop~1' 'HEAD'; do
+    brun "$BR/clone" config set base_ref "$expr"
+    check "config set refuses the revision expression $expr" "refused" "$([ "$rc" -ne 0 ] && echo refused || echo "accepted (rc 0)")"
+    check "a refused $expr leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
+done
 
 # Hand edits: the verb refuses each shape, and never prints the fallback.
 bset() { jq "$@" "$BSJ" > "$BR/sj" && mv "$BR/sj" "$BSJ"; }
@@ -1565,6 +1627,37 @@ jq '.solutions.in_tree_path = "docs/solutions"' "$MSC/sidecar.json" > "$MSC/sj" 
 dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
 check "solutions-dirs does not list docs/solutions twice" "$SOLS
 docs/solutions" "$dirs"
+# #508: the dedupe compares a normalized in_tree_path, so a trailing "/" or a
+# leading "./" does not list docs/solutions twice.
+for spelling in "docs/solutions/" "./docs/solutions" "./docs/solutions/"; do
+    jq --arg p "$spelling" '.solutions.in_tree_path = $p' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+    dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+    check "solutions-dirs with in_tree_path $spelling lists docs/solutions once" "$SOLS
+docs/solutions" "$dirs"
+    # Every reader gets one meaning: config get normalizes a value stored raw.
+    runo "$MIG" config get solutions.in_tree_path
+    check "config get solutions.in_tree_path with stored $spelling is docs/solutions" docs/solutions "$out"
+done
+jq '.solutions.in_tree_path = "./docs/adr/"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs prints a normalized in_tree_path" "$SOLS
+docs/adr
+docs/solutions" "$dirs"
+# A read the sidecar could not make is a refusal, not an answer: a jq failure
+# exits nonzero, and an unset key prints nothing (no bare newline).
+git -C "$MSC" checkout -q -- sidecar.json
+jq '.solutions = "str"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+runo "$MIG" config get solutions.in_tree_path
+if [ "$rc" -ne 0 ]; then ok "config get solutions.in_tree_path exits nonzero when jq cannot read it"; else bad "config get solutions.in_tree_path exits nonzero when jq cannot read it" "rc=0, stdout [$out]"; fi
+raw="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null; printf 'rc=%s' "$?")"
+# solutions-dirs reads the same key, so it refuses too rather than printing a
+# shorter list than the project configured.
+check "solutions-dirs exits nonzero and prints no list when jq cannot read in_tree_path" "rc=1" "$raw"
+git -C "$MSC" checkout -q -- sidecar.json
+jq 'del(.solutions.in_tree_path)' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+if [ "$(jq -r '.solutions.in_tree_path // "unset"' "$MSC/sidecar.json")" = unset ]; then ok "the unset-key case starts from a sidecar.json that is valid and lacks in_tree_path"; else bad "the unset-key case starts from a sidecar.json that is valid and lacks in_tree_path" "$(cat "$MSC/sidecar.json")"; fi
+raw="$(cd "$MIG" && bash "$SC" config get solutions.in_tree_path 2>/dev/null; printf x)"
+check "config get solutions.in_tree_path prints nothing when the key is unset" "x" "$raw"
 git -C "$MSC" checkout -q -- sidecar.json
 rm -f "$MIG/docs/solutions/planted.md"; rmdir "$MIG/docs/solutions"
 jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
@@ -1612,6 +1705,10 @@ pm_text="$(cat "$repo_root/pre-merge/review-checklist.md")"
 contains "pre-merge's docs/solutions dimension asks solutions-dirs" 'bash "$SC" solutions-dirs' "$pm_text"
 # shellcheck disable=SC2016  # literal pattern
 lacks "pre-merge restates no in_tree_path-none skip" 'unless it is `none`' "$pm_text"
+# #507: the same guards the /execute and /write-a-prd blocks carry, so the
+# checklist cannot put the old derivation back beside the verb.
+lacks "pre-merge's docs/solutions dimension derives no path itself" "path solutions" "$pm_text"
+lacks "pre-merge reads no solutions.in_tree_path itself" 'config get solutions.in_tree_path' "$pm_text"
 cc_text="$(cat "$repo_root/correct-course/SKILL.md")"
 # shellcheck disable=SC2016  # literal patterns
 contains "correct-course's stale-artifact check asks solutions-dirs" 'bash "$SC" solutions-dirs' "$cc_text"
@@ -2079,6 +2176,13 @@ $SGC/solutions" "$rc $out"
     contains "a sibling directory that cannot be entered is named on stderr" "cannot read $UNR (cannot enter the directory); skipped" "$(cat "$tmp/grp.err")"
 fi
 rm -rf "$UNR"
+# A dangling symlink where a sidecar directory should be is skipped, and named.
+ln -s "$tmp/nowhere-dir" "$SKILL_KIT_SIDECAR_ROOT/grp-dangling"
+out="$(cd "$GA" && bash "$SC" related-solutions-dirs 2>"$tmp/grp.err")"; rc=$?
+rm -f "$SKILL_KIT_SIDECAR_ROOT/grp-dangling"
+check "a dangling sidecar-directory symlink still exits 0 and prints the members" "0 $SGB/solutions
+$SGC/solutions" "$rc $out"
+contains "a dangling sidecar-directory symlink is named on stderr" "cannot read $SKILL_KIT_SIDECAR_ROOT/grp-dangling (dangling symlink); skipped" "$(cat "$tmp/grp.err")"
 
 # An ill-formed label on this project is refused rather than read as "no group".
 jq '.solutions.system = "Payments-Platform"' "$SGE/sidecar.json" > "$SGE/sj" && mv "$SGE/sj" "$SGE/sidecar.json"

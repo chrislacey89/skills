@@ -236,6 +236,10 @@ check "a re-run leaves the existing PR body as it was" "$(cat "$tmp/before")" "$
 # the base, and stop when base-ref refuses.
 mkguest "empty base" init
 git -C "$P" branch develop
+# origin/develop resolves, so base-ref (origin/develop) and base-ref --name
+# (develop) print different things, and a block calling the wrong form fails
+# the --base check below (#605).
+git -C "$P" update-ref refs/remotes/origin/develop develop
 (cd "$P" && bash "$SC" config set base_ref develop >/dev/null 2>&1) || bad "empty base: declare base_ref" "config set failed"
 PM_BASE="" run_pm W-1 "$SC" ""
 check "an empty BASE_BRANCH placeholder exits 0" 0 "$pm_rc"

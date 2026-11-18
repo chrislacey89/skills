@@ -50,7 +50,11 @@ export SKILL_KIT_RESEARCH_ARCHIVE="$tmp/archive"
 
 pass=0
 fail=0
+skip=0
 ok()  { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
+# An arm that did not run is a skip, never a pass (#548): a pass count that
+# includes it reports coverage the run did not have.
+skipped() { printf '  SKIP %s\n' "$1"; skip=$((skip + 1)); }
 bad() { printf '  FAIL %s\n' "$1"; printf '       %s\n' "$2"; fail=$((fail + 1)); }
 section() { printf '\n=== %s ===\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi; }
@@ -169,7 +173,7 @@ check "corrupt sidecar.json restored: resolve succeeds again" 0 "$rc"
 # would answer `github` (#530: a /fix-findings breaker made exactly that edit
 # and both suites stayed green). uid 0 reads mode-000 files, so root skips.
 if [ "$(id -u)" -eq 0 ]; then
-    ok "unreadable sidecar.json: skipped under root, which reads mode-000 files"
+    skipped "unreadable sidecar.json: root reads mode-000 files, so the arm cannot run"
 else
     chmod 000 "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
     for a in prds slices stamp; do
@@ -233,8 +237,9 @@ section "backend: a corrupt sidecar refuses only the keys no readable sidecar cl
 # #530's scope decision. A corrupt sidecar.json cannot be ruled out as a key's
 # owner without parsing it, so a repo that no readable sidecar claims is still
 # refused: it might be the corrupt one's, and `github` there could be a guest's
-# PR. A repo a readable sidecar does claim resolves to it, and the corrupt file
-# is named on stderr; before #530 one corrupt file refused every repo.
+# PR. A key a readable sidecar does claim resolves to it, and the corrupt file
+# is named on stderr; before #530 one corrupt file refused every repo. The
+# narrowing is per key, in resolution order (#543, below).
 # Own root, so the stray cannot leak into the sections below.
 scope_root="$tmp/scope-sidecars"
 mkproj https://github.com/acme/claimed.git
@@ -264,6 +269,30 @@ check "unclaimed repo beside a corrupt sidecar: backend stamp prints nothing (no
 case "$err" in *stray/sidecar.json*) ok "unclaimed repo beside a corrupt sidecar: the corrupt file is named on stderr" ;; *) bad "unclaimed repo beside a corrupt sidecar: the corrupt file is named on stderr" "got [$err]" ;; esac
 SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$unclaimed" init --name unclaimed --mode owned --write sidecar --in-tree-path none --no-migrate-archive
 check "unclaimed repo beside a corrupt sidecar: init refuses rather than risk a second owner" 1 "$rc"
+# #543: the narrowing is per key, in resolution order (root:, then remotes,
+# then path:), and a key no readable sidecar claims is refused before a later
+# key is tried. A sidecar that lacks the root: key (one made in a shallow
+# clone, or before the first commit) claims this repo only by its remote, so
+# beside a corrupt stray the repo is refused, not resolved: the stray might own
+# root:.
+order_root="$tmp/order-sidecars"
+mkproj https://github.com/acme/laterkey.git
+laterkey="$P"
+SKILL_KIT_SIDECAR_ROOT="$order_root" runo "$laterkey" init --name later --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the key-order arm" "$err"
+jq '.keys |= map(select(startswith("root:") | not))' "$order_root/later/sidecar.json" > "$tmp/later.json" && mv "$tmp/later.json" "$order_root/later/sidecar.json"
+check "key-order fixture: the sidecar claims the remote but not the root key" "0 1" \
+    "$(jq '[.keys[] | select(startswith("root:"))] | length' "$order_root/later/sidecar.json") $(jq '[.keys[] | select(. == "remote:github.com/acme/laterkey")] | length' "$order_root/later/sidecar.json")"
+mkdir -p "$order_root/stray"
+printf '{"keys": [' > "$order_root/stray/sidecar.json"
+SKILL_KIT_SIDECAR_ROOT="$order_root" runo "$laterkey" backend stamp
+check "claimed only by a later key beside a corrupt sidecar: backend stamp exits 1" 1 "$rc"
+check "claimed only by a later key beside a corrupt sidecar: backend stamp prints nothing (not github)" "" "$out"
+case "$err" in *order-sidecars/stray/sidecar.json*) ok "claimed only by a later key beside a corrupt sidecar: the corrupt file is named on stderr" ;; *) bad "claimed only by a later key beside a corrupt sidecar: the corrupt file is named on stderr" "got [$err]" ;; esac
+rm -r "$order_root/stray"
+SKILL_KIT_SIDECAR_ROOT="$order_root" runo "$laterkey" backend stamp
+check "stray removed: the later key resolves the repo again" "0:sidecar" "$rc:$out"
+clean "key-order arm leaves the project clean" "$laterkey"
 clean "scope arms leave the claimed project clean" "$claimed"
 clean "scope arms leave the unclaimed project clean" "$unclaimed"
 
@@ -277,7 +306,7 @@ section "backend: a sidecar directory the scan cannot enter is a refusal, never 
 # precedence as #530: refused only when no readable sidecar claims the key.
 # uid 0 searches mode-000 directories, so root skips.
 if [ "$(id -u)" -eq 0 ]; then
-    ok "unenterable sidecar directory: skipped under root, which searches mode-000 directories"
+    skipped "unenterable sidecar directory: root searches mode-000 directories, so the arms cannot run"
 else
     dir_root="$tmp/dir-sidecars"
     mkproj https://github.com/acme/dirguest.git
@@ -302,19 +331,24 @@ else
     dirclaimed="$P"
     SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
     [ "$rc" -eq 0 ] || bad "init the readable claimant" "$err"
-    chmod 000 "$dir_root/g"
-    SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" backend stamp
-    check "claimed repo beside an unenterable sidecar dir: backend stamp answers sidecar" sidecar "$out"
-    case "$err" in *"$dir_root/g"*) ok "claimed repo beside an unenterable sidecar dir: the directory is named on stderr" ;; *) bad "claimed repo beside an unenterable sidecar dir: the directory is named on stderr" "got [$err]" ;; esac
-    chmod 755 "$dir_root/g"
+    # #556: at 444 as well as 000, so the precedence is not pinned beside one
+    # mode only.
+    for m in 000 444; do
+        chmod "$m" "$dir_root/g"
+        SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" backend stamp
+        check "claimed repo beside a sidecar dir at mode $m: backend stamp answers sidecar" sidecar "$out"
+        case "$err" in *"$dir_root/g"*) ok "claimed repo beside a sidecar dir at mode $m: the directory is named on stderr" ;; *) bad "claimed repo beside a sidecar dir at mode $m: the directory is named on stderr" "got [$err]" ;; esac
+        chmod 755 "$dir_root/g"
+    done
     clean "unenterable-directory arms leave the guest project clean" "$dirguest"
     clean "unenterable-directory arms leave the claimed project clean" "$dirclaimed"
 
     # The root itself. At mode 000 the */ glob returns its own pattern, and at
     # 111 (searchable, not listable) it cannot list a single entry; either way
-    # the scan used to find nothing and read as a miss. A root that does not
+    # the scan used to find nothing and read as a miss. At 444 (listable, not
+    # searchable) the -x term alone refuses it (#556). A root that does not
     # exist is still the honest miss, whose answer is github.
-    for m in 000 111; do
+    for m in 000 111 444; do
         chmod "$m" "$dir_root"
         for a in prds slices stamp; do
             SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirguest" backend "$a"
@@ -330,6 +364,22 @@ else
     check "absent sidecar root: backend stamp is still the github miss" "0:github" "$rc:$out"
 fi
 
+# #556: the root guard's -d term. An executable regular file at the root path
+# passes -e, -r, and -x, and its */ glob matches nothing, so without -d it read
+# as a miss and answered github. No chmod of a directory, so this runs under
+# root too.
+file_root="$tmp/file-root"
+mkproj https://github.com/acme/fileroot.git
+fileproj="$P"
+touch "$file_root"
+chmod 755 "$file_root"
+for a in prds slices stamp; do
+    SKILL_KIT_SIDECAR_ROOT="$file_root" runo "$fileproj" backend "$a"
+    check "sidecar root is an executable regular file: backend $a exits 1" 1 "$rc"
+    check "sidecar root is an executable regular file: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"$file_root"*) ok "sidecar root is an executable regular file: backend $a names the root on stderr" ;; *) bad "sidecar root is an executable regular file: backend $a names the root on stderr" "got [$err]" ;; esac
+done
+
 # A sidecar.json symlink whose target is gone fails `[ -f ]`, so the scan used
 # to skip it as "no sidecar here". It is the same class as an unreadable file:
 # present, and unparseable. No chmod, so this arm runs under root too.
@@ -338,6 +388,12 @@ mkproj https://github.com/acme/linkguest.git
 linkguest="$P"
 SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" init --name g --mode guest --write sidecar --in-tree-path none --no-migrate-archive
 [ "$rc" -eq 0 ] || bad "init guest for the dangling-symlink arms" "$err"
+# A readable claimant beside it, made first: init refuses beside an unreadable
+# sidecar rather than risk a second owner.
+mkproj https://github.com/acme/linkclaimed.git
+linkclaimed="$P"
+SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkclaimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init the readable claimant beside the dangling symlink" "$err"
 mv "$link_root/g/sidecar.json" "$tmp/link-good.json"
 ln -s "$tmp/link-gone.json" "$link_root/g/sidecar.json"
 for a in prds slices stamp; do
@@ -346,10 +402,92 @@ for a in prds slices stamp; do
     check "dangling sidecar.json symlink: backend $a prints nothing on stdout (not github)" "" "$out"
     case "$err" in *"$link_root/g/sidecar.json"*) ok "dangling sidecar.json symlink: backend $a names the file on stderr" ;; *) bad "dangling sidecar.json symlink: backend $a names the file on stderr" "got [$err]" ;; esac
 done
+# #556: a readable claimant still resolves beside the dangling link.
+SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkclaimed" backend stamp
+check "claimed repo beside a dangling sidecar.json symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+case "$err" in *"$link_root/g/sidecar.json"*) ok "claimed repo beside a dangling sidecar.json symlink: the link is named on stderr" ;; *) bad "claimed repo beside a dangling sidecar.json symlink: the link is named on stderr" "got [$err]" ;; esac
+clean "dangling-symlink arms leave the claimed project clean" "$linkclaimed"
 rm "$link_root/g/sidecar.json"
 mv "$tmp/link-good.json" "$link_root/g/sidecar.json"
 SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" backend stamp
 check "dangling symlink replaced: backend stamp answers sidecar again" sidecar "$out"
+
+# #555: the same class one level up. A sidecar directory that is a symlink to
+# nothing never matched the */ glob, and a root that is a symlink to nothing
+# failed [ -e ], so each read as a miss and answered github on a guest repo.
+# Both are present and unreadable, so both are refused; a live symlink at
+# either level still resolves, so the fix cannot refuse a valid repo. No
+# chmod, so these arms run under root too.
+dl_root="$tmp/dl-sidecars"
+mkproj https://github.com/acme/dlguest.git
+dlguest="$P"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" init --name g --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the dangling-directory arms" "$err"
+mkproj https://github.com/acme/dlclaimed.git
+dlclaimed="$P"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlclaimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init the readable claimant for the dangling-directory arms" "$err"
+mv "$dl_root/g" "$tmp/dl-g-real"
+ln -s "$tmp/dl-g-real" "$dl_root/g"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" backend stamp
+check "sidecar dir is a live symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+rm "$dl_root/g"
+ln -s "$tmp/dl-g-gone" "$dl_root/g"
+for a in prds slices stamp; do
+    SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" backend "$a"
+    check "dangling sidecar dir symlink: backend $a exits 1" 1 "$rc"
+    check "dangling sidecar dir symlink: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"$dl_root/g"*) ok "dangling sidecar dir symlink: backend $a names the link on stderr" ;; *) bad "dangling sidecar dir symlink: backend $a names the link on stderr" "got [$err]" ;; esac
+done
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" resolve
+case "$rc:$err" in 1:*"SIDECAR MISS"*|0:*) bad "dangling sidecar dir symlink: resolve refuses rather than reporting a SIDECAR MISS" "got [$rc] [$err]" ;; *) ok "dangling sidecar dir symlink: resolve refuses rather than reporting a SIDECAR MISS" ;; esac
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlclaimed" backend stamp
+check "claimed repo beside a dangling sidecar dir symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+case "$err" in *"$dl_root/g"*) ok "claimed repo beside a dangling sidecar dir symlink: the link is named on stderr" ;; *) bad "claimed repo beside a dangling sidecar dir symlink: the link is named on stderr" "got [$err]" ;; esac
+rm "$dl_root/g"
+mv "$tmp/dl-g-real" "$dl_root/g"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" backend stamp
+check "dangling sidecar dir link replaced: backend stamp answers sidecar again" "0:sidecar" "$rc:$out"
+
+ln -s "$dl_root" "$tmp/dl-root-link"
+SKILL_KIT_SIDECAR_ROOT="$tmp/dl-root-link" runo "$dlguest" backend stamp
+check "sidecar root is a live symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+ln -s "$tmp/dl-root-gone" "$tmp/dl-root-dangling"
+for a in prds slices stamp; do
+    SKILL_KIT_SIDECAR_ROOT="$tmp/dl-root-dangling" runo "$dlguest" backend "$a"
+    check "dangling sidecar root symlink: backend $a exits 1" 1 "$rc"
+    check "dangling sidecar root symlink: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"$tmp/dl-root-dangling"*) ok "dangling sidecar root symlink: backend $a names the root on stderr" ;; *) bad "dangling sidecar root symlink: backend $a names the root on stderr" "got [$err]" ;; esac
+done
+clean "dangling-link arms leave the guest project clean" "$dlguest"
+clean "dangling-link arms leave the claimed project clean" "$dlclaimed"
+
+# -----------------------------------------------------------------------------
+section "backend: every fenced call site handles the refusal"
+
+# docs/state-backend.md § "A caller branches on all three outcomes" points here
+# for the shapes a fenced block that asks `backend` may take: a `case` on the
+# answer, or an assignment whose `||` catches the nonzero exit by emptying a
+# variable (`|| VAR=`) or leaving (`|| { ...; exit N; }`). `|| true` and `|| :`
+# are refused: the next `if` reads the failure as github. An
+# `if [ "$(backend)" = sidecar ]` reads a refusal as github (#530). This reads
+# every line of every tracked SKILL.md that runs `bash "$SC" backend`, skipping
+# prose (a line holding a backtick), so a new call site is checked the day it
+# lands (#544). It pins the shape, not what each `*)` arm does.
+# shellcheck disable=SC2016  # $SC and $( are literal text in the pattern
+call_re='^[[:space:]]*(case "\$\(bash "\$SC" backend [a-z]+\)" in|[A-Za-z_]+="\$\(bash "\$SC" backend [a-z]+\)" \|\| ([A-Za-z_]+=|\{ .*exit [0-9]+; \}))$'
+sites=0 offenders=""
+# shellcheck disable=SC2016  # the grep pattern's $SC is literal text
+while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    sites=$((sites + 1))
+    line="${hit#*:*:}"
+    grep -Eq "$call_re" <<<"$line" || offenders="${offenders:+$offenders; }${hit%"$line"}$line"
+done <<EOF_SITES
+$(cd "$repo_root" && git ls-files '*/SKILL.md' | xargs grep -n 'bash "\$SC" backend ' | grep -v '`')
+EOF_SITES
+check "fenced backend call sites found (zero would mean the scan matched nothing)" yes "$([ "$sites" -gt 0 ] && echo yes || echo no)"
+check "every fenced backend call site is a case on the answer or an assignment with ||" "" "$offenders"
 
 # -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
@@ -1105,5 +1243,5 @@ check "the closed item holds the lesson" '["docs/solutions/testing/x-2026-01-01.
 runo "$LP" work set "$lc" lessons x
 check "work set does not take the lessons field" 2 "$rc"
 
-printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
+printf '\n---\n%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skip"
 [ "$fail" -eq 0 ]
