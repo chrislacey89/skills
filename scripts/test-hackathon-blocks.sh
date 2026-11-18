@@ -169,7 +169,8 @@ if grep -q 'without a SIDECAR MISS line' "$tmp/err"; then ok "non-miss failure i
 # `sleep`. Stub state: $stub/list.N is the Nth `gh run list` answer (the last
 # one repeats; the word FAIL makes the call exit 1), $stub/red names run ids
 # whose `gh run watch` fails, $stub/watched logs every watched id (an id with
-# whitespace exits 65 unlogged).
+# whitespace exits 65 unlogged), $stub/runaway marks a `run list` call past
+# the 20th (a re-list loop that does not end).
 echo "== CI-watch block"
 ci_repo="$tmp/ci/event"; mkdir -p "$ci_repo" "$tmp/home"
 printf '[user]\n\tname = t\n\temail = t@example.com\n' >"$tmp/home/.gitconfig"
@@ -181,6 +182,9 @@ S="${STUB_STATE:?}"
 case "$1 $2" in
 "run list")
     n=$(($(cat "$S/n" 2>/dev/null || echo 0) + 1)); echo "$n" >"$S/n"
+    # A re-list loop that never ends would hang the suite: past 20 calls, mark
+    # the run and fail the call so the block exits and ci_case names the case.
+    if [ "$n" -gt 20 ]; then : >"$S/runaway"; echo "gh: runaway" >&2; exit 1; fi
     f="$S/list.$n"; [ -f "$f" ] || f="$(ls "$S"/list.* | sort -t. -k2 -n | tail -n1)"
     if [ "$(cat "$f")" = FAIL ]; then echo "gh: network" >&2; exit 1; fi
     cat "$f" ;;
@@ -209,6 +213,7 @@ ci_case() { # ci_case <shell> <label> <want rc> <want watched> <red ids> <list1>
     else
         check "[$sh] CI-watch $label exit" "$want" "$rc"
     fi
+    if [[ -e "$ci_state/runaway" ]]; then bad "[$sh] CI-watch $label re-list loop did not terminate"; fi
     check "[$sh] CI-watch $label watched" "$wantw" "$(tr '\n' ' ' <"$ci_state/watched" 2>/dev/null | sed 's/ $//')"
 }
 for sh in "${shells[@]}"; do
