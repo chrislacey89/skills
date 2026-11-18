@@ -306,19 +306,24 @@ else
     dirclaimed="$P"
     SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
     [ "$rc" -eq 0 ] || bad "init the readable claimant" "$err"
-    chmod 000 "$dir_root/g"
-    SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" backend stamp
-    check "claimed repo beside an unenterable sidecar dir: backend stamp answers sidecar" sidecar "$out"
-    case "$err" in *"$dir_root/g"*) ok "claimed repo beside an unenterable sidecar dir: the directory is named on stderr" ;; *) bad "claimed repo beside an unenterable sidecar dir: the directory is named on stderr" "got [$err]" ;; esac
-    chmod 755 "$dir_root/g"
+    # #556: at 444 as well as 000, so the precedence is not pinned beside one
+    # mode only.
+    for m in 000 444; do
+        chmod "$m" "$dir_root/g"
+        SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirclaimed" backend stamp
+        check "claimed repo beside a sidecar dir at mode $m: backend stamp answers sidecar" sidecar "$out"
+        case "$err" in *"$dir_root/g"*) ok "claimed repo beside a sidecar dir at mode $m: the directory is named on stderr" ;; *) bad "claimed repo beside a sidecar dir at mode $m: the directory is named on stderr" "got [$err]" ;; esac
+        chmod 755 "$dir_root/g"
+    done
     clean "unenterable-directory arms leave the guest project clean" "$dirguest"
     clean "unenterable-directory arms leave the claimed project clean" "$dirclaimed"
 
     # The root itself. At mode 000 the */ glob returns its own pattern, and at
     # 111 (searchable, not listable) it cannot list a single entry; either way
-    # the scan used to find nothing and read as a miss. A root that does not
+    # the scan used to find nothing and read as a miss. At 444 (listable, not
+    # searchable) the -x term alone refuses it (#556). A root that does not
     # exist is still the honest miss, whose answer is github.
-    for m in 000 111; do
+    for m in 000 111 444; do
         chmod "$m" "$dir_root"
         for a in prds slices stamp; do
             SKILL_KIT_SIDECAR_ROOT="$dir_root" runo "$dirguest" backend "$a"
@@ -334,6 +339,22 @@ else
     check "absent sidecar root: backend stamp is still the github miss" "0:github" "$rc:$out"
 fi
 
+# #556: the root guard's -d term. An executable regular file at the root path
+# passes -e, -r, and -x, and its */ glob matches nothing, so without -d it read
+# as a miss and answered github. No chmod of a directory, so this runs under
+# root too.
+file_root="$tmp/file-root"
+mkproj https://github.com/acme/fileroot.git
+fileproj="$P"
+touch "$file_root"
+chmod 755 "$file_root"
+for a in prds slices stamp; do
+    SKILL_KIT_SIDECAR_ROOT="$file_root" runo "$fileproj" backend "$a"
+    check "sidecar root is an executable regular file: backend $a exits 1" 1 "$rc"
+    check "sidecar root is an executable regular file: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"$file_root"*) ok "sidecar root is an executable regular file: backend $a names the root on stderr" ;; *) bad "sidecar root is an executable regular file: backend $a names the root on stderr" "got [$err]" ;; esac
+done
+
 # A sidecar.json symlink whose target is gone fails `[ -f ]`, so the scan used
 # to skip it as "no sidecar here". It is the same class as an unreadable file:
 # present, and unparseable. No chmod, so this arm runs under root too.
@@ -342,6 +363,12 @@ mkproj https://github.com/acme/linkguest.git
 linkguest="$P"
 SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" init --name g --mode guest --write sidecar --in-tree-path none --no-migrate-archive
 [ "$rc" -eq 0 ] || bad "init guest for the dangling-symlink arms" "$err"
+# A readable claimant beside it, made first: init refuses beside an unreadable
+# sidecar rather than risk a second owner.
+mkproj https://github.com/acme/linkclaimed.git
+linkclaimed="$P"
+SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkclaimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init the readable claimant beside the dangling symlink" "$err"
 mv "$link_root/g/sidecar.json" "$tmp/link-good.json"
 ln -s "$tmp/link-gone.json" "$link_root/g/sidecar.json"
 for a in prds slices stamp; do
@@ -350,6 +377,11 @@ for a in prds slices stamp; do
     check "dangling sidecar.json symlink: backend $a prints nothing on stdout (not github)" "" "$out"
     case "$err" in *"$link_root/g/sidecar.json"*) ok "dangling sidecar.json symlink: backend $a names the file on stderr" ;; *) bad "dangling sidecar.json symlink: backend $a names the file on stderr" "got [$err]" ;; esac
 done
+# #556: a readable claimant still resolves beside the dangling link.
+SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkclaimed" backend stamp
+check "claimed repo beside a dangling sidecar.json symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+case "$err" in *"$link_root/g/sidecar.json"*) ok "claimed repo beside a dangling sidecar.json symlink: the link is named on stderr" ;; *) bad "claimed repo beside a dangling sidecar.json symlink: the link is named on stderr" "got [$err]" ;; esac
+clean "dangling-symlink arms leave the claimed project clean" "$linkclaimed"
 rm "$link_root/g/sidecar.json"
 mv "$tmp/link-good.json" "$link_root/g/sidecar.json"
 SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" backend stamp
