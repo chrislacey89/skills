@@ -70,6 +70,8 @@ cat > "$tmp/bin/gh" <<'STUB'
 printf '%s\n' "$*" >> "$GH_CALLS"
 case "$*" in
     "pr view 7 --json url -q .url") printf '%s\n' "$GH_URL" ;;
+    "pr view 7 --json state -q .state") printf '%s\n' "${GH_STATE:-OPEN}" ;;
+    "pr view 7 --json headRefName -q .headRefName") printf '%s\n' "${GH_HEAD:-feat/x}" ;;
     *) echo "stub gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -99,7 +101,7 @@ run_block() {
     local b="${co_block//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
     b="${b//<number>/7}"
     : > "$tmp/calls"
-    out="$(cd "$P" && GH_URL="$URL" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "${RUN_SHELL:-bash}" -c "$b" 2>"$tmp/stderr")"; rc=$?
+    out="$(cd "$P" && GH_STATE="${GH_STATE:-OPEN}" GH_URL="$URL" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "${RUN_SHELL:-bash}" -c "$b" 2>"$tmp/stderr")"; rc=$?
 }
 
 # -----------------------------------------------------------------------------
@@ -189,6 +191,43 @@ run_block
 check "github: the block exits 0" 0 "$rc"
 check "github: no gh call" "" "$(cat "$tmp/calls")"
 check "github: it says Closes #N did the work" 1 "$(grep -c 'Closes #N closed the issue the PR body names' <<<"$out")"
+
+
+# -----------------------------------------------------------------------------
+section "a PR the client already merged takes its own route (#700)"
+
+# Step 1 reads the PR's state. MERGED skips Step 2's mergeable precondition and
+# the merge, and goes straight to the lock release, the work close, and the teardown.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+route_block="$(block "$CO" 'PR_STATE=')"
+[ -n "$route_block" ] || bad "closeout/SKILL.md Step 1 carries the PR-state route block" "not found"
+route() {
+    local b="${route_block//<number>/7}"
+    out="$(cd "$P" && GH_STATE="$1" GH_URL="$URL" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" bash -c "$b" 2>"$tmp/stderr")"; rc=$?
+}
+route MERGED
+check "MERGED: the route block exits 0" 0 "$rc"
+check "MERGED: it names the already-merged route" 1 "$(grep -c '^route: already merged' <<<"$out")"
+route OPEN
+check "OPEN: the route block exits 0" 0 "$rc"
+check "OPEN: it names the full route" 1 "$(grep -c '^route: full' <<<"$out")"
+route CLOSED
+check "CLOSED: the route block stops" 1 "$rc"
+check "CLOSED: it says why" 1 "$(grep -c 'closed without merging' "$tmp/stderr")"
+
+# On the MERGED route the work-close block still runs against the merged PR.
+mkproj guest
+MS="$(mk --kind slice)"
+(cd "$P" && bash "$SC" work set "$MS" pr "$URL") >/dev/null 2>&1
+GH_STATE=MERGED run_block
+check "MERGED: the work-close block closes the item" closed "$(state "$MS")"
+check "MERGED: no merge or edit call reached gh" "pr view 7 --json url -q .url" "$(cat "$tmp/calls")"
+
+# The skill prose gives MERGED its own route past Step 2 and the merge.
+# shellcheck disable=SC2016  # the needles are the skill's literal text
+check "Step 2 skips itself on a MERGED PR" 1 "$(grep -c 'If `state` is `MERGED`, skip this step' "$CO")"
+# shellcheck disable=SC2016
+check "Step 3 skips the merge on a MERGED PR" 1 "$(grep -c 'If the PR already reports `MERGED`, skip the merge' "$CO")"
 
 # -----------------------------------------------------------------------------
 section "mutation: the check sees a block that closes nothing"

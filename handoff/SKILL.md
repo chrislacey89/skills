@@ -75,7 +75,7 @@ Read the path before writing to it (the file exists, empty, after the block). Wr
 
 ### 4. Shape the doc body
 
-Follow the plain-language walkthrough shape from `docs/writing-for-humans.md` (bundled in this skill's references when invoked outside the skills repo). The body should be readable in one pass by someone who has not seen this conversation.
+Follow the plain-language walkthrough shape from `references/writing-for-humans.md`. The body should be readable in one pass by someone who has not seen this conversation.
 
 Order:
 
@@ -92,7 +92,7 @@ Order:
 
 6. **Suggested skills** — one or two `/<skill-name>` references the fresh session is likely to want, with a one-line reason each. Optional; skip when the next move is obvious from the Next session block.
 
-Revise once before saving. Apply the bar in `docs/writing-for-humans.md`: strip clutter, cut warm-up, prefer active verbs and concrete nouns, ensure the lede earns the next sentence.
+Revise once before saving. Apply the bar in `references/writing-for-humans.md`: strip clutter, cut warm-up, prefer active verbs and concrete nouns, ensure the lede earns the next sentence.
 
 Then confirm three things about the content. Each can be checked; none asks whether the doc reads well to you, which is the question the writer is least able to answer (Step 5 asks someone else).
 

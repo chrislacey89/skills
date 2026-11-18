@@ -172,6 +172,9 @@ jobs:
       - name: Run Q4 mechanism-name contract suite
         run: bash scripts/test-q4-mechanism-names.sh
 
+      - name: Run compound citation-anchor contract suite
+        run: bash scripts/test-compound-citation-anchors.sh
+
       - name: Run oracle-table coverage suite
         run: bash scripts/test-oracle-table-coverage.sh
 
