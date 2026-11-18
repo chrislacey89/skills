@@ -559,8 +559,8 @@ Before implementing, check the project's stack and load relevant best practices.
 - **Next.js / React projects**: If `package.json` includes `next` or `react`, load these skills before writing code:
   - `/vercel-react-best-practices` — performance optimization and React Server Component guidance
   - `/vercel-composition-patterns` — component composition patterns that scale without prop sprawl
-  - `/next-best-practices` — file conventions, data patterns, metadata, and error handling
-  - `/next-cache-components` — cache components, `use cache`, `cacheLife`, and `cacheTag`
+  - `/next-cache-components-adoption` — turning on Cache Components and resolving the blocking routes it surfaces
+  - `/next-cache-components-optimizer` — improving the UI a route shows immediately on load or navigation
 
 ### 3. Implement
 

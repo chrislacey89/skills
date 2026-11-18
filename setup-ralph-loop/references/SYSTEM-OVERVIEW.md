@@ -148,7 +148,7 @@ Frontmatter captures `date`, `repo`, `feature`, and `installed_versions_snapshot
 
 **Lesson recall by file:** A lesson's `paths` frontmatter names the files it concerns, and `/execute` runs `sidecar.sh lessons match` on the slice's planned files in Step 1 and on its changed files in Step 4, before the keyword search and the review. Each run is logged in the sidecar, and a different step reads that log: `/pre-merge` Phase 1 prints one line saying whether the branch has a lookup on record (information, never a finding), and `sidecar.sh lessons audit` reports whether recall is working at all — a self-check of the matcher against the real lessons, coverage, the group's stores, loose ends, and each branch's runs. `docs/state-backend.md` § Lesson recall states the commands.
 
-**Key enhancement to /execute:** When a project uses Next.js or React, Ralph loads `/vercel-react-best-practices`, `/vercel-composition-patterns`, `/next-best-practices`, and `/next-cache-components` before implementation so framework guidance is present in every iteration.
+**Key enhancement to /execute:** When a project uses Next.js or React, Ralph loads `/vercel-react-best-practices`, `/vercel-composition-patterns`, `/next-cache-components-adoption`, and `/next-cache-components-optimizer` before implementation so framework guidance is present in every iteration.
 
 **Quality must be explicit:** Ralph does not infer whether a repo is a throwaway prototype or a long-lived codebase. The quality bar must be stated in the repo and reinforced in the execution skill: small steps, passing feedback loops, reviewable commits, and no silent downgrade from production standards to demo-code shortcuts just because the loop is running AFK.
 
