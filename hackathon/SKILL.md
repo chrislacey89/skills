@@ -84,7 +84,7 @@ Every phase reads these values. Change one here and nowhere else.
 | Ladder minimum | 6 rungs, at least 2 of them marked `~` (stretch) |
 | Kickoff block | the first 20 minutes of the build window |
 | Checkpoint interval | every 90 minutes from the end of the kickoff block, until the freeze |
-| Freeze | 120 minutes before the submission deadline |
+| Freeze | 75 minutes before the submission deadline |
 | Submission buffer | submit at least 60 minutes before the deadline, then keep editing the page until it closes |
 | Story checkpoint | the last checkpoint before the freeze: by then the submission page has every required section and the video is recorded |
 | First Q&A drill | at the second checkpoint, or at the first when the freeze comes before a second one |
