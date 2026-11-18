@@ -1622,6 +1622,35 @@ esac
 assert_eq "" "$(git -C "$repo_sf" log --format=%s s1..HEAD | grep '^fixup! ' || true)" \
     "stacked on s1: after the fold no fixup! commit is left on the branch"
 
+# A fixup the fork point decides (RB-2): this slice rewrote the sibling's line,
+# and a fixup! names the sibling's commit. Rebased from main it would fold into
+# that commit and conflict with this slice's rewrite; rebased from s1, where the
+# fold actually starts, the target is not in the todo list and the fixup stays
+# in place. The stacked trial must say clean, so a trial measured from main fails.
+repo_fp="$sandbox/repo-stacked-forkpoint"
+mkdir -p "$repo_fp"
+(
+    cd "$repo_fp" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c s1
+    printf 's\n' > s.txt
+    git add s.txt && git commit -q -m 's1 adds s'
+    git switch -q -c f
+    printf 's, rewritten by f\n' > s.txt
+    git add s.txt && git commit -q -m 'f rewrites s'
+    printf 's, fixed\n' > s.txt
+    git add s.txt && git commit -q --fixup="$(git rev-parse s1)" -m 'fix s' -m 'Fix-Findings-Run: 20261118T000001Z'
+)
+point_origin_at_main "$repo_fp"
+head_fp="$(git -C "$repo_fp" rev-parse HEAD)"
+assert_eq "fold trial: clean" "$(cd "$repo_fp" && env -u BASE_REF bash -c "$(fill_base "$fold_trial_template" s1)" 2>&1)"     "stacked on s1, a fixup that folds only from main: the trial measures from the sibling and reports clean"
+assert_eq "$head_fp" "$(git -C "$repo_fp" rev-parse HEAD)" "stacked on s1, a fixup that folds only from main: the fixup is left as it was"
+assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$(cd "$repo_fp" && env -u BASE_REF bash -c "$(fill_base "$fold_trial_template" "")" 2>&1)"     "control: the same fixup measured from main conflicts, so the fork point decides the verdict"
+
 section "fold trial and fixup target: the blocks run under zsh, the shell an agent has on macOS"
 # docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md:
 # the blocks run in zsh in a real session, so each path runs there too. A missing
