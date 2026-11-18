@@ -3112,9 +3112,13 @@ lessons_audit_group() {
     own="$(jq -r '.solutions.system // "" | strings' "$sc/sidecar.json" 2>/dev/null)" || own=""
     rel="$(jq -r '.solutions.related // [] | .[]? | strings' "$sc/sidecar.json" 2>/dev/null)" || rel=""
     if [ -n "$own" ]; then
-        for d in "$SIDECAR_ROOT"/*/; do
+        for d in "$SIDECAR_ROOT"/*; do
+            # A dangling symlink is not a directory, and could be a member: unreadable.
+            if [ -L "$d" ] && [ ! -e "$d" ]; then
+                lessons_group_line "$d" "${d##*/}" unreadable
+                continue
+            fi
             [ -d "$d" ] || continue
-            d="${d%/}"
             [ "$d" != "$sc" ] || continue
             f="$d/sidecar.json"
             if [ ! -x "$d" ] || { [ -e "$f" ] && ! label="$(jq -r '.solutions.system // "" | strings' "$f" 2>/dev/null)"; }; then

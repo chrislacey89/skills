@@ -1050,6 +1050,13 @@ if [ "$(id -u)" -ne 0 ]; then
 "group: amember unreadable
 group: root:0000000000000000000000000000000000000000 unreadable" "$(printf '%s\n' "$out" | grep '^group: ')"
     git -C "$AS" checkout -q -- sidecar.json
+    # A dangling symlink where a sidecar directory should be is unreadable too.
+    ln -s "$tmp/nowhere" "$tmp/sidecars/zdangling"
+    runo "$AP" lessons audit
+    rm -f "$tmp/sidecars/zdangling"
+    check "audit: a dangling sidecar-directory symlink is unreadable" \
+"group: amember readable
+group: zdangling unreadable" "$(printf '%s\n' "$out" | grep '^group: ')"
 fi
 
 # No lesson carries paths: the self-check could not run, never pass.
