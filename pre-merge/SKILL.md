@@ -31,7 +31,7 @@ Do not use it as a substitute for implementation verification, QA intake, or ref
 
 `/pre-merge` runs in one of three modes. All three reuse the architectural review dimensions defined in `review-checklist.md`; they differ in what they consume and what they produce.
 
-- **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2) and prints findings to the terminal as advisories (Phase 4), then hands back there — **it makes no fix commits of its own and opens no second pass.** This is the mode auto-invoked by `/execute` Step 6 on the HITL path. **What it reads is decided by branch state, not by a flag:** a first review reads the whole slice, which is the whole branch unless the slice's work item records where it started; a re-run against a PR that already carries a review-currency stamp, whose head has since moved, takes the post-stamp delta — the commits after the stamped SHA — as the review's *subject*, and does not re-read what the earlier review covered. Phase 1 step 4 makes that decision and prints it. The delta is the subject, not the limit of what a reviewer may read: `review-checklist.md` settles what a reviewer reads, and that includes the tree around the delta.
+- **Author-mode (default)** — invoked on your own branch with no `--pr` argument. The skill creates the PR (Phase 2, which can run last; Phase 2 says when) and prints findings to the terminal as advisories (Phase 4), then hands back there — **it makes no fix commits of its own and opens no second pass.** This is the mode auto-invoked by `/execute` Step 6 on the HITL path. **What it reads is decided by branch state, not by a flag:** a first review reads the whole slice, which is the whole branch unless the slice's work item records where it started; a re-run against a PR that already carries a review-currency stamp, whose head has since moved, takes the post-stamp delta — the commits after the stamped SHA — as the review's *subject*, and does not re-read what the earlier review covered. Phase 1 step 4 makes that decision and prints it. The delta is the subject, not the limit of what a reviewer may read: `review-checklist.md` settles what a reviewer reads, and that includes the tree around the delta.
 - **Reviewer-mode** — invoked as `/pre-merge --pr <number>` against a PR you did not author. The skill skips PR creation (the PR already exists) and produces *draft comment text* (Phase 4) for you to review and post, structured per `references/comment-craft.md` (5P gate, Triple-R, Comment Signals, MMG Exchange).
 - **Loop-mode** — invoked as `/pre-merge --loop`, or entered automatically when `/execute` hands off on an AFK run. Runs Phases 1–4 as author-mode does, except Phase 1 step 4's scope decision: loop-mode always reads the whole branch and never takes the post-stamp delta, then continues into **Phase 5**: it records every finding in a durable ledger — in the PR body, or on the work item, where [references/state-backend.md](references/state-backend.md) § Where the review's records live says — attaches the evidence that supports or refutes each one, and hands back to the operator. Findings stop being terminal output in this mode; they become durable rows with owners. **Loop-mode does not fix anything and makes no commits** — the operator decides what happens to each finding (see Phase 5 § Why the loop does not fix).
 
@@ -91,13 +91,20 @@ If you are running on a branch other than the user's working branch and `--pr` w
 3. **Detect the base branch and assess the diff:**
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
    # $BASE_REF is the range endpoint; $BASE_BRANCH is the name `--base` takes.
-   BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
-   BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
+   if [ -n "$BASE_BRANCH" ]; then
+     if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+     elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+     else echo "neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves: not guessing a base" >&2; exit 1; fi
+   else
+     BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+     BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
+   fi
    git diff "$BASE_REF...HEAD" --stat
    git log --oneline "$BASE_REF..HEAD"
    ```
-   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, no variable set here reaches a later block: put the sibling slice's branch name (the upstream the PR will target) in the `BASE_BRANCH=` placeholder of each block that consumes it (the Phase 2 block for your backend and the Phase 4 stamp block). If no diff from the base, tell the user there's nothing to review and stop.
+   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, put the sibling slice's branch name (the upstream the PR will target) in the `BASE_BRANCH=` placeholder of every block that takes one: this block, step 4's scope block, the Phase 2 block for your backend, the Phase 4 stamp block, and the fold block in § Handoff. No variable set here reaches a later block, because each block runs in its own shell. If no diff from the base, tell the user there's nothing to review and stop.
 
    **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`. When `origin/<base>` does not resolve, `base-ref` measures against the local branch and says so on stderr; if the counts look wrong, `git fetch` and re-run.
 
@@ -113,9 +120,18 @@ If you are running on a branch other than the user's working branch and `--pr` w
      *) echo "scope aborted: sidecar.sh backend stamp failed; not guessing the github path" >&2; exit 1 ;;
    esac
    W="<the W-<n> step 2 named, or empty on the github backend>"
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
    BASE_REF="$(bash "$SC" base-ref)" || { echo "scope aborted: sidecar.sh base-ref failed" >&2; exit 1; }
    RANGE="$(bash "$SC" range ${W:+"$W"})" || { echo "scope aborted: sidecar.sh range failed" >&2; exit 1; }
    SLICE_FROM="${RANGE%%..*}"
+   if [ -n "$BASE_BRANCH" ]; then
+     # range measures from the declared base; a stacked slice starts at its sibling instead.
+     if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then STACKED_REF="origin/$BASE_BRANCH"
+     elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then STACKED_REF="$BASE_BRANCH"
+     else echo "scope aborted: neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves" >&2; exit 1; fi
+     [ "$SLICE_FROM" != "$BASE_REF" ] || SLICE_FROM="$STACKED_REF"
+     BASE_REF="$STACKED_REF"
+   fi
    SCOPE_FROM="$SLICE_FROM"
    if [ -n "$REVIEWED_SHA" ] \
      && git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
@@ -175,7 +191,18 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 **Skip this phase entirely in reviewer-mode** — the PR already exists, you did not author it, and rewriting someone else's PR body is out of scope. Proceed to Phase 3.
 
-**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when `git rev-parse -q --verify '@{u}'` prints nothing *and* `git ls-remote --heads origin "$(git branch --show-current)"` prints nothing: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The fold gate below points here, and `/fix-findings` runs the same two commands before it writes a `fixup!` commit; `scripts/test-delta-review-scope.sh` pins the copy to this one. Skip to Phase 3 and review the local branch. The stamp lives in the sidecar, so it does not need a PR. This phase runs when the human picks **Open the PR** from the handoff menu. Until then, re-runs keep deferring it, so review fixes can be folded into the commits they correct before anyone else reads the history. That is *Pro Git*'s rule (Chacon, Ch. 3): rebase local changes you haven't shared yet, and never rebase anything you've pushed. The closing-issue thread reconciliation in Phase 4 reads the work item on this backend, not a PR, so it runs on a deferred run too. Step 3 below is not skipped for the reviewers: on a deferred run, Phase 3 takes the `## Review Notes` block verbatim from the `/execute` handoff, and step 3 still writes it where [references/state-backend.md](references/state-backend.md) § Where the review's records live says. On the `github` backend the PR body holds the stamp, so the PR is opened here, before the review.
+**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared:
+
+```bash
+# Is this branch shared? Prints "shared: yes" or "shared: no".
+B=$(git branch --show-current)
+R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
+HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
+if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ]; then SHARED=yes; else SHARED=no; fi
+echo "shared: $SHARED"
+```
+
+The fold gate below points here, and `/fix-findings` runs the same lines before it writes a `fixup!` commit; `scripts/test-delta-review-scope.sh` pins the copy to this one. Skip to Phase 3 and review the local branch. The stamp lives in the sidecar, so it does not need a PR. This phase runs when the human picks **Open the PR** from the handoff menu. Until then, re-runs keep deferring it, so review fixes can be folded into the commits they correct before anyone else reads the history. That is *Pro Git*'s rule (Chacon, Ch. 3): rebase local changes you haven't shared yet, and never rebase anything you've pushed. The closing-issue thread reconciliation in Phase 4 reads the work item on this backend, not a PR, so it runs on a deferred run too. Step 3 below is not skipped: on a deferred run it still writes the `/execute` handoff's `## Review Notes` where [references/state-backend.md](references/state-backend.md) § Where the review's records live says, and Phase 3 reads them from there, so a later re-run in a fresh session finds them too. On the `github` backend the PR body holds the stamp, so the PR is opened here, before the review.
 
 1. **Check for an existing PR:**
    ```bash
@@ -348,7 +375,7 @@ Either way the controller-owned dimensions are outside this choice entirely — 
 
 **The context contract is about provenance, not permission.** It has three parts, and the closed list is only the first of them.
 
-**Handed over — the same in all three modes.** The diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the `## Review Notes` block (from the PR body, or from the `/execute` handoff on a deferred run; see the deferral paragraph in Phase 2), or on the `sidecar` backend that block read where [references/state-backend.md](references/state-backend.md) § Where the review's records live says. The output of `bash "$SC" profile`, verbatim, goes in every brief too: it is a declaration the operator wrote, not this session's account of anything. Nothing else is *given* to a sub-agent, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no `## Review Notes` block, because `/execute` never ran on it; that is an absent input, not a missing step.
+**Handed over — the same in all three modes.** The diff, `review-checklist.md`, `references/writing-for-humans.md`, and — when one exists — the `## Review Notes` block, read where [references/state-backend.md](references/state-backend.md) § Where the review's records live says. The output of `bash "$SC" profile`, verbatim, goes in every brief too: it is a declaration the operator wrote, not this session's account of anything. Nothing else is *given* to a sub-agent, in particular not the implementing session's context. An externally-authored PR reviewed in reviewer-mode has no `## Review Notes` block, because `/execute` never ran on it; that is an absent input, not a missing step.
 
 Run it in the controller, before spawning, and paste its stdout unedited:
 
@@ -394,7 +421,7 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 **Controller-owned dimensions run here, in this session.** Every dimension in `review-checklist.md` whose `**Runs in:**` marker reads `the controller, in Phase 4` is yours to execute — Phase 3 did not delegate it, and no sub-agent could have. The marker is on those dimensions because their procedures need a cross-slice view — the PRD, every slice issue, and the set of merged slices held together at once. Phase 1 assembles exactly that, in this context, which is the whole reason the work lands here.
 
-Read each such dimension's procedure from `review-checklist.md` and run it now. Its findings are ordinary findings: they carry the severity the checklist assigns them, they join the three tiers below, and in loop-mode they get ledger rows like any other. **In particular, a Concern from a controller-owned dimension is still a Concern, named escalation and all** — the relocation moved where the check runs, not what its verdict is worth. There is no tier above Concern; a dimension whose verdict should stop a merge says so by naming that action inside its Concern, which is what Coverage Matrix Reconciliation does for an unmapped Must.
+Read each such dimension's procedure from `review-checklist.md` and run it now. Its findings are ordinary findings: they carry the severity the checklist assigns them, they join the three tiers below, and in loop-mode they get ledger rows like any other. **In particular, a Concern from a controller-owned dimension is still a Concern, named escalation and all** — the relocation moved where the check runs, not what its verdict is worth. `review-checklist.md` § Severity Classification says how a Concern carries a finding that should stop a merge.
 
 Then run them through the same evidence discipline as everything else: a controller-owned dimension is not exempt from citing what supports it. What it *is* exempt from is the delegated-finding check immediately below, which exists to catch a sub-agent misreporting; there is no sub-agent here.
 
@@ -625,8 +652,7 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 # 4's fenced block and does not survive here. Unset, the range below makes git
 # diff HEAD against itself and print nothing, and the guard below would
 # misread that empty diff as "delta is a /compound entry" on a delta that was
-# never read. Same failure BASE_REF's guard at review-checklist.md:114 exists
-# to catch.
+# never read.
 : "${SCOPE_FROM:?resolve it with the Phase 1 step 4 scope-decision block before running this}"
 # Capture and test for empty rather than asking `grep -qv` for the verdict.
 # Two reasons, and the second is why this shape is not optional: `grep -q` exits
@@ -699,10 +725,10 @@ Recorded by `/pre-merge` loop-mode. Every finding below has an owner. Rows marke
 
 | Pass | Finding | Dimension | State | Evidence / outcome |
 |---|---|---|---|---|
-| 1 | Duplicate date formatter in pipeline | 1 — Deep Modules | fixed | `abc1234` — operator |
-| 1 | Same pattern in `lib/export/` | 1 — Deep Modules | filed | #199 — operator |
-| 1 | Stamp block "no-ops" | 7 — docs/solutions | open | refuted — `/execute` Step 5 uses the same shape ("Write verified status back to the issue") |
-| 2 | Presence helper claimed as Effect Layer | 4 — Boundary Map | open | confirmed — `lib/presence.ts:12` exports a plain function |
+| 1 | Duplicate date formatter in pipeline | Deep Modules | fixed | `abc1234` — operator |
+| 1 | Same pattern in `lib/export/` | Deep Modules | filed | #199 — operator |
+| 1 | Stamp block "no-ops" | docs/solutions/ Adherence | open | refuted — `/execute` Step 5 uses the same shape ("Write verified status back to the issue") |
+| 2 | Presence helper claimed as Effect Layer | Boundary Map Contracts | open | confirmed — `lib/presence.ts:12` exports a plain function |
 
 **Checks not run this pass:** `/ts-audit` — delta is 12 changed `.ts` lines across 1 file, below the 50-line / 2-file trigger.
 ```
@@ -828,28 +854,43 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 
 ## Handoff
 
-- **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), an existing PR number you want reviewed (reviewer-mode), or an AFK handoff from `/execute` — branch plus the `## Review Notes` it wrote into the PR body (loop-mode)
-- **Produces:** a PR with lineage, stamped with the head SHA the review covered (in the PR body, or in the sidecar when `backend stamp` answers `sidecar`) — plus, locally, the transient `.claude/.review-stamped` flag the classification hook reads to route post-review fixes through `/fix-findings` — and an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or that same PR plus a `## Review Disposition Ledger` in which every finding has a row, an owner, and the evidence for or against it (loop-mode)
+- **Expected input:** verified implementation work that is ready for review and PR creation (author-mode), an existing PR number you want reviewed (reviewer-mode), or an AFK handoff from `/execute` — branch plus the `## Review Notes` it handed over (loop-mode)
+- **Produces:** a PR with lineage (not yet, on a run that deferred Phase 2; Phase 2 says when), stamped with the head SHA the review covered (where [references/state-backend.md](references/state-backend.md) says the stamp lives) — plus, locally, the transient `.claude/.review-stamped` flag the classification hook reads to route post-review fixes through `/fix-findings` — and an architectural review readout (author-mode); draft PR comment text following `references/comment-craft.md` (reviewer-mode); or that same PR plus a `## Review Disposition Ledger` in which every finding has a row, an owner, and the evidence for or against it (loop-mode)
 - **May redirect:** to `/qa` when a finding looks behavioral, or to `/request-refactor-plan` when deeper structural cleanup is warranted
 - **May invoke:** `/ts-audit` on changed `.ts`/`.tsx` — in loop-mode only; author-mode and reviewer-mode mention it without invoking
 - **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR, then handed back here for a re-run over its commit, so the entry is reviewed and merged with the code it explains rather than merged unreviewed (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`. In loop-mode, the ledger hands back to the operator: settle the `open` rows — fix, file, accept, or drop each one — then either re-invoke `/pre-merge --loop` on the updated diff or continue to `/compound`, the `/pre-merge` re-run it hands back to, and `/closeout` as above
 
-**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). It does not apply on AFK loop-mode runs — there is no user to ask, so print the exit readout and the handoff line instead. Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended — capture the lesson)**, **`/closeout` (merge and clean up — no lesson worth capturing)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then capture the lesson**. When no lesson emerged, lead with **→ `/closeout` (recommended — merge and clean up)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then merge**. Route those findings to `/qa` or `/request-refactor-plan` after the choice, rather than naming two skills in one label. When the human picks **Fix a finding on this branch first**, ask one follow-up question — which findings to fix — as a `multiSelect` `AskUserQuestion` with one option per open finding, labeled with its number and a one-line statement of its claim. A `survived` breaker verdict carried from an earlier `/fix-findings` round is its own option, beside the finding it is about. Pre-select nothing, mark no option recommended, and propose no set in the question text or anywhere before it ("S1 to S3?"): a suggested set that the human confirms is the model's choice with the human's signature on it, which is the boundary chrislacey89/skills#190 protects. The tool caps a question's options (`references/next-step-menu.md`), so with more than four open findings ask in number order, four per question and one question per turn, and take every selection together. Invoke `/fix-findings` with exactly the numbers they select, in number order, or in the order they typed them if they answered through "Other"; never fill the numbers in yourself, because choosing them is the human's disposition, not this skill's. On the sidecar backend, hand it the slice's `W-<n>` from Phase 1 step 2 as well, which `/fix-findings`' round count reads. The menu's own option labels name no finding numbers, so the menu choice never carries a set into the follow-up. Both menus carry the finding-disposition pair because it is a separate axis from the lesson: whether a finding can wait does not depend on whether a lesson emerged, and a reviewer holding both has to be able to say so. **On the re-run `/compound` handed back — the delta test above says the post-stamp delta is only `docs/solutions/` paths — take the no-lesson menu even though a lesson plainly emerged from the branch: it is already captured, in the commit this run just reviewed, so `/compound` is not an option to re-offer and `/closeout` leads.** Within that pair the discriminator is *now vs. later*, not severity — so each label leads with the act that distinguishes it (*fix* vs. *hand off*) and closes with the step it returns to, rather than leading with the step both options share. In reviewer-mode the options differ — **Post the draft comments**, **Talk it through offline first (MMG Exchange)**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
+**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). It does not apply on AFK loop-mode runs — there is no user to ask, so print the exit readout and the handoff line instead. Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended — capture the lesson)**, **`/closeout` (merge and clean up — no lesson worth capturing)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then capture the lesson**. When no lesson emerged, lead with **→ `/closeout` (recommended — merge and clean up)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then merge**. Route those findings to `/qa` or `/request-refactor-plan` after the choice, rather than naming two skills in one label. When the human picks **Fix a finding on this branch first**, ask one follow-up question — which findings to fix — as a `multiSelect` `AskUserQuestion` with one option per open finding, labeled with its number and a one-line statement of its claim. A `survived` breaker verdict carried from an earlier `/fix-findings` round is its own option, beside the finding it is about. Pre-select nothing, mark no option recommended, and propose no set in the question text or anywhere before it ("S1 to S3?"): a suggested set that the human confirms is the model's choice with the human's signature on it, which is the boundary chrislacey89/skills#190 protects. The tool caps a question's options (`references/next-step-menu.md`), so with more than four open findings ask in number order, four per question and one question per turn, and take every selection together. Invoke `/fix-findings` with exactly the numbers they select, in number order, or in the order they typed them if they answered through "Other"; never fill the numbers in yourself, because choosing them is the human's disposition, not this skill's. On the sidecar backend, hand it the slice's `W-<n>` from Phase 1 step 2 as well, which `/fix-findings`' round count reads. The menu's own option labels name no finding numbers, so the menu choice never carries a set into the follow-up. Both menus carry the finding-disposition pair because it is a separate axis from the lesson: whether a finding can wait does not depend on whether a lesson emerged, and a reviewer holding both has to be able to say so. **On the re-run `/compound` handed back, take the no-lesson menu even though a lesson plainly emerged from the branch: it is already captured, in the commit this run just reviewed, so `/compound` is not an option to re-offer and `/closeout` leads.** Phase 4's delta test says so only when the post-stamp delta holds nothing but the captured lesson. When that commit also carries the mechanism `/compound` stages with the entry, the test is silent, and Phase 4's *"if — and only if — a durable lesson emerged"* condition is what decides it; the test's silence is not a reason to re-offer `/compound`. Within the finding-disposition pair the discriminator is *now vs. later*, not severity — so each label leads with the act that distinguishes it (*fix* vs. *hand off*) and closes with the step it returns to, rather than leading with the step both options share. In reviewer-mode the options differ — **Post the draft comments**, **Talk it through offline first (MMG Exchange)**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
 
 **While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Once Phase 2 has run, offer the menu above.
 
-**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in `git log --format=%s "$BASE_REF..HEAD"` starts with `fixup! `, and the branch is unshared (Phase 2's test), add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. On a pick, run:
+**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and Phase 2's shared-branch block prints `shared: no`, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
 
 ```bash
-: "${BASE_REF:?derive it with the Phase 1 step 3 block before running this}"
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 1 step 3 was given; an earlier block's shell variable does not reach this one
+fold_abort() { echo "fold aborted: ${1}; the branch is as it was" >&2; exit 1; }
+if [ -n "$BASE_BRANCH" ]; then
+  if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+  elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+  else fold_abort "neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves"; fi
+else
+  BASE_REF=$(bash "$SC" base-ref) || fold_abort "sidecar.sh base-ref failed"
+fi
 # Rebase onto the branch's own fork point, not the base's tip: a base that moved
 # since the branch forked would change the tree, and the re-run would then read
 # the fold as new content.
-FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
+FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || fold_abort "no merge base with $BASE_REF"
 TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
 if ! GIT_SEQUENCE_EDITOR=: git rebase -q -i --autosquash "$FORK_POINT"; then
-  git rebase --abort
-  echo "fold aborted: a fixup conflicted with a later commit; the branch is as it was" >&2
+  # Only a stop with unmerged paths is a conflict; a signer or a hook that refused is not.
+  if [ -n "$(git ls-files -u)" ]; then
+    WHY="$(git log -1 --format='%h "%s"' REBASE_HEAD) conflicted"
+  else
+    WHY="the rebase failed without a conflict (git's message is above)"
+  fi
+  [ ! -d "$(git rev-parse --git-path rebase-merge)" ] || git rebase --abort
+  fold_abort "$WHY"
 elif [ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ]; then
   echo "folded: tree unchanged"
 else
@@ -857,4 +898,4 @@ else
 fi
 ```
 
-Then re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.
+An abort names its cause: a commit that `conflicted`, by SHA and subject, or a rebase that failed without a conflict (a signer or a hook refused, and git's own message is printed above it). Either way the branch is as it was. Otherwise, re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.

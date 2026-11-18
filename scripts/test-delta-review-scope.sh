@@ -53,6 +53,30 @@ assert_eq() {
 section() { printf '\n== %s\n' "$1"; }
 fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 1; }
 
+# run_bounded <seconds> <command...> — runs the command with stdout and stderr
+# combined, and kills it after <seconds>, exiting 124 as timeout(1) does.
+# The watcher polls once a second and exits as soon as the command does, so it
+# leaves no sleep behind holding the caller's command substitution open.
+run_bounded() {
+    local secs="$1" pid watcher rc; shift
+    "$@" 2>&1 &
+    pid=$!
+    (
+        i=0
+        while [ "$i" -lt "$secs" ]; do
+            sleep 1
+            kill -0 "$pid" 2>/dev/null || exit 0
+            i=$((i + 1))
+        done
+        kill -9 "$pid" 2>/dev/null
+        exit 1
+    ) >/dev/null 2>&1 &
+    watcher=$!
+    wait "$pid"; rc=$?
+    wait "$watcher" || return 124
+    return "$rc"
+}
+
 # assert_fixture_committed <repo> <label> <before_count> <expected_new_commits> <file>...
 #
 # Checks the RESULT of a fixture-building subshell rather than the subshell's
@@ -140,6 +164,41 @@ scope_block="$(printf '%s\n' "$scope_block" | sed 's/^W="<[^"]*>"$/W="${SCOPE_W:
 [[ "$scope_block" == *'SCOPE_FROM="$REVIEWED_SHA"'* ]] \
     || fatal "scope block extracted from $premerge_skill does not assign SCOPE_FROM from the stamp"
 
+# The stacked-PR placeholder (#606). Step 3, step 4 and the fold each take the
+# sibling slice's branch here, because no earlier block's variable reaches them.
+# Each block is filled in by substitution, the way an agent fills it, and no
+# case below presets BASE_REF: a preset tests a path no run takes
+# (docs/solutions/testing-patterns/a-preset-variable-tests-a-path-no-run-takes-2026-10-26.md).
+bb_placeholder='BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"'
+# fill_base <block> <branch> — the block with its BASE_BRANCH placeholder filled.
+fill_base() {
+    local filled="BASE_BRANCH=\"$2\""
+    [[ "$1" == *"$bb_placeholder"* ]] || { echo "FATAL: a block lost its stacked BASE_BRANCH placeholder" >&2; return 1; }
+    printf '%s' "${1//"$bb_placeholder"/$filled}"
+}
+[[ "$scope_block" == *"$bb_placeholder"* ]] || fatal "scope block has no stacked BASE_BRANCH placeholder (#606)"
+scope_block_template="$scope_block"
+scope_block="$(fill_base "$scope_block_template" "")" || fatal "could not fill the scope block's BASE_BRANCH placeholder"
+
+# fenced_with <file> <needle> — the first fenced block in <file> whose body holds
+# <needle>, whole and de-indented, with the sidecar.sh placeholder pointed at the
+# canonical script.
+fenced_with() {
+    awk -v needle="$2" '
+        /^[[:space:]]*```/ {
+            if (inblock) { if (found) { printf "%s", buf; exit } inblock = 0; next }
+            inblock = 1; buf = ""; found = 0; next
+        }
+        inblock { line = $0; sub(/^[[:space:]]*/, "", line); buf = buf line "\n"; if (index($0, needle)) found = 1 }
+    ' "$1" | sed "s|<this skill's directory>/references/sidecar.sh|$sidecar_sh|"
+}
+
+# Phase 1 step 3's block (#606): the base and the branch's diff against it.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+step3_block="$(fenced_with "$premerge_skill" 'git log --oneline "$BASE_REF..HEAD"')"
+[[ "$step3_block" == *"$sidecar_sh"* ]] || fatal "no Phase 1 step 3 block found in $premerge_skill"
+[[ "$step3_block" == *"$bb_placeholder"* ]] || fatal "Phase 1 step 3's block has no stacked BASE_BRANCH placeholder (#606)"
+
 # The round-count block from /fix-findings' next-step menu, whole: the fence
 # that holds the RANGE line, through its closing fence. Its github arm counts
 # Fix-Findings-Run lines and its sidecar arm counts fixrun records (#585).
@@ -162,15 +221,20 @@ rounds_block="$(printf '%s\n' "$rounds_block" | sed 's/^W="<the slice[^"]*>"$/W=
 # shellcheck disable=SC2016
 [[ "$rounds_block" == *'W="${ROUNDS_W:-}"'* ]] || fatal "the round-count block's W= placeholder was not substituted"
 
-# The fold block from Phase 4's handoff (#566): from its BASE_REF guard to the
-# `fi` that closes the abort arm. Run in section 11 rather than restated, so a
-# rewrite that rebases onto the base's tip instead of the fork point fails there.
-fold_block="$(awk '
-    /^: "\$\{BASE_REF:\?derive it with the Phase 1 step 3 block/ { on = 1 }
-    on { print }
-    on && /^fi$/ { exit }
-' "$premerge_skill")"
-[[ "$fold_block" == *'git rebase -q -i --autosquash'* ]] || fatal "no fold block found in $premerge_skill"
+# The fold block from Phase 4's handoff (#566), whole. Run in section 11 rather
+# than restated, so a rewrite that rebases onto the base's tip instead of the
+# fork point fails there. It computes its own base (#606), so it runs with no
+# BASE_REF in its environment, as in the fresh shell an agent gives it.
+fold_block_template="$(fenced_with "$premerge_skill" 'git rebase -q -i --autosquash')"
+[[ "$fold_block_template" == *"$sidecar_sh"* ]] || fatal "no fold block found in $premerge_skill, or it does not ask sidecar.sh for its base"
+[[ "$fold_block_template" == *"$bb_placeholder"* ]] || fatal "the fold block has no stacked BASE_BRANCH placeholder (#606)"
+# run_fold <repo> [stacked branch] — the fold, in a shell with no BASE_REF.
+run_fold() { (cd "$1" && env -u BASE_REF bash -c "$(fill_base "$fold_block_template" "${2:-}")" 2>&1); }
+
+# /pre-merge Phase 2's shared-branch block (#572), whole: it prints its verdict.
+shared_block="$(fenced_with "$premerge_skill" 'git ls-remote --heads')"
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+[[ "$shared_block" == *'echo "shared: $SHARED"'* ]] || fatal "no shared-branch block printing its verdict found in $premerge_skill"
 
 # The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
 # out of its list item and whole, from its comment to the line that prints the
@@ -189,13 +253,13 @@ fixup_target_block="$(printf '%s\n' "$fixup_target_block" | sed -e 's/^FILE="<[^
 # shellcheck disable=SC2016  # the pattern is the substituted literal text
 [[ "$fixup_target_block" == *'END="${TARGET_END:?}"'* ]] || fatal "fixup-target block's anchor placeholders were not substituted"
 [[ "$fixup_target_block" == *'|| FIXUP_TARGET='* ]] || fatal "no FIXUP_TARGET block found in $fixfindings_skill"
-[[ "$fixup_target_block" == *'&& FIXUP_TARGET='* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no unshared-branch line"
+[[ "$fixup_target_block" == *'then FIXUP_TARGET=; fi'* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no shared-branch line"
 
 # The fold-trial block that follows it (#611): from its comment line to its
 # closing fence. Section 12 runs it whole against a fixup that folds, one that
 # does not, and each failure that is not a conflict (#614).
 fold_trial_block="$(awk '
-    /^   # After `git commit --fixup`: would \/pre-merge.s fold still apply cleanly\?/ { on = 1 }
+    /^   # After `git commit --fixup`: would the commit just made fold\?/ { on = 1 }
     on && /^   ```$/ { exit }
     on { sub(/^   /, ""); print }
 ' "$fixfindings_skill")"
@@ -310,14 +374,14 @@ before_count="$(git -C "$repo" rev-list --count HEAD)"
 assert_fixture_committed "$repo" "fixture post-stamp commits" "$before_count" 2 three.txt four.txt
 head_sha="$(git -C "$repo" rev-parse HEAD)"
 
-# run_scope <body> — runs the extracted block in the fixture with BASE_REF=main
+# run_scope <body> — runs the extracted block in the fixture, with no BASE_REF preset,
 # and prints "<scope line>|<files the diff --stat names, sorted, space-joined>".
 run_scope() {
     local body="$1" out files scope
     : > "$GH_STUB_ARGV_LOG"
     : > "$GH_STUB_ARGV_MISS_LOG"
     : > "$GIT_STUB_ARGV_LOG"
-    out="$(cd "$repo" && GH_STUB_BODY="$body" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    out="$(cd "$repo" && GH_STUB_BODY="$body" env -u BASE_REF bash -c "$scope_block" 2>&1)"
     # Exposed for callers that need the raw combined stdout+stderr rather than
     # the parsed "<scope>|<files>" pair (#348 review, finding 5's stderr-noise
     # assertion below).
@@ -561,7 +625,7 @@ run_scope2() {
     local out files scope
     : > "$GH_STUB_ARGV_LOG"
     : > "$GIT_STUB_ARGV_LOG"
-    out="$(cd "$repo2" && GH_STUB_BODY="$(stamped_body "$first_sha2")" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    out="$(cd "$repo2" && GH_STUB_BODY="$(stamped_body "$first_sha2")" env -u BASE_REF bash -c "$scope_block" 2>&1)"
     LAST_SCOPE_RAW="$out"
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -700,6 +764,73 @@ assert_eq "2" "$(run_rounds_slices "")" "on the sidecar backend a trailer line i
     || fatal "fixrun record for an off-branch SHA failed"
 assert_eq "2" "$(run_rounds_slices "")" "a record whose commit is not on the branch (a fold rewrote it) is not counted"
 
+# --- 9c. A stacked slice is measured against its sibling (#606) --------------
+# A stacked PR targets the sibling slice's branch, so step 3's diff and step 4's
+# scope must start there, not at the base: measured from main, the review would
+# re-read the sibling's commits as this slice's. Each block runs in a shell with
+# no BASE_REF, and the sibling reaches it only through its placeholder.
+section "stacked slice: step 3 and step 4 measure from the sibling branch named in their placeholder"
+repo_stack="$sandbox/repo-stack"
+mkdir -p "$repo_stack"
+(
+    cd "$repo_stack" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c slice-1
+    printf 'sibling\n' > s1.txt
+    git add s1.txt && git commit -q -m 'slice 1: sibling'
+    git switch -q -c feature
+    printf 'f1\n' > f1.txt
+    git add f1.txt && git commit -q -m 'slice 2: f1'
+    printf 'f2\n' > f2.txt
+    git add f2.txt && git commit -q -m 'slice 2: f2'
+)
+assert_fixture_committed "$repo_stack" "stacked fixture" 0 4 base.txt s1.txt f1.txt f2.txt
+# stat_files <output> — the files a --stat names, sorted, space-joined.
+stat_files() { printf '%s\n' "$1" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//'; }
+run_step3() { (cd "$repo_stack" && env -u BASE_REF -u BASE_BRANCH bash -c "$(fill_base "$step3_block" "$1")" 2>&1); }
+stack3="$(run_step3 slice-1)"
+assert_eq "f1.txt f2.txt" "$(stat_files "$stack3")" "step 3, stacked on slice-1: the diff names only this slice's files"
+assert_eq 2 "$(printf '%s\n' "$stack3" | grep -cE '^[0-9a-f]{7,} slice 2: ' || true)" "step 3, stacked on slice-1: the log lists only this slice's two commits"
+assert_eq "f1.txt f2.txt s1.txt" "$(stat_files "$(run_step3 "")")" "control: step 3 with an empty placeholder measures from main, sibling included"
+git -C "$repo_stack" update-ref refs/remotes/origin/slice-1 slice-1
+git -C "$repo_stack" update-ref refs/remotes/origin/main main
+git -C "$repo_stack" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+assert_eq "f1.txt f2.txt" "$(stat_files "$(run_step3 slice-1)")" "step 3, stacked, with origin/slice-1 present: still only this slice's files"
+stack3="$(run_step3 no-such-sibling)" && rc=0 || rc=$?
+[[ "$rc" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "step 3, stacked on a branch that does not resolve: the block stops"
+assert_eq "" "$(stat_files "$stack3")" "step 3, stacked on a branch that does not resolve: it measures nothing"
+run_scope_stack() {
+    local out
+    out="$(cd "$repo_stack" && GH_STUB_BODY="" env -u BASE_REF -u BASE_BRANCH bash -c "$(fill_base "$scope_block_template" "$1")" 2>&1)"
+    printf '%s|%s' "$(printf '%s\n' "$out" | grep '^review scope:' || true)" "$(stat_files "$out")"
+}
+(cd "$repo_stack" && git switch -q feature)
+assert_eq "review scope: whole branch, from origin/slice-1|f1.txt f2.txt" "$(run_scope_stack slice-1)" \
+    "step 4, stacked on slice-1: the whole-branch scope starts at the sibling"
+assert_eq "review scope: whole branch, from origin/main|f1.txt f2.txt s1.txt" "$(run_scope_stack "")" \
+    "control: step 4 with an empty placeholder starts at the base"
+
+# The fold, stacked: it rebases onto the fork point with the sibling, in a shell
+# that has a stale BASE_REF it must not read.
+(
+    cd "$repo_stack" || exit 1
+    printf 'f1, fixed\n' > f1.txt
+    git add f1.txt && git commit -q --fixup=HEAD~1 -m 'fix f1'
+)
+sibling_tip="$(git -C "$repo_stack" rev-parse slice-1)"
+stack_fold="$(cd "$repo_stack" && BASE_REF=origin/nope bash -c "$(fill_base "$fold_block_template" slice-1)" 2>&1)"
+case "$stack_fold" in
+    *"folded: tree unchanged"*) assert_eq ok ok "the fold, stacked on slice-1, in a shell with a stale BASE_REF: it folds" ;;
+    *) assert_eq "folded: tree unchanged" "$stack_fold" "the fold, stacked on slice-1, in a shell with a stale BASE_REF: it folds" ;;
+esac
+assert_eq "2 $sibling_tip" "$(git -C "$repo_stack" rev-list --count slice-1..HEAD) $(git -C "$repo_stack" merge-base slice-1 HEAD)" \
+    "the stacked fold leaves the sibling's commits as they were and this slice's two commits on top"
+
 # --- 10. A failed backend -----------------------------------------------------
 
 # #530: `backend stamp` that exits nonzero prints nothing. A block written as
@@ -716,7 +847,7 @@ printf '{"keys": [' > "$broken_root/broken/sidecar.json"
 assert_eq 1 "$?" "fixture precondition: backend stamp exits 1 under the broken root"
 : > "$GH_STUB_ARGV_LOG"
 failed_out="$(cd "$repo" && SKILL_KIT_SIDECAR_ROOT="$broken_root" GH_STUB_BODY="<!-- reviewed-at: $stamp_sha -->" \
-    BASE_REF=main bash -c "$scope_block" 2>&1)"
+    env -u BASE_REF bash -c "$scope_block" 2>&1)"
 failed_rc=$?
 assert_eq 1 "$failed_rc" "failed backend: the scope block exits 1"
 assert_eq "" "$(printf '%s\n' "$failed_out" | grep '^review scope:' || true)" \
@@ -788,9 +919,9 @@ before_count=0
 assert_fixture_committed "$repo3" "fold fixture setup" "$before_count" 4 base.txt one.txt two.txt
 reviewed_sha3="$(git -C "$repo3" rev-parse HEAD)"   # the re-run stamped the fixup head
 # The base moved after the fork, so a fold onto main's tip would change the tree.
-fold_out="$(cd "$repo3" && BASE_REF=main bash -c "$fold_block" 2>&1)"
+fold_out="$(run_fold "$repo3")"
 case "$fold_out" in
-    folded:*) assert_eq ok ok "the documented fold block reports the fold" ;;
+    *"folded: "*) assert_eq ok ok "the documented fold block reports the fold" ;;
     *) assert_eq "folded: ..." "$fold_out" "the documented fold block reports the fold" ;;
 esac
 assert_eq "2" "$(git -C "$repo3" rev-list --count main..HEAD)" \
@@ -805,7 +936,7 @@ assert_eq "" "$(git -C "$repo3" log --format=%B main..HEAD | grep 'Fix-Findings-
 run_scope3() {
     local out files scope
     : > "$GH_STUB_ARGV_LOG"
-    out="$(cd "$repo3" && GH_STUB_BODY="$(stamped_body "$1")" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    out="$(cd "$repo3" && GH_STUB_BODY="$(stamped_body "$1")" env -u BASE_REF bash -c "$scope_block" 2>&1)"
     LAST_SCOPE_RAW="$out"
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -844,10 +975,10 @@ first_commit3="${branch_commits3%%$'\n'*}"
     git add one.txt && git commit -q --fixup="$first_commit3"
 )
 conflict_head="$(git -C "$repo3" rev-parse HEAD)"
-conflict_out="$(cd "$repo3" && BASE_REF=main bash -c "$fold_block" 2>&1)"
+conflict_out="$(run_fold "$repo3")"
 case "$conflict_out" in
-    *"fold aborted"*) assert_eq ok ok "a conflicting fixup: the fold block names the abort" ;;
-    *) assert_eq "fold aborted ..." "$conflict_out" "a conflicting fixup: the fold block names the abort" ;;
+    *"fold aborted: "*" conflicted"*) assert_eq ok ok "a conflicting fixup: the fold block names the abort as a conflict" ;;
+    *) assert_eq "fold aborted: ... conflicted ..." "$conflict_out" "a conflicting fixup: the fold block names the abort as a conflict" ;;
 esac
 assert_eq "$conflict_head" "$(git -C "$repo3" rev-parse HEAD)" \
     "a conflicting fixup: HEAD is where it was before the fold"
@@ -875,11 +1006,15 @@ mkdir -p "$repo4"
     git commit -q -am 'feature: add d'
 )
 assert_fixture_committed "$repo4" "fixup-target fixture" 0 3 f.txt
-# point_origin_at_main <repo> — gives a fixture the origin/HEAD a clone has, so
-# sidecar.sh base-ref answers origin/main with nothing on stderr. No remote is
-# added: ls-remote still finds no branch, so the branch still reads as unshared.
+# point_origin_at_main <repo> — gives a fixture the origin a clone has, so
+# sidecar.sh base-ref answers origin/main with nothing on stderr. Only main is
+# pushed: ls-remote answers and finds no feature branch, so the branch reads as
+# unshared. A fixture with no origin at all would read as shared, because an
+# ls-remote that cannot ask counts as shared (#572).
 point_origin_at_main() {
-    git -C "$1" update-ref refs/remotes/origin/main main
+    git init -q --bare "$1.origin.git"
+    git -C "$1" remote add origin "$1.origin.git"
+    git -C "$1" push -q origin main 2>/dev/null
     git -C "$1" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 }
 point_origin_at_main "$repo4"
@@ -914,25 +1049,42 @@ git -C "$repo4" config blame.blankBoundary true
 git -C "$repo4" config blame.markUnblamableLines true
 assert_eq "" "$(run_target 1 1)" "blame.blankBoundary/markUnblamableLines set: a base line still yields no target"
 assert_eq "$change_b_sha" "$(run_target 2 2)" "blame display config set: a single-commit line is still the target"
+# markUnblamableLines only marks a line an ignored revision changed and blame
+# could not pass to another commit, so it needs blame.ignoreRevsFile to show at
+# all (#573 item 1). Ignore 'feature: add d': line 4 has no counterpart in its
+# parent, so a user's config would print `*<sha>` for it, and the block's
+# `-c blame.markUnblamableLines=false` is what keeps the answer a bare SHA.
+add_d_sha="$(git -C "$repo4" rev-parse HEAD)"
+printf '%s\n' "$add_d_sha" > "$sandbox/ignore-revs4"
+git -C "$repo4" config blame.ignoreRevsFile "$sandbox/ignore-revs4"
+assert_eq "*${add_d_sha:0:39}" "$(git -C "$repo4" blame -l -s -L 4,4 main..HEAD -- f.txt | awk '{ print $1 }')" \
+    "fixture precondition: with the ignore-revs file, the user's blame config marks line 4 with *"
+assert_eq "$add_d_sha" "$(run_target 4 4)" "an unblamable line under the user's ignore-revs file: the target is a bare SHA"
+git -C "$repo4" config --unset blame.ignoreRevsFile
 
 # A shared branch never gets a fixup: /pre-merge offers the fold only on an
 # unshared branch, so a `fixup!` subject there would merge as-is (#611). Both
 # ways of sharing count — a push with -u, and a plain push with no upstream.
 bare4="$sandbox/bare4.git"
 git init -q --bare "$bare4"
-git -C "$repo4" remote add origin "$bare4"
+git -C "$repo4" remote set-url origin "$bare4"
 git -C "$repo4" push -q origin feature 2>/dev/null
 assert_eq "" "$(run_target 2 2)" "plain push without -u: a single-commit line yields no target"
 git -C "$repo4" branch -q --set-upstream-to=origin/feature
 assert_eq "" "$(run_target 2 2)" "pushed with an upstream: a single-commit line yields no target"
-# The unshared test is copied from /pre-merge Phase 2; pin the copy to it.
-lsremote_premerge="$(grep -o "git ls-remote --heads origin [^\`]*" "$premerge_skill" | head -1 || true)"
-[[ -n "$lsremote_premerge" && "$fixup_target_block" == *"$lsremote_premerge"* ]] && r=same || r=differs
-assert_eq same "$r" "the fixup-target block's remote check is /pre-merge Phase 2's"
-# shellcheck disable=SC2016  # literal text being matched
-upstream_cmd='git rev-parse -q --verify '"'"'@{u}'"'"
-grep -qF -- "$upstream_cmd" "$premerge_skill" && [[ "$fixup_target_block" == *"$upstream_cmd"* ]] && r=same || r=differs
-assert_eq same "$r" "the fixup-target block's upstream check is /pre-merge Phase 2's"
+# The unshared test is copied from /pre-merge Phase 2's shared-branch block;
+# pin the copy to it, line by line, and the verdict to the same condition (#572).
+shared_copy_lines() {
+    printf '%s\n' "$1" | grep -E '^(B=|R=|HEADS=)' || true
+    printf '%s\n' "$1" | sed -n 's/^if \(.*\); then .*/\1/p'
+}
+premerge_shared_lines="$(shared_copy_lines "$shared_block")"
+assert_eq 4 "$(printf '%s\n' "$premerge_shared_lines" | grep -c .)" "/pre-merge's shared-branch block has its three lookups and one verdict"
+missing=""
+while IFS= read -r l; do
+    [[ -z "$l" || "$fixup_target_block" == *"$l"* ]] || missing="$missing [$l]"
+done <<<"$premerge_shared_lines"
+assert_eq "" "$missing" "the fixup-target block's shared-branch test is /pre-merge Phase 2's, line for line"
 
 # --- 12b. The fold trial demotes a fixup the fold could not apply (#611) ------
 section "fold trial: a fixup that would not fold becomes an ordinary commit"
@@ -995,8 +1147,8 @@ assert_eq "feature" "$(git -C "$repo6" branch --show-current)" "the trial leaves
 assert_eq "$worktrees_before" "$(git -C "$repo6" worktree list | grep -c .)" "the trial registers no worktree"
 assert_eq "" "$(git -C "$repo6" status --porcelain)" "the trial leaves the working tree clean"
 # The fold /pre-merge offers now succeeds where it would have aborted.
-case "$(cd "$repo6" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
-    folded:*) assert_eq ok ok "after the demotion, /pre-merge's fold applies" ;;
+case "$(run_fold "$repo6")" in
+    *"folded: "*) assert_eq ok ok "after the demotion, /pre-merge's fold applies" ;;
     *) assert_eq "folded: ..." "aborted" "after the demotion, /pre-merge's fold applies" ;;
 esac
 
@@ -1032,8 +1184,8 @@ head9="$(git -C "$repo9" rev-parse HEAD)"
 assert_eq "fold trial: clean" "$(trial_in "$repo9")" \
     "a base that moved after the fork: the trial still reports clean"
 assert_eq "$head9" "$(git -C "$repo9" rev-parse HEAD)" "a base that moved after the fork: the fixup is not demoted"
-case "$(cd "$repo9" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
-    folded:*) assert_eq ok ok "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
+case "$(run_fold "$repo9")" in
+    *"folded: "*) assert_eq ok ok "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
     *) assert_eq "folded: ..." "aborted" "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
 esac
 
@@ -1188,16 +1340,40 @@ out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$signing_config" bas
 assert_eq "fold trial: clean" "$out10" "global signing with a failing signer: the trial still reports clean"
 assert_eq "$head10" "$(git -C "$repo10" rev-parse HEAD)" "global signing with a failing signer: the fixup is not demoted"
 
+# #686 box 11: the trial's own identity. The throwaway clone reads none of the
+# repository's config, so its rebase commits with the -c user.name/user.email
+# the block passes; without them a machine with no global identity aborts a
+# fixup that folds. useConfigOnly stops git guessing one from the host.
+no_identity_config="$sandbox/no-identity.gitconfig"
+printf '[user]\n\tuseConfigOnly = true\n' > "$no_identity_config"
+no_identity_env=(env -u BASE_REF -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL
+    GIT_CONFIG_GLOBAL="$no_identity_config" GIT_CONFIG_NOSYSTEM=1)
+id_probe="$sandbox/id-probe"
+git init -q "$id_probe"
+"${no_identity_env[@]}" git -C "$id_probe" commit -q --allow-empty -m probe 2>/dev/null && r=committed || r=refused
+assert_eq refused "$r" "the instrument: with no identity configured, a commit is refused"
+out10="$(cd "$repo10" && "${no_identity_env[@]}" bash -c "$fold_trial_block" 2>&1)"
+assert_eq "fold trial: clean" "$out10" "no identity anywhere: the trial's own identity still lets a clean fixup fold"
+assert_eq "$head10" "$(git -C "$repo10" rev-parse HEAD)" "no identity anywhere: the fixup is not demoted"
+
 section "fold trial: a rebase that fails without a conflict refuses (#614 item 1)"
 # A global pre-rebase hook refuses before anything is replayed.
 refusing_hooks="$sandbox/refusing-hooks"
 mkdir -p "$refusing_hooks"
-printf '#!/bin/sh\nexit 1\n' > "$refusing_hooks/pre-rebase"
+printf '#!/bin/sh\necho "pre-rebase: frozen until Friday" >&2\nexit 1\n' > "$refusing_hooks/pre-rebase"
 chmod +x "$refusing_hooks/pre-rebase"
 hooks_config="$sandbox/hooks.gitconfig"
 printf '[core]\n\thooksPath = %s\n' "$refusing_hooks" > "$hooks_config"
-out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$hooks_config" bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
+: > "$TRIAL_TMP_LOG"
+out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$hooks_config" PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--no-such-arg \
+    bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
 assert_refused "a refusing pre-rebase hook" "$repo10" "$head10" "$rc10" "$out10" "the rebase failed without a conflict"
+# #686 box 6: the rebase's own error reaches the report, so a hook's reason is not lost.
+case "$out10" in
+    *"frozen until Friday"*) assert_eq ok ok "a refusing pre-rebase hook: the abort relays the hook's message" ;;
+    *) assert_eq "the hook's message" "$out10" "a refusing pre-rebase hook: the abort relays the hook's message" ;;
+esac
+assert_trial_dir_gone "a refusing pre-rebase hook"
 
 # A fixup that undoes its target stops the rebase with nothing unmerged: the fold
 # aborts, but this is not a conflict either, so it goes to the human.
@@ -1213,6 +1389,35 @@ clean_fixup_repo "$repo12"
 head12="$(git -C "$repo12" rev-parse HEAD)"
 out12="$(trial_in "$repo12")" && rc12=0 || rc12=$?
 assert_refused "a fixup that empties its target" "$repo12" "$head12" "$rc12" "$out12" "the rebase failed without a conflict"
+
+# /pre-merge's own fold has the same two kinds of abort (#675): only a stop with
+# unmerged paths is a conflict. A signer or a hook that refuses is something
+# else, and a message that calls it a conflict sends the operator to the wrong
+# fix. Either way the branch is left as it was.
+section "/pre-merge's fold: an abort that is not a conflict is not called one (#675)"
+repo14="$sandbox/repo14"
+clean_fixup_repo "$repo14"
+head14="$(git -C "$repo14" rev-parse HEAD)"
+# fold_refused <label> <global config>
+fold_refused() {
+    local out
+    out="$(cd "$repo14" && env -u BASE_REF GIT_CONFIG_GLOBAL="$2" bash -c "$(fill_base "$fold_block_template" "")" 2>&1)"
+    case "$out" in
+        *"fold aborted: the rebase failed without a conflict"*) assert_eq ok ok "$1: the abort says it was not a conflict" ;;
+        *) assert_eq "fold aborted: the rebase failed without a conflict ..." "$out" "$1: the abort says it was not a conflict" ;;
+    esac
+    case "$out" in
+        *conflicted*) assert_eq "no conflict claimed" "$out" "$1: no conflict is claimed" ;;
+        *) assert_eq ok ok "$1: no conflict is claimed" ;;
+    esac
+    assert_eq "$head14" "$(git -C "$repo14" rev-parse HEAD)" "$1: HEAD is where it was"
+    assert_eq "" "$(git -C "$repo14" status --porcelain)" "$1: the tree is clean"
+    [[ -d "$(git -C "$repo14" rev-parse --git-path rebase-merge)" ]] && r=in-progress || r=none
+    assert_eq none "$r" "$1: no rebase is left in progress"
+}
+fold_refused "a failing signer" "$signing_config"
+fold_refused "a refusing pre-rebase hook" "$hooks_config"
+assert_eq "folded: tree unchanged" "$(run_fold "$repo14" 2>/dev/null)" "control: with neither, the same branch folds"
 
 section "fold trial: a blocked leftover does not fail later fixups (#614 item 4)"
 repo11="$sandbox/repo11"
@@ -1254,12 +1459,16 @@ assert_eq 0 "$rc11" "a clean fixup after a leftover: the block exits 0"
 assert_eq "$clean11" "$(git -C "$repo11" rev-parse HEAD)" "a clean fixup after a leftover: it is not demoted"
 assert_eq "fixup! feature: two" "$(git -C "$repo11" log -1 --format=%s)" "a clean fixup after a leftover: the subject is still fixup!"
 case "$out11" in
-    "fold trial: clean"*"$leftover11"*) assert_eq ok ok "a clean fixup after a leftover: clean, and the leftover is named" ;;
+    *"$leftover11"*"fold trial: clean"*) assert_eq ok ok "a clean fixup after a leftover: clean, and the leftover is named" ;;
     *) assert_eq "clean, naming $leftover11" "$out11" "a clean fixup after a leftover: clean, and the leftover is named" ;;
 esac
 # A skip that cannot move on must not spin: an AFK fixer has no one to stop it.
-out11="$(cd "$repo11" && env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--skip \
-    bash -c "$fold_trial_block" 2>&1)" && rc11=0 || rc11=$?
+# Bounded (#686 box 13): a regression here spins, so it fails by name after a
+# minute instead of hanging pre-push and CI. macOS ships no `timeout`.
+out11="$(cd "$repo11" && run_bounded 60 env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--skip \
+    bash -c "$fold_trial_block")" && rc11=0 || rc11=$?
+[[ "$rc11" -ne 124 ]] && r=finished || r=timed-out
+assert_eq finished "$r" "a rebase --skip that fails: the block finishes within the bound"
 assert_refused "a rebase --skip that fails" "$repo11" "$clean11" "$rc11" "$out11" "rebase --skip did not move past"
 # The skip must judge the new commit, not wave everything through: a second
 # conflicting fixup after the leftover is still demoted, and the leftover stays.
@@ -1272,6 +1481,10 @@ rm "$repo11/.git/hooks/commit-msg"
 out11="$(trial_in "$repo11")" && rc11=0 || rc11=$?
 assert_eq 0 "$rc11" "a conflicting fixup after a leftover: the block exits 0"
 assert_eq "fix one again" "$(git -C "$repo11" log -1 --format=%s)" "a conflicting fixup after a leftover: it is still demoted"
+case "$out11" in
+    *"$leftover11"*) assert_eq ok ok "a conflicting fixup after a leftover: the demotion still names the leftover (#686 box 2)" ;;
+    *) assert_eq "a line naming $leftover11" "$out11" "a conflicting fixup after a leftover: the demotion still names the leftover (#686 box 2)" ;;
+esac
 assert_eq "fixup! feature: one" "$(git -C "$repo11" log -1 --format=%s "$leftover11")" "the leftover itself is not touched"
 
 section "fold trial: a conflict the fixup causes in a later commit still demotes"
@@ -1293,8 +1506,11 @@ assert_eq 0 "$rc13" "a later commit conflicts: the block exits 0"
 assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out13" "a later commit conflicts: the trial names the demotion"
 assert_eq "add three" "$(git -C "$repo13" log -1 --format=%s)" "a later commit conflicts: the fixup is demoted"
 
-section "fold trial: the block runs under zsh, the shell an agent has on macOS"
-if command -v zsh >/dev/null 2>&1; then
+section "fold trial and fixup target: the blocks run under zsh, the shell an agent has on macOS"
+# docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md:
+# the blocks run in zsh in a real session, so each path runs there too. A missing
+# zsh skips locally and fails when CI is set (#686 box 9).
+zsh_arms() {
     zsh_clean="$(cd "$repo10" && env -u BASE_REF zsh -f -c "$fold_trial_block" 2>&1)"
     assert_eq "fold trial: clean" "$zsh_clean" "zsh: a clean fixup reports clean"
     : > "$TRIAL_TMP_LOG"
@@ -1302,36 +1518,140 @@ if command -v zsh >/dev/null 2>&1; then
         zsh -f -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
     assert_refused "zsh, a failing clone" "$repo10" "$head10" "$rc10" "$zsh_out" "the throwaway clone failed"
     assert_trial_dir_gone "zsh, a failing clone"
+    # The conflict path: a fixup a later commit rewrote over is demoted.
+    local zc="$sandbox/zsh-conflict" zs="$sandbox/zsh-skip" zt="$sandbox/zsh-target" out rc
+    mkdir -p "$zc"
+    (
+        cd "$zc" || exit 1
+        git init -q -b main . && git config user.email t@example.com && git config user.name t
+        printf 'base\n' > base.txt && git add base.txt && git commit -q -m base
+        git switch -q -c feature
+        printf 'one\n' > one.txt && git add one.txt && git commit -q -m 'feature: one'
+        printf 'one, rewritten\n' > one.txt && git add one.txt && git commit -q -m 'feature: rewrite one'
+        printf 'one, fixed\n' > one.txt && git add one.txt && git commit -q --fixup=HEAD~1 -m 'fix one'
+    )
+    point_origin_at_main "$zc"
+    out="$(cd "$zc" && env -u BASE_REF zsh -f -c "$fold_trial_block" 2>&1)" && rc=0 || rc=$?
+    assert_eq "0 fold trial: would not fold; recommitted as an ordinary commit" "$rc $out" "zsh: a conflicting fixup is demoted"
+    assert_eq "fix one" "$(git -C "$zc" log -1 --format=%s)" "zsh: the demoted commit carries the fixer's subject"
+    # The skip path: a leftover that will not fold is skipped and named, and the
+    # clean fixup after it stays a fixup.
+    mkdir -p "$zs"
+    (
+        cd "$zs" || exit 1
+        git init -q -b main . && git config user.email t@example.com && git config user.name t
+        printf 'base\n' > base.txt && git add base.txt && git commit -q -m base
+        git switch -q -c feature
+        printf 'one\n' > one.txt && git add one.txt && git commit -q -m 'feature: one'
+        printf 'one, rewritten\n' > one.txt && git add one.txt && git commit -q -m 'feature: rewrite one'
+        printf 'two\n' > two.txt && git add two.txt && git commit -q -m 'feature: two'
+        printf 'one, fixed\n' > one.txt && git add one.txt && git commit -q --fixup=HEAD~2 -m 'fix one'
+        printf 'two, fixed\n' > two.txt && git add two.txt && git commit -q --fixup=HEAD~1 -m 'fix two'
+    )
+    point_origin_at_main "$zs"
+    local leftover_z head_z
+    leftover_z="$(git -C "$zs" rev-parse HEAD~1)"
+    head_z="$(git -C "$zs" rev-parse HEAD)"
+    out="$(cd "$zs" && run_bounded 60 env -u BASE_REF zsh -f -c "$fold_trial_block")" && rc=0 || rc=$?
+    case "$rc:$out" in
+        "0:"*"$leftover_z"*"fold trial: clean"*) assert_eq ok ok "zsh: a leftover is skipped and named, and the clean fixup reports clean" ;;
+        *) assert_eq "0:fold trial: clean ... $leftover_z" "$rc:$out" "zsh: a leftover is skipped and named, and the clean fixup reports clean" ;;
+    esac
+    assert_eq "$head_z" "$(git -C "$zs" rev-parse HEAD)" "zsh: the clean fixup after a leftover is not demoted"
+    # The fixup-target block: one commit's line is its target, a base line has none.
+    mkdir -p "$zt"
+    (
+        cd "$zt" || exit 1
+        git init -q -b main . && git config user.email t@example.com && git config user.name t
+        printf 'a\nb\n' > f.txt && git add f.txt && git commit -q -m base
+        git switch -q -c feature
+        printf 'a\nB\n' > f.txt && git commit -q -am 'feature: change b'
+    )
+    point_origin_at_main "$zt"
+    out="$(cd "$zt" && env -u BASE_REF TARGET_FILE=f.txt TARGET_START=2 TARGET_END=2 zsh -f -c "$fixup_target_block" 2>/dev/null)"
+    assert_eq "FIXUP_TARGET=$(git -C "$zt" rev-parse HEAD)" "$out" "zsh: the fixup-target block names the one commit that wrote the line"
+    out="$(cd "$zt" && env -u BASE_REF TARGET_FILE=f.txt TARGET_START=1 TARGET_END=1 zsh -f -c "$fixup_target_block" 2>/dev/null)"
+    assert_eq "FIXUP_TARGET=" "$out" "zsh: a base line has no fixup target"
+}
+if command -v zsh >/dev/null 2>&1; then
+    zsh_arms
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the fold-trial and fixup-target blocks ran under zsh (CI is set, so a missing zsh fails)"
 else
-    printf '  skip zsh is not installed\n'
+    printf '  SKIP zsh is not on PATH, so the fold-trial and fixup-target blocks ran under bash only\n'
 fi
 
-# --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
+# --- 13. "Unshared" means no upstream AND not on the push remote (#566, #572) --
 # A plain `git push origin <branch>` publishes the branch with no upstream, so
 # the `@{u}` check alone would keep deferring review of a branch others can read.
-# The remote-side command is extracted from the skill's own prose and run.
-section "unshared test: a branch pushed without -u is shared"
-lsremote_cmd="$(grep -o "git ls-remote --heads origin [^\`]*" "$premerge_skill" | head -1 || true)"
-[[ -n "$lsremote_cmd" ]] || fatal "no ls-remote command found in pre-merge/SKILL.md"
+# A remote that cannot be asked is not an answer of "absent" (#572): ls-remote
+# prints nothing and exits nonzero, and reading only its output called a pushed
+# branch private. The branch is looked up on the remote it pushes to, and only
+# an exact refs/heads/<branch> counts. The whole block is run in each state and
+# its printed verdict is the assertion.
+section "unshared test: the verdict on the push remote, in every state the prose names"
 bare5="$sandbox/bare5.git"
+fork5="$sandbox/fork5.git"
 repo5="$sandbox/repo5"
 git init -q --bare "$bare5"
+git init -q --bare "$fork5"
 git init -q -b main "$repo5"
 (
     cd "$repo5" || exit 1
     git config user.email t@example.com
     git config user.name t
     git remote add origin "$bare5"
+    git remote add fork "$fork5"
     printf 'a\n' > f.txt
     git add f.txt && git commit -q -m 'base'
     git switch -q -c feature
 )
-unshared_remote() { (cd "$repo5" && bash -c "$lsremote_cmd" 2>/dev/null); }
-assert_eq "" "$(unshared_remote)" "unpushed branch: remote check prints nothing (unshared)"
+run_shared() { (cd "$repo5" && bash -c "$shared_block" 2>/dev/null); }
+# The same block under zsh (#574), the shell an agent runs it in on macOS:
+# each verdict below that names "zsh" is checked in both shells.
+have_zsh=no
+if command -v zsh >/dev/null 2>&1; then
+    have_zsh=yes
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the shared-branch block ran under zsh (CI is set, so a missing zsh fails)"
+else
+    printf '  SKIP zsh is not on PATH, so the shared-branch block runs under bash only\n'
+fi
+# shared_both <expected> <label> — the verdict in bash, and in zsh when present.
+shared_both() {
+    assert_eq "$1" "$(run_shared)" "$2"
+    [ "$have_zsh" = no ] || assert_eq "$1" "$(cd "$repo5" && zsh -f -c "$shared_block" 2>/dev/null)" "zsh: $2"
+}
+shared_both "shared: no" "unpushed branch, origin reachable: unshared"
+git -C "$repo5" push -q origin feature:alice/feature 2>/dev/null
+assert_eq "shared: no" "$(run_shared)" "origin holds alice/feature, not feature: an exact refs/heads/ match only, so unshared"
+# ls-remote matches a pattern against the tail of a ref name, so even the full
+# refs/heads/feature pattern matches a branch named x/refs/heads/feature.
+git -C "$repo5" push -q origin feature:x/refs/heads/feature 2>/dev/null
+assert_eq "refs/heads/x/refs/heads/feature" "$(git -C "$repo5" ls-remote --heads origin refs/heads/feature | cut -f2)" \
+    "fixture precondition: ls-remote's own pattern matches refs/heads/x/refs/heads/feature"
+shared_both "shared: no" "origin holds x/refs/heads/feature, which ls-remote's pattern matches: the exact match still says unshared"
+git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
+shared_both "shared: yes" "origin cannot be reached: ls-remote fails, so shared"
+git -C "$repo5" remote set-url origin "$bare5"
+git -C "$repo5" push -q fork feature 2>/dev/null
+assert_eq "shared: no" "$(run_shared)" "control: pushed only to fork, and nothing says fork is the push remote: origin is asked, unshared"
+git -C "$repo5" config remote.pushDefault fork
+shared_both "shared: yes" "remote.pushDefault is fork, which holds the branch: shared"
+git -C "$repo5" config branch.feature.pushRemote origin
+assert_eq "shared: no" "$(run_shared)" "branch.feature.pushRemote is origin, which outranks remote.pushDefault: unshared"
+git -C "$repo5" config --unset branch.feature.pushRemote
+git -C "$repo5" config --unset remote.pushDefault
+git -C "$repo5" config branch.feature.remote fork
+assert_eq "shared: yes" "$(run_shared)" "branch.feature.remote is fork, which holds the branch: shared"
+git -C "$repo5" config --unset branch.feature.remote
 git -C "$repo5" push -q origin feature 2>/dev/null
 assert_eq "" "$(git -C "$repo5" rev-parse -q --verify '@{u}' 2>/dev/null)" "plain push: still no upstream"
-[[ -n "$(unshared_remote)" ]] && r=shared || r=unshared
-assert_eq "shared" "$r" "plain push without -u: remote check sees the branch (shared)"
+shared_both "shared: yes" "plain push to origin without -u: shared"
+git -C "$repo5" branch -q --set-upstream-to=origin/feature
+git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
+assert_eq "shared: yes" "$(run_shared)" "an upstream is set: shared, whatever the remote answers"
+git -C "$repo5" remote set-url origin "$bare5"
 
 # -----------------------------------------------------------------------------
 

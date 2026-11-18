@@ -23,12 +23,11 @@
 #      Phase 4's output format had no tier to print either into.
 #
 # WHAT THIS SUITE HOLDS. Four detectors, each reading its expectation OUT of
-# the canon rather than restating it. Three carry a planted self-test — a
+# the canon rather than restating it. Each carries a planted self-test — a
 # positive that must hit and a near-miss that must stay silent — because a
 # detector whose healthy state is zero hits needs a self-test, not a floor
 # (docs/solutions/testing-patterns/mechanism-generality-lags-the-pattern-2026-08-23.md
-# § Prevention). Detector 2 does not; it carries only a `gate_count >= 2`
-# floor, which is the substitute that rule names as insufficient.
+# § Prevention).
 #
 # WHAT IS MECHANIZED AND WHAT IS HELD BY REVIEW. #293 §3 enumerated five
 # restated operatives in pre-merge/SKILL.md; §5 added by-number references;
@@ -40,9 +39,10 @@
 #   MECHANIZED
 #     - by-number dimension references, across the scanned population
 #       (Detector 1). #293 §5.
-#     - severity labels on `- **Name (Label):**` violation bullets
-#       (Detector 4). The comment-thread item. That bullet shape ONLY —
-#       an inline `flag as \`Concern\`` is not reached.
+#     - severity labels on `- **Name (Label):**` violation bullets in the
+#       canon (Detector 4). The comment-thread item. That bullet shape ONLY —
+#       an inline `flag as \`Concern\`` is not reached — and the canon only,
+#       since the same bullet shape elsewhere (a PRD's appetite) is not a tier.
 #
 #   PARTIALLY MECHANIZED — a paraphrase defeats both, by construction
 #     - a dimension's gate (Detector 2): a VERBATIM 60-character prefix of
@@ -202,6 +202,23 @@ grep -E '^\*\*Only runs (when|if) ' "$checklist" \
 gate_count="$(grep -c . "$gates_file" || true)"
 [ "$gate_count" -ge 2 ] || fatal "extracted $gate_count gate line(s) from the canon; expected at least 2. The '**Only runs when …**' shape changed. Refusing to report a vacuous pass."
 
+# Reads a file path as $1; emits the first line carrying a gate's fingerprint.
+detect_gate_restatement() {
+    grep -F -f "$gates_file" "$1" | head -1 || true
+}
+
+section "Detector 2 self-tests"
+
+fixture="$(mktemp)"
+first_gate="$(head -1 "$gates_file")"
+printf 'In Phase 3 this dimension only runs when %s, as the checklist says.\n' "$first_gate" > "$fixture"
+hit="$(detect_gate_restatement "$fixture")"
+assert_true "$([ -n "$hit" ] && echo true || echo false)" "gate detector: flags a sentence carrying a gate's first 60 characters"
+printf 'Each conditional dimension states its own gate under its heading in review-checklist.md; read it there.\n' > "$fixture"
+miss="$(detect_gate_restatement "$fixture")"
+assert_eq "" "$miss" "gate detector: silent on a pointer to the gates that restates none"
+rm -f "$fixture"
+
 # ============================================================================
 # Detector 3 — the review-size ladder, restated
 # ============================================================================
@@ -279,7 +296,7 @@ detect_undefined_severity_labels() {
         | sed -E 's/ *—.*$//' \
         | while IFS= read -r label; do
             [ -n "$label" ] || continue
-            grep -qx "$label" <<<"$tiers" || printf '%s\n' "$label"
+            grep -qxF "$label" <<<"$tiers" || printf '%s\n' "$label"
         done
     } || true
 }
@@ -294,6 +311,10 @@ miss="$(printf -- '- **Unmapped Want (Suggestion):** A Want-commitment has no me
 assert_eq "" "$miss" "severity detector: silent on a defined tier"
 miss="$(printf -- '- **Unmapped Must (Concern — with the withheld action named):** x\n' | detect_undefined_severity_labels)"
 assert_eq "" "$miss" "severity detector: silent on a defined tier carrying an em-dash qualifier"
+# #300: a label is compared as text, so a regex metacharacter in it cannot
+# match a defined tier it does not spell.
+hit="$(printf -- '- **Unmapped Want (Sugg.stion):** x\n' | detect_undefined_severity_labels)"
+assert_eq "Sugg.stion" "$hit" "severity detector: flags a label whose '.' would match a defined tier as a regex"
 
 # ============================================================================
 # The corpus scan
@@ -314,14 +335,17 @@ while IFS= read -r f; do
     [ -n "$h" ] && numeric_hits="$numeric_hits$f: $h
 "
 
-    h="$(detect_undefined_severity_labels < "$p")"
-    [ -n "$h" ] && label_hits="$label_hits$f: $h
+    # Severity labels are the canon's vocabulary: a `- **Name (Label):**`
+    # bullet elsewhere (a PRD appetite, say) is not a review finding (#300).
+    if [ "$f" = "pre-merge/review-checklist.md" ]; then
+        h="$(detect_undefined_severity_labels < "$p")"
+        [ -n "$h" ] && label_hits="$label_hits$f: $h
 "
+        # Gates and bands belong to the canon; every OTHER file must be free of them.
+        continue
+    fi
 
-    # Gates and bands belong to the canon; every OTHER file must be free of them.
-    [ "$f" = "pre-merge/review-checklist.md" ] && continue
-
-    h="$(grep -F -f "$gates_file" "$p" | head -1 || true)"
+    h="$(detect_gate_restatement "$p")"
     [ -n "$h" ] && gate_hits="$gate_hits$f: $h
 "
 
@@ -336,7 +360,7 @@ done < "$population_file"
 assert_eq "" "$numeric_hits" "no '[Dd]imensions?|Dim <N>' match in the $pop_count scanned files"
 assert_eq "" "$gate_hits" "no verbatim copy of a gate's first 60 characters outside the canon ($gate_count gates extracted)"
 assert_eq "" "$band_hits" "no file outside the canon carries 3+ of the $band_count band thresholds, nor the Observation bound $observation_bound"
-assert_eq "" "$label_hits" "every '- **Name (Label):**'-shaped severity label found is a tier the canon defines"
+assert_eq "" "$label_hits" "every '- **Name (Label):**'-shaped severity label in the canon is a tier the canon defines"
 
 printf '\n%d passed, %d failed  (bash %s)\n' "$pass" "$fail" "${BASH_VERSION%%(*}"
 [ "$fail" -eq 0 ]
