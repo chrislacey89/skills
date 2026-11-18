@@ -511,6 +511,10 @@ and the thread URL, and the Step 2 evidence row beside it. The human's typed
 disposition is the selection `/fix-findings` requires. This skill adds no
 number to it, and drops none from it. On the `sidecar` backend, hand it the
 slice's `W-<n>` as well, so each fix is attributed to its slice in `trace`.
+For a stacked PR, hand it the sibling slice's branch as well. This skill may run in a
+fresh session where nothing carries that name, so read it from the PR's base
+branch (`gh pr view <pr-number> --json baseRefName`) when that base is not the
+repo's default base.
 This block looks up the open slices recorded on the current branch and prints
 one verdict:
 
