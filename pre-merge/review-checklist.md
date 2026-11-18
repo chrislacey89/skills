@@ -190,7 +190,7 @@ This is a **reconciliation test, not a gate** — `/pre-merge` is advisory in ev
 - Ignoring a relevant prevention strategy — a solution's Prevention section describes a practice that applies to this code, but the code doesn't follow it
 - Stale solution consumption — relying on a `volatile` solution that is older than 90 days or whose Shelf Life condition appears met
 
-**Out of scope:** Whether new lessons should be captured (that's `/compound` after merge).
+**Out of scope:** Whether new lessons should be captured (that's `/compound (in-PR)`, which runs before `/closeout` merges).
 
 ---
 
