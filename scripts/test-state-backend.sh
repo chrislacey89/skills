@@ -463,6 +463,31 @@ clean "dangling-link arms leave the guest project clean" "$dlguest"
 clean "dangling-link arms leave the claimed project clean" "$dlclaimed"
 
 # -----------------------------------------------------------------------------
+section "backend: every fenced call site handles the refusal"
+
+# docs/state-backend.md § "A caller branches on all three outcomes" states the
+# two shapes a fenced block that asks `backend` may take: a `case` on the
+# answer, or an assignment whose `||` catches the nonzero exit. An
+# `if [ "$(backend)" = sidecar ]` reads a refusal as github (#530). This reads
+# every line of every tracked SKILL.md that runs `bash "$SC" backend`, skipping
+# prose (a line holding a backtick), so a new call site is checked the day it
+# lands (#544). It pins the shape, not what each `*)` arm does.
+# shellcheck disable=SC2016  # $SC and $( are literal text in the pattern
+call_re='^[[:space:]]*(case "\$\(bash "\$SC" backend [a-z]+\)" in|[A-Za-z_]+="\$\(bash "\$SC" backend [a-z]+\)" \|\| .+)$'
+sites=0 offenders=""
+# shellcheck disable=SC2016  # the grep pattern's $SC is literal text
+while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    sites=$((sites + 1))
+    line="${hit#*:*:}"
+    grep -Eq "$call_re" <<<"$line" || offenders="${offenders:+$offenders; }${hit%"$line"}$line"
+done <<EOF_SITES
+$(cd "$repo_root" && git ls-files '*/SKILL.md' | xargs grep -n 'bash "\$SC" backend ' | grep -v '`')
+EOF_SITES
+check "fenced backend call sites found (zero would mean the scan matched nothing)" yes "$([ "$sites" -gt 0 ] && echo yes || echo no)"
+check "every fenced backend call site is a case on the answer or an assignment with ||" "" "$offenders"
+
+# -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
 
 # expect <mode> <remote> <prds> <slices> <stamp>
