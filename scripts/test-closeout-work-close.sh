@@ -217,7 +217,9 @@ check "CLOSED: it says why" 1 "$(grep -c 'closed without merging' "$tmp/stderr")
 
 # The skill prose gives MERGED its own route: Step 2 narrows to the fully-pushed check, and the merge is skipped.
 # shellcheck disable=SC2016  # the needles are the skill's literal text
-check "Step 2 keeps the fully-pushed check on a MERGED PR, and stops when it fails" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the first checkbox, that the feature branch is fully pushed, still holds.*If it fails, stop and report it\.' "$CO")"
+check "Step 2 keeps the fully-pushed check on a MERGED PR, and stops when it fails" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the fully-pushed checkbox below still holds.*If it fails, stop and report it\.' "$CO")"
+# The anchor the MERGED sentence names must exist as a checkbox in Step 2's checklist.
+check "Step 2's checklist has a fully-pushed checkbox for the MERGED route to name" 1 "$(sed -n '/^### 2\. /,/^### 3\. /p' "$CO" | grep -c '^- \[ \] The feature branch is fully pushed')"
 # The route line the agent prints must not tell it to skip Step 2 wholesale, and
 # the prose after the block must say Step 2 narrows instead.
 route MERGED
