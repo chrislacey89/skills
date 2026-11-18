@@ -2884,19 +2884,12 @@ lessons_index() {
     return "$rc"
 }
 
-# lessons_resolve_name <lesson file name> [<index>]: one line per lesson file
-# with that base name, across the directories solutions-dirs and
-# related-solutions-dirs print, a group member's prefixed "related project: ".
-# No line means no lesson has the name. Links are names, never paths, so a
-# name holding "/" resolves to nothing. With no index, one is built here.
+# lessons_resolve_name <lesson file name> <index>: one line per lesson file
+# with that base name in the index lessons_index printed, a group member's
+# prefixed "related project: ". No line means no lesson has the name. Links
+# are names, never paths, so a name holding "/" resolves to nothing.
 lessons_resolve_name() {
-    local want="$1" idx tag path sdirs rdirs
-    if [ $# -ge 2 ]; then idx="$2"
-    else
-        sdirs="$(cmd_solutions_dirs)" || return 1
-        rdirs="$(cmd_related_solutions_dirs)" || return 1
-        idx="$(lessons_index "$sdirs" "$rdirs")" || return 1
-    fi
+    local want="$1" idx="$2" tag path
     case "$want" in ''|*/*) return 0 ;; esac
     while IFS=$'\t' read -r tag path; do
         [ "${path##*/}" = "$want" ] || continue
