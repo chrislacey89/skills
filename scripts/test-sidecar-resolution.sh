@@ -1641,7 +1641,9 @@ git -C "$MSC" checkout -q -- sidecar.json
 jq '.solutions = "str"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
 runo "$MIG" config get solutions.in_tree_path
 if [ "$rc" -ne 0 ]; then ok "config get solutions.in_tree_path exits nonzero when jq cannot read it"; else bad "config get solutions.in_tree_path exits nonzero when jq cannot read it" "rc=0, stdout [$out]"; fi
+git -C "$MSC" checkout -q -- sidecar.json
 jq 'del(.solutions.in_tree_path)' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+if [ "$(jq -r '.solutions.in_tree_path // "unset"' "$MSC/sidecar.json")" = unset ]; then ok "the unset-key case starts from a sidecar.json that is valid and lacks in_tree_path"; else bad "the unset-key case starts from a sidecar.json that is valid and lacks in_tree_path" "$(cat "$MSC/sidecar.json")"; fi
 raw="$(cd "$MIG" && bash "$SC" config get solutions.in_tree_path 2>/dev/null; printf x)"
 check "config get solutions.in_tree_path prints nothing when the key is unset" "x" "$raw"
 git -C "$MSC" checkout -q -- sidecar.json
