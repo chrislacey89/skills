@@ -21,7 +21,7 @@ This skill exists because the highest-leverage finding in Cohen's peer-review da
 
 This is a **side-route skill**. It does not block merge and is never auto-invoked.
 
-It reconnects to the main pipeline at the `/pre-merge` → merge boundary: run it when you want comprehension before approving, then proceed to merge (and `/compound` if a durable lesson emerged). `/pre-merge` Phase 4 *recommends* it (without invoking it) when the person merging did not author the diff or hasn't internalized it; `/execute` Step 5/6 names it as an option before `/pre-merge` from the author side.
+It reconnects to the main pipeline at the `/pre-merge` → merge boundary: run it when you want comprehension before approving, then continue down the default path from `/pre-merge` (`/compound` in-PR if a durable lesson emerged, a `/pre-merge` re-run, then `/closeout`). `/pre-merge` Phase 4 *recommends* it (without invoking it) when the person merging did not author the diff or hasn't internalized it; `/execute` Step 5/6 names it as an option before `/pre-merge` from the author side.
 
 Use `/walk-commits` when:
 
@@ -186,5 +186,5 @@ If any commit is still 🔴, say plainly that the branch is not yet understood w
 
 - **Expected input:** a finished branch ready to merge, plus the base branch to diff against. No upstream artifact is required, though a linked PRD or slice issue helps frame intent.
 - **Produces:** reviewer comprehension and a per-commit sign-off (🟢/🟡/🔴) with the open items the merger must resolve — a decision, not a durable file. It does not create issues, post comments, or edit code.
-- **Reconnects at:** the `/pre-merge` → merge boundary. Run it before approving; proceed to merge once commits are understood, then `/compound` if a durable lesson emerged.
+- **Reconnects at:** the `/pre-merge` → merge boundary. Run it before approving; once commits are understood, continue with `/compound` in-PR if a durable lesson emerged, a `/pre-merge` re-run that re-stamps, then `/closeout`.
 - **What comes next:** the user merges (or pauses on unresolved 🔴/🟡 items). `/walk-commits` does not invoke anything.
