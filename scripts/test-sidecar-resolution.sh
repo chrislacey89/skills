@@ -272,6 +272,13 @@ check "require strips only a line-number suffix, not any colon-digit tail" "1:MI
 mkdir -p "$tmp/colon"; : > "$tmp/colon/log"; : > "$tmp/colon/log:12"
 out=$(cd "$tmp" && bash "$SC" require "colon/log:12" --from "PRD #1" 2>&1); rc=$?
 check "require finds an existing file whose name contains a colon as named" "0:$tmp/colon/log:12" "$rc:$out"
+
+mkdir -p "$tmp/colonsib/lessons/a"; : > "$tmp/colonsib/lessons/a/entry.md"; : > "$tmp/colonsib/lessons/a/log:12"
+out=$(cd "$tmp/colonsib" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require finds a colon-named file beside the referrer" "0:$tmp/colonsib/lessons/a/log:12" "$rc:$out"
+: > "$tmp/colonsib/lessons/a/log"
+out=$(cd "$tmp/colonsib" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require prefers the colon-named sibling over a sibling with the stripped name" "0:$tmp/colonsib/lessons/a/log:12" "$rc:$out"
 # shellcheck disable=SC2088  # literal ~user and ~ are the inputs under test
 out=$(HOME="$tmp/home" bash "$SC" require "~user/r/a.md" --from "PRD #1" 2>&1); rc=$?
 # shellcheck disable=SC2088

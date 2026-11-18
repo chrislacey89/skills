@@ -114,7 +114,8 @@
 #      looked up literally and miss. A "#anchor" suffix is stripped when <path>
 #      does not exist with it, so name.md#section finds name.md. So is a line
 #      suffix that is all line numbers (":12", ":12-20", ":12+", ":12, 30-31"),
-#      so name.md:12 finds name.md and a real name holding ":12" still wins.
+#      so name.md:12 finds name.md. A real name holding ":12" wins over the stripped
+#      name at every step below too, not only here.
 #   2. beside the referrer: dirname(<referrer>)/<path>, for a relative <path>.
 #   3. for a bare name (no "/"): <name> in each sibling category folder, that is
 #      dirname(dirname(<referrer>))/*/<name>, in glob (alphabetical) order. A name
@@ -1508,29 +1509,40 @@ cited_probe() {
 }
 
 resolve_cited() {
-    local path="$1" from="$2" probe
+    local path="$1" from="$2" probe raw c
     probe="$(cited_probe "$path")"
+    # The path as written (with "~/" expanded), tried before the stripped form at
+    # every step: a real file named "log:12" beside the referrer must beat "log".
+    raw="$path"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$raw" in "~/"*) raw="$HOME/${raw#"~/"}" ;; esac
     # A relative link inside a lesson is relative to the lesson's own folder, so when
     # --from names an existing file, also try the path beside it.
-    if [ ! -e "$probe" ] && [ -f "$from" ]; then
-        case "$probe" in /*) ;; *) [ -e "$(dirname "$from")/$probe" ] && probe="$(dirname "$from")/$probe" ;; esac
+    if [ ! -e "$probe" ] && [ ! -e "$raw" ] && [ -f "$from" ]; then
+        for c in "$raw" "$probe"; do
+            case "$c" in /*) ;; *) [ -e "$(dirname "$from")/$c" ] && { probe="$(dirname "$from")/$c"; break; } ;; esac
+        done
     fi
     # A bare name may also live in a sibling category folder (<store>/<category>/<name>.md),
-    # so look one level up and across, never deeper.
+    # so look one level up and across, never deeper. The name as written is tried
+    # before the stripped one.
     if [ ! -e "$probe" ] && [ -f "$from" ]; then
-        case "$probe" in
-            /*|*/*) ;;
-            *) local cand first="" hits=""
-               for cand in "$(dirname "$(dirname "$from")")"/*/"$probe"; do
-                   [ -e "$cand" ] || continue
-                   [ -n "$first" ] || first="$cand"
-                   hits="${hits:+$hits }$cand"
-               done
-               if [ -n "$first" ]; then
-                   [ "$hits" = "$first" ] || printf 'sidecar.sh: warning: %s is in more than one category folder: %s; using %s\n' "$probe" "$hits" "$first" >&2
-                   probe="$first"
-               fi ;;
-        esac
+        for c in "$raw" "$probe"; do
+            case "$c" in
+                /*|*/*) ;;
+                *) local cand first="" hits=""
+                   for cand in "$(dirname "$(dirname "$from")")"/*/"$c"; do
+                       [ -e "$cand" ] || continue
+                       [ -n "$first" ] || first="$cand"
+                       hits="${hits:+$hits }$cand"
+                   done
+                   if [ -n "$first" ]; then
+                       [ "$hits" = "$first" ] || printf 'sidecar.sh: warning: %s is in more than one category folder: %s; using %s\n' "$c" "$hits" "$first" >&2
+                       probe="$first"
+                       break
+                   fi ;;
+            esac
+        done
     fi
     [ -e "$probe" ] || return 1
     # A hit may be beside the referrer or in a sibling category, not where the
