@@ -948,8 +948,8 @@ first_commit3="${branch_commits3%%$'\n'*}"
 conflict_head="$(git -C "$repo3" rev-parse HEAD)"
 conflict_out="$(run_fold "$repo3")"
 case "$conflict_out" in
-    *"fold aborted"*) assert_eq ok ok "a conflicting fixup: the fold block names the abort" ;;
-    *) assert_eq "fold aborted ..." "$conflict_out" "a conflicting fixup: the fold block names the abort" ;;
+    *"fold aborted: "*" conflicted"*) assert_eq ok ok "a conflicting fixup: the fold block names the abort as a conflict" ;;
+    *) assert_eq "fold aborted: ... conflicted ..." "$conflict_out" "a conflicting fixup: the fold block names the abort as a conflict" ;;
 esac
 assert_eq "$conflict_head" "$(git -C "$repo3" rev-parse HEAD)" \
     "a conflicting fixup: HEAD is where it was before the fold"
@@ -1315,6 +1315,35 @@ clean_fixup_repo "$repo12"
 head12="$(git -C "$repo12" rev-parse HEAD)"
 out12="$(trial_in "$repo12")" && rc12=0 || rc12=$?
 assert_refused "a fixup that empties its target" "$repo12" "$head12" "$rc12" "$out12" "the rebase failed without a conflict"
+
+# /pre-merge's own fold has the same two kinds of abort (#675): only a stop with
+# unmerged paths is a conflict. A signer or a hook that refuses is something
+# else, and a message that calls it a conflict sends the operator to the wrong
+# fix. Either way the branch is left as it was.
+section "/pre-merge's fold: an abort that is not a conflict is not called one (#675)"
+repo14="$sandbox/repo14"
+clean_fixup_repo "$repo14"
+head14="$(git -C "$repo14" rev-parse HEAD)"
+# fold_refused <label> <global config>
+fold_refused() {
+    local out
+    out="$(cd "$repo14" && env -u BASE_REF GIT_CONFIG_GLOBAL="$2" bash -c "$(fill_base "$fold_block_template" "")" 2>&1)"
+    case "$out" in
+        *"fold aborted: the rebase failed without a conflict"*) assert_eq ok ok "$1: the abort says it was not a conflict" ;;
+        *) assert_eq "fold aborted: the rebase failed without a conflict ..." "$out" "$1: the abort says it was not a conflict" ;;
+    esac
+    case "$out" in
+        *conflicted*) assert_eq "no conflict claimed" "$out" "$1: no conflict is claimed" ;;
+        *) assert_eq ok ok "$1: no conflict is claimed" ;;
+    esac
+    assert_eq "$head14" "$(git -C "$repo14" rev-parse HEAD)" "$1: HEAD is where it was"
+    assert_eq "" "$(git -C "$repo14" status --porcelain)" "$1: the tree is clean"
+    [[ -d "$(git -C "$repo14" rev-parse --git-path rebase-merge)" ]] && r=in-progress || r=none
+    assert_eq none "$r" "$1: no rebase is left in progress"
+}
+fold_refused "a failing signer" "$signing_config"
+fold_refused "a refusing pre-rebase hook" "$hooks_config"
+assert_eq "folded: tree unchanged" "$(run_fold "$repo14" 2>/dev/null)" "control: with neither, the same branch folds"
 
 section "fold trial: a blocked leftover does not fail later fixups (#614 item 4)"
 repo11="$sandbox/repo11"

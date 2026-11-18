@@ -853,7 +853,7 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 
 **While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Once Phase 2 has run, offer the menu above.
 
-**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and the branch is unshared (Phase 2's test), add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. On a pick, run:
+**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and the branch is unshared (Phase 2's test), add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -872,8 +872,14 @@ fi
 FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || fold_abort "no merge base with $BASE_REF"
 TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
 if ! GIT_SEQUENCE_EDITOR=: git rebase -q -i --autosquash "$FORK_POINT"; then
-  git rebase --abort
-  echo "fold aborted: a fixup conflicted with a later commit; the branch is as it was" >&2
+  # Only a stop with unmerged paths is a conflict; a signer or a hook that refused is not.
+  if [ -n "$(git ls-files -u)" ]; then
+    WHY="$(git log -1 --format='%h "%s"' REBASE_HEAD) conflicted"
+  else
+    WHY="the rebase failed without a conflict (git's message is above)"
+  fi
+  [ ! -d "$(git rev-parse --git-path rebase-merge)" ] || git rebase --abort
+  fold_abort "$WHY"
 elif [ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ]; then
   echo "folded: tree unchanged"
 else
@@ -881,4 +887,4 @@ else
 fi
 ```
 
-Then re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.
+An abort names its cause: a commit that `conflicted`, by SHA and subject, or a rebase that failed without a conflict (a signer or a hook refused, and git's own message is printed above it). Either way the branch is as it was. Otherwise, re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.
