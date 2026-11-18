@@ -601,9 +601,13 @@ label_ok() { case "$1" in ''|.*|*/*|*[!a-z0-9._-]*) return 1 ;; esac; }
 # identity, so a sidecar it cannot read is only named on stderr and skipped.
 system_labels() {
     local d f label
-    for d in "$SIDECAR_ROOT"/*/; do
+    for d in "$SIDECAR_ROOT"/*; do
+        # A dangling symlink is not a directory, and could be a member: name it.
+        if [ -L "$d" ] && [ ! -e "$d" ]; then
+            printf 'sidecar.sh: cannot read %s (dangling symlink); skipped\n' "$d" >&2
+            continue
+        fi
         [ -d "$d" ] || continue
-        d="${d%/}"
         f="$d/sidecar.json"
         if [ ! -x "$d" ]; then
             printf 'sidecar.sh: cannot read %s (cannot enter the directory); skipped\n' "$d" >&2

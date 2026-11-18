@@ -2151,6 +2151,13 @@ $SGC/solutions" "$rc $out"
     contains "a sibling directory that cannot be entered is named on stderr" "cannot read $UNR (cannot enter the directory); skipped" "$(cat "$tmp/grp.err")"
 fi
 rm -rf "$UNR"
+# A dangling symlink where a sidecar directory should be is skipped, and named.
+ln -s "$tmp/nowhere-dir" "$SKILL_KIT_SIDECAR_ROOT/grp-dangling"
+out="$(cd "$GA" && bash "$SC" related-solutions-dirs 2>"$tmp/grp.err")"; rc=$?
+rm -f "$SKILL_KIT_SIDECAR_ROOT/grp-dangling"
+check "a dangling sidecar-directory symlink still exits 0 and prints the members" "0 $SGB/solutions
+$SGC/solutions" "$rc $out"
+contains "a dangling sidecar-directory symlink is named on stderr" "cannot read $SKILL_KIT_SIDECAR_ROOT/grp-dangling (dangling symlink); skipped" "$(cat "$tmp/grp.err")"
 
 # An ill-formed label on this project is refused rather than read as "no group".
 jq '.solutions.system = "Payments-Platform"' "$SGE/sidecar.json" > "$SGE/sj" && mv "$SGE/sj" "$SGE/sidecar.json"
