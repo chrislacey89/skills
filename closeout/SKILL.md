@@ -392,7 +392,7 @@ Confirm the *outcome*, not that the steps ran. All must be true:
 - [ ] Remote branch gone — the branch Step 3's `--delete-branch` was supposed to delete is not on the remote (the command below exits **2**). This one is not N/A under host-owned isolation: the host owns the filesystem worktree, `gh` owns the remote branch.
 
 ```bash
-git ls-remote --exit-code --heads origin <feature-branch>   # exit 2 = confirmed gone (pass); exit 0 = still on the remote (fail); anything else = could not check
+git ls-remote --exit-code --heads origin refs/heads/<feature-branch>   # exit 2 = confirmed gone (pass); exit 0 = still on the remote (fail); anything else = could not check
 ```
 
 **Why the remote gets its own check.** Every other item above passes while the remote branch survives — Step 3 confirms the PR reports `MERGED`, Step 6 prunes the local branch and its remote-*tracking* ref, and this list's "Branch pruned" reads `git branch`, which is local. None of them asks the remote. In the field `gh pr merge --delete-branch` aborted at its local step in a multi-worktree checkout (`'main' is already used by worktree`) *after* the remote merge had succeeded: the merge reported success, the branch deletion silently did not happen, and a fully green closeout ran over the top of it. `--exit-code` is what makes found and not-found distinguishable at all here; without it the command exits 0 in both states and the check reads as permanently clean.

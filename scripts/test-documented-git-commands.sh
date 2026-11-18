@@ -1621,6 +1621,24 @@ fi
 # contract it is standing in for.
 git -C "$remote_sandbox/work" push -q origin --delete issue-9-widget \
     || fatal "could not delete the fixture branch from the fixture remote"
+
+# Polarity 2b — a DIFFERENT branch whose name merely ends in the feature branch
+# (x/issue-9-widget) is on the remote. A short pattern matches it by ref tail and
+# would read "still on the remote"; the check must be exact (refs/heads/<branch>)
+# and still exit 2 for the deleted feature branch.
+git -C "$remote_sandbox/work" push -q origin issue-9-widget:refs/heads/x/issue-9-widget \
+    || fatal "could not push x/issue-9-widget to the fixture remote"
+suffix_status=0
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || suffix_status=$?
+if [[ "$suffix_status" -eq 2 ]]; then
+    printf '  ok   x/issue-9-widget on the remote does not count as issue-9-widget (the check matches the exact ref)\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits %d, not 2, when only x/issue-9-widget is on the remote; a suffix-matching branch is read as the feature branch\n' "$suffix_status"
+    fail=$((fail + 1))
+fi
+git -C "$remote_sandbox/work" push -q origin --delete x/issue-9-widget \
+    || fatal "could not delete x/issue-9-widget from the fixture remote"
 gone_status=0
 ( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || gone_status=$?
 if [[ "$gone_status" -eq 2 ]]; then
