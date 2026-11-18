@@ -50,7 +50,11 @@ export SKILL_KIT_RESEARCH_ARCHIVE="$tmp/archive"
 
 pass=0
 fail=0
+skip=0
 ok()  { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
+# An arm that did not run is a skip, never a pass (#548): a pass count that
+# includes it reports coverage the run did not have.
+skipped() { printf '  SKIP %s\n' "$1"; skip=$((skip + 1)); }
 bad() { printf '  FAIL %s\n' "$1"; printf '       %s\n' "$2"; fail=$((fail + 1)); }
 section() { printf '\n=== %s ===\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi; }
@@ -169,7 +173,7 @@ check "corrupt sidecar.json restored: resolve succeeds again" 0 "$rc"
 # would answer `github` (#530: a /fix-findings breaker made exactly that edit
 # and both suites stayed green). uid 0 reads mode-000 files, so root skips.
 if [ "$(id -u)" -eq 0 ]; then
-    ok "unreadable sidecar.json: skipped under root, which reads mode-000 files"
+    skipped "unreadable sidecar.json: root reads mode-000 files, so the arm cannot run"
 else
     chmod 000 "$SKILL_KIT_SIDECAR_ROOT/corrupt/sidecar.json"
     for a in prds slices stamp; do
@@ -277,7 +281,7 @@ section "backend: a sidecar directory the scan cannot enter is a refusal, never 
 # precedence as #530: refused only when no readable sidecar claims the key.
 # uid 0 searches mode-000 directories, so root skips.
 if [ "$(id -u)" -eq 0 ]; then
-    ok "unenterable sidecar directory: skipped under root, which searches mode-000 directories"
+    skipped "unenterable sidecar directory: root searches mode-000 directories, so the arms cannot run"
 else
     dir_root="$tmp/dir-sidecars"
     mkproj https://github.com/acme/dirguest.git
@@ -1105,5 +1109,5 @@ check "the closed item holds the lesson" '["docs/solutions/testing/x-2026-01-01.
 runo "$LP" work set "$lc" lessons x
 check "work set does not take the lessons field" 2 "$rc"
 
-printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
+printf '\n---\n%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skip"
 [ "$fail" -eq 0 ]
