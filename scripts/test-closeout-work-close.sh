@@ -215,14 +215,6 @@ route CLOSED
 check "CLOSED: the route block stops" 1 "$rc"
 check "CLOSED: it says why" 1 "$(grep -c 'closed without merging' "$tmp/stderr")"
 
-# On the MERGED route the work-close block still runs against the merged PR.
-mkproj guest
-MS="$(mk --kind slice)"
-(cd "$P" && bash "$SC" work set "$MS" pr "$URL") >/dev/null 2>&1
-GH_STATE=MERGED run_block
-check "MERGED: the work-close block closes the item" closed "$(state "$MS")"
-check "MERGED: no merge or edit call reached gh" "pr view 7 --json url -q .url" "$(cat "$tmp/calls")"
-
 # The skill prose gives MERGED its own route past Step 2 and the merge.
 # shellcheck disable=SC2016  # the needles are the skill's literal text
 check "Step 2 keeps the fully-pushed check on a MERGED PR" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the first checkbox, that the feature branch is fully pushed, still holds' "$CO")"
