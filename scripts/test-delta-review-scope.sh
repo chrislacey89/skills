@@ -840,6 +840,44 @@ esac
 assert_eq "2 $sibling_tip" "$(git -C "$repo_stack" rev-list --count slice-1..HEAD) $(git -C "$repo_stack" merge-base slice-1 HEAD)" \
     "the stacked fold leaves the sibling's commits as they were and this slice's two commits on top"
 
+# The same three stacked blocks under zsh, the shell an agent runs them in on
+# macOS (docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md,
+# § Prevention: a zsh arm is per block). A missing zsh skips locally and fails
+# when CI is set.
+stacked_zsh_arms() {
+    local out z3 zs zf
+    z3="$(cd "$repo_stack" && env -u BASE_REF -u BASE_BRANCH zsh -f -c "$(fill_base "$step3_block" slice-1)" 2>&1)"
+    assert_eq "f1.txt f2.txt" "$(stat_files "$z3")" "zsh: step 3, stacked on slice-1: the diff names only this slice's files"
+    assert_eq 2 "$(printf '%s\n' "$z3" | grep -cE '^[0-9a-f]{7,} slice 2: ' || true)" "zsh: step 3, stacked on slice-1: the log lists only this slice's two commits"
+    z3="$(cd "$repo_stack" && env -u BASE_REF -u BASE_BRANCH zsh -f -c "$(fill_base "$step3_block" no-such-sibling)" 2>&1)" && rc=0 || rc=$?
+    [[ "$rc" -ne 0 ]] && r=nonzero || r=zero
+    assert_eq nonzero "$r" "zsh: step 3, stacked on a branch that does not resolve: the block stops"
+    assert_eq "" "$(stat_files "$z3")" "zsh: step 3, stacked on a branch that does not resolve: it measures nothing"
+    zs="$(cd "$repo_stack" && GH_STUB_BODY="" env -u BASE_REF -u BASE_BRANCH zsh -f -c "$(fill_base "$scope_block_template" slice-1)" 2>&1)"
+    assert_eq "review scope: whole branch, from origin/slice-1|f1.txt f2.txt" \
+        "$(printf '%s\n' "$zs" | grep '^review scope:' || true)|$(stat_files "$zs")" \
+        "zsh: step 4, stacked on slice-1: the whole-branch scope starts at the sibling"
+    (
+        cd "$repo_stack" || exit 1
+        printf 'f2, fixed\n' > f2.txt
+        git add f2.txt && git commit -q --fixup=HEAD -m 'fix f2'
+    )
+    zf="$(cd "$repo_stack" && BASE_REF=origin/nope zsh -f -c "$(fill_base "$fold_block_template" slice-1)" 2>&1)" && rc=0 || rc=$?
+    case "$zf" in
+        *"folded: tree unchanged"*) assert_eq ok ok "zsh: the fold, stacked on slice-1, with a stale BASE_REF: it folds" ;;
+        *) assert_eq "folded: tree unchanged" "$zf" "zsh: the fold, stacked on slice-1, with a stale BASE_REF: it folds" ;;
+    esac
+    assert_eq "0 2 $sibling_tip" "$rc $(git -C "$repo_stack" rev-list --count slice-1..HEAD) $(git -C "$repo_stack" merge-base slice-1 HEAD)" \
+        "zsh: the stacked fold exits 0 and leaves this slice's two commits on the sibling"
+}
+if command -v zsh >/dev/null 2>&1; then
+    stacked_zsh_arms
+elif [[ -n "${CI:-}" ]]; then
+    assert_eq "zsh on PATH" "zsh absent" "the stacked step 3, step 4 and fold blocks ran under zsh (CI is set, so a missing zsh fails)"
+else
+    printf '  SKIP zsh is not on PATH, so the stacked step 3, step 4 and fold blocks ran under bash only\n'
+fi
+
 # --- 10. A failed backend -----------------------------------------------------
 
 # #530: `backend stamp` that exits nonzero prints nothing. A block written as
