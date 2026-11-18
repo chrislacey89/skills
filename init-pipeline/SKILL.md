@@ -66,6 +66,8 @@ IMPL_PATTERNS=("*.ts" "*.tsx" "*.astro" "*.py" "*.go" "*.rb" "*.java" "*.rs" "*.
 
 MATCHED=0
 for pattern in "${IMPL_PATTERNS[@]}"; do
+  # The unquoted right-hand side is the point: each entry is a glob.
+  # shellcheck disable=SC2053
   if [[ "$FILE_PATH" == $pattern ]]; then MATCHED=1; break; fi
 done
 if [ $MATCHED -eq 0 ]; then exit 0; fi
