@@ -168,7 +168,8 @@ if grep -q 'without a SIDECAR MISS line' "$tmp/err"; then ok "non-miss failure i
 # env -i shell, bash and zsh, in a scratch repo with a stub `gh` and a no-op
 # `sleep`. Stub state: $stub/list.N is the Nth `gh run list` answer (the last
 # one repeats; the word FAIL makes the call exit 1), $stub/red names run ids
-# whose `gh run watch` fails, $stub/watched logs every watched id.
+# whose `gh run watch` fails, $stub/watched logs every watched id (an id with
+# whitespace exits 65 unlogged).
 echo "== CI-watch block"
 ci_repo="$tmp/ci/event"; mkdir -p "$ci_repo" "$tmp/home"
 printf '[user]\n\tname = t\n\temail = t@example.com\n' >"$tmp/home/.gitconfig"
@@ -184,6 +185,9 @@ case "$1 $2" in
     if [ "$(cat "$f")" = FAIL ]; then echo "gh: network" >&2; exit 1; fi
     cat "$f" ;;
 "run watch")
+    # An id holding whitespace or a newline is the zsh unquoted-$IDS defect
+    # (one argument "1\n2"): reject it so the zsh arm discriminates it.
+    case "$3" in *[[:space:]]*) exit 65 ;; esac
     echo "$3" >>"$S/watched"
     if grep -qx "$3" "$S/red" 2>/dev/null; then exit 1; fi ;;
 *) exit 64 ;;
