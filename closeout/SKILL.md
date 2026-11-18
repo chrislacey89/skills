@@ -264,7 +264,7 @@ SC="<this skill's directory>/references/sidecar.sh"
 case "$(bash "$SC" backend stamp)" in
   sidecar) bash "$SC" stamp clear "$(gh pr view <number> --json headRefName -q .headRefName)" ;;
   github) ;;
-  *) echo "stamp NOT cleared: sidecar.sh backend stamp failed; clear it once backend answers" >&2; exit 1 ;;
+  *) echo "stamp NOT cleared: sidecar.sh backend stamp failed; once it answers, run: bash \"$SC\" stamp clear <branch>, where <branch> is the merged PR's head branch: gh pr view <number> --json headRefName -q .headRefName" >&2; exit 1 ;;
 esac
 ```
 
