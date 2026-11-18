@@ -259,12 +259,35 @@ assert_eq "" "$substituted" \
 
 # The sidecar stamp backend (#521) has its own writer, `sidecar.sh stamp
 # write`, and the same rule holds for it: /pre-merge is the only skill whose
-# body invokes it. Matched as an invocation — the verb after a sidecar.sh path
-# or a variable holding one, braced or not, quoted or not (#533: `"${SC}"` and
-# a bare `$SC` slipped past a quoted-only match) — so prose that names "the
-# stamp write" in passing does not count, and a second writer does whatever it
-# calls and spells its variable.
-sidecar_writers="$(grep -lE '(sidecar\.sh"?|"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?)[[:space:]]+stamp[[:space:]]+write' -- */SKILL.md | sort || true)"
+# body invokes it. Matched as an invocation: the verb after a sidecar.sh path,
+# or after a variable holding one, braced or bare, quoted or not. #533 widened
+# the match from the quoted "$SC" form to the braced and bare ones before any
+# skill used them. Prose that names "the stamp write" in passing does not count.
+# Not matched, and used by no skill today (#540): a backslash line continuation
+# before the verb, a single-quoted path, a "${SC:-x}" default, and quoted verb
+# words ("stamp" "write"). Widen when one is written, with a planted case below.
+# The other way round, prose that spells the call, such as "the $SC stamp write
+# call", counts as a writer. That fails loudly in the assertion below, so the
+# author sees it and rewords, and the matcher is not narrowed for it.
+stamp_writer_re='(sidecar\.sh"?|"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?"?)[[:space:]]+stamp[[:space:]]+write'
+# Self-test: each spelling the matcher claims must hit, and the prose near-miss
+# must not, so narrowing the pattern reddens here even while no skill uses the
+# wider spellings.
+writer_probe="$(mktemp -d)"
+# shellcheck disable=SC2016  # the planted lines are literal skill text
+{
+    printf '%s\n' 'bash "$SC" stamp write "$B" "$SHA"' > "$writer_probe/quoted.md"
+    printf '%s\n' 'bash "${SC}" stamp write "$B" "$SHA"' > "$writer_probe/braced-quoted.md"
+    printf '%s\n' 'bash $SC stamp write "$B" "$SHA"' > "$writer_probe/bare.md"
+    printf '%s\n' 'bash ${SC} stamp write "$B" "$SHA"' > "$writer_probe/braced.md"
+    printf '%s\n' 'bash "/x/references/sidecar.sh" stamp write "$B" "$SHA"' > "$writer_probe/path.md"
+    printf '%s\n' 'Phase 4 is the only caller of the stamp write, and the sidecar.sh stamp is read here.' > "$writer_probe/prose.md"
+}
+assert_eq "bare.md braced-quoted.md braced.md path.md quoted.md" \
+    "$(cd "$writer_probe" && { grep -lE "$stamp_writer_re" -- *.md || true; } | sort | tr '\n' ' ' | sed 's/ $//')" \
+    "the stamp-writer matcher hits every spelling it claims and not the prose near-miss"
+rm -rf "$writer_probe"
+sidecar_writers="$(grep -lE "$stamp_writer_re" -- */SKILL.md | sort || true)"
 assert_eq "pre-merge/SKILL.md" "$sidecar_writers" \
     "sidecar.sh stamp write is invoked in pre-merge/SKILL.md and no other SKILL.md"
 
