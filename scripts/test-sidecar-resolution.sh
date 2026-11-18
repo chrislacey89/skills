@@ -283,6 +283,13 @@ check "require finds a colon-named file beside the referrer" "0:$tmp/colonsib/le
 : > "$tmp/colonsib/lessons/a/log"
 out=$(cd "$tmp/colonsib" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
 check "require prefers the colon-named sibling over a sibling with the stripped name" "0:$tmp/colonsib/lessons/a/log:12" "$rc:$out"
+# Step 3 (a sibling category folder) also tries the name as written before the stripped one.
+mkdir -p "$tmp/colonsib3/lessons/a" "$tmp/colonsib3/lessons/b"; : > "$tmp/colonsib3/lessons/a/entry.md"; : > "$tmp/colonsib3/lessons/b/log:12"
+out=$(cd "$tmp/colonsib3" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require finds a colon-named file in a sibling category folder" "0:$tmp/colonsib3/lessons/b/log:12" "$rc:$out"
+: > "$tmp/colonsib3/lessons/b/log"
+out=$(cd "$tmp/colonsib3" && bash "$SC" require "log:12" --from lessons/a/entry.md 2>&1); rc=$?
+check "require prefers the colon-named file over the stripped name in a sibling category folder" "0:$tmp/colonsib3/lessons/b/log:12" "$rc:$out"
 # shellcheck disable=SC2088  # literal ~user and ~ are the inputs under test
 out=$(HOME="$tmp/home" bash "$SC" require "~user/r/a.md" --from "PRD #1" 2>&1); rc=$?
 # shellcheck disable=SC2088
