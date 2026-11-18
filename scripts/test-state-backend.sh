@@ -465,8 +465,8 @@ clean "dangling-link arms leave the claimed project clean" "$dlclaimed"
 # -----------------------------------------------------------------------------
 section "backend: every fenced call site handles the refusal"
 
-# docs/state-backend.md § "A caller branches on all three outcomes" states the
-# two shapes a fenced block that asks `backend` may take: a `case` on the
+# docs/state-backend.md § "A caller branches on all three outcomes" points here
+# for the shapes a fenced block that asks `backend` may take: a `case` on the
 # answer, or an assignment whose `||` catches the nonzero exit by emptying a
 # variable (`|| VAR=`) or leaving (`|| { ...; exit N; }`). `|| true` and `|| :`
 # are refused: the next `if` reads the failure as github. An
