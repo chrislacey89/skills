@@ -564,6 +564,22 @@ check "no sidecar: text mode has no taught by line" 0 "$(printf '%s\n' "$out" | 
 runo "$tmp" trace "$NP/docs/solutions/testing/solo-2026-02-05.md" --json
 check "outside any repo: trace of a lesson exits 0 with taught_by []" '[0,[]]' "$(printf '[%s,%s]' "$rc" "$(jqo '.taught_by')")"
 
+# A sidecar whose solutions key cannot be read: solutions-dirs refuses, and the
+# trace must say so and stop, never report the lesson's real neighbor as
+# MISSING and exit 0.
+mkproj
+BP="$P"
+runo "$BP" init --name badsol --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+BS="$out"
+mkdir -p "$BP/docs/solutions"
+printf -- '---\nrelated: [m.md]\n---\n# L\n' > "$BP/docs/solutions/l.md"
+printf '# M\n' > "$BP/docs/solutions/m.md"
+jq '.solutions = "str"' "$BS/sidecar.json" > "$BS/sj" && mv "$BS/sj" "$BS/sidecar.json"
+runo "$BP" trace docs/solutions/l.md
+if [ "$rc" -ne 0 ]; then ok "an unreadable solutions key: trace of a lesson exits nonzero"; else bad "an unreadable solutions key: trace of a lesson exits nonzero" "rc=0, stdout [$out]"; fi
+case "$out" in *MISSING:*) bad "an unreadable solutions key: no MISSING line" "$out" ;; *) ok "an unreadable solutions key: no MISSING line" ;; esac
+case "$err" in *"could not list the lesson directories"*) ok "an unreadable solutions key: stderr names the directory listing" ;; *) bad "an unreadable solutions key: stderr names the directory listing" "$err" ;; esac
+
 # -----------------------------------------------------------------------------
 section "/compound's work-item block, run for real"
 

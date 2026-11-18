@@ -2446,7 +2446,7 @@ trace_lesson() {
     raw="docs/solutions"
     if in_repo; then
         top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || top=""
-        raw="$(cd "${top:-.}" && cmd_solutions_dirs)"
+        raw="$(cd "${top:-.}" && cmd_solutions_dirs)" || refuse "trace: could not list the lesson directories"
     fi
     while IFS= read -r d; do
         [ -n "$d" ] || continue
@@ -2890,10 +2890,12 @@ lessons_index() {
 # No line means no lesson has the name. Links are names, never paths, so a
 # name holding "/" resolves to nothing. With no index, one is built here.
 lessons_resolve_name() {
-    local want="$1" idx tag path
+    local want="$1" idx tag path sdirs rdirs
     if [ $# -ge 2 ]; then idx="$2"
     else
-        idx="$(lessons_index "$(cmd_solutions_dirs)" "$(cmd_related_solutions_dirs)")" || return 1
+        sdirs="$(cmd_solutions_dirs)" || return 1
+        rdirs="$(cmd_related_solutions_dirs)" || return 1
+        idx="$(lessons_index "$sdirs" "$rdirs")" || return 1
     fi
     case "$want" in ''|*/*) return 0 ;; esac
     while IFS=$'\t' read -r tag path; do
