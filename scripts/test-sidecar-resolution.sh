@@ -1635,6 +1635,15 @@ dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
 check "solutions-dirs prints a normalized in_tree_path" "$SOLS
 docs/adr
 docs/solutions" "$dirs"
+# A read the sidecar could not make is a refusal, not an answer: a jq failure
+# exits nonzero, and an unset key prints nothing (no bare newline).
+git -C "$MSC" checkout -q -- sidecar.json
+jq '.solutions = "str"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+runo "$MIG" config get solutions.in_tree_path
+if [ "$rc" -ne 0 ]; then ok "config get solutions.in_tree_path exits nonzero when jq cannot read it"; else bad "config get solutions.in_tree_path exits nonzero when jq cannot read it" "rc=0, stdout [$out]"; fi
+jq 'del(.solutions.in_tree_path)' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+raw="$(cd "$MIG" && bash "$SC" config get solutions.in_tree_path 2>/dev/null; printf x)"
+check "config get solutions.in_tree_path prints nothing when the key is unset" "x" "$raw"
 git -C "$MSC" checkout -q -- sidecar.json
 rm -f "$MIG/docs/solutions/planted.md"; rmdir "$MIG/docs/solutions"
 jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"

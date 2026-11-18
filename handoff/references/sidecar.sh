@@ -918,8 +918,9 @@ cmd_config() {
             [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
             sc="$(do_resolve)" || exit 1
             if [ "$2" = "solutions.in_tree_path" ]; then
-                norm_in_tree_path "$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
-                printf '\n'
+                local itp
+                itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")" || exit 1
+                [ -z "$itp" ] || { norm_in_tree_path "$itp"; printf '\n'; }
             else
                 jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
             fi
