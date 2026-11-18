@@ -17,6 +17,10 @@
 # runs EACH block in its OWN `env -i` shell (bash, and zsh when installed)
 # inside a scratch repo, with HOME and SKILL_KIT_SIDECAR_ROOT in scratch dirs.
 #
+# The rung loop's CI-watch block (#722) runs the same way against a stub `gh`:
+# all green, one red, an empty list, a failed list, a run on the second poll,
+# and a second run that registers while the first is watched.
+#
 # APPARATUS. The commit block with its SC= line stripped must exit 127, and a
 # resolve block whose failure is not a miss must stop before init; a runner
 # that cannot go red on those measures nothing.
@@ -34,14 +38,16 @@ check() { if [[ "$2" == "$3" ]]; then ok "$1"; else bad "$1 (want '$2', got '$3'
 
 [[ -f "$skill" ]] || { echo "no $skill"; exit 1; }
 
-# Print the column-0 fenced bash block containing $1 (fixed string); fail unless
+# Print the fenced bash block containing $1 (fixed string), with the fence's
+# indent stripped (a block inside a list item is indented); fail unless
 # exactly one block does.
 block() {
     local anchor="$1" out n
     out="$(awk -v a="$anchor" '
-        /^```bash$/ { inb = 1; buf = ""; hit = 0; next }
-        /^```$/ && inb { if (hit) { printf "%s\001", buf }; inb = 0; next }
-        inb { buf = buf $0 "\n"; if (index($0, a)) hit = 1 }' "$skill")"
+        /^ *```bash$/ { inb = 1; buf = ""; hit = 0; match($0, /^ */); ind = RLENGTH; next }
+        /^ *```$/ && inb { if (hit) { printf "%s\001", buf }; inb = 0; next }
+        inb { line = $0; if (substr(line, 1, ind) ~ /^ *$/) line = substr(line, ind + 1)
+              buf = buf line "\n"; if (index(line, a)) hit = 1 }' "$skill")"
     n="$(printf '%s' "$out" | tr -cd '\001' | wc -c | tr -d ' ')"
     if [[ "$n" != 1 ]]; then echo "ANCHOR-ERROR: '$anchor' matched $n blocks" >&2; return 1; fi
     printf '%s' "$out" | tr -d '\001'
@@ -52,6 +58,7 @@ b_init="$(block ' init --name ')" || exit 1
 b_path="$(block 'echo "dossier:')" || exit 1
 b_commit="$(block ' commit -- ')" || exit 1
 b_resume="$(block 'hackathon-*.md')" || exit 1
+b_ci="$(block 'gh run watch')" || exit 1
 
 skilldir="$tmp/skilldir"
 mkdir -p "$skilldir"
@@ -156,6 +163,60 @@ out="$(cd "$repo" && env -i PATH="/usr/bin:/bin:/opt/homebrew/bin" HOME="$tmp/ho
     GIT_CONFIG_GLOBAL="$tmp/home/.gitconfig" bash "$f" 2>"$tmp/err")"; rc=$?
 check "non-miss resolve failure exits 1 (finding 9)" 1 "$rc"
 if grep -q 'without a SIDECAR MISS line' "$tmp/err"; then ok "non-miss failure is relayed, init not offered"; else bad "non-miss relay: $(cat "$tmp/err")"; fi
+
+# CI-watch block (rung loop step 3, #722). Each case runs the block in a fresh
+# env -i shell, bash and zsh, in a scratch repo with a stub `gh` and a no-op
+# `sleep`. Stub state: $stub/list.N is the Nth `gh run list` answer (the last
+# one repeats; the word FAIL makes the call exit 1), $stub/red names run ids
+# whose `gh run watch` fails, $stub/watched logs every watched id.
+echo "== CI-watch block"
+ci_repo="$tmp/ci/event"; mkdir -p "$ci_repo" "$tmp/home"
+printf '[user]\n\tname = t\n\temail = t@example.com\n' >"$tmp/home/.gitconfig"
+( cd "$ci_repo" && git init -q && git commit -q --allow-empty -m c )
+ci_stub="$tmp/ci/bin"; ci_state="$tmp/ci/state"; mkdir -p "$ci_stub" "$ci_state"
+cat >"$ci_stub/gh" <<'STUB'
+#!/bin/sh
+S="${STUB_STATE:?}"
+case "$1 $2" in
+"run list")
+    n=$(($(cat "$S/n" 2>/dev/null || echo 0) + 1)); echo "$n" >"$S/n"
+    f="$S/list.$n"; [ -f "$f" ] || f="$(ls "$S"/list.* | sort -t. -k2 -n | tail -n1)"
+    if [ "$(cat "$f")" = FAIL ]; then echo "gh: network" >&2; exit 1; fi
+    cat "$f" ;;
+"run watch")
+    echo "$3" >>"$S/watched"
+    if grep -qx "$3" "$S/red" 2>/dev/null; then exit 1; fi ;;
+*) exit 64 ;;
+esac
+STUB
+printf '#!/bin/sh\nexit 0\n' >"$ci_stub/sleep"
+chmod +x "$ci_stub/gh" "$ci_stub/sleep"
+
+ci_case() { # ci_case <shell> <label> <want rc> <want watched> <red ids> <list1> [<list2> ...]
+    local sh="$1" label="$2" want="$3" wantw="$4" red="$5" i=0; shift 5
+    rm -f "$ci_state"/*; printf '%s' "$red" >"$ci_state/red"
+    for l in "$@"; do i=$((i + 1)); printf '%b' "$l" >"$ci_state/list.$i"; done
+    printf '%s\n' "$b_ci" >"$tmp/ci.sh"
+    ( cd "$ci_repo" && env -i PATH="$ci_stub:/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin" HOME="$tmp/home" \
+        GIT_CONFIG_GLOBAL="$tmp/home/.gitconfig" GIT_CONFIG_NOSYSTEM=1 STUB_STATE="$ci_state" "$sh" "$tmp/ci.sh" ) >/dev/null 2>&1
+    rc=$?
+    if [[ "$want" == nonzero ]]; then
+        if [[ $rc -ne 0 ]]; then ok "[$sh] CI-watch $label exits nonzero"; else bad "[$sh] CI-watch $label exits nonzero (got 0)"; fi
+    else
+        check "[$sh] CI-watch $label exit" "$want" "$rc"
+    fi
+    check "[$sh] CI-watch $label watched" "$wantw" "$(tr '\n' ' ' <"$ci_state/watched" 2>/dev/null | sed 's/ $//')"
+}
+for sh in "${shells[@]}"; do
+    ci_case "$sh" "all green" 0 "1 2" "" '1\n2\n'
+    ci_case "$sh" "one red" 1 "1 2" "2" '1\n2\n'
+    ci_case "$sh" "empty list" 3 "" "" '' ''
+    ci_case "$sh" "failed list call" 2 "" "" 'FAIL'
+    ci_case "$sh" "run listed on the second poll" 0 "1" "" '' '1\n'
+    ci_case "$sh" "second run registers while the first is watched (green)" 0 "1 2" "" '1\n' '1\n2\n'
+    ci_case "$sh" "second run registers late and is red" 1 "1 2" "2" '1\n' '1\n2\n'
+    ci_case "$sh" "re-list fails after the watch" 2 "1" "" '1\n' 'FAIL'
+done
 
 echo "$pass passed, $fail failed"
 [[ $fail == 0 ]]

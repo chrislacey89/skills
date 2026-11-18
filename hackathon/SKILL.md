@@ -440,22 +440,34 @@ nothing in this phase moves the freeze or the submit-by time.
    commit until each finishes ([`gh run watch`](https://cli.github.com/manual/gh_run_watch)).
    A repo with a deploy workflow gets more than one run per push, and watching
    only the newest can report the deploy's green while CI is red. A run can take
-   a few seconds to register, so the block polls for up to two minutes. It exits
-   2 when `gh run list` fails and 3 when no run appears: neither is a CI result,
-   so neither is green, and 3 means CI has no run for this commit (check that
-   the push landed and that a workflow triggers on it):
+   a few seconds to register, so the block polls for up to two minutes, and
+   after it has watched the runs it found it lists again and watches any run
+   that registered meanwhile, until a fresh list adds none. It exits 2 when
+   `gh run list` fails and 3 when no run appears: neither is a CI result, so
+   neither is green. On 2, fix `gh` (auth, network) and rerun the block without
+   touching code. On 3, CI has no run for this commit: check that the push
+   landed and that a workflow triggers on it:
 
    ```bash
-   SHA="$(git rev-parse HEAD)"; IDS=
+   SHA="$(git rev-parse HEAD)"; IDS=; SEEN=; FAIL=
    for _ in $(seq 12); do
      IDS="$(gh run list --commit "$SHA" --json databaseId -q '.[].databaseId')" || exit 2
      test -n "$IDS" && break
      sleep 10
    done
    test -n "$IDS" || { echo "no CI run for $SHA" >&2; exit 3; }
-   FAIL=
-   for id in $IDS; do
-     gh run watch "$id" --exit-status || FAIL=1
+   while test -n "$IDS"; do
+     while IFS= read -r id; do
+       test -n "$id" || continue
+       gh run watch "$id" --exit-status || FAIL=1
+       SEEN="$SEEN $id "
+     done <<<"$IDS"
+     ALL="$(gh run list --commit "$SHA" --json databaseId -q '.[].databaseId')" || exit 2
+     IDS=
+     while IFS= read -r id; do
+       test -n "$id" || continue
+       case "$SEEN" in *" $id "*) ;; *) IDS="$IDS$id"$'\n' ;; esac
+     done <<<"$ALL"
    done
    test -z "$FAIL"
    ```
