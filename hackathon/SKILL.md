@@ -334,7 +334,8 @@ re-deriving it. Fill the dossier:
     the platform page in the kickoff block with every required section stubbed,
     drafts each section from the dossier and `DECISIONS.md` as rungs land, in
     `PLAN.md`'s `## Submission draft` section (no new file), and re-pastes the page at each checkpoint. The demo-lane owner reviews it. The
-    page is complete, video included, by the Locked story checkpoint.
+    page is complete, video included, by the Locked story checkpoint. It is never `~`: cutting it at a
+    checkpoint leaves nothing to judge.
 - **Rabbit holes and no-gos.** Name what you will not build, and the parts most
   likely to swallow an hour, along with what you will do instead.
 - **Slow-dependency work goes first.** Move to the kickoff block and rung 1
