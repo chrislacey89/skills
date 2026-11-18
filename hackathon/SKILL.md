@@ -426,6 +426,10 @@ nothing in this phase moves the freeze or the submit-by time.
    than the hook fails on files every local commit passed.
 3. Deploy a hello-world to the deploy target, so the slowest unknown is resolved
    first.
+4. Recheck the chosen project against the kickoff remarks (Phase 0, **Kickoff
+   remarks are part of the brief**).
+5. Stub the platform page with every required section (Phase 2, **The
+   submission is a rung**).
 
 **Rung loop.** For each rung, in ladder order:
 
