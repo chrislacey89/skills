@@ -218,6 +218,15 @@ check "CLOSED: it says why" 1 "$(grep -c 'closed without merging' "$tmp/stderr")
 # The skill prose gives MERGED its own route: Step 2 narrows to the fully-pushed check, and the merge is skipped.
 # shellcheck disable=SC2016  # the needles are the skill's literal text
 check "Step 2 keeps the fully-pushed check on a MERGED PR, and stops when it fails" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the fully-pushed checkbox below still holds.*If it fails, stop and report it\.' "$CO")"
+# The substitute check, when @{u} is gone, passes only on exit 0 AND empty output; a nonzero exit is a stop.
+check "Step 2's @{u}-gone substitute check requires exit 0 as well as empty output" 1 "$(grep -c 'no longer resolves.*must exit 0 and print nothing.*a nonzero exit (for example the head commit was never fetched here) is a stop' "$CO")"
+check "Step 2 no longer reads the missing @{u} as 'the same stop' before the check" 0 "$(grep -c 'no longer resolves[^.]*that is the same stop' "$CO")"
+# Behavior behind the pin: a head commit the checkout never fetched makes the command exit nonzero with no stdout.
+fx=$(mktemp -d); git -C "$fx" init -q; git -C "$fx" -c user.name=t -c user.email=t@t commit -q --allow-empty -m a
+rc=0; out=$(git -C "$fx" log --oneline HEAD "^1234567890123456789012345678901234567890" 2>/dev/null) || rc=$?
+check "unfetched head commit: the check exits nonzero" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+check "unfetched head commit: stdout is empty, so empty output alone would pass" 1 "$([ -z "$out" ] && echo 1 || echo 0)"
+rm -rf "$fx"
 # The anchor the MERGED sentence names must exist as a checkbox in Step 2's checklist.
 check "Step 2's checklist has a fully-pushed checkbox for the MERGED route to name" 1 "$(sed -n '/^### 2\. /,/^### 3\. /p' "$CO" | grep -c '^- \[ \] The feature branch is fully pushed')"
 # The route line the agent prints must not tell it to skip Step 2 wholesale, and
