@@ -1489,8 +1489,7 @@ cmd_require() {
 # warning goes to stderr here so both callers print it.
 # cited_probe <path>: step 1 of the header's "require resolution order", the
 # path as given with "~/" expanded and a #anchor or :line suffix stripped when
-# the path does not exist with it. resolve_cited and trace_research share it so
-# the two lookups cannot drift apart on which forms a citation may take.
+# the path does not exist with it.
 cited_probe() {
     # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
     local probe="$1"
@@ -2193,7 +2192,10 @@ cmd_trace() {
 # date, ascending: /research supersedes an entry with a new dated file.
 trace_research() {
     local cited="$1" via="$2" probe res="" newer="" re base slug date cand cb
-    probe="$(cited_probe "$cited")"
+    probe="$cited"
+    # shellcheck disable=SC2088  # the literal ~ is the point
+    case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
+    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
     if [ -f "$probe" ]; then
         res="$(abs_path "$probe")"
         re='^(.+)-([0-9]{4}-[0-9]{2}-[0-9]{2})\.md$'
