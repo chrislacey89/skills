@@ -1025,6 +1025,18 @@ git -C "$repo4" config blame.blankBoundary true
 git -C "$repo4" config blame.markUnblamableLines true
 assert_eq "" "$(run_target 1 1)" "blame.blankBoundary/markUnblamableLines set: a base line still yields no target"
 assert_eq "$change_b_sha" "$(run_target 2 2)" "blame display config set: a single-commit line is still the target"
+# markUnblamableLines only marks a line an ignored revision changed and blame
+# could not pass to another commit, so it needs blame.ignoreRevsFile to show at
+# all (#573 item 1). Ignore 'feature: add d': line 4 has no counterpart in its
+# parent, so a user's config would print `*<sha>` for it, and the block's
+# `-c blame.markUnblamableLines=false` is what keeps the answer a bare SHA.
+add_d_sha="$(git -C "$repo4" rev-parse HEAD)"
+printf '%s\n' "$add_d_sha" > "$sandbox/ignore-revs4"
+git -C "$repo4" config blame.ignoreRevsFile "$sandbox/ignore-revs4"
+assert_eq "*${add_d_sha:0:39}" "$(git -C "$repo4" blame -l -s -L 4,4 main..HEAD -- f.txt | awk '{ print $1 }')" \
+    "fixture precondition: with the ignore-revs file, the user's blame config marks line 4 with *"
+assert_eq "$add_d_sha" "$(run_target 4 4)" "an unblamable line under the user's ignore-revs file: the target is a bare SHA"
+git -C "$repo4" config --unset blame.ignoreRevsFile
 
 # A shared branch never gets a fixup: /pre-merge offers the fold only on an
 # unshared branch, so a `fixup!` subject there would merge as-is (#611). Both

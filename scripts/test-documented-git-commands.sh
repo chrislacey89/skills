@@ -1397,8 +1397,23 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # Its `-L "$START,$END"` is the first flag with a separate, quoted value, so the
 # flag arm also takes one quoted variable after a space.
 # The fixup-target block also pins blame's display config with leading
-# `-c key=value` pairs before the verb, so the pattern allows those.
-range_pattern='git( +-c +[A-Za-z.]+=[a-z]+)* +(diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# `-c key=value` pairs before the verb, so the pattern allows those, with any
+# unquoted value (#573: a value with a digit once fell outside `[a-z]+`).
+range_pattern='git( +-c +[A-Za-z.]+=[^ "]+)* +(diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# range_verb <hit> — the git subcommand of a census hit, past any -c pairs.
+range_verb() { printf '%s' "$1" | sed -E 's/^git( +-c +[A-Za-z.]+=[^ "]+)* +/git /' | awk '{print $2}'; }
+# Self-test (#573 item 4): a `-c` value is not always lowercase letters. A value
+# with a digit must still enter the census whole and yield its verb; the
+# accounting check below would otherwise only report a mismatch, not which line.
+# shellcheck disable=SC2016  # planted lines are literal skill text
+for planted in 'log|git -c core.abbrev=12 log --oneline "$BASE_REF..HEAD"' \
+    'blame|git -c blame.date=iso8601 -c color.ui=false blame -l "$BASE_REF..HEAD"'; do
+    planted_verb="${planted%%|*}"
+    planted_range="${planted#*|}"
+    planted_hit="$(printf '%s\n' "$planted_range" | { grep -oE "$range_pattern" || true; })"
+    assert_eq "${planted_range%\"}" "$planted_hit" "the census pattern takes a whole range line, up to HEAD, whose -c value is not all lowercase: $planted_range"
+    assert_eq "$planted_verb" "$(range_verb "$planted_range")" "range_verb reads the subcommand past every -c pair: $planted_range"
+done
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies
@@ -1441,7 +1456,7 @@ bad_endpoint=0
 bad_operator=0
 while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
-    verb="$(printf '%s' "$hit" | sed -E 's/^git( +-c +[A-Za-z.]+=[a-z]+)* +/git /' | awk '{print $2}')"
+    verb="$(range_verb "$hit")"
     # The endpoint char class excludes '.' so the greedy prefix cannot eat the
     # first dot of a three-dot range and leave it in the captured name.
     endpoint="$(printf '%s' "$hit" | sed -E 's/.*[ "]([^ ".]*)\.\.\.?HEAD$/\1/')"

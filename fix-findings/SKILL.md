@@ -179,6 +179,10 @@ The fixer's instructions, in order:
    finding's own claim requires. If it cannot be reproduced, report
    **`refuted`** with the evidence and make **no commit**. A refuted finding is
    reported to the human, not argued into existence and not fixed anyway.
+   The finding's line numbers were read at review time, and an earlier fixer
+   in this run may have moved them. Find the anchored text in the file at the
+   current `HEAD` before editing, and use the lines it is on now, here and in
+   item 5's block.
 2. **Grep `docs/solutions/` for the class of thing you are about to write** — both
    locations, the sidecar's `solutions/` and the project's in-tree path, resolved
    through the bundled [references/sidecar.sh](references/sidecar.sh) exactly as
@@ -220,8 +224,8 @@ The fixer's instructions, in order:
    # Which one commit on this branch wrote every line the finding anchors on?
    SC="<this skill's directory>/references/sidecar.sh"
    FILE="<the finding's file>"
-   START="<the anchor's first line>"
-   END="<the anchor's last line>"
+   START="<the anchor's first line, found again at the current HEAD>"
+   END="<the anchor's last line, found again at the current HEAD>"
    BASE_REF="$(bash "$SC" base-ref)" || { echo "fixup target aborted: sidecar.sh base-ref failed" >&2; exit 1; }
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $(1) }' | sort -u)
