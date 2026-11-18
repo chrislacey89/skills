@@ -414,10 +414,13 @@ nothing in this phase moves the freeze or the submit-by time.
    dossier's seeded log), make the first commit, then push it to the remote added in
    prep with `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
-   runs the commands in `lefthook.yml`, the one source for what the hooks run,
-   with the staged-files placeholder replaced by the whole repo. Never write a
-   different command into CI: a CI step that checks other files than the hook
-   fails on files every local commit passed.
+   runs `lefthook run pre-commit --all-files --fail-on-changes` and then
+   `lefthook run pre-push`, so `lefthook.yml` stays the one source for what the
+   hooks run. See [`lefthook run`](https://lefthook.dev/usage/commands/run/)
+   for `--all-files` and [`fail_on_changes`](https://lefthook.dev/configuration/fail_on_changes/)
+   for the failing-on-changes setting; `lefthook run --help` lists both flags.
+   Never write a different command into CI: a CI step that checks other files
+   than the hook fails on files every local commit passed.
 3. Deploy a hello-world to the deploy target, so the slowest unknown is resolved
    first.
 
