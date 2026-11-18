@@ -698,6 +698,13 @@ check "a refused @{-1} leaves the key as it was" develop "$(jq -r .base_ref "$BS
 brun "$BR/clone" config set base_ref v1
 check "config set refuses a tag name" 1 "$rc"
 check "a refused tag leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
+# #605: the hand-edit path below refuses these for base-ref; the setter must
+# refuse them too, so a revision expression never reaches the key.
+for expr in 'develop~1' 'HEAD'; do
+    brun "$BR/clone" config set base_ref "$expr"
+    check "config set refuses the revision expression $expr" "refused" "$([ "$rc" -ne 0 ] && echo refused || echo "accepted (rc 0)")"
+    check "a refused $expr leaves the key as it was" develop "$(jq -r .base_ref "$BSJ")"
+done
 
 # Hand edits: the verb refuses each shape, and never prints the fallback.
 bset() { jq "$@" "$BSJ" > "$BR/sj" && mv "$BR/sj" "$BSJ"; }
