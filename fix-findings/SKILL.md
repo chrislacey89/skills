@@ -784,7 +784,8 @@ stop.
   for a `blocked` fix that left a `fixup!` commit (Step 1), that commit's SHA
   with no breaker verdict. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode. It reads
-  the stamp off the PR itself (`pre-merge/SKILL.md` Phase 1 step 4), takes the
+  the stamp where [references/state-backend.md](references/state-backend.md)
+  says it lives (`pre-merge/SKILL.md` Phase 1 step 4), takes the
   post-stamp delta — these fix commits — as its subject, runs the review
   dimensions on that delta with the tree readable around it, and replaces the
   existing stamp at the new head. Hand it the breaker verdicts as evidence and
