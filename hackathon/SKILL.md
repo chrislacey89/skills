@@ -401,8 +401,8 @@ the next section so the user sees the day.
 
 - the kickoff block's end (start time + kickoff block)
 - each checkpoint (every checkpoint interval after that, while before the freeze)
-- the Locked first Q&A drill and restyle cutoff (the second checkpoint)
-- the Locked story checkpoint (the last checkpoint before the freeze)
+- the Locked first Q&A drill and restyle cutoff
+- the Locked story checkpoint
 - the freeze (deadline − freeze)
 - the submit-by time (deadline − submission buffer)
 
