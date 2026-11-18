@@ -387,6 +387,56 @@ mv "$tmp/link-good.json" "$link_root/g/sidecar.json"
 SKILL_KIT_SIDECAR_ROOT="$link_root" runo "$linkguest" backend stamp
 check "dangling symlink replaced: backend stamp answers sidecar again" sidecar "$out"
 
+# #555: the same class one level up. A sidecar directory that is a symlink to
+# nothing never matched the */ glob, and a root that is a symlink to nothing
+# failed [ -e ], so each read as a miss and answered github on a guest repo.
+# Both are present and unreadable, so both are refused; a live symlink at
+# either level still resolves, so the fix cannot refuse a valid repo. No
+# chmod, so these arms run under root too.
+dl_root="$tmp/dl-sidecars"
+mkproj https://github.com/acme/dlguest.git
+dlguest="$P"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" init --name g --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the dangling-directory arms" "$err"
+mkproj https://github.com/acme/dlclaimed.git
+dlclaimed="$P"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlclaimed" init --name claimed --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init the readable claimant for the dangling-directory arms" "$err"
+mv "$dl_root/g" "$tmp/dl-g-real"
+ln -s "$tmp/dl-g-real" "$dl_root/g"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" backend stamp
+check "sidecar dir is a live symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+rm "$dl_root/g"
+ln -s "$tmp/dl-g-gone" "$dl_root/g"
+for a in prds slices stamp; do
+    SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" backend "$a"
+    check "dangling sidecar dir symlink: backend $a exits 1" 1 "$rc"
+    check "dangling sidecar dir symlink: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"$dl_root/g"*) ok "dangling sidecar dir symlink: backend $a names the link on stderr" ;; *) bad "dangling sidecar dir symlink: backend $a names the link on stderr" "got [$err]" ;; esac
+done
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" resolve
+case "$rc:$err" in 1:*"SIDECAR MISS"*|0:*) bad "dangling sidecar dir symlink: resolve refuses rather than reporting a SIDECAR MISS" "got [$rc] [$err]" ;; *) ok "dangling sidecar dir symlink: resolve refuses rather than reporting a SIDECAR MISS" ;; esac
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlclaimed" backend stamp
+check "claimed repo beside a dangling sidecar dir symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+case "$err" in *"$dl_root/g"*) ok "claimed repo beside a dangling sidecar dir symlink: the link is named on stderr" ;; *) bad "claimed repo beside a dangling sidecar dir symlink: the link is named on stderr" "got [$err]" ;; esac
+rm "$dl_root/g"
+mv "$tmp/dl-g-real" "$dl_root/g"
+SKILL_KIT_SIDECAR_ROOT="$dl_root" runo "$dlguest" backend stamp
+check "dangling sidecar dir link replaced: backend stamp answers sidecar again" "0:sidecar" "$rc:$out"
+
+ln -s "$dl_root" "$tmp/dl-root-link"
+SKILL_KIT_SIDECAR_ROOT="$tmp/dl-root-link" runo "$dlguest" backend stamp
+check "sidecar root is a live symlink: backend stamp answers sidecar" "0:sidecar" "$rc:$out"
+ln -s "$tmp/dl-root-gone" "$tmp/dl-root-dangling"
+for a in prds slices stamp; do
+    SKILL_KIT_SIDECAR_ROOT="$tmp/dl-root-dangling" runo "$dlguest" backend "$a"
+    check "dangling sidecar root symlink: backend $a exits 1" 1 "$rc"
+    check "dangling sidecar root symlink: backend $a prints nothing on stdout (not github)" "" "$out"
+    case "$err" in *"$tmp/dl-root-dangling"*) ok "dangling sidecar root symlink: backend $a names the root on stderr" ;; *) bad "dangling sidecar root symlink: backend $a names the root on stderr" "got [$err]" ;; esac
+done
+clean "dangling-link arms leave the guest project clean" "$dlguest"
+clean "dangling-link arms leave the claimed project clean" "$dlclaimed"
+
 # -----------------------------------------------------------------------------
 section "backend: truth table across mode × forge kind"
 

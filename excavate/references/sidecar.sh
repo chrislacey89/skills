@@ -459,9 +459,9 @@ file_lists_key() {
 # matches a path under a directory it cannot search, so a sidecar directory at
 # mode 000 or 444 used to drop out of the scan and read as a miss, which
 # `backend` answers with `github` (chrislacey89/skills#542). A directory that
-# cannot be entered is unread, like a corrupt file, and so is a sidecar.json
-# that is present but not a regular file; a directory with no sidecar.json is
-# skipped.
+# cannot be entered is unread, like a corrupt file, and so are a sidecar.json
+# that is present but not a regular file and an entry that is a symlink to
+# nothing; a directory with no sidecar.json is skipped.
 #
 # The loop below starts one jq per sidecar for each key it is asked about. A
 # caller about to ask about several keys runs owners_scan first, which answers
@@ -475,14 +475,20 @@ owners_of() {
         return 0
     fi
     # A root that exists but cannot be listed and entered hides every sidecar
-    # in it; only a root that does not exist at all is a miss.
-    if [ -e "$SIDECAR_ROOT" ] && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
+    # in it, and so does a symlink to nothing at the root path: only a
+    # root path that holds nothing at all is a miss.
+    if { [ -e "$SIDECAR_ROOT" ] || [ -L "$SIDECAR_ROOT" ]; } && ! { [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ]; }; then
         printf 'sidecar.sh: cannot list %s; refusing to treat it as a miss\n' "$SIDECAR_ROOT" >&2
         return 2
     fi
-    for d in "$SIDECAR_ROOT"/*/; do
+    for d in "$SIDECAR_ROOT"/*; do
+        # A symlink to nothing never matched the */ this loop used to walk, so
+        # it read as a miss; it is present and unreadable.
+        if [ -L "$d" ] && [ ! -e "$d" ]; then
+            unread="${unread:+$unread$'\n'}$d (a symlink to nothing)"
+            continue
+        fi
         [ -d "$d" ] || continue
-        d="${d%/}"
         f="$d/sidecar.json"
         if [ ! -x "$d" ]; then
             unread="${unread:+$unread$'\n'}$d (cannot enter the directory)"
@@ -522,7 +528,7 @@ owners_of() {
 # sidecars, held in SCAN_HITS as "H<TAB>key<TAB>dir" lines. It answers only
 # when every sidecar is plainly readable, so it never has an unread file to
 # report: on anything owners_of names (a root it cannot list, a directory it
-# cannot enter, a sidecar.json that is not a regular file, one holding no JSON
+# cannot enter, a symlink to nothing, a sidecar.json that is not a regular file, one holding no JSON
 # value or several (each file is parsed on its own, so a value split across two files is corrupt in both), or a "keys" that is not an array) it records
 # nothing, and owners_of reads file by file and names the problem as before. The answer is
 # the sidecars as they were when it ran, so a caller runs scan_clear before it
@@ -538,9 +544,9 @@ owners_scan() {
         keyset="$keyset$k"$'\n'
     done
     [ -d "$SIDECAR_ROOT" ] && [ -r "$SIDECAR_ROOT" ] && [ -x "$SIDECAR_ROOT" ] || return 0
-    for d in "$SIDECAR_ROOT"/*/; do
+    for d in "$SIDECAR_ROOT"/*; do
+        if [ -L "$d" ] && [ ! -e "$d" ]; then return 0; fi
         [ -d "$d" ] || continue
-        d="${d%/}"
         f="$d/sidecar.json"
         [ -x "$d" ] || return 0
         if [ ! -f "$f" ]; then
