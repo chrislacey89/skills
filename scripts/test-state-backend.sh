@@ -237,8 +237,9 @@ section "backend: a corrupt sidecar refuses only the keys no readable sidecar cl
 # #530's scope decision. A corrupt sidecar.json cannot be ruled out as a key's
 # owner without parsing it, so a repo that no readable sidecar claims is still
 # refused: it might be the corrupt one's, and `github` there could be a guest's
-# PR. A repo a readable sidecar does claim resolves to it, and the corrupt file
-# is named on stderr; before #530 one corrupt file refused every repo.
+# PR. A key a readable sidecar does claim resolves to it, and the corrupt file
+# is named on stderr; before #530 one corrupt file refused every repo. The
+# narrowing is per key, in resolution order (#543, below).
 # Own root, so the stray cannot leak into the sections below.
 scope_root="$tmp/scope-sidecars"
 mkproj https://github.com/acme/claimed.git
@@ -268,6 +269,30 @@ check "unclaimed repo beside a corrupt sidecar: backend stamp prints nothing (no
 case "$err" in *stray/sidecar.json*) ok "unclaimed repo beside a corrupt sidecar: the corrupt file is named on stderr" ;; *) bad "unclaimed repo beside a corrupt sidecar: the corrupt file is named on stderr" "got [$err]" ;; esac
 SKILL_KIT_SIDECAR_ROOT="$scope_root" runo "$unclaimed" init --name unclaimed --mode owned --write sidecar --in-tree-path none --no-migrate-archive
 check "unclaimed repo beside a corrupt sidecar: init refuses rather than risk a second owner" 1 "$rc"
+# #543: the narrowing is per key, in resolution order (root:, then remotes,
+# then path:), and a key no readable sidecar claims is refused before a later
+# key is tried. A sidecar that lacks the root: key (one made in a shallow
+# clone, or before the first commit) claims this repo only by its remote, so
+# beside a corrupt stray the repo is refused, not resolved: the stray might own
+# root:.
+order_root="$tmp/order-sidecars"
+mkproj https://github.com/acme/laterkey.git
+laterkey="$P"
+SKILL_KIT_SIDECAR_ROOT="$order_root" runo "$laterkey" init --name later --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+[ "$rc" -eq 0 ] || bad "init guest for the key-order arm" "$err"
+jq '.keys |= map(select(startswith("root:") | not))' "$order_root/later/sidecar.json" > "$tmp/later.json" && mv "$tmp/later.json" "$order_root/later/sidecar.json"
+check "key-order fixture: the sidecar claims the remote but not the root key" "0 1" \
+    "$(jq '[.keys[] | select(startswith("root:"))] | length' "$order_root/later/sidecar.json") $(jq '[.keys[] | select(. == "remote:github.com/acme/laterkey")] | length' "$order_root/later/sidecar.json")"
+mkdir -p "$order_root/stray"
+printf '{"keys": [' > "$order_root/stray/sidecar.json"
+SKILL_KIT_SIDECAR_ROOT="$order_root" runo "$laterkey" backend stamp
+check "claimed only by a later key beside a corrupt sidecar: backend stamp exits 1" 1 "$rc"
+check "claimed only by a later key beside a corrupt sidecar: backend stamp prints nothing (not github)" "" "$out"
+case "$err" in *order-sidecars/stray/sidecar.json*) ok "claimed only by a later key beside a corrupt sidecar: the corrupt file is named on stderr" ;; *) bad "claimed only by a later key beside a corrupt sidecar: the corrupt file is named on stderr" "got [$err]" ;; esac
+rm -r "$order_root/stray"
+SKILL_KIT_SIDECAR_ROOT="$order_root" runo "$laterkey" backend stamp
+check "stray removed: the later key resolves the repo again" "0:sidecar" "$rc:$out"
+clean "key-order arm leaves the project clean" "$laterkey"
 clean "scope arms leave the claimed project clean" "$claimed"
 clean "scope arms leave the unclaimed project clean" "$unclaimed"
 
