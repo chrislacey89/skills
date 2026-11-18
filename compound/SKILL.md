@@ -436,7 +436,7 @@ Hand to `/pre-merge` in author-mode. It reads the stamp (`references/state-backe
 
 **Why this is not ceremony on the docs-only case.** The in-PR default exists so the entry is "reviewed and merged with the code that taught it" — Phase 5's own words. Skipping the re-run makes the second half of that true and the first half false, which is worse than the post-merge fallback, because the fallback at least does not claim the review. And the case is not reliably docs-only: this commit stages Phase 4's mechanism alongside the entry, and in the measurement behind chrislacey89/skills#336 — four `docs: compound` commits across seventeen stamped merges — two carried code (a contract test rewritten to derive its coverage from the schema, and a new test file), both under a subject beginning `docs: compound`. The subject line is not evidence of what the commit contains, and the mechanism file is exactly the kind of guard `/compound` Phase 4 found vacuous when self-authored.
 
-**The re-run terminates here; it does not bounce back.** Its subject is the entry that captured the lesson, so no *uncaptured* lesson can emerge from reading it. Whether `/compound` is offered again is decided in `/pre-merge` Phase 4. There is one re-run per in-PR capture, and its exit is `/closeout`.
+Whether `/compound` is offered again on that re-run is decided in `/pre-merge` Phase 4.
 
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path. After the commit, record the lesson on its work item, below.
 
