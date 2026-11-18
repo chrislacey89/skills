@@ -1299,8 +1299,18 @@ assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidec
     "with BASE_REF unset the checklist block asks base-ref and reports the planted deletion and rename"
 assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" "" BASE_REF=origin/nope)")" \
     "a stale BASE_REF in the environment is not read"
-assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" prod)")" \
-    "a stacked sibling in the placeholder is the endpoint (origin/prod here)"
+# A stacked sibling that differs from the default base: a detached commit on top
+# of `feature` (the sibling slice) deletes keep.txt. Measured against the
+# sibling the block reports only that deletion; against origin/prod it would
+# also report doomed.txt and the rename, so dropping the stacked arm fails here.
+git -C "$deltrig" checkout -q --detach feature
+git -C "$deltrig" rm -q keep.txt
+git -C "$deltrig" commit -q -m S1
+assert_eq 'D keep.txt;' "$(del_oracle "$(run_check_block "$sidecar" feature)")" \
+    "a stacked sibling in the placeholder is the endpoint, not the default base"
+assert_eq 'D doomed.txt;D keep.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" "")")" \
+    "with no sibling the same stacked branch is measured against the default base"
+git -C "$deltrig" checkout -q feature
 refusing_sc="$base_sandbox/refusing-sidecar.sh"
 printf '#!/bin/sh\necho "base-ref: refused" >&2\nexit 1\n' > "$refusing_sc"
 set +e
