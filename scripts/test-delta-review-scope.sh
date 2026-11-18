@@ -254,6 +254,12 @@ fixup_target_block="$(printf '%s\n' "$fixup_target_block" | sed -e 's/^FILE="<[^
 [[ "$fixup_target_block" == *'END="${TARGET_END:?}"'* ]] || fatal "fixup-target block's anchor placeholders were not substituted"
 [[ "$fixup_target_block" == *'|| FIXUP_TARGET='* ]] || fatal "no FIXUP_TARGET block found in $fixfindings_skill"
 [[ "$fixup_target_block" == *'then FIXUP_TARGET=; fi'* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no shared-branch line"
+# Its stacked-PR placeholder takes the sibling branch /pre-merge's fold rebases
+# from, so a fixup is never made of a commit the fold will not reach (RB-2).
+# Section 12d fills it; everywhere else it is left empty, as on an unstacked branch.
+[[ "$fixup_target_block" == *"$bb_placeholder"* ]] || fatal "the fixup-target block has no stacked BASE_BRANCH placeholder"
+fixup_target_template="$fixup_target_block"
+fixup_target_block="$(fill_base "$fixup_target_template" "")" || fatal "could not fill the fixup-target block's BASE_BRANCH placeholder"
 
 # The fold-trial block that follows it (#611): from its comment line to its
 # closing fence. Section 12 runs it whole against a fixup that folds, one that
@@ -266,6 +272,9 @@ fold_trial_block="$(awk '
 [[ "$fold_trial_block" == *'rebase -q -i --autosquash'* ]] || fatal "no fold-trial block found in $fixfindings_skill"
 fold_trial_block="${fold_trial_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
 [[ "$fold_trial_block" == *"$sidecar_sh"* ]] || fatal "fold-trial block's sidecar.sh placeholder was not substituted"
+[[ "$fold_trial_block" == *"$bb_placeholder"* ]] || fatal "the fold-trial block has no stacked BASE_BRANCH placeholder"
+fold_trial_template="$fold_trial_block"
+fold_trial_block="$(fill_base "$fold_trial_template" "")" || fatal "could not fill the fold-trial block's BASE_BRANCH placeholder"
 
 printf 'scope block (%s lines) and rounds block extracted\n' "$(printf '%s\n' "$scope_block" | grep -c .)"
 
@@ -1505,6 +1514,75 @@ out13="$(trial_in "$repo13")" && rc13=0 || rc13=$?
 assert_eq 0 "$rc13" "a later commit conflicts: the block exits 0"
 assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out13" "a later commit conflicts: the trial names the demotion"
 assert_eq "add three" "$(git -C "$repo13" log -1 --format=%s)" "a later commit conflicts: the fixup is demoted"
+
+# --- 12d. A stacked slice: the fixup target and the trial use the fold's base (RB-2)
+# The fold rebases from the sibling's tip, so a sibling commit is not in its
+# todo list and a fixup of it would merge as `fixup!`. Measured from main, the
+# fixup-target block named the sibling's commit and the trial called it clean.
+# Only main is on origin, so the branch reads as unshared.
+section "stacked slice: no fixup target on a sibling's line, and the trial folds from the sibling"
+repo_sf="$sandbox/repo-stacked-fixup"
+mkdir -p "$repo_sf"
+(
+    cd "$repo_sf" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c s1
+    printf 's\n' > s.txt
+    git add s.txt && git commit -q -m 's1 adds s'
+    git switch -q -c f
+    printf 'f\n' > f.txt
+    git add f.txt && git commit -q -m 'f adds f'
+)
+point_origin_at_main "$repo_sf"
+s1_sha="$(git -C "$repo_sf" rev-parse s1)"
+f_sha="$(git -C "$repo_sf" rev-parse f)"
+# run_stacked_target <placeholder value> <file> — what the block printed for
+# line 1, and its exit status as the function's own.
+run_stacked_target() {
+    (cd "$repo_sf" && env -u BASE_REF -u BASE_BRANCH TARGET_FILE="$2" TARGET_START=1 TARGET_END=1 \
+        bash -c "$(fill_base "$fixup_target_template" "$1")" 2>&1)
+}
+assert_eq "FIXUP_TARGET=$s1_sha" "$(run_stacked_target "" s.txt)" \
+    "control: with an empty placeholder the sibling's line is measured from main and has a target"
+assert_eq "FIXUP_TARGET=" "$(run_stacked_target s1 s.txt)" \
+    "stacked on s1: a line the sibling wrote has no fixup target"
+assert_eq "FIXUP_TARGET=$f_sha" "$(run_stacked_target s1 f.txt)" \
+    "stacked on s1: a line this slice wrote still has its commit as the target"
+out_sf="$(run_stacked_target no-such-sibling f.txt)" && rc_sf=0 || rc_sf=$?
+[[ "$rc_sf" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "stacked on a branch that does not resolve: the fixup-target block stops"
+case "$out_sf" in
+    *FIXUP_TARGET=*) assert_eq "no answer printed" "$out_sf" "stacked on a branch that does not resolve: no target is printed" ;;
+    *) assert_eq ok ok "stacked on a branch that does not resolve: no target is printed" ;;
+esac
+# The trial, stacked: a fixup of this slice's own commit folds, and the trial
+# and the fold agree on it, both measured from s1.
+(
+    cd "$repo_sf" || exit 1
+    printf 'f, fixed\n' > f.txt
+    git add f.txt && git commit -q --fixup="$f_sha" -m 'fix f' -m 'Fix-Findings-Run: 20261118T000000Z'
+)
+head_sf="$(git -C "$repo_sf" rev-parse HEAD)"
+assert_eq "fold trial: clean" "$(cd "$repo_sf" && BASE_REF=origin/nope bash -c "$(fill_base "$fold_trial_template" s1)" 2>&1)" \
+    "stacked on s1, a stale BASE_REF in the environment: the trial folds from the sibling and reports clean"
+assert_eq "$head_sf" "$(git -C "$repo_sf" rev-parse HEAD)" "stacked on s1: a clean trial leaves the fixup as it was"
+out_sf="$(cd "$repo_sf" && env -u BASE_REF bash -c "$(fill_base "$fold_trial_template" no-such-sibling)" 2>&1)" && rc_sf=0 || rc_sf=$?
+[[ "$rc_sf" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "stacked on a branch that does not resolve: the trial stops"
+case "$out_sf" in
+    *"fold trial aborted: neither origin/no-such-sibling nor no-such-sibling resolves"*) assert_eq ok ok "stacked on a branch that does not resolve: the trial says why" ;;
+    *) assert_eq "fold trial aborted: neither ..." "$out_sf" "stacked on a branch that does not resolve: the trial says why" ;;
+esac
+case "$(run_fold "$repo_sf" s1)" in
+    *"folded: tree unchanged"*) assert_eq ok ok "stacked on s1: /pre-merge's fold applies, as the trial said" ;;
+    *) assert_eq "folded: tree unchanged" "aborted" "stacked on s1: /pre-merge's fold applies, as the trial said" ;;
+esac
+assert_eq "" "$(git -C "$repo_sf" log --format=%s s1..HEAD | grep '^fixup! ' || true)" \
+    "stacked on s1: after the fold no fixup! commit is left on the branch"
 
 section "fold trial and fixup target: the blocks run under zsh, the shell an agent has on macOS"
 # docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md:

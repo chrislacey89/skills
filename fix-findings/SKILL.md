@@ -95,6 +95,9 @@ human to dispose of findings, so there is no valid input.
   writes it into each fix-run record, so a fix is attributed to its slice and
   not to every slice on the branch. On the `github` backend there is none, and
   the count covers the branch.
+- **The sibling slice's branch, for a stacked PR**: the one `/pre-merge` put
+  in its `BASE_BRANCH=` placeholders. Step 1's fixup-target and fold-trial
+  blocks take it in theirs, so they measure from where the fold rebases.
 
 If a number the human gave does not correspond to a finding, say which numbers
 exist and stop. Do not guess at intent, and do not silently fix the neighbors.
@@ -226,7 +229,14 @@ The fixer's instructions, in order:
    FILE="<the finding's file>"
    START="<the anchor's first line, found again at the current HEAD>"
    END="<the anchor's last line, found again at the current HEAD>"
-   BASE_REF="$(bash "$SC" base-ref)" || { echo "fixup target aborted: sidecar.sh base-ref failed" >&2; exit 1; }
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
+   if [ -n "$BASE_BRANCH" ]; then
+     if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+     elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+     else echo "fixup target aborted: neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves" >&2; exit 1; fi
+   else
+     BASE_REF="$(bash "$SC" base-ref)" || { echo "fixup target aborted: sidecar.sh base-ref failed" >&2; exit 1; }
+   fi
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $(1) }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
@@ -248,7 +258,14 @@ The fixer's instructions, in order:
    # After `git commit --fixup`: would the commit just made fold?
    SC="<this skill's directory>/references/sidecar.sh"
    trial_abort() { echo "fold trial aborted: ${1}; the fixup! commit stays" >&2; exit 1; }
-   BASE_REF="$(bash "$SC" base-ref)" || trial_abort "sidecar.sh base-ref failed"
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch the fixup-target block was given; an earlier block's shell variable does not reach this one
+   if [ -n "$BASE_BRANCH" ]; then
+     if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+     elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+     else trial_abort "neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves"; fi
+   else
+     BASE_REF="$(bash "$SC" base-ref)" || trial_abort "sidecar.sh base-ref failed"
+   fi
    FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || trial_abort "no merge base with $BASE_REF"
    TRIAL_HEAD=$(git rev-parse HEAD) || trial_abort "cannot read HEAD"
    TRIAL_DIR=$(mktemp -d) || trial_abort "mktemp failed"
@@ -820,8 +837,8 @@ esac
 
 `range` is the slice's commits when its work item records a start still on
 this branch, and the range from `base-ref` otherwise. Both arms count only
-what is in that range. Step 1's blame range stays on
-`base-ref`, because a fixup may target an earlier slice's commit.
+what is in that range. Step 1's blame range is a different one, the range
+`/pre-merge`'s fold rebases, and Step 1's fixup-target block sets it.
 
 **Below two rounds**, recommended option first: **→ Re-run `/pre-merge`
 (recommended — review the fixes and re-stamp)**, **Fix another finding —
