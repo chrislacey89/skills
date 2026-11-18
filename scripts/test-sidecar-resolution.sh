@@ -1863,6 +1863,23 @@ contains "a miss relays the resolver's init command" "SIDECAR MISS: run: bash $S
 contains "a miss probes the default in-tree store" "in-tree (docs/solutions)=0 sidecar=0" "$hout"
 check "a miss creates no sidecar" "$sc_before" "$(ls "$SKILL_KIT_SIDECAR_ROOT")"
 
+# A solutions-dirs that fails (A4-2): the block says so and counts nothing, so row 10 and
+# row 11 are not computed from an empty list. The stub passes every other verb through.
+FAILSC="$tmp/fail-solutions-dirs.sh"
+# shellcheck disable=SC2016  # the stub's $1 and $@ expand when the stub runs, not here
+printf '#!/bin/bash\n[ "$1" = solutions-dirs ] && { echo "stub: in_tree_path unreadable" >&2; exit 1; }\nexec bash "%s" "$@"\n' "$SC" > "$FAILSC"
+mkdir -p "$HR/docs/solutions/history"
+printf 'in-tree lesson\n' > "$HR/docs/solutions/history/a.md"
+fscript="BASE_REF=main
+$(printf '%s\n' "$hblock" | sed -e "s|^SC=.*|SC=\"$FAILSC\"|")"
+fall="$(cd "$HR" && bash -c "$fscript" 2>&1)"; fout="$(cd "$HR" && bash -c "$fscript" 2>/dev/null)"
+contains "a failing solutions-dirs prints SOLUTIONS DIRS UNAVAILABLE" "SOLUTIONS DIRS UNAVAILABLE" "$fout"
+contains "a failing solutions-dirs keeps its stderr" "stub: in_tree_path unreadable" "$fall"
+contains "a failing solutions-dirs reports the counts as unknown" "solutions entries: unknown" "$fout"
+lacks "a failing solutions-dirs prints no zero count" "in-tree (none)=0" "$fout"
+contains "a failing solutions-dirs leaves the last-merge verdict unknown" "last merge compounded: unknown" "$fout"
+rm -rf "$HR/docs/solutions"
+
 # /correct-course's no-PRD research lookup points at /write-a-prd's whole
 # "Research document" lookup (#495); the pointer must name text that exists.
 cc_ptr="$(grep -c 'write-a-prd` § 4.s "Research document" lookup' "$repo_root/correct-course/SKILL.md")"
