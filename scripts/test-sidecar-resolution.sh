@@ -1564,6 +1564,19 @@ jq '.solutions.in_tree_path = "docs/solutions"' "$MSC/sidecar.json" > "$MSC/sj" 
 dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
 check "solutions-dirs does not list docs/solutions twice" "$SOLS
 docs/solutions" "$dirs"
+# #508: the dedupe compares a normalized in_tree_path, so a trailing "/" or a
+# leading "./" does not list docs/solutions twice.
+for spelling in "docs/solutions/" "./docs/solutions" "./docs/solutions/"; do
+    jq --arg p "$spelling" '.solutions.in_tree_path = $p' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+    dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+    check "solutions-dirs with in_tree_path $spelling lists docs/solutions once" "$SOLS
+docs/solutions" "$dirs"
+done
+jq '.solutions.in_tree_path = "./docs/adr/"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
+dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
+check "solutions-dirs prints a normalized in_tree_path" "$SOLS
+docs/adr
+docs/solutions" "$dirs"
 git -C "$MSC" checkout -q -- sidecar.json
 rm -f "$MIG/docs/solutions/planted.md"; rmdir "$MIG/docs/solutions"
 jq '.solutions.in_tree_path = "docs/adr"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"

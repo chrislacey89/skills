@@ -164,7 +164,8 @@
 #
 # solutions-dirs policy. The directories a reader searches for lessons, one per
 # line: the sidecar's solutions/ (created if absent), then the project's
-# solutions.in_tree_path unless it is "none", then docs/solutions when that
+# solutions.in_tree_path unless it is "none" (leading "./" and trailing "/"
+# stripped), then docs/solutions when that
 # directory exists in the tree and is not already listed (a /excavate PR commits
 # there whatever in_tree_path says). With no sidecar it prints docs/solutions
 # alone. In-tree entries are relative to the current directory.
@@ -1307,6 +1308,10 @@ cmd_solutions_dirs() {
         mkdir -p "$sc/solutions" || { rm -f "$err"; refuse "solutions-dirs: cannot create $sc/solutions"; }
         printf '%s\n' "$sc/solutions"
         itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
+        # Normalized before the dedupe below: docs/solutions/ and
+        # ./docs/solutions name the same directory as docs/solutions.
+        while [ "${itp#./}" != "$itp" ] && [ "$itp" != "./" ]; do itp="${itp#./}"; done
+        while [ "${#itp}" -gt 1 ] && [ "${itp%/}" != "$itp" ]; do itp="${itp%/}"; done
         case "$itp" in ''|none) ;; *) printf '%s\n' "$itp"; seen="$itp" ;; esac
     else
         sc=""
