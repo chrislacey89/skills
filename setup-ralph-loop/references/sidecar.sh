@@ -1500,10 +1500,6 @@ cmd_require() {
     printf '%s\n' "$hit"
 }
 
-# resolve_cited <path> <referrer>: require's lookup, shared with trace. Prints
-# the physical path of the first candidate that exists, or returns 1; the order
-# is the header's "require resolution order", and the duplicate-category
-# warning goes to stderr here so both callers print it.
 # cited_probe <path>: step 1 of the header's "require resolution order", the
 # path as given with "~/" expanded and a #anchor or :line suffix stripped when
 # the path does not exist with it.
@@ -1524,6 +1520,10 @@ cited_probe() {
     printf '%s\n' "$probe"
 }
 
+# resolve_cited <path> <referrer>: require's lookup, shared with trace. Prints
+# the physical path of the first candidate that exists, or returns 1; the order
+# is the header's "require resolution order", and the duplicate-category
+# warning goes to stderr here so both callers print it.
 resolve_cited() {
     local path="$1" from="$2" probe raw c
     probe="$(cited_probe "$path")"
