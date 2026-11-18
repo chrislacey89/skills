@@ -399,10 +399,12 @@ the next section so the user sees the day.
 
 - the kickoff block's end (start time + kickoff block)
 - each checkpoint (every checkpoint interval after that, while before the freeze)
+- the Locked first Q&A drill and restyle cutoff (the second checkpoint)
+- the Locked story checkpoint (the last checkpoint before the freeze)
 - the freeze (deadline − freeze)
 - the submit-by time (deadline − submission buffer)
 
-Write the four kinds of times into `PLAN.md` and the dossier. Then hold them:
+Write these times into `PLAN.md` and the dossier. Then hold them:
 nothing in this phase moves the freeze or the submit-by time.
 
 **Kickoff block** (after the start time and never before):

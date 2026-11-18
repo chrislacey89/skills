@@ -113,9 +113,9 @@ Non-builder scorer column (Phase 1): <their scores, taken before they saw either
 | Start | |
 | Kickoff block ends | |
 | Checkpoints | |
-| First Q&A drill (second checkpoint) | |
-| Restyle cutoff (second checkpoint) | |
-| Story checkpoint (last before the freeze) | |
+| First Q&A drill | |
+| Restyle cutoff | |
+| Story checkpoint | |
 | Freeze | |
 | Submit by | |
 | Deadline | |
