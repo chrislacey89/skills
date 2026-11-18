@@ -1424,5 +1424,43 @@ else
     rm -rf "$BMS/solutions/big"
 fi
 
+section "a refused directory listing stops check, propose and audit"
+
+# A malformed solutions or solutions.related in the project's own sidecar: the
+# listing's refusal must stop each verb with a nonzero exit, never a false
+# dead-link or a report built from an empty group. A sidecar with no related
+# key is an empty group and still runs.
+mkproj
+RFP="$P"
+runo "$RFP" init --name refusal --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+RFS="$out"
+[ -d "$RFS" ] || fatal "init did not create a sidecar: $err"
+mkdir -p "$RFP/lib"; : > "$RFP/lib/a.sh"
+lesson "$RFP" "x/l-2026-01-01.md" "L" "paths: [lib]" "related: [m-2026-01-02.md]"
+lesson "$RFP" "x/m-2026-01-02.md" "M" "paths: [lib/a.sh]"
+git -C "$RFP" add docs lib && git -C "$RFP" commit -q -m "lessons"
+git -C "$RFP" checkout -q -b feat/r
+runo "$RFP" lessons match lib/other.sh --record start
+runo "$RFP" lessons flag docs/solutions/x/l-2026-01-01.md --for lib/other.sh --reason "r"
+cp "$RFS/sidecar.json" "$tmp/refusal.json"
+LF="docs/solutions/x/l-2026-01-01.md"
+runo "$RFP" lessons check "$LF"
+check "no related key: check of a file exits 0" 0 "$rc"
+check "no related key: check of a file reports no dead-link" 0 "$(printf '%s\n' "$out" | grep -c '^dead-link')"
+runo "$RFP" lessons propose "$LF"
+check "no related key: propose exits 0" 0 "$rc"
+runo "$RFP" lessons audit
+check "no related key: audit exits 0" 0 "$rc"
+for bad_json in '.solutions.related = "oops"' '.solutions = "str"'; do
+    jq "$bad_json" "$tmp/refusal.json" > "$RFS/sidecar.json"
+    for verb in "check $LF" "check" "propose $LF" "audit"; do
+        # shellcheck disable=SC2086  # the verb and its argument split on purpose
+        runo "$RFP" lessons $verb
+        if [ "$rc" -ne 0 ]; then ok "[$bad_json] lessons $verb: exits nonzero"; else bad "[$bad_json] lessons $verb: exits nonzero" "rc=0, stdout [$out]"; fi
+        case "$out" in *dead-link*) bad "[$bad_json] lessons $verb: no false dead-link" "$out" ;; *) ok "[$bad_json] lessons $verb: no false dead-link" ;; esac
+    done
+done
+cp "$tmp/refusal.json" "$RFS/sidecar.json"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

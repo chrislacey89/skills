@@ -3001,7 +3001,7 @@ lessons_listed() {
 
 # shellcheck disable=SC2120  # its argument comes through cmd_lessons' "lessons_$sub" dispatch
 lessons_check() {
-    local top file="" dirs="" d list="" raw t a b c det bk listed="" n=0 out="" abs idx hits
+    local top file="" dirs="" d list="" raw t a b c det bk listed="" n=0 out="" abs idx hits rdirs
     [ $# -le 1 ] || die_usage "usage: sidecar.sh lessons check [<lesson-file>]"
     in_repo || refuse "lessons check: not inside a git repository"
     top="$(cd "$(pgit rev-parse --show-toplevel)" && pwd -P)" || refuse "lessons check: cannot find the project's top level"
@@ -3026,7 +3026,11 @@ lessons_check() {
                 || refuse "lessons check: could not read the lesson headers"
         fi
     fi
-    idx="$(lessons_index "${dirs:-$(cmd_solutions_dirs)}" "$(cmd_related_solutions_dirs)")" \
+    # Each listing is read on its own line so its refusal is not lost in
+    # argument position; a single-file check has no dirs yet.
+    [ -n "$dirs" ] || dirs="$(cmd_solutions_dirs)" || refuse "lessons check: could not list the lesson directories"
+    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons check: could not list the related lesson directories"
+    idx="$(lessons_index "$dirs" "$rdirs")" \
         || refuse "lessons check: could not list the lessons a link may name"
     bk="$(cmd_backend slices 2>/dev/null)" || bk=failed
     [ "$bk" != sidecar ] || listed="$(lessons_listed "$top")"
@@ -3155,13 +3159,14 @@ lessons_audit_group() {
 # open flags, whose entries are checked against the lesson as it is now, here
 # or in the group.
 lessons_audit_flags() {
-    local sc="$1" own="$2" sum all files=() f ret lname entry cnt fat reason es
+    local sc="$1" own="$2" sum all rdirs files=() f ret lname entry cnt fat reason es
     sum="$(lessons_flag_summary "$sc")" || return 1
     [ -n "$sum" ] || return 0
     all="$(lessons_scan "$own")" || return 1
     # The group is read best effort; lessons_scan_group's comment states the
     # rule. The project's own store above stays strict.
-    all="$all"$'\n'"$(lessons_scan_group "$(cmd_related_solutions_dirs 2>/dev/null)")"
+    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons audit: could not list the related lesson directories"
+    all="$all"$'\n'"$(lessons_scan_group "$rdirs")"
     for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
     ret=""
     if [ "${#files[@]}" -gt 0 ]; then
@@ -3359,7 +3364,7 @@ lessons_flag() {
 # resolves to a lesson here or in the group, as a file name, once. It never
 # proposes replaces: only a person can say one lesson took another's place.
 lessons_propose() {
-    local file top raw dirs="" d self comps e n out="" seen=$'\n' idx lines kind tok res b rel="" rseen=$'\n'
+    local file top raw dirs="" d self comps e n out="" seen=$'\n' idx lines kind tok res b rel="" rseen=$'\n' rdirs
     [ $# -eq 1 ] || die_usage "usage: sidecar.sh lessons propose <lesson-file>"
     file="$1"
     [ -f "$file" ] || refuse "lessons propose: no such lesson file: $file"
@@ -3393,7 +3398,8 @@ lessons_propose() {
         [ -d "$d" ] || continue
         dirs="${dirs:+$dirs$'\n'}$(cd "$d" && pwd -P)"
     done <<<"$raw"
-    idx="$(lessons_index "$raw" "$(cmd_related_solutions_dirs)")" || refuse "lessons propose: could not list the lessons"
+    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons propose: could not list the related lesson directories"
+    idx="$(lessons_index "$raw" "$rdirs")" || refuse "lessons propose: could not list the lessons"
     lines="$(lesson_cites "$self" "$top" "$dirs")"
     while IFS=$'\t' read -r kind tok res; do
         case "$kind" in
