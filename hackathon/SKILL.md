@@ -90,6 +90,7 @@ Every phase reads these values. Change one here and nowhere else.
 | First Q&A drill | at the second checkpoint |
 | Restyle cutoff | no visual redesign after the second checkpoint |
 | Table script length | 60 seconds |
+| Acceptance script length | 3 minutes, on a phone |
 | Dossier prefix | `hackathon-` |
 
 ## State
@@ -377,7 +378,7 @@ re-deriving it. Fill the dossier:
     edit, the write-up and every acceptance at once: one person holding all of
     those is where the afternoon stalls.
   - **Acceptance scripts.** For each rung, write the steps the demo-lane owner
-    follows to accept it, short enough to run in 3 minutes on a phone, before
+    follows to accept it, short enough to run within the Locked acceptance script length, before
     the rung is built. Accepting is then a routine, not a conversation.
   - **Solo:** you hold both lanes. Put the demo-lane work into the checkpoint,
     so it happens at fixed times instead of never.

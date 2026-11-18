@@ -56,18 +56,18 @@ Blind second scorer: <cells that met the Locked disagreement threshold, and how 
 **Award line:** <the best (award) entry in the room because (reason, in the organizers' words)>
 **Said back by:** <who, outside the build, repeated what it is and why it wins>
 **Real-world ground:** <the dataset, standard, or official system it is built on>
-**What the AI does that a judge can watch:** <reads / decides / explains / builds; "drafts only" caps Peak moment at 3>
+**What the AI does that a judge can watch:** <reads / decides / explains / builds; scoring cap per Phase 1, Ambition check>
 
 ## Scope ladder
 
-| Rung | Adds (what a judge notices) | Done when | Tracer test | Acceptance script (3 min, phone) | Stretch |
+| Rung | Adds (what a judge notices) | Done when | Tracer test | Acceptance script | Stretch |
 |---|---|---|---|---|---|
 | 1 | tracer bullet: <end-to-end path> | | | | |
 | 2 | | | | | |
-| S | submission page: every required section, video by the story checkpoint | page matches the required artifacts | — | demo-lane owner reads it on a phone | never `~` |
+| S | submission page: every required section, video by the story checkpoint | page matches the required artifacts | — | demo-lane owner reads it on a phone | see Phase 2, Scope ladder |
 | … | | | | | `~` |
 
-The peak-moment rung and the most ambitious AI rung are never `~`.
+Which rungs may be stretch: see Phase 2, Scope ladder.
 
 **Who sees what** (signed off by: <non-builder>):
 
