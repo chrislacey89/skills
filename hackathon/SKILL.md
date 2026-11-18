@@ -104,7 +104,8 @@ Two homes, split on purpose.
   The dossier's shape is
   [references/dossier-template.md](references/dossier-template.md).
 - **From the start time on, two files live in the event repo:** `PLAN.md` (the
-  ladder) and `DECISIONS.md` (the decision log). This is a scoped exception to
+  ladder, and a `## Submission draft` section holding the submission page's
+  text) and `DECISIONS.md` (the decision log). This is a scoped exception to
   the pack's rule that durable state never lives in the project tree. Here the
   repo *is* the judged deliverable, and judges read the decision log. The
   exception covers those two files in an event repo and nothing else.
@@ -331,8 +332,8 @@ re-deriving it. Fill the dossier:
     not on the ladder.
   - **The submission is a rung**, with no code. The build lane's agent creates
     the platform page in the kickoff block with every required section stubbed,
-    drafts each section from the dossier and `DECISIONS.md` as rungs land, and
-    re-pastes the page at each checkpoint. The demo-lane owner reviews it. The
+    drafts each section from the dossier and `DECISIONS.md` as rungs land, in
+    `PLAN.md`'s `## Submission draft` section (no new file), and re-pastes the page at each checkpoint. The demo-lane owner reviews it. The
     page is complete, video included, by the Locked story checkpoint.
 - **Rabbit holes and no-gos.** Name what you will not build, and the parts most
   likely to swallow an hour, along with what you will do instead.
@@ -556,7 +557,7 @@ close reads as work done after the deadline.
    the high-concept line and the real-world ground, what shipped (the ticked
    rungs), how it was built (the factory), and what was cut. Every number on
    it (tests, commits, decisions) comes from one source and matches the README
-   and the deployed site. Paste the final text from the committed draft, not
+   and the deployed site. Paste the final text from `PLAN.md`'s committed `## Submission draft` section, not
    from memory. Submit by the submit-by time.
 3. **Table script** (Locked length): open on the high-concept line, show rung 1's
    path, and **end on the peak moment**. Judges remember the peak and the
