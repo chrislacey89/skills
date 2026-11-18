@@ -118,7 +118,7 @@ Tell the user, in one short block: which PR will merge, which worktree (if any) 
 
 ### 2. Verify safety preconditions before any destructive step
 
-If `state` is `MERGED`, there is nothing left to merge, so the mergeable, checks, and review preconditions below no longer apply, and the review-currency comparison is moot. The teardown is still destructive, so the fully-pushed checkbox below still holds: a commit made after the client merged exists only on this branch, and Step 6 would discard it. If it fails, stop and report it. Then go to Step 3's release of the post-review edit lock.
+If `state` is `MERGED`, there is nothing left to merge, so the mergeable, checks, and review preconditions below no longer apply, and the review-currency comparison is moot. The teardown is still destructive, so the fully-pushed checkbox below still holds: a commit made after the client merged exists only on this branch, and Step 6 would discard it. If it fails, stop and report it. If `@{u}` no longer resolves because the remote branch was deleted and pruned, that is the same stop, so check the other way round: `git log --oneline HEAD "^$(gh pr view <number> --json headRefOid -q .headRefOid)"` must print nothing, since a `^<rev>` argument excludes every commit reachable from `<rev>` ([git-log](https://git-scm.com/docs/git-log)); a commit it prints is one the merged PR never held. Then go to Step 3's release of the post-review edit lock.
 
 The teardown is destructive; verify it is safe first (self-guard). All of these must hold:
 
