@@ -53,8 +53,8 @@
 #   8. Surface checks: strings in /closeout, /help, /fix-findings,
 #      SYSTEM-OVERVIEW and state-backend. The checks that read a fixed string
 #      are of two kinds. A presence check (the route names /closeout Step 2, a
-#      row exists) pins that string and nothing more. An absence check (four
-#      of them: 'threads are still open' in /closeout, the trigger words in this
+#      row exists) pins that string and nothing more. An absence check (for
+#      example 'threads are still open' in /closeout, the trigger words in this
 #      skill's Invocation Position, 'escaped defect' in the handoff menu, 'in
 #      two ways' in /fix-findings) pins only that the removed phrase is gone.
 #      The property behind each (no route claims a trigger nothing reads, the
@@ -1018,7 +1018,7 @@ check "Where State Lives has a row for this skill's record" 1 \
     "$(grep -cE '^\| .*\| `<sidecar>/review-responses/pr-<n>\.md`' <<<"$SO_STATE")"
 check "state-backend's not-persisted rule ends the paragraph it governs" 1 \
     "$(grep -E '^On the `sidecar` backend with no work item' "$SB" | grep -c 'Notes and a ledger are printed to the terminal')"
-check "and it no longer reads as a rule about this skill's record" 0 \
+check "state-backend's not-persisted rule no longer sits in the paragraph about this skill's record (the phrase 'Notes and a ledger' only)" 0 \
     "$(grep -E '^`/respond-to-review`.s record is not in the table' "$SB" | grep -c 'Notes and a ledger')"
 
 check "/help row 1 recommends /respond-to-review on CHANGES_REQUESTED" 1 \
