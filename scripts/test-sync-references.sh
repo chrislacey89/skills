@@ -188,6 +188,48 @@ fi
 
 # -----------------------------------------------------------------------------
 
+section "whitespace-padded manifest lines (leading, trailing, tabs) are synced (#144)"
+dir="$(make_sandbox padded)"
+mkdir -p "$dir/docs" "$dir/consumer/references"
+printf 'hello\n' > "$dir/docs/thing.md"
+printf '   \t docs/thing.md \t  consumer   \t \n' > "$dir/scripts/skill-references.manifest"
+set +e
+(cd "$dir" && bash scripts/sync-skill-references.sh >/dev/null)
+rc=$?
+set -e
+assert_exit 0 "$rc" "sync accepts a whitespace-padded line"
+if [[ -f "$dir/consumer/references/thing.md" ]] && cmp -s "$dir/docs/thing.md" "$dir/consumer/references/thing.md"; then
+    printf '  ok   padded entry copied byte for byte\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL padded entry not synced\n'
+    fail=$((fail + 1))
+fi
+set +e
+(cd "$dir" && bash scripts/sync-skill-references.sh --check >/dev/null)
+rc=$?
+set -e
+assert_exit 0 "$rc" "--check is green on a padded line after sync"
+
+# -----------------------------------------------------------------------------
+
+section "source modified after sync: --check reports drift (#144)"
+printf 'hello, changed\n' > "$dir/docs/thing.md"
+set +e
+output="$(cd "$dir" && bash scripts/sync-skill-references.sh --check 2>&1)"
+rc=$?
+set -e
+assert_exit 1 "$rc" "--check fails when the source changed after sync"
+assert_contains "$output" "drift:" "drift message printed for a changed source"
+set +e
+(cd "$dir" && bash scripts/sync-skill-references.sh >/dev/null)
+(cd "$dir" && bash scripts/sync-skill-references.sh --check >/dev/null)
+rc=$?
+set -e
+assert_exit 0 "$rc" "re-sync after a source change clears drift"
+
+# -----------------------------------------------------------------------------
+
 section "unknown flag errors cleanly"
 dir="$(make_sandbox bad_flag)"
 set +e
