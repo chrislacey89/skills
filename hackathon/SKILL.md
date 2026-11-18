@@ -105,10 +105,11 @@ Two homes, split on purpose.
   [references/dossier-template.md](references/dossier-template.md).
 - **From the start time on, two files live in the event repo:** `PLAN.md` (the
   ladder, the clock plan, and a `## Submission draft` section holding the
-  submission page's text) and `DECISIONS.md` (the decision log). This is a scoped exception to
-  the pack's rule that durable state never lives in the project tree. Here the
-  repo *is* the judged deliverable, and judges read the decision log. The
-  exception covers those two files in an event repo and nothing else.
+  submission page's text) and `DECISIONS.md` (the decision log). This is a
+  scoped exception to the pack's rule that durable state never lives in the
+  project tree. Here the repo *is* the judged deliverable, and judges read the
+  decision log. The exception covers those two files in an event repo and
+  nothing else.
 
 Set up the sidecar in the directory that will become the event repo. Create it
 with `git init` and **no commits and nothing pushed**, so the empty-until-start
@@ -333,9 +334,10 @@ re-deriving it. Fill the dossier:
   - **The submission is a rung**, with no code. The build lane's agent creates
     the platform page in the kickoff block with every required section stubbed,
     drafts each section from the dossier and `DECISIONS.md` as rungs land, in
-    `PLAN.md`'s `## Submission draft` section (no new file), and re-pastes the page at each checkpoint. The demo-lane owner reviews it. The
-    page is complete, video included, by the Locked story checkpoint. It is never `~`: cutting it at a
-    checkpoint leaves nothing to judge.
+    `PLAN.md`'s `## Submission draft` section (no new file), and re-pastes the
+    page at each checkpoint. The demo-lane owner reviews it. The page is
+    complete, video included, by the Locked story checkpoint. It is never `~`:
+    cutting it at a checkpoint leaves nothing to judge.
 - **Rabbit holes and no-gos.** Name what you will not build, and the parts most
   likely to swallow an hour, along with what you will do instead.
 - **Slow-dependency work goes first.** Move to the kickoff block and rung 1
@@ -380,8 +382,9 @@ re-deriving it. Fill the dossier:
     edit, the write-up and every acceptance at once: one person holding all of
     those is where the afternoon stalls.
   - **Acceptance scripts.** For each rung, write the steps the demo-lane owner
-    follows to accept it, short enough to run within the Locked acceptance script length, before
-    the rung is built. Accepting is then a routine, not a conversation.
+    follows to accept it, short enough to run within the Locked acceptance
+    script length, before the rung is built. Accepting is then a routine, not a
+    conversation.
   - **Solo:** you hold both lanes. Put the demo-lane work into the checkpoint,
     so it happens at fixed times instead of never.
 - **Seed the decision log.** Copy each decision made so far (project, stack,
@@ -415,9 +418,10 @@ nothing in this phase moves the freeze or the submit-by time.
 1. If the build actually starts at a time other than the event profile's start
    time, recompute the kickoff block's end and the checkpoints from the actual
    start, in `PLAN.md` and the dossier alike. The freeze and the submit-by time
-   come from the deadline, so they stay. Add `PLAN.md` (State says what it holds) and `DECISIONS.md` (copied from the
-   dossier's seeded log), make the first commit, then push it to the remote added in
-   prep with `git push -u origin HEAD`.
+   come from the deadline, so they stay. Add `PLAN.md` (State says what it
+   holds) and `DECISIONS.md` (copied from the dossier's seeded log), make the
+   first commit, then push it to the remote added in prep with
+   `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
    runs `lefthook run pre-commit --all-files --fail-on-changes` and then
    `lefthook run pre-push`, so `lefthook.yml` stays the one source for what the
@@ -537,9 +541,10 @@ session, and a deadline warning given after the deadline is worse than none.
    changed ladder is a real fork, so confirm it with the user before going on.
 5. **Story check.** Re-paste the submission page from the latest draft. At the
    Locked first Q&A drill, draft the five most likely judge questions from
-   `DECISIONS.md` (Phase 4 step 4 says how), run them once, out loud, and note the weak answers. At the Locked story
-   checkpoint, confirm the page has every required section and the video is
-   recorded; if either is missing, it takes the next rung's slot.
+   `DECISIONS.md` (Phase 4 step 4 says how), run them once, out loud, and note
+   the weak answers. At the Locked story checkpoint, confirm the page has every
+   required section and the video is recorded; if either is missing, it takes
+   the next rung's slot.
 
 **Freeze.** At the freeze, stop adding rungs. Whatever is unfinished either
 works behind a flag or gets reverted. Set `phase: demo` and commit the dossier.
@@ -554,13 +559,13 @@ close reads as work done after the deadline.
    Things fail at the worst moment, so the checklist assumes the live demo will
    break; the template holds the one list.
 2. **Submission.** The page has been drafted since kickoff, so this step
-   finishes it. Check it against the event profile's required artifacts, one
-   by one (known limitations are a common one to miss). It covers the problem,
-   the high-concept line and the real-world ground, what shipped (the ticked
-   rungs), how it was built (the factory), and what was cut. Every number on
-   it (tests, commits, decisions) comes from one source and matches the README
-   and the deployed site. Paste the final text from `PLAN.md`'s committed `## Submission draft` section, not
-   from memory. Submit by the submit-by time.
+   finishes it. Check it against the event profile's required artifacts, one by
+   one (known limitations are a common one to miss). It covers the problem, the
+   high-concept line and the real-world ground, what shipped (the ticked rungs),
+   how it was built (the factory), and what was cut. Every number on it (tests,
+   commits, decisions) comes from one source and matches the README and the
+   deployed site. Paste the final text from `PLAN.md`'s committed
+   `## Submission draft` section, not from memory. Submit by the submit-by time.
 3. **Table script** (Locked length): open on the high-concept line, show rung 1's
    path, and **end on the peak moment**. Judges remember the peak and the
    ending. Rehearse it until it fits the time, then rehearse the 15-second
