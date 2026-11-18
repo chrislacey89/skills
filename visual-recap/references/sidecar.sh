@@ -3163,9 +3163,10 @@ lessons_audit_flags() {
     sum="$(lessons_flag_summary "$sc")" || return 1
     [ -n "$sum" ] || return 0
     all="$(lessons_scan "$own")" || return 1
-    # The group is read best effort; lessons_scan_group's comment states the
-    # rule. The project's own store above stays strict.
-    rdirs="$(cmd_related_solutions_dirs)" || refuse "lessons audit: could not list the related lesson directories"
+    # A refused listing of the group's directories returns 1 here, so the
+    # caller prints "flags: could-not-run" like every other section of the
+    # audit; the listing's own refusal message is already on stderr.
+    rdirs="$(cmd_related_solutions_dirs)" || return 1
     all="$all"$'\n'"$(lessons_scan_group "$rdirs")"
     for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
     ret=""

@@ -1456,7 +1456,13 @@ for bad_json in '.solutions.related = "oops"' '.solutions = "str"'; do
     for verb in "check $LF" "check" "propose $LF" "audit"; do
         # shellcheck disable=SC2086  # the verb and its argument split on purpose
         runo "$RFP" lessons $verb
-        if [ "$rc" -ne 0 ]; then ok "[$bad_json] lessons $verb: exits nonzero"; else bad "[$bad_json] lessons $verb: exits nonzero" "rc=0, stdout [$out]"; fi
+        if [ "$verb" = audit ] && [ "$bad_json" = '.solutions.related = "oops"' ]; then
+            # Only the group listing fails: the audit still finishes, and its
+            # flags section says it could not run, with the usual exit status.
+            check "[$bad_json] lessons audit: exits 0" 0 "$rc"
+            check "[$bad_json] lessons audit: flags could-not-run" 1 "$(printf '%s\n' "$out" | grep -c '^flags: could-not-run')"
+            case "$err" in *"solutions.related"*) ok "[$bad_json] lessons audit: reason on stderr" ;; *) bad "[$bad_json] lessons audit: reason on stderr" "stderr [$err]" ;; esac
+        elif [ "$rc" -ne 0 ]; then ok "[$bad_json] lessons $verb: exits nonzero"; else bad "[$bad_json] lessons $verb: exits nonzero" "rc=0, stdout [$out]"; fi
         case "$out" in *dead-link*) bad "[$bad_json] lessons $verb: no false dead-link" "$out" ;; *) ok "[$bad_json] lessons $verb: no false dead-link" ;; esac
     done
 done
