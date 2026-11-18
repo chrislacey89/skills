@@ -105,6 +105,10 @@ J="$SIDECAR/sidecar.json"
 check "sidecar.json declares schema 2" 2 "$(jq -r .schema "$J")"
 check "solutions.write is recorded" ask "$(jq -r .solutions.write "$J")"
 check "solutions.in_tree_path is recorded" docs/adr "$(jq -r .solutions.in_tree_path "$J")"
+ITPN="$tmp/itp-norm"
+mkrepo "$ITPN"
+(cd "$ITPN" && SKILL_KIT_SIDECAR_ROOT="$tmp/itp-norm-root" bash "$SC" init --name itpn --mode guest --write ask --in-tree-path ./docs/solutions/ --no-migrate-archive >/dev/null 2>&1)
+check "init stores in_tree_path normalized" docs/solutions "$(jq -r .solutions.in_tree_path "$tmp/itp-norm-root/itpn/sidecar.json")"
 check "sidecar.json carries a root: key" 1 "$(jq '[.keys[] | select(startswith("root:"))] | length' "$J")"
 check "sidecar.json carries the main checkout's path: key" \
     "path:$(printf '%s' "$PROJ" | tr '[:upper:]' '[:lower:]')" "$(jq -r '.keys[] | select(startswith("path:"))' "$J")"
@@ -1622,6 +1626,9 @@ for spelling in "docs/solutions/" "./docs/solutions" "./docs/solutions/"; do
     dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"
     check "solutions-dirs with in_tree_path $spelling lists docs/solutions once" "$SOLS
 docs/solutions" "$dirs"
+    # Every reader gets one meaning: config get normalizes a value stored raw.
+    runo "$MIG" config get solutions.in_tree_path
+    check "config get solutions.in_tree_path with stored $spelling is docs/solutions" docs/solutions "$out"
 done
 jq '.solutions.in_tree_path = "./docs/adr/"' "$MSC/sidecar.json" > "$MSC/sj" && mv "$MSC/sj" "$MSC/sidecar.json"
 dirs="$(cd "$MIG" && bash "$SC" solutions-dirs 2>/dev/null)"

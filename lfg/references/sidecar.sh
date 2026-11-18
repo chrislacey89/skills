@@ -722,6 +722,17 @@ $k"
     printf '%s\n' "$hit"
 }
 
+# One meaning for solutions.in_tree_path in every reader: a leading "./" and a
+# trailing "/" stripped, so docs/solutions/ and ./docs/solutions are
+# docs/solutions. Written by init, applied again on config get and in
+# solutions-dirs so a sidecar written before this existed agrees too.
+norm_in_tree_path() {
+    local itp="$1"
+    while [ "${itp#./}" != "$itp" ] && [ "$itp" != "./" ]; do itp="${itp#./}"; done
+    while [ "${#itp}" -gt 1 ] && [ "${itp%/}" != "$itp" ]; do itp="${itp%/}"; done
+    printf '%s' "$itp"
+}
+
 cmd_init() {
     local name="" mode="" write="" itp="" keys key owner gname gemail dir storage top forge_kind forge_write migrate=1 aliases=""
     while [ $# -gt 0 ]; do
@@ -742,6 +753,7 @@ cmd_init() {
     case "$mode" in owned|guest) ;; *) die_usage "init: --mode must be owned or guest" ;; esac
     case "$write" in sidecar|in-tree|ask) ;; *) die_usage "init: --write must be sidecar, in-tree, or ask" ;; esac
     [ -n "$itp" ] || die_usage "init: --in-tree-path is required (a path, or none)"
+    itp="$(norm_in_tree_path "$itp")"
     if [ "$write" != "sidecar" ] && [ "$itp" = "none" ]; then
         die_usage "init: --write $write needs an in-tree path, not none"
     fi
@@ -905,7 +917,12 @@ cmd_config() {
         get)
             [ $# -eq 2 ] || die_usage "usage: sidecar.sh config get <dotted.key>"
             sc="$(do_resolve)" || exit 1
-            jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+            if [ "$2" = "solutions.in_tree_path" ]; then
+                norm_in_tree_path "$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
+                printf '\n'
+            else
+                jq -r --arg k "$2" 'getpath($k | split(".")) // empty' "$sc/sidecar.json"
+            fi
             ;;
         set)
             [ $# -eq 3 ] || die_usage "usage: sidecar.sh config set <mode <owned|guest>|base_ref <branch>|system <label>|verify.<field> <value>|conventions <json-array>|design <json>>"
@@ -1319,8 +1336,7 @@ cmd_solutions_dirs() {
         itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
         # Normalized before the dedupe below: docs/solutions/ and
         # ./docs/solutions name the same directory as docs/solutions.
-        while [ "${itp#./}" != "$itp" ] && [ "$itp" != "./" ]; do itp="${itp#./}"; done
-        while [ "${#itp}" -gt 1 ] && [ "${itp%/}" != "$itp" ]; do itp="${itp%/}"; done
+        itp="$(norm_in_tree_path "$itp")"
         case "$itp" in ''|none) ;; *) printf '%s\n' "$itp"; seen="$itp" ;; esac
     else
         sc=""
