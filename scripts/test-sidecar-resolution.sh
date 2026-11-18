@@ -423,6 +423,29 @@ check "a direct commit from the guest project succeeds" 0 "$rc"
 check "git status --porcelain in the project is empty" "" "$(git -C "$GUEST" status --porcelain)"
 check "no file under the project's .git changed" "$GUEST_BEFORE" "$(fingerprint "$GUEST")"
 
+# #541 item 1: docs/state-backend.md says no verb writes to the project's tree
+# or its .git; backend and stamp are pinned here beside init and commit. A new
+# remote first, so the reads below also take the path where do_resolve appends
+# an alias and commits it in the sidecar, the one place a read commits.
+git -C "$GUEST" remote add mirror https://github.com/acme/guest-mirror.git
+GUEST_BEFORE="$(fingerprint "$GUEST")"
+gbranch="$(git -C "$GUEST" branch --show-current)"
+ghead="$(git -C "$GUEST" rev-parse HEAD)"
+for a in prds slices stamp; do
+    runo "$GUEST" backend "$a"
+    check "backend $a on the guest project answers sidecar" "0 sidecar" "$rc $out"
+done
+check "a backend read appended the new remote as an alias in the sidecar" 1 \
+    "$(jq '[.keys[] | select(. == "remote:github.com/acme/guest-mirror")] | length' "$GSC/sidecar.json")"
+runo "$GUEST" stamp write "$gbranch" "$ghead"
+check "stamp write on the guest project succeeds" 0 "$rc"
+runo "$GUEST" stamp read "$gbranch"
+check "stamp read on the guest project returns the head" "0 $ghead" "$rc $out"
+runo "$GUEST" stamp clear "$gbranch"
+check "stamp clear on the guest project succeeds" 0 "$rc"
+check "backend and stamp leave git status --porcelain in the project empty" "" "$(git -C "$GUEST" status --porcelain)"
+check "backend and stamp change no file under the project's .git" "$GUEST_BEFORE" "$(fingerprint "$GUEST")"
+
 # -----------------------------------------------------------------------------
 section "resolve refuses to add an alias another sidecar owns"
 
