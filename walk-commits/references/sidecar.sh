@@ -112,7 +112,9 @@
 #   1. <path> as given, relative to the current directory. A leading "~/" is
 #      expanded to $HOME; "~user/" and a bare "~" are left alone, so they are
 #      looked up literally and miss. A "#anchor" suffix is stripped when <path>
-#      does not exist with it, so name.md#section finds name.md.
+#      does not exist with it, so name.md#section finds name.md. So is a line
+#      suffix that is all line numbers (":12", ":12-20", ":12+", ":12, 30-31"),
+#      so name.md:12 finds name.md and a real name holding ":12" still wins.
 #   2. beside the referrer: dirname(<referrer>)/<path>, for a relative <path>.
 #   3. for a bare name (no "/"): <name> in each sibling category folder, that is
 #      dirname(dirname(<referrer>))/*/<name>, in glob (alphabetical) order. A name
@@ -1478,14 +1480,30 @@ cmd_require() {
 # the physical path of the first candidate that exists, or returns 1; the order
 # is the header's "require resolution order", and the duplicate-category
 # warning goes to stderr here so both callers print it.
-resolve_cited() {
-    local path="$1" from="$2"
+# cited_probe <path>: step 1 of the header's "require resolution order", the
+# path as given with "~/" expanded and a #anchor or :line suffix stripped when
+# the path does not exist with it. resolve_cited and trace_research share it so
+# the two lookups cannot drift apart on which forms a citation may take.
+cited_probe() {
     # A quoted "~/..." reaches us unexpanded (older PRDs record research paths this way).
-    local probe="$path"
+    local probe="$1"
     # shellcheck disable=SC2088  # the literal ~ is the point
-    case "$path" in "~/"*) probe="$HOME/${path#"~/"}" ;; esac
+    case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
     # A link may carry a section anchor (name.md#section); look up the file.
     case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
+    # An anchor may carry a line suffix (path:12, :12-20, :12+, :12, 30-31);
+    # look up the file. Only a suffix that is all line numbers is stripped, and
+    # only when the path does not exist with it, so a real name holding a
+    # colon is still found as named.
+    if [ ! -e "$probe" ] && [[ "$probe" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
+        probe="${BASH_REMATCH[1]}"
+    fi
+    printf '%s\n' "$probe"
+}
+
+resolve_cited() {
+    local path="$1" from="$2" probe
+    probe="$(cited_probe "$path")"
     # A relative link inside a lesson is relative to the lesson's own folder, so when
     # --from names an existing file, also try the path beside it.
     if [ ! -e "$probe" ] && [ -f "$from" ]; then
@@ -2157,10 +2175,7 @@ cmd_trace() {
 # date, ascending: /research supersedes an entry with a new dated file.
 trace_research() {
     local cited="$1" via="$2" probe res="" newer="" re base slug date cand cb
-    probe="$cited"
-    # shellcheck disable=SC2088  # the literal ~ is the point
-    case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
-    case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
+    probe="$(cited_probe "$cited")"
     if [ -f "$probe" ]; then
         res="$(abs_path "$probe")"
         re='^(.+)-([0-9]{4}-[0-9]{2}-[0-9]{2})\.md$'

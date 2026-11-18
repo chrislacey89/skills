@@ -258,6 +258,20 @@ out=$(cd "$tmp" && bash "$SC" require "sibling.md#why" --from "lessons/a/entry.m
 check "require strips a #anchor and finds the file" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
 out=$(cd "$tmp" && bash "$SC" require "nowhere.md#why" --from "lessons/a/entry.md" 2>&1); rc=$?
 check "require on an absent name with an anchor reports the path as given" "1:MISSING: nowhere.md#why (referenced by lessons/a/entry.md)" "$rc:$out"
+# #577: a path:line anchor (the form a third of filed Context anchors use)
+# names the file before the line suffix, in each form the census found.
+for form in "sibling.md:12" "sibling.md:12-20" "sibling.md:12+" "sibling.md:12, 30-31"; do
+    out=$(cd "$tmp" && bash "$SC" require "$form" --from "lessons/a/entry.md" 2>&1); rc=$?
+    check "require strips a line suffix and finds the file: $form" "0:$tmp/lessons/a/sibling.md" "$rc:$out"
+done
+out=$(cd "$tmp" && bash "$SC" require "nowhere.md:12" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require on an absent name with a line suffix reports the path as given" "1:MISSING: nowhere.md:12 (referenced by lessons/a/entry.md)" "$rc:$out"
+out=$(cd "$tmp" && bash "$SC" require "sibling.md:12x" --from "lessons/a/entry.md" 2>&1); rc=$?
+check "require strips only a line-number suffix, not any colon-digit tail" "1:MISSING: sibling.md:12x (referenced by lessons/a/entry.md)" "$rc:$out"
+# A real file whose name holds ":<digits>" is found as named, not as its prefix.
+mkdir -p "$tmp/colon"; : > "$tmp/colon/log"; : > "$tmp/colon/log:12"
+out=$(cd "$tmp" && bash "$SC" require "colon/log:12" --from "PRD #1" 2>&1); rc=$?
+check "require finds an existing file whose name contains a colon as named" "0:$tmp/colon/log:12" "$rc:$out"
 # shellcheck disable=SC2088  # literal ~user and ~ are the inputs under test
 out=$(HOME="$tmp/home" bash "$SC" require "~user/r/a.md" --from "PRD #1" 2>&1); rc=$?
 # shellcheck disable=SC2088
