@@ -467,13 +467,15 @@ section "backend: every fenced call site handles the refusal"
 
 # docs/state-backend.md § "A caller branches on all three outcomes" states the
 # two shapes a fenced block that asks `backend` may take: a `case` on the
-# answer, or an assignment whose `||` catches the nonzero exit. An
+# answer, or an assignment whose `||` catches the nonzero exit by emptying a
+# variable (`|| VAR=`) or leaving (`|| { ...; exit N; }`). `|| true` and `|| :`
+# are refused: the next `if` reads the failure as github. An
 # `if [ "$(backend)" = sidecar ]` reads a refusal as github (#530). This reads
 # every line of every tracked SKILL.md that runs `bash "$SC" backend`, skipping
 # prose (a line holding a backtick), so a new call site is checked the day it
 # lands (#544). It pins the shape, not what each `*)` arm does.
 # shellcheck disable=SC2016  # $SC and $( are literal text in the pattern
-call_re='^[[:space:]]*(case "\$\(bash "\$SC" backend [a-z]+\)" in|[A-Za-z_]+="\$\(bash "\$SC" backend [a-z]+\)" \|\| .+)$'
+call_re='^[[:space:]]*(case "\$\(bash "\$SC" backend [a-z]+\)" in|[A-Za-z_]+="\$\(bash "\$SC" backend [a-z]+\)" \|\| ([A-Za-z_]+=|\{ .*exit [0-9]+; \}))$'
 sites=0 offenders=""
 # shellcheck disable=SC2016  # the grep pattern's $SC is literal text
 while IFS= read -r hit; do
