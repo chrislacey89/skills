@@ -1337,8 +1337,9 @@ cmd_solutions_dirs() {
     if sc="$(do_resolve 2>"$err")"; then
         cat "$err" >&2
         mkdir -p "$sc/solutions" || { rm -f "$err"; refuse "solutions-dirs: cannot create $sc/solutions"; }
+        itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")" \
+            || { rm -f "$err"; refuse "solutions-dirs: cannot read solutions.in_tree_path from $sc/sidecar.json"; }
         printf '%s\n' "$sc/solutions"
-        itp="$(jq -r '.solutions.in_tree_path // empty' "$sc/sidecar.json")"
         # Normalized before the dedupe below: docs/solutions/ and
         # ./docs/solutions name the same directory as docs/solutions.
         itp="$(norm_in_tree_path "$itp")"
