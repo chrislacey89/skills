@@ -226,13 +226,16 @@ The fixer's instructions, in order:
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $(1) }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
-   { git rev-parse -q --verify '@{u}' >/dev/null || [ -n "$(git ls-remote --heads origin "$(git branch --show-current)" 2>/dev/null)" ]; } && FIXUP_TARGET=
+   B=$(git branch --show-current)
+   R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
+   HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
+   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ]; then FIXUP_TARGET=; fi
    printf 'FIXUP_TARGET=%s\n' "$FIXUP_TARGET"
    ```
 
    A SHA on the printed line means one branch commit wrote every anchored
-   line and the branch passes `/pre-merge` Phase 2's unshared test, which is
-   the `@{u}` line. A pushed branch gets no fixups because `/pre-merge`
+   line and the branch is unshared: the four lines above the `printf` are
+   `/pre-merge` Phase 2's shared-branch block, which says what they check. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
    Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
    message item 5 states for this backend. Then check that the branch still folds:

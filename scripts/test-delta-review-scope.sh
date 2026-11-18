@@ -207,6 +207,11 @@ fold_block_template="$(fenced_with "$premerge_skill" 'git rebase -q -i --autosqu
 # run_fold <repo> [stacked branch] — the fold, in a shell with no BASE_REF.
 run_fold() { (cd "$1" && env -u BASE_REF bash -c "$(fill_base "$fold_block_template" "${2:-}")" 2>&1); }
 
+# /pre-merge Phase 2's shared-branch block (#572), whole: it prints its verdict.
+shared_block="$(fenced_with "$premerge_skill" 'git ls-remote --heads')"
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+[[ "$shared_block" == *'echo "shared: $SHARED"'* ]] || fatal "no shared-branch block printing its verdict found in $premerge_skill"
+
 # The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
 # out of its list item and whole, from its comment to the line that prints the
 # answer. Section 12 runs it with nothing preset, the way a fresh shell does
@@ -224,7 +229,7 @@ fixup_target_block="$(printf '%s\n' "$fixup_target_block" | sed -e 's/^FILE="<[^
 # shellcheck disable=SC2016  # the pattern is the substituted literal text
 [[ "$fixup_target_block" == *'END="${TARGET_END:?}"'* ]] || fatal "fixup-target block's anchor placeholders were not substituted"
 [[ "$fixup_target_block" == *'|| FIXUP_TARGET='* ]] || fatal "no FIXUP_TARGET block found in $fixfindings_skill"
-[[ "$fixup_target_block" == *'&& FIXUP_TARGET='* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no unshared-branch line"
+[[ "$fixup_target_block" == *'then FIXUP_TARGET=; fi'* ]] || fatal "FIXUP_TARGET block in $fixfindings_skill has no shared-branch line"
 
 # The fold-trial block that follows it (#611): from its comment line to its
 # closing fence. Section 12 runs it whole against a fixup that folds, one that
@@ -977,11 +982,15 @@ mkdir -p "$repo4"
     git commit -q -am 'feature: add d'
 )
 assert_fixture_committed "$repo4" "fixup-target fixture" 0 3 f.txt
-# point_origin_at_main <repo> — gives a fixture the origin/HEAD a clone has, so
-# sidecar.sh base-ref answers origin/main with nothing on stderr. No remote is
-# added: ls-remote still finds no branch, so the branch still reads as unshared.
+# point_origin_at_main <repo> — gives a fixture the origin a clone has, so
+# sidecar.sh base-ref answers origin/main with nothing on stderr. Only main is
+# pushed: ls-remote answers and finds no feature branch, so the branch reads as
+# unshared. A fixture with no origin at all would read as shared, because an
+# ls-remote that cannot ask counts as shared (#572).
 point_origin_at_main() {
-    git -C "$1" update-ref refs/remotes/origin/main main
+    git init -q --bare "$1.origin.git"
+    git -C "$1" remote add origin "$1.origin.git"
+    git -C "$1" push -q origin main 2>/dev/null
     git -C "$1" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
 }
 point_origin_at_main "$repo4"
@@ -1022,19 +1031,24 @@ assert_eq "$change_b_sha" "$(run_target 2 2)" "blame display config set: a singl
 # ways of sharing count — a push with -u, and a plain push with no upstream.
 bare4="$sandbox/bare4.git"
 git init -q --bare "$bare4"
-git -C "$repo4" remote add origin "$bare4"
+git -C "$repo4" remote set-url origin "$bare4"
 git -C "$repo4" push -q origin feature 2>/dev/null
 assert_eq "" "$(run_target 2 2)" "plain push without -u: a single-commit line yields no target"
 git -C "$repo4" branch -q --set-upstream-to=origin/feature
 assert_eq "" "$(run_target 2 2)" "pushed with an upstream: a single-commit line yields no target"
-# The unshared test is copied from /pre-merge Phase 2; pin the copy to it.
-lsremote_premerge="$(grep -o "git ls-remote --heads origin [^\`]*" "$premerge_skill" | head -1 || true)"
-[[ -n "$lsremote_premerge" && "$fixup_target_block" == *"$lsremote_premerge"* ]] && r=same || r=differs
-assert_eq same "$r" "the fixup-target block's remote check is /pre-merge Phase 2's"
-# shellcheck disable=SC2016  # literal text being matched
-upstream_cmd='git rev-parse -q --verify '"'"'@{u}'"'"
-grep -qF -- "$upstream_cmd" "$premerge_skill" && [[ "$fixup_target_block" == *"$upstream_cmd"* ]] && r=same || r=differs
-assert_eq same "$r" "the fixup-target block's upstream check is /pre-merge Phase 2's"
+# The unshared test is copied from /pre-merge Phase 2's shared-branch block;
+# pin the copy to it, line by line, and the verdict to the same condition (#572).
+shared_copy_lines() {
+    printf '%s\n' "$1" | grep -E '^(B=|R=|HEADS=)' || true
+    printf '%s\n' "$1" | sed -n 's/^if \(.*\); then .*/\1/p'
+}
+premerge_shared_lines="$(shared_copy_lines "$shared_block")"
+assert_eq 4 "$(printf '%s\n' "$premerge_shared_lines" | grep -c .)" "/pre-merge's shared-branch block has its three lookups and one verdict"
+missing=""
+while IFS= read -r l; do
+    [[ -z "$l" || "$fixup_target_block" == *"$l"* ]] || missing="$missing [$l]"
+done <<<"$premerge_shared_lines"
+assert_eq "" "$missing" "the fixup-target block's shared-branch test is /pre-merge Phase 2's, line for line"
 
 # --- 12b. The fold trial demotes a fixup the fold could not apply (#611) ------
 section "fold trial: a fixup that would not fold becomes an ordinary commit"
@@ -1437,32 +1451,62 @@ else
     printf '  skip zsh is not installed\n'
 fi
 
-# --- 13. "Unshared" means no upstream AND not on the remote (#566) --------------
+# --- 13. "Unshared" means no upstream AND not on the push remote (#566, #572) --
 # A plain `git push origin <branch>` publishes the branch with no upstream, so
 # the `@{u}` check alone would keep deferring review of a branch others can read.
-# The remote-side command is extracted from the skill's own prose and run.
-section "unshared test: a branch pushed without -u is shared"
-lsremote_cmd="$(grep -o "git ls-remote --heads origin [^\`]*" "$premerge_skill" | head -1 || true)"
-[[ -n "$lsremote_cmd" ]] || fatal "no ls-remote command found in pre-merge/SKILL.md"
+# A remote that cannot be asked is not an answer of "absent" (#572): ls-remote
+# prints nothing and exits nonzero, and reading only its output called a pushed
+# branch private. The branch is looked up on the remote it pushes to, and only
+# an exact refs/heads/<branch> counts. The whole block is run in each state and
+# its printed verdict is the assertion.
+section "unshared test: the verdict on the push remote, in every state the prose names"
 bare5="$sandbox/bare5.git"
+fork5="$sandbox/fork5.git"
 repo5="$sandbox/repo5"
 git init -q --bare "$bare5"
+git init -q --bare "$fork5"
 git init -q -b main "$repo5"
 (
     cd "$repo5" || exit 1
     git config user.email t@example.com
     git config user.name t
     git remote add origin "$bare5"
+    git remote add fork "$fork5"
     printf 'a\n' > f.txt
     git add f.txt && git commit -q -m 'base'
     git switch -q -c feature
 )
-unshared_remote() { (cd "$repo5" && bash -c "$lsremote_cmd" 2>/dev/null); }
-assert_eq "" "$(unshared_remote)" "unpushed branch: remote check prints nothing (unshared)"
+run_shared() { (cd "$repo5" && bash -c "$shared_block" 2>/dev/null); }
+assert_eq "shared: no" "$(run_shared)" "unpushed branch, origin reachable: unshared"
+git -C "$repo5" push -q origin feature:alice/feature 2>/dev/null
+assert_eq "shared: no" "$(run_shared)" "origin holds alice/feature, not feature: an exact refs/heads/ match only, so unshared"
+# ls-remote matches a pattern against the tail of a ref name, so even the full
+# refs/heads/feature pattern matches a branch named x/refs/heads/feature.
+git -C "$repo5" push -q origin feature:x/refs/heads/feature 2>/dev/null
+assert_eq "refs/heads/x/refs/heads/feature" "$(git -C "$repo5" ls-remote --heads origin refs/heads/feature | cut -f2)" \
+    "fixture precondition: ls-remote's own pattern matches refs/heads/x/refs/heads/feature"
+assert_eq "shared: no" "$(run_shared)" "origin holds x/refs/heads/feature, which ls-remote's pattern matches: the exact match still says unshared"
+git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
+assert_eq "shared: yes" "$(run_shared)" "origin cannot be reached: ls-remote fails, so shared"
+git -C "$repo5" remote set-url origin "$bare5"
+git -C "$repo5" push -q fork feature 2>/dev/null
+assert_eq "shared: no" "$(run_shared)" "control: pushed only to fork, and nothing says fork is the push remote: origin is asked, unshared"
+git -C "$repo5" config remote.pushDefault fork
+assert_eq "shared: yes" "$(run_shared)" "remote.pushDefault is fork, which holds the branch: shared"
+git -C "$repo5" config branch.feature.pushRemote origin
+assert_eq "shared: no" "$(run_shared)" "branch.feature.pushRemote is origin, which outranks remote.pushDefault: unshared"
+git -C "$repo5" config --unset branch.feature.pushRemote
+git -C "$repo5" config --unset remote.pushDefault
+git -C "$repo5" config branch.feature.remote fork
+assert_eq "shared: yes" "$(run_shared)" "branch.feature.remote is fork, which holds the branch: shared"
+git -C "$repo5" config --unset branch.feature.remote
 git -C "$repo5" push -q origin feature 2>/dev/null
 assert_eq "" "$(git -C "$repo5" rev-parse -q --verify '@{u}' 2>/dev/null)" "plain push: still no upstream"
-[[ -n "$(unshared_remote)" ]] && r=shared || r=unshared
-assert_eq "shared" "$r" "plain push without -u: remote check sees the branch (shared)"
+assert_eq "shared: yes" "$(run_shared)" "plain push to origin without -u: shared"
+git -C "$repo5" branch -q --set-upstream-to=origin/feature
+git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
+assert_eq "shared: yes" "$(run_shared)" "an upstream is set: shared, whatever the remote answers"
+git -C "$repo5" remote set-url origin "$bare5"
 
 # -----------------------------------------------------------------------------
 
