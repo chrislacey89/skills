@@ -101,9 +101,24 @@ bash "$SC" base-ref --name   # the bare branch name: prod, never origin/prod
 
 This site wants the base branch **name**, not a ref — it feeds `git switch <base-branch>` at Step 4, and `git switch` rejects a remote-tracking ref outright (`fatal: a branch is expected, got remote branch 'origin/prod'`) — it wants the local base branch you are about to pull. So it asks `base-ref --name`, and deliberately *not* the ref form `/pre-merge`, `/help`, `/walk-commits`, `/visual-recap`, `/compound`, and `/execute` take; they need a ref only because they use the base as a **range endpoint**, which this skill never does. Do not "fix" this to match them. If `base-ref --name` exits nonzero it has found no base: relay its stderr and stop rather than guessing one.
 
+Then read the PR's state. The client may already have merged it, so this decides the route:
+
+```bash
+PR_STATE="$(gh pr view <number> --json state -q .state)" || { echo "closeout aborted: cannot read the PR's state" >&2; exit 1; }
+case "$PR_STATE" in
+  MERGED) echo "route: already merged (Step 2 narrows to its fully-pushed check, skip the merge; run the lock release, the work close, and the teardown)" ;;
+  OPEN) echo "route: full" ;;
+  *) echo "closeout aborted: the PR is $PR_STATE: closed without merging, nothing to close out" >&2; exit 1 ;;
+esac
+```
+
+On `route: already merged`, the confirmation below names the teardown, not a merge, and Step 2 narrows to its fully-pushed check while Step 3's merge is skipped, as those steps say. Everything after the merge still runs: the post-review lock release, the work-item close, and Steps 4 through 8.
+
 Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
 
 ### 2. Verify safety preconditions before any destructive step
+
+If `state` is `MERGED`, there is nothing left to merge, so the mergeable, checks, and review preconditions below no longer apply, and the review-currency comparison is moot. The teardown is still destructive, so the fully-pushed checkbox below still holds: a commit made after the client merged exists only on this branch, and Step 6 would discard it. If it fails, stop and report it. If `@{u}` no longer resolves because the remote branch was deleted and pruned, run this check instead: `git log --oneline HEAD "^$(gh pr view <number> --json headRefOid -q .headRefOid)"` must exit 0 and print nothing, since a `^<rev>` argument excludes every commit reachable from `<rev>` ([git-log](https://git-scm.com/docs/git-log)); a commit it prints is one the merged PR never held, and a nonzero exit (for example the head commit was never fetched here) is a stop, because empty output alone does not show it ran. Then go to Step 3's release of the post-review edit lock.
 
 The teardown is destructive; verify it is safe first (self-guard). All of these must hold:
 
@@ -151,7 +166,7 @@ Three outcomes, and only one of them interrupts:
 
   If `$REVIEWED_SHA` is not present locally — the branch was force-pushed and the reviewed commit was rewritten away — say so. The reviewed diff is unrecoverable, which is a *stronger* divergence signal than a measurable delta, not a weaker one.
 
-  If it is present and `git rev-parse "$REVIEWED_SHA^{tree}"` equals `git rev-parse "$HEAD_SHA^{tree}"`, the rewrite changed history but not content, usually a fold of review fixups. Say so in one line. The re-review option below costs almost nothing here: `/pre-merge` Phase 1 step 4 reads this state as a history-only rewrite and re-stamps without reviewing again. A re-stamp is still needed, because the git guardrail compares the stamp to the PR head at merge.
+  If it is present, whether the delta is a history-only rewrite is `/pre-merge` Phase 1 step 4's call, not this step's: it states the conditions. Do not restate them here. When that step reads the state as history-only, it re-stamps without reviewing again, so the re-review option below costs almost nothing. A re-stamp is still needed, because the git guardrail compares the stamp to the PR head at merge.
 
   **Name a `docs: compound` commit for what it contains, not for its subject line.** One post-stamp commit has a standing explanation available — the `docs/solutions/` entry `/compound`'s in-PR path commits onto the branch — and that explanation is the one most likely to get the menu below clicked through. It is only ever *half* available: `/compound` Phase 5 stages Phase 4's mechanism in the same commit, so a `docs: compound` subject covers both a docs-only entry and a commit that ships code. In the measurement behind chrislacey89/skills#336, four of ten past-stamp merges on one repo were compound commits and two of the four shipped code — a contract test rewritten to derive its coverage from the schema, and a new test file. Read the paths rather than the subject:
 
@@ -205,6 +220,8 @@ esac
 
 ### 3. Merge the PR
 
+If the PR already reports `MERGED`, skip the merge and its confirmation (the client merged it), and start at "Then release the post-review edit lock" below. On the `sidecar` backend this route matters: nothing else closes the slice's work item.
+
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it, and **give the squash commit the PR body as its message**. Without `--body-file`, `gh` builds the squash message from the per-unit commit messages, so a reader who runs `git blame` months later lands on every fix-round message concatenated (bodies of 200–400 lines were measured across four repos on 2026-09-10) and never on the walkthrough `/pre-merge` Phase 2 wrote. That is also why authors put history in code comments: it was the only per-line record that survived the merge. `/execute` and `/compound` route incident history to the PR body on the promise that it lasts; this flag is what keeps the promise.
 
 ```bash
@@ -247,11 +264,11 @@ SC="<this skill's directory>/references/sidecar.sh"
 case "$(bash "$SC" backend stamp)" in
   sidecar) bash "$SC" stamp clear "$(gh pr view <number> --json headRefName -q .headRefName)" ;;
   github) ;;
-  *) echo "stamp NOT cleared: sidecar.sh backend stamp failed; clear it once backend answers" >&2; exit 1 ;;
+  *) echo "stamp NOT cleared: sidecar.sh backend stamp failed; once it answers, run: bash \"$SC\" stamp clear <branch>, where <branch> is the merged PR's head branch: gh pr view <number> --json headRefName -q .headRefName" >&2; exit 1 ;;
 esac
 ```
 
-On the sidecar backend the stamp is spent with the review, so it is cleared here too. The branch comes from the merged PR, not from `git branch --show-current`: `gh pr merge --delete-branch` deletes the local branch and, in a plain checkout, switches to the base first, so the current branch is by now the base. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
+On the sidecar backend the stamp is spent with the review, so it is cleared here too. The branch comes from the merged PR, not from `git branch --show-current`: `--delete-branch` removes the local branch ([`gh pr merge`](https://cli.github.com/manual/gh_pr_merge) says what it does and when), so the current branch may by now be the base. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
 
 **Then close the merged slice's work item.** On the `github` backend the `Closes #N` line `/pre-merge` wrote into the PR body closed the issue the PR body names at merge. On the `sidecar` backend nothing does, and an item left `open` is offered again by `work list --unblocked` and keeps gating every slice that lists it in `blocked_by` ([references/state-backend.md](references/state-backend.md)). The item to close is the open slice whose `pr` field holds the merged PR's URL. `/pre-merge` Phase 2 records that URL on whichever item Phase 1 was given, the slice or its PRD, so the block matches slices only and leaves a PRD that holds it untouched:
 
@@ -369,12 +386,13 @@ Confirm the *outcome*, not that the steps ran. All must be true:
 - [ ] On the base branch — `git branch --show-current` reports the base.
 - [ ] Working tree clean — `git status --short` is empty.
 - [ ] PR merged — `gh pr view <number> --json state -q .state` reports `MERGED`.
+- [ ] On the `sidecar` backend, the work-item close ran: Step 3 printed `work item: closed` or its refusal was relayed to the user.
 - [ ] Worktree gone — the feature worktree no longer appears in `git worktree list`. (N/A — host-managed — when isolation is host-owned, Step 0.)
 - [ ] Branch pruned — the feature branch no longer appears in `git branch`. (N/A — host-managed — when isolation is host-owned, Step 0.)
 - [ ] Remote branch gone — the branch Step 3's `--delete-branch` was supposed to delete is not on the remote (the command below exits **2**). This one is not N/A under host-owned isolation: the host owns the filesystem worktree, `gh` owns the remote branch.
 
 ```bash
-git ls-remote --exit-code --heads origin <feature-branch>   # exit 2 = confirmed gone (pass); exit 0 = still on the remote (fail); anything else = could not check
+git ls-remote --exit-code --heads origin refs/heads/<feature-branch>   # exit 2 = confirmed gone (pass); exit 0 = still on the remote (fail); anything else = could not check
 ```
 
 **Why the remote gets its own check.** Every other item above passes while the remote branch survives — Step 3 confirms the PR reports `MERGED`, Step 6 prunes the local branch and its remote-*tracking* ref, and this list's "Branch pruned" reads `git branch`, which is local. None of them asks the remote. In the field `gh pr merge --delete-branch` aborted at its local step in a multi-worktree checkout (`'main' is already used by worktree`) *after* the remote merge had succeeded: the merge reported success, the branch deletion silently did not happen, and a fully green closeout ran over the top of it. `--exit-code` is what makes found and not-found distinguishable at all here; without it the command exits 0 in both states and the check reads as permanently clean.
@@ -426,8 +444,8 @@ A run of `/closeout` is not complete until:
 ## Handoff
 
 - **Expected input:** a reviewed, mergeable PR created by `/pre-merge`, on a feature branch (in a worktree or a plain checkout)
-- **Produces:** the PR merged, the worktree torn down, the merged branch pruned, the base branch pulled, and a verified clean end state — no filesystem state introduced
+- **Produces:** the PR merged, the worktree torn down, the merged branch pruned, the base branch pulled, and a verified clean end state — no filesystem state introduced; on the `sidecar` backend, also the merged slice's work item closed (Step 3)
 - **May invoke:** `/compound` when a durable lesson emerged and was not already captured on the PR
 - **Comes next by default:** `/compound` (only when an uncaptured lesson is worth recording) and the `SYSTEM-OVERVIEW.md` Step 9 cleanup prose (close the PRD and any slices still open, confirm research-artifact frontmatter). After that, the loop is closed — `/help` when you return to the repo.
 
-**Next-step menu.** With the merge done and a clean base reached, offer the tail as a menu rather than leaving it to recall (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/compound` (capture a lesson from this change)** when an uncaptured lesson is worth recording, **Step 9 issue-closing still to do** when a PRD or slice issues remain, **Stopping here — clean base, nothing left open**, **`/help` (pick up the next piece of work)**. The last three are distinct destinations, not one state described three ways: Step 9's cleanup prose, ending the session, and asking what to start next. Each label leads with the act that distinguishes it, not with a shared word the reader has to scan past. Name Step 9 as remaining work; do not perform it from here. The platform's free-text "Other" option is the escape hatch — don't add one.
+**Next-step menu.** With the merge done and a clean base reached, offer the tail as a menu rather than leaving it to recall (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/compound` (capture a lesson from this change)** when an uncaptured lesson is worth recording, **`SYSTEM-OVERVIEW.md` Step 9 issue-closing still to do** when a PRD or slice issues remain, **Stopping here — clean base, nothing left open**, **`/help` (pick up the next piece of work)**. The last three are distinct destinations, not one state described three ways: `SYSTEM-OVERVIEW.md` Step 9's cleanup prose, ending the session, and asking what to start next. Each label leads with the act that distinguishes it, not with a shared word the reader has to scan past. Name `SYSTEM-OVERVIEW.md` Step 9 as remaining work; do not perform it from here. The platform's free-text "Other" option is the escape hatch — don't add one.

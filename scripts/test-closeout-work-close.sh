@@ -70,6 +70,8 @@ cat > "$tmp/bin/gh" <<'STUB'
 printf '%s\n' "$*" >> "$GH_CALLS"
 case "$*" in
     "pr view 7 --json url -q .url") printf '%s\n' "$GH_URL" ;;
+    "pr view 7 --json state -q .state") printf '%s\n' "${GH_STATE:-OPEN}" ;;
+    "pr view 7 --json headRefName -q .headRefName") printf '%s\n' "${GH_HEAD:-feat/x}" ;;
     *) echo "stub gh: unexpected call: $*" >&2; exit 1 ;;
 esac
 STUB
@@ -99,7 +101,7 @@ run_block() {
     local b="${co_block//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
     b="${b//<number>/7}"
     : > "$tmp/calls"
-    out="$(cd "$P" && GH_URL="$URL" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "${RUN_SHELL:-bash}" -c "$b" 2>"$tmp/stderr")"; rc=$?
+    out="$(cd "$P" && GH_STATE="${GH_STATE:-OPEN}" GH_URL="$URL" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "${RUN_SHELL:-bash}" -c "$b" 2>"$tmp/stderr")"; rc=$?
 }
 
 # -----------------------------------------------------------------------------
@@ -189,6 +191,53 @@ run_block
 check "github: the block exits 0" 0 "$rc"
 check "github: no gh call" "" "$(cat "$tmp/calls")"
 check "github: it says Closes #N did the work" 1 "$(grep -c 'Closes #N closed the issue the PR body names' <<<"$out")"
+
+
+# -----------------------------------------------------------------------------
+section "a PR the client already merged takes its own route (#700)"
+
+# Step 1 reads the PR's state. MERGED skips Step 2's mergeable precondition and
+# the merge, and goes straight to the lock release, the work close, and the teardown.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+route_block="$(block "$CO" 'PR_STATE=')"
+[ -n "$route_block" ] || bad "closeout/SKILL.md Step 1 carries the PR-state route block" "not found"
+route() {
+    local b="${route_block//<number>/7}"
+    out="$(cd "$P" && GH_STATE="$1" GH_URL="$URL" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" bash -c "$b" 2>"$tmp/stderr")"; rc=$?
+}
+route MERGED
+check "MERGED: the route block exits 0" 0 "$rc"
+check "MERGED: it names the already-merged route" 1 "$(grep -c '^route: already merged' <<<"$out")"
+route OPEN
+check "OPEN: the route block exits 0" 0 "$rc"
+check "OPEN: it names the full route" 1 "$(grep -c '^route: full' <<<"$out")"
+route CLOSED
+check "CLOSED: the route block stops" 1 "$rc"
+check "CLOSED: it says why" 1 "$(grep -c 'closed without merging' "$tmp/stderr")"
+
+# The skill prose gives MERGED its own route: Step 2 narrows to the fully-pushed check, and the merge is skipped.
+# shellcheck disable=SC2016  # the needles are the skill's literal text
+check "Step 2 keeps the fully-pushed check on a MERGED PR, and stops when it fails" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the fully-pushed checkbox below still holds.*If it fails, stop and report it\.' "$CO")"
+# The substitute check, when @{u} is gone, passes only on exit 0 AND empty output; a nonzero exit is a stop.
+check "Step 2's @{u}-gone substitute check requires exit 0 as well as empty output" 1 "$(grep -c 'no longer resolves.*must exit 0 and print nothing.*a nonzero exit (for example the head commit was never fetched here) is a stop' "$CO")"
+check "Step 2 no longer reads the missing @{u} as 'the same stop' before the check" 0 "$(grep -c 'no longer resolves[^.]*that is the same stop' "$CO")"
+# Behavior behind the pin: a head commit the checkout never fetched makes the command exit nonzero with no stdout.
+fx=$(mktemp -d); git -C "$fx" init -q; git -C "$fx" -c user.name=t -c user.email=t@t commit -q --allow-empty -m a
+rc=0; out=$(git -C "$fx" log --oneline HEAD "^1234567890123456789012345678901234567890" 2>/dev/null) || rc=$?
+check "unfetched head commit: the check exits nonzero" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+check "unfetched head commit: stdout is empty, so empty output alone would pass" 1 "$([ -z "$out" ] && echo 1 || echo 0)"
+rm -rf "$fx"
+# The anchor the MERGED sentence names must exist as a checkbox in Step 2's checklist.
+check "Step 2's checklist has a fully-pushed checkbox for the MERGED route to name" 1 "$(sed -n '/^### 2\. /,/^### 3\. /p' "$CO" | grep -c '^- \[ \] The feature branch is fully pushed')"
+# The route line the agent prints must not tell it to skip Step 2 wholesale, and
+# the prose after the block must say Step 2 narrows instead.
+route MERGED
+check "MERGED: the printed route does not skip Step 2 wholesale" 0 "$(grep -c 'skip Step 2' <<<"$out")"
+check "MERGED: the printed route keeps Step 2's fully-pushed check" 1 "$(grep -c 'Step 2 narrows to its fully-pushed check' <<<"$out")"
+# shellcheck disable=SC2016
+check "the prose after the route block says Step 2 narrows to its fully-pushed check" 1 "$(grep -c '^On `route: already merged`.*Step 2 narrows to its fully-pushed check' "$CO")"
+# shellcheck disable=SC2016
+check "Step 3 skips the merge on a MERGED PR" 1 "$(grep -c 'If the PR already reports `MERGED`, skip the merge' "$CO")"
 
 # -----------------------------------------------------------------------------
 section "mutation: the check sees a block that closes nothing"

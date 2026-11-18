@@ -110,10 +110,17 @@ For each `Produces` entry in the PR's slice issue:
 
 For each `Consumes` entry referencing an already-closed upstream slice, run the same check against the upstream's declared Produces. If the upstream export is missing or shape-drifted, note it and flag the upstream issue for correction.
 
-**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header. In author-mode and loop-mode, run the same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it, with `$BASE_REF` from `bash "$SC" base-ref`. The first line refuses to run without it, because an empty left endpoint makes git diff `HEAD` against itself and print nothing, which reads as a clean pass:
+**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header. In author-mode and loop-mode, run the same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it. The block asks for its own base because it runs in its own shell, where no earlier block's `$BASE_REF` exists; for a stacked PR, fill its `BASE_BRANCH=` placeholder as `SKILL.md` Phase 1 step 3 says:
 
 ```bash
-: "${BASE_REF:?set it from sidecar.sh base-ref before running this}"
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
+BASE_REF="$(bash "$SC" base-ref)" || { echo "deletion check aborted: sidecar.sh base-ref failed" >&2; exit 1; }
+if [ -n "$BASE_BRANCH" ]; then
+  if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+  elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+  else echo "deletion check aborted: neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves" >&2; exit 1; fi
+fi
 git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
 ```
 
@@ -141,7 +148,7 @@ A consumed upstream slice is already merged, so it has a PR number and no local 
 This is a **reconciliation test, not a gate** — `/pre-merge` is advisory in every mode and merges nothing itself. Escalate only on unmapped Musts. Warn on unmapped Wants. Accept unmapped ~Tildes silently.
 
 **Violation patterns:**
-- **Unmapped Must (Concern — with the withheld action named):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. Classify as **Concern** and state the action inside the finding: the branch should not merge until the Must is covered by a slice or consciously cut with a `Scope Notes` entry on the PRD body. Concern is the strongest tier this skill defines — there is no fourth — and naming the withheld action is how it carries that weight without claiming a gate `/pre-merge` does not own.
+- **Unmapped Must (Concern — with the withheld action named):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. Classify as **Concern** and state the action inside the finding: the branch should not merge until the Must is covered by a slice or consciously cut with a `Scope Notes` entry on the PRD body. Naming the withheld action is how the Concern carries that weight without claiming a gate `/pre-merge` does not own; § Severity Classification states why there is no stronger tier to use.
 - **Unmapped Want (Suggestion):** A Want-commitment in the PRD has no merged slice covering it. Surface it as a warning — the scope hammer may have cut it consciously; confirm with the user and add a `Scope Notes` entry if so.
 - **Renegotiation not recorded:** A commitment was consciously cut or added mid-cycle but the PRD issue body was not edited to reflect the new state. The matrix is a derived view; the PRD is the single source of truth. Flag for update.
 
@@ -183,7 +190,7 @@ This is a **reconciliation test, not a gate** — `/pre-merge` is advisory in ev
 - Ignoring a relevant prevention strategy — a solution's Prevention section describes a practice that applies to this code, but the code doesn't follow it
 - Stale solution consumption — relying on a `volatile` solution that is older than 90 days or whose Shelf Life condition appears met
 
-**Out of scope:** Whether new lessons should be captured (that's `/compound` after merge).
+**Out of scope:** Whether new lessons should be captured (that's `/compound (in-PR)`, which runs before `/closeout` merges).
 
 ---
 
@@ -292,6 +299,8 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 - **Suggestion:** A principle is partially stressed. Improvement is possible but the current code is defensible. Example: "Two test names describe implementation details ('calls API twice') — renaming to behavior descriptions would improve readability."
 
 - **Concern:** A clear principle violation with specific evidence from the diff. Cite the principle, show the code, explain why it matters. Example: "The `formatResponse` function in `utils/format.ts` is a pass-through that forwards its arguments to `buildResponse` with no transformation — this is a shallow wrapper (Deep Modules)."
+
+**There is no tier above Concern.** A finding that should stop a merge stays a Concern and names that action inside its text.
 
 **A cap by kind of text, under every dimension.** A finding whose subject is a kind of text listed in [references/restated-claims.md](references/restated-claims.md) § *What is not a prose contract* is at most a Suggestion, whichever dimension raised it.
 

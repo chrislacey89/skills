@@ -100,25 +100,38 @@ cat "$SC_ERR" >&2; rm -f "$SC_ERR"
 # Solutions entries in every directory `sidecar.sh solutions-dirs` prints (its
 # header owns that policy); the sidecar's solutions/ is counted apart. Row 10
 # reads the counts, row 11 the dates.
-ITP="" IN_TREE_N=0 SIDE_N=0 NEWEST=0
-while IFS= read -r DIR; do
-  [ -n "$DIR" ] && [ "$DIR" != "$SIDE" ] || continue
-  ITP="${ITP:+$ITP,}$DIR"
-  [ -d "$DIR" ] || continue
-  IN_TREE_N=$((IN_TREE_N + $(find "$DIR" -type f ! -name '.*' | wc -l)))
-  T=$(git log -1 --format=%ct "$BASE_REF" -- "$DIR")
-  [ "${T:-0}" -gt "${NEWEST:-0}" ] && NEWEST=$T
-done <<< "$(bash "$SC" solutions-dirs 2>/dev/null)"
+ITP="" IN_TREE_N=0 SIDE_N=0 NEWEST=0 DIRS_OK=1
+DIRS_ERR="$(mktemp)"
+if DIRS="$(bash "$SC" solutions-dirs 2>"$DIRS_ERR")"; then
+  while IFS= read -r DIR; do
+    [ -n "$DIR" ] && [ "$DIR" != "$SIDE" ] || continue
+    ITP="${ITP:+$ITP,}$DIR"
+    [ -d "$DIR" ] || continue
+    IN_TREE_N=$((IN_TREE_N + $(find "$DIR" -type f ! -name '.*' | wc -l)))
+    T=$(git log -1 --format=%ct "$BASE_REF" -- "$DIR")
+    [ "${T:-0}" -gt "${NEWEST:-0}" ] && NEWEST=$T
+  done <<< "$DIRS"
+else
+  DIRS_OK=0
+  echo "SOLUTIONS DIRS UNAVAILABLE"
+fi
+cat "$DIRS_ERR" >&2; rm -f "$DIRS_ERR"
 if [ -n "$SIDE" ]; then
   SIDE_N=$(find "$SIDE" -type f -name '*.md' | wc -l | tr -d ' ')
   T=$(sgit log -1 --format=%ct -- solutions)
   [ "${T:-0}" -gt "${NEWEST:-0}" ] && NEWEST=$T
 fi
-echo "solutions entries: in-tree (${ITP:-none})=$IN_TREE_N sidecar=$SIDE_N"
+if [ "$DIRS_OK" = 1 ]; then
+  echo "solutions entries: in-tree (${ITP:-none})=$IN_TREE_N sidecar=$SIDE_N"
+else
+  echo "solutions entries: unknown (sidecar.sh solutions-dirs could not list the directories; sidecar=$SIDE_N)"
+fi
 PREV_LANDING=""
 [ -n "$BASE_REF" ] && PREV_LANDING=$(git log --first-parent --skip=1 -1 --format=%ct "$BASE_REF")
 if [ -z "$BASE_REF" ]; then
   echo "last merge compounded: unknown (BASE_REF is not set in this call; set it from Phase 1a)"
+elif [ "$DIRS_OK" = 0 ]; then
+  echo "last merge compounded: unknown (solutions directories could not be listed)"
 elif [ -n "$PREV_LANDING" ] && [ "${NEWEST:-0}" -lt "$PREV_LANDING" ]; then
   echo "last merge compounded: no"
 else
@@ -134,6 +147,7 @@ Read the resolver's stderr as well as the block's stdout. Three outcomes matter:
 
 - **`Sidecar: <path> (last commit <date>)`** — report both in "Where you are". A last-commit date months behind the project's own activity is how a stalled sidecar shows up.
 - **`SIDECAR MISS`** — no sidecar is registered for this project. The resolver's miss line carries the exact `init` command; quote it, and let row 6 route the recommendation. Exit 1 without a `SIDECAR MISS` line (not a git repository, or a found sidecar whose new alias could not be committed) is not a miss: relay the resolver's line as printed.
+- **`SOLUTIONS DIRS UNAVAILABLE`** — `sidecar.sh solutions-dirs` exited non-zero, so the in-tree count was not computed (the `solutions entries:` line says `unknown`, as does `last merge compounded:`) and its stderr follows the block. Do not fire row 10 or 11 on it; relay the stderr line as printed.
 - **`ALIAS COLLISION: …`** — two sidecars claim one of this checkout's keys. It is a warning, not a failure: the resolver used the first sidecar it names and the block continued. Print the line in "Where you are" as given, naming both sidecars, whatever the recommendation turns out to be — a project split across two sidecars has two research archives and two solutions stores, and each one reads as incomplete on its own.
 
 "Last merge compounded" prints `unknown` when `$BASE_REF` is empty in this call (each parallel call gets a fresh shell, so Phase 1a's variable has to be written into the block); row 11 does not fire on `unknown`. It otherwise compares the newest entry in either location against the landing *before* the last one on the base branch (`--first-parent`, so a squash commit and a merge commit each count once). An entry for the last merge is written before that merge lands, on the PR or straight into the sidecar, so measuring from the last landing itself would flag every sidecar-compounded merge as uncompounded. The in-tree side reads commit dates on the base branch rather than file mtimes, which a fresh clone resets.
@@ -197,7 +211,7 @@ Walk through these checks in priority order. The first one that matches is the r
 
 | # | Signal | Recommendation | One-line reason |
 |---|---|---|---|
-| 1 | Open PR on current branch | `reviewDecision` is `CHANGES_REQUESTED`: `/respond-to-review`. Otherwise: merge the PR, then run `/compound` | Changes requested: "A teammate requested changes on PR #`<n>` — `/respond-to-review` checks each comment against the code before you decide what to fix or push back on." Otherwise: "You have an open PR on `<branch>` — if review is done, merge it and capture lessons." |
+| 1 | Open PR on current branch | `reviewDecision` is `CHANGES_REQUESTED`: `/respond-to-review`. Otherwise: `/compound` in-PR when a durable lesson emerged (then a `/pre-merge` re-run that re-stamps), then `/closeout` to merge | Changes requested: "A teammate requested changes on PR #`<n>` — `/respond-to-review` checks each comment against the code before you decide what to fix or push back on." Otherwise: "You have an open PR on `<branch>` — if review is done, capture any lesson onto it with `/compound`, then `/closeout` merges it." |
 | 2 | Current branch has commits ahead of base, no open PR | `/pre-merge` | "You have `<N>` commits ahead of `<base>` with no PR yet — `/pre-merge` creates it and runs the architectural review." |
 | 3 | Open slice issues (or slice work items) referencing a PRD, none closed | `/execute` on the highest-priority slice with an empty `open_blockers` | "You have `<N>` open slice issues under PRD #`<prd>` — `/execute` is the next step for the first unblocked one." |
 | 4 | Open slice issues (or slice work items) referencing a PRD, some closed | `/execute` on the next slice with an empty `open_blockers` | "You have `<N>` open and `<M>` closed slices under PRD #`<prd>` — `/execute` picks up the next unblocked slice." |

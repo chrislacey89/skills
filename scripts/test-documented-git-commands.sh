@@ -814,10 +814,11 @@ verb_marker='BASE_REF="$(bash "$SC" base-ref)"'
 verb_sites="$(cd "$repo_root" && { grep -lF "$verb_marker" ./*/SKILL.md || true; } \
     | sed 's|^\./||' | sort | tr '\n' ' ' | sed 's/ $//')"
 verb_site_count="$(printf '%s\n' "$verb_sites" | tr ' ' '\n' | grep -c . || true)"
-# The floor is today's count: /pre-merge and /respond-to-review from #597, and
-# the five #598 converted. A drop below it means a site lost the assignment, or
-# the derivation above broke and every loop below is running on nothing.
-if [[ "$verb_site_count" -ge 7 ]]; then
+# The floor is today's count: /pre-merge and /respond-to-review from #597, the
+# five #598 converted, and /fix-findings, whose fixup-target and fold-trial
+# blocks ask too. A drop below it means a site lost the assignment, or the
+# derivation above broke and every loop below is running on nothing.
+if [[ "$verb_site_count" -ge 8 ]]; then
     printf '  ok   derived %s skills that ask base-ref for the ref\n' "$verb_site_count"
     pass=$((pass + 1))
 else
@@ -891,11 +892,16 @@ block_holding() {
 # the line prints $block_stopped, so a check whose right answer is empty cannot
 # pass on a block that never got there.
 range_mark='@@range-line'
+stacked_placeholder='BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"'
+stacked_empty='BASE_BRANCH=""'
 block_stopped='<the block stopped before this line>'
 run_range_line() {
     local dir="$1" block="$2" line="$3" script out
     # shellcheck disable=SC2016  # the awk program reads ENVIRON, not the shell
-    script="$(printf '%s\n' "${block//"$placeholder"/$sidecar}" | LINE="$line" MARK="$range_mark" awk '
+    script="${block//"$placeholder"/$sidecar}"
+    # A stacked-PR placeholder (#606) is left empty, as on an unstacked branch.
+    script="${script//"$stacked_placeholder"/$stacked_empty}"
+    script="$(printf '%s\n' "$script" | LINE="$line" MARK="$range_mark" awk '
         $0 == ENVIRON["LINE"] { print "echo \"" ENVIRON["MARK"] " start\""; print; print "echo \"" ENVIRON["MARK"] " end\""; next }
         { print }')"
     out="$( ( cd "$dir" && env -u BASE_REF -u BASE_BRANCH SKILL_KIT_SIDECAR_ROOT="$no_sidecars" bash -c "$script" 2>&1 </dev/null ) || true )"
@@ -1252,14 +1258,15 @@ done
 
 # -----------------------------------------------------------------------------
 
-section "the checklist's author-mode block refuses to run without a base ref"
+section "the checklist's author-mode block computes its own base (#606)"
 
 # Found by an independent probe of #333: with $BASE_REF unset, git reads the
 # empty left endpoint of `...HEAD` as HEAD itself, exits 0, and prints nothing —
-# which the rung's own prose reads as "nothing deleted, skip." review-checklist.md
-# does not ask base-ref itself (Phase 1 resolves the ref), so a reviewer who
-# copies the author-mode block without Phase 1 gets a confident clean pass.
-# The block's first line now refuses instead; this runs the block both ways.
+# which the rung's own prose reads as "nothing deleted, skip." The block first
+# refused to run without a BASE_REF; #606 then had it ask sidecar.sh base-ref
+# itself (or take a stacked sibling through its placeholder), because a review
+# sub-agent runs it in a fresh shell where no earlier block's variable exists.
+# So it runs here with no BASE_REF, with a stale one, and with base-ref refusing.
 extract_block_with() {
     # The first fenced block in $1 whose body contains the literal $2.
     awk -v needle="$2" '
@@ -1278,28 +1285,47 @@ extract_block_with() {
 }
 check_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" '--diff-filter=DR')"
 [[ -n "$check_block" ]] || fatal "pre-merge/review-checklist.md has no fenced block carrying the deletion trigger"
-
+checklist_bb='BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"'
+[[ "$check_block" == *"$placeholder"* && "$check_block" == *"$checklist_bb"* ]] \
+    || fatal "the checklist's deletion block lost its sidecar.sh or stacked BASE_BRANCH placeholder"
+# run_check_block <sidecar.sh path> <stacked branch> [env assignments...]
+run_check_block() {
+    local sc="$1" bb="BASE_BRANCH=\"$2\"" blk; shift 2
+    blk="${check_block//"$placeholder"/$sc}"
+    blk="${blk//"$checklist_bb"/$bb}"
+    ( cd "$deltrig" && env -u BASE_REF "$@" SKILL_KIT_SIDECAR_ROOT="$no_sidecars" bash -c "$blk" 2>&1 )
+}
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" "")")" \
+    "with BASE_REF unset the checklist block asks base-ref and reports the planted deletion and rename"
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" "" BASE_REF=origin/nope)")" \
+    "a stale BASE_REF in the environment is not read"
+# A stacked sibling that differs from the default base: a detached commit on top
+# of `feature` (the sibling slice) deletes keep.txt. Measured against the
+# sibling the block reports only that deletion; against origin/prod it would
+# also report doomed.txt and the rename, so dropping the stacked arm fails here.
+git -C "$deltrig" checkout -q --detach feature
+git -C "$deltrig" rm -q keep.txt
+git -C "$deltrig" commit -q -m S1
+assert_eq 'D keep.txt;' "$(del_oracle "$(run_check_block "$sidecar" feature)")" \
+    "a stacked sibling in the placeholder is the endpoint, not the default base"
+assert_eq 'D doomed.txt;D keep.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" "")")" \
+    "with no sibling the same stacked branch is measured against the default base"
+git -C "$deltrig" checkout -q feature
+refusing_sc="$base_sandbox/refusing-sidecar.sh"
+printf '#!/bin/sh\necho "base-ref: refused" >&2\nexit 1\n' > "$refusing_sc"
 set +e
-unset_out="$(cd "$deltrig" && env -u BASE_REF bash -c "$check_block" 2>&1)"
-unset_status=$?
+refused_out="$(run_check_block "$refusing_sc" "")"
+refused_status=$?
 set -e
-if [[ "$unset_status" -ne 0 ]]; then
-    printf '  ok   with BASE_REF unset the checklist block exits %s instead of printing an empty pass\n' "$unset_status"
+if [[ "$refused_status" -ne 0 ]]; then
+    printf '  ok   with base-ref refusing the checklist block exits %s instead of printing an empty pass\n' "$refused_status"
     pass=$((pass + 1))
 else
-    printf '  FAIL with BASE_REF unset the checklist block exited 0 with output %q — a silent clean pass\n' "$unset_out"
+    printf '  FAIL with base-ref refusing the checklist block exited 0 with output %q — a silent clean pass\n' "$refused_out"
     fail=$((fail + 1))
 fi
-assert_eq '' "$(printf '%s' "$unset_out" | grep -E '^[DR]' || true)" \
-    "with BASE_REF unset the checklist block reports no deletions it could not have measured"
-
-set +e
-set_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$check_block" 2>&1)"
-set_status=$?
-set -e
-assert_eq 0 "$set_status" "with BASE_REF set the checklist block is a valid invocation"
-assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$set_out")" \
-    "with BASE_REF set the checklist block reports the planted deletion and rename"
+assert_eq '' "$(printf '%s' "$refused_out" | grep -E '^[DR]' || true)" \
+    "with base-ref refusing the checklist block reports no deletions it could not have measured"
 
 # -----------------------------------------------------------------------------
 
@@ -1382,8 +1408,23 @@ section "no skill uses a base branch NAME where a ref belongs — anywhere"
 # Its `-L "$START,$END"` is the first flag with a separate, quoted value, so the
 # flag arm also takes one quoted variable after a space.
 # The fixup-target block also pins blame's display config with leading
-# `-c key=value` pairs before the verb, so the pattern allows those.
-range_pattern='git( +-c +[A-Za-z.]+=[a-z]+)* +(diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# `-c key=value` pairs before the verb, so the pattern allows those, with any
+# unquoted value (#573: a value with a digit once fell outside `[a-z]+`).
+range_pattern='git( +-c +[A-Za-z.]+=[^ "]+)* +(diff|log|blame)( +--?[A-Za-z0-9-]+(=[A-Za-z0-9%,._-]+| +"[$][^"]*")?)* +"?[$]?\{?[A-Za-z_][A-Za-z0-9_{}]*\}?\.\.\.?HEAD'
+# range_verb <hit> — the git subcommand of a census hit, past any -c pairs.
+range_verb() { printf '%s' "$1" | sed -E 's/^git( +-c +[A-Za-z.]+=[^ "]+)* +/git /' | awk '{print $2}'; }
+# Self-test (#573 item 4): a `-c` value is not always lowercase letters. A value
+# with a digit must still enter the census whole and yield its verb; the
+# accounting check below would otherwise only report a mismatch, not which line.
+# shellcheck disable=SC2016  # planted lines are literal skill text
+for planted in 'log|git -c core.abbrev=12 log --oneline "$BASE_REF..HEAD"' \
+    'blame|git -c blame.date=iso8601 -c color.ui=false blame -l "$BASE_REF..HEAD"'; do
+    planted_verb="${planted%%|*}"
+    planted_range="${planted#*|}"
+    planted_hit="$(printf '%s\n' "$planted_range" | { grep -oE "$range_pattern" || true; })"
+    assert_eq "${planted_range%\"}" "$planted_hit" "the census pattern takes a whole range line, up to HEAD, whose -c value is not all lowercase: $planted_range"
+    assert_eq "$planted_verb" "$(range_verb "$planted_range")" "range_verb reads the subcommand past every -c pair: $planted_range"
+done
 # The scan set has to match the label above it, or this section commits the
 # overclaim it exists to prevent. `*/references/*.md` install into the skill
 # directories and are read at runtime; `docs/*.md` are the canonical copies
@@ -1426,7 +1467,7 @@ bad_endpoint=0
 bad_operator=0
 while IFS= read -r hit; do
     [[ -n "$hit" ]] || continue
-    verb="$(printf '%s' "$hit" | sed -E 's/^git( +-c +[A-Za-z.]+=[a-z]+)* +/git /' | awk '{print $2}')"
+    verb="$(range_verb "$hit")"
     # The endpoint char class excludes '.' so the greedy prefix cannot eat the
     # first dot of a three-dot range and leave it in the captured name.
     endpoint="$(printf '%s' "$hit" | sed -E 's/.*[ "]([^ ".]*)\.\.\.?HEAD$/\1/')"
@@ -1580,6 +1621,26 @@ fi
 # contract it is standing in for.
 git -C "$remote_sandbox/work" push -q origin --delete issue-9-widget \
     || fatal "could not delete the fixture branch from the fixture remote"
+
+# Polarity 2b — a DIFFERENT branch whose name merely ends in the feature branch
+# (x/issue-9-widget) is on the remote. A short pattern matches it by ref tail and
+# would read "still on the remote"; the full refs/heads/<branch> form avoids that
+# and must still exit 2 for the deleted feature branch. It narrows the match but
+# is not exact: ls-remote patterns still match by ref tail (see the note in
+# test-delta-review-scope.sh).
+git -C "$remote_sandbox/work" push -q origin issue-9-widget:refs/heads/x/issue-9-widget \
+    || fatal "could not push x/issue-9-widget to the fixture remote"
+suffix_status=0
+( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || suffix_status=$?
+if [[ "$suffix_status" -eq 2 ]]; then
+    printf '  ok   x/issue-9-widget on the remote does not count as issue-9-widget (the check matches the exact ref)\n'
+    pass=$((pass + 1))
+else
+    printf '  FAIL the check exits %d, not 2, when only x/issue-9-widget is on the remote; a suffix-matching branch is read as the feature branch\n' "$suffix_status"
+    fail=$((fail + 1))
+fi
+git -C "$remote_sandbox/work" push -q origin --delete x/issue-9-widget \
+    || fatal "could not delete x/issue-9-widget from the fixture remote"
 gone_status=0
 ( cd "$remote_sandbox/work" && eval "${ls_remote_line//<feature-branch>/issue-9-widget}" >/dev/null 2>&1 ) || gone_status=$?
 if [[ "$gone_status" -eq 2 ]]; then

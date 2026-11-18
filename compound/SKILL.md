@@ -316,6 +316,8 @@ related: [<lesson file name>, ...]
 
 **Propose `paths` from the files the branch changed.** `paths` is how `/execute` finds this lesson again by file, whatever words a later task uses. List the files the branch changed with `git diff --name-only "$BASE_REF...HEAD"`, where `BASE_REF` is what `bash "$SC" base-ref` prints (`SC` as in Phase 5). On the post-merge fallback that range is empty, because the session is on base, so take the list from the merged PR with `gh pr diff <n> --name-only` instead. Keep the ones the lesson's text names, and write them relative to the project's top level, a folder in place of its files when the lesson is about the whole folder. Show the proposed line to the user with the rest of the entry; it is written only as they confirm or edit it, and `[]` when nothing fits. `replaces` and `related` name other lessons by file name, and are `[]` unless the user names one. Each list is one line in brackets, and no entry may hold a comma, a space, or a bracket.
 
+**Cite what survives a rewrite.** The entry is written while the branch can still be rewritten: `/pre-merge` Phase 4's fold, the `fixup!` commits `/fix-findings` writes for it, and the squash merge each replace commit SHAs, so a SHA that names the commit that taught the lesson stops resolving, or after a short-SHA collision resolves to an unrelated commit. In the body and in `## Related`, cite the PR number, a file path with the symbol or test name, or the merged commit on the base branch. Cite a bare SHA only for a commit already on the base branch. Phase 5's citation check enforces this before the commit.
+
 **Adjust the template to fit the content.** Not every solution needs every section. A simple bug fix might just need Problem, Root Cause, Solution, and Prevention. An architectural decision might skip Symptoms and emphasize Key Decision. Don't pad sections that have nothing to say.
 
 ### Phase 4: Check for Overlaps
@@ -410,15 +412,31 @@ gh issue view -R chrislacey89/skills <n> --json number,title,state
 
 A non-zero exit means the entry cites an issue that is not there — do not commit it. This is weaker than a contract test and deliberately so: the citation lives in a downstream repo's `docs/solutions/` file, which this repo's CI cannot read, so there is nothing for a `scripts/test-*.sh` to assert against. What the suite *can* pin is that this command is still here, and `scripts/test-q4-mechanism-names.sh` does — the check runs where the claim is made, and the pin stops the check itself from being quietly dropped.
 
+**Citation check (DO-CONFIRM — verify before committing the entry).** Every 7-to-40-character hex token in the entry that contains a digit is either a commit on the base or gets rewritten to a durable anchor (Phase 3) before this commit. A SHA from this branch is not on the base yet and will not be after the fold or the squash. Set `<path/to/entry.md>` to the entry file; the block asks `sidecar.sh base-ref` for the base itself, because an earlier block's shell variable does not reach this one. [`git merge-base --is-ancestor`](https://git-scm.com/docs/git-merge-base) is the test, and a non-zero exit of any kind counts as not on the base:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+ENTRY=<path/to/entry.md>
+STALE=0
+for tok in $(grep -owE '[0-9a-f]{7,40}' "$ENTRY" | grep '[0-9]' | sort -u); do
+  git merge-base --is-ancestor "$tok" "$BASE_REF" || { echo "not on the base, rewrite it to a durable anchor: $tok"; STALE=1; }
+done
+[ "$STALE" -eq 0 ]
+```
+
+A flagged token is a commit that the fold or the squash will rewrite, or text that only looks like a SHA. Replace the commit with the PR number, or with a path and symbol, and run the block again.
+
+
 After the commit, record the lesson on its work item, below.
 
 **Then hand to a `/pre-merge` re-run — that push just moved the head past the review stamp.** `/pre-merge` Phase 4 recorded the SHA its review actually covered, and the commit above lands after it. `/compound` cannot fix that itself: `/pre-merge` is the stamp's only writer — pinned by `scripts/test-review-currency-marker.sh` — and a skill that stamped its own commit would certify as reviewed the one commit nothing independent read. So the in-PR path's terminal step is a review, not a merge.
 
-Hand to `/pre-merge` in author-mode. It reads the stamp off the PR, takes the post-stamp delta — this commit — as its subject, and re-stamps at the new head (its Phase 1 step 4). `/closeout` follows from `/pre-merge`'s own next-step menu; **the in-PR path never hands to `/closeout` directly.**
+Hand to `/pre-merge` in author-mode. It reads the stamp (`references/state-backend.md` says where it lives), takes the post-stamp delta — this commit — as its subject, and re-stamps at the new head (its Phase 1 step 4). `/closeout` follows from `/pre-merge`'s own next-step menu; **the in-PR path never hands to `/closeout` directly.**
 
 **Why this is not ceremony on the docs-only case.** The in-PR default exists so the entry is "reviewed and merged with the code that taught it" — Phase 5's own words. Skipping the re-run makes the second half of that true and the first half false, which is worse than the post-merge fallback, because the fallback at least does not claim the review. And the case is not reliably docs-only: this commit stages Phase 4's mechanism alongside the entry, and in the measurement behind chrislacey89/skills#336 — four `docs: compound` commits across seventeen stamped merges — two carried code (a contract test rewritten to derive its coverage from the schema, and a new test file), both under a subject beginning `docs: compound`. The subject line is not evidence of what the commit contains, and the mechanism file is exactly the kind of guard `/compound` Phase 4 found vacuous when self-authored.
 
-**The re-run terminates here; it does not bounce back.** Its subject is the entry that captured the lesson, so no *uncaptured* lesson can emerge from reading it — `/pre-merge` Phase 4's closing recommendation is conditioned on that and does not re-offer `/compound`. There is one re-run per in-PR capture, and its exit is `/closeout`.
+Whether `/compound` is offered again on that re-run is decided in `/pre-merge` Phase 4.
 
 **Post-merge (fallback):** the same commit lands on the base branch. If the repo requires review for the base branch, open a small PR for the doc rather than pushing it unreviewed — the whole point of the in-PR default is to keep `docs/solutions/` entries reviewed, so don't bypass that on the fallback path. After the commit, record the lesson on its work item, below.
 

@@ -88,7 +88,7 @@ Use when:
 ## Default pipeline
 
 ```text
-/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /closeout (merge + teardown) → /compound → cleanup
+/shape → /research → /write-a-prd → /prd-to-issues → /execute → QA → /pre-merge → /compound (in-PR) → /pre-merge (re-run: re-stamp) → /closeout (merge + teardown) → cleanup
 ```
 
 Treat this as the default route, not a prison. For blank-project or major-tranche work that is too large for a single PRD, `/shape` can branch to `/create-milestone`, which creates a GitHub milestone plus feature issues that mature from `roadmap bet` to `research-ready` to `prd` before re-entering the default route at `/research`. The workflow supports branch points and deliberate backtracking.

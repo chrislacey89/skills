@@ -1,6 +1,6 @@
 ---
 name: walk-commits
-description: "Side-route skill for an interactive, commit-by-commit comprehension walkthrough of a finished branch before merge. Use when the person about to merge didn't author the diff — or hasn't internalized it — and needs to understand each commit's intent, riskiest line, deliberate oddities, and what's absent by design, with per-commit sign-off. Not a defect finder (that's /pre-merge), not a behavioral check (that's /verify), not an acceptance-criteria checklist (that's /execute Step 5). Optional and never auto-invoked."
+description: "Side-route skill for an interactive, commit-by-commit comprehension walkthrough of a finished branch before merge. Use when the person about to merge didn't author the diff — or hasn't internalized it — and needs to understand each commit's intent, riskiest line, deliberate oddities, and what's absent by design, with per-commit sign-off. Not a defect finder (that's /pre-merge), not a behavioral or acceptance check (that's /execute Step 5's manual verification). Optional and never auto-invoked."
 sources:
   primary:
     - "Code Reading: The Open Source Perspective — Diomidis Spinellis"
@@ -15,13 +15,13 @@ sources:
 
 Walk the person about to merge a branch through it commit by commit, so they actually understand what they are shipping. The output is *reviewer comprehension and a sign-off decision*, not a defect list. For each commit you narrate the author's intent (not a restatement of the diff), anchor the single riskiest line, surface the choices that look odd on purpose, name what is absent by design, and flag anything needing the merger's explicit sign-off — then let them step to the next commit.
 
-This skill exists because the highest-leverage finding in Cohen's peer-review dataset is *author preparation*: an annotated change walked through by a prepared narrator correlates with near-zero defect variance. The pipeline produces that annotation nowhere else. `/pre-merge` finds defects across the whole diff; `/verify` runs the app; `/execute` Step 5 checks acceptance criteria. None of them narrate the change commit-by-commit for the human who clicks merge.
+This skill exists because the highest-leverage finding in Cohen's peer-review dataset is *author preparation*: an annotated change walked through by a prepared narrator correlates with near-zero defect variance. The pipeline produces that annotation nowhere else. `/pre-merge` finds defects across the whole diff; `/execute` Step 5's manual verification runs the app and checks acceptance criteria. None of them narrate the change commit-by-commit for the human who clicks merge.
 
 ## Invocation Position
 
 This is a **side-route skill**. It does not block merge and is never auto-invoked.
 
-It reconnects to the main pipeline at the `/pre-merge` → merge boundary: run it when you want comprehension before approving, then proceed to merge (and `/compound` if a durable lesson emerged). `/pre-merge` Phase 4 *recommends* it (without invoking it) when the person merging did not author the diff or hasn't internalized it; `/execute` Step 5/6 names it as an option before `/pre-merge` from the author side.
+It reconnects to the main pipeline at the `/pre-merge` → merge boundary: run it when you want comprehension before approving, then continue down the default path from `/pre-merge` (`/compound` in-PR if a durable lesson emerged, a `/pre-merge` re-run, then `/closeout`). `/pre-merge` Phase 4 *recommends* it (without invoking it) when the person merging did not author the diff or hasn't internalized it; `/execute` Step 5/6 names it as an option before `/pre-merge` from the author side.
 
 Use `/walk-commits` when:
 
@@ -32,7 +32,7 @@ Use `/walk-commits` when:
 Do not use `/walk-commits`:
 
 - To find defects across the whole diff — that is `/pre-merge`'s adversarial, dimension-based review.
-- To confirm the feature behaves correctly at runtime — that is `/verify`.
+- To confirm the feature behaves correctly at runtime — that is `/execute` Step 5's manual verification.
 - To check acceptance criteria — that is `/execute` Step 5's checklist.
 - To draft review comments on someone else's open PR — that is `/pre-merge --pr <n>` reviewer-mode.
 
@@ -163,7 +163,7 @@ After each commit's card, advance the walkthrough with a single `AskUserQuestion
 - **Next commit** — proceed to the following commit.
 - **2–3 commit-specific deep-dives** — concrete, drawn from *this* commit (e.g. "Show the test that backs commit 3's claim," "Read the call sites of the renamed export," "Confirm the `"use server"` boundary with a `next build`").
 
-When a commit is opaque, do **not** deep-recurse line by line. Take Spinellis's *breadth-first escape* and use **execution as a reading tool**: read the test as the spec, try another call site, or escalate to a `next build` / `/verify`. PR-level example: a migrated `"use server"` action with a new injectable `db` param was confirmed by a build, not by staring at the diff. Naming this as a legitimate reading move keeps comprehension moving instead of stalling.
+When a commit is opaque, do **not** deep-recurse line by line. Take Spinellis's *breadth-first escape* and use **execution as a reading tool**: read the test as the spec, try another call site, or escalate to a `next build` or running the app by hand. PR-level example: a migrated `"use server"` action with a new injectable `db` param was confirmed by a build, not by staring at the diff. Naming this as a legitimate reading move keeps comprehension moving instead of stalling.
 
 ### 4. Wrap up after the last commit
 
@@ -177,7 +177,7 @@ If any commit is still 🔴, say plainly that the branch is not yet understood w
 ## What This Skill is NOT
 
 - **Not a defect review.** It does not sweep the whole diff for bugs across dimensions — `/pre-merge` does that and emits advisory findings.
-- **Not a behavioral check.** It does not run the app — `/verify` does that.
+- **Not a behavioral check.** It does not run the app — `/execute` Step 5's manual verification does that.
 - **Not an acceptance-criteria checklist.** That is `/execute` Step 5.
 - **Not a mandatory stage.** It is optional, invoked only when wanted, and never auto-runs. If a future sample of PRs shows it is rarely invoked or only fires on diffs `/pre-merge` already covered, fold it back into `/pre-merge` as an optional phase.
 - **Not a rubber stamp.** Clicking "Next commit" without absorbing each card defeats the point. The 🟢/🟡/🔴 sign-off and the test-backed intent check are the structural guards against that.
@@ -186,5 +186,5 @@ If any commit is still 🔴, say plainly that the branch is not yet understood w
 
 - **Expected input:** a finished branch ready to merge, plus the base branch to diff against. No upstream artifact is required, though a linked PRD or slice issue helps frame intent.
 - **Produces:** reviewer comprehension and a per-commit sign-off (🟢/🟡/🔴) with the open items the merger must resolve — a decision, not a durable file. It does not create issues, post comments, or edit code.
-- **Reconnects at:** the `/pre-merge` → merge boundary. Run it before approving; proceed to merge once commits are understood, then `/compound` if a durable lesson emerged.
+- **Reconnects at:** the `/pre-merge` → merge boundary. Run it before approving; once commits are understood, continue with `/compound` in-PR if a durable lesson emerged, a `/pre-merge` re-run that re-stamps, then `/closeout`.
 - **What comes next:** the user merges (or pauses on unresolved 🔴/🟡 items). `/walk-commits` does not invoke anything.
