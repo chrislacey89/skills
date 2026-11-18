@@ -1462,5 +1462,16 @@ for bad_json in '.solutions.related = "oops"' '.solutions = "str"'; do
 done
 cp "$tmp/refusal.json" "$RFS/sidecar.json"
 
+# Only cmd_solutions_dirs fails here: with sidecar.json valid, the related
+# listing succeeds, so the refuse after the project's own listing is the only
+# thing that can stop a single-file check from printing a false dead-link.
+if [ -d "$RFS/solutions" ]; then mv "$RFS/solutions" "$tmp/refusal-solutions"; else rm -f "$RFS/solutions"; fi
+: > "$RFS/solutions"
+runo "$RFP" lessons check "$LF"
+if [ "$rc" -ne 0 ]; then ok "unlistable own solutions dir: check of a file exits nonzero"; else bad "unlistable own solutions dir: check of a file exits nonzero" "rc=0, stdout [$out]"; fi
+case "$out" in *dead-link*) bad "unlistable own solutions dir: check of a file reports no dead-link" "$out" ;; *) ok "unlistable own solutions dir: check of a file reports no dead-link" ;; esac
+rm -f "$RFS/solutions"
+[ ! -d "$tmp/refusal-solutions" ] || mv "$tmp/refusal-solutions" "$RFS/solutions"
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
