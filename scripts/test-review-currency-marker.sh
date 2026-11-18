@@ -611,9 +611,18 @@ STUB
 assert_eq main "$(git -C "$fx/proj" branch --show-current)" "fixture: the checkout is on base, as after gh pr merge --delete-branch"
 assert_eq "$stamp_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
     "control: the merged branch's stamp exists before the clear block runs"
+# A second branch's stamp, which the clear must leave alone (#531 item 2): a
+# clear that removed every stamp also passes the assertion on `feature` below.
+other_sha='0123456789abcdef0123456789abcdef01234567'
+(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp write other-branch "$other_sha" >/dev/null 2>&1) \
+    || { printf 'FATAL: could not stamp a second branch in the closeout fixture\n' >&2; exit 2; }
+assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
+    "control: a second branch's stamp exists before the clear block runs"
 (cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" CLAUDE_PROJECT_DIR="$fx/proj" bash -c "$clear_block" >/dev/null 2>&1)
 assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
     "after the clear block, run on base, the merged branch's stamp is gone"
+assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
+    "after the clear block, a second branch's stamp is still there"
 
 section "/closeout Steps 2 and 3 abort on a failed backend rather than taking the gh path"
 
