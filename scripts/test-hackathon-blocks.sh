@@ -17,7 +17,7 @@
 # runs EACH block in its OWN `env -i` shell (bash, and zsh when installed)
 # inside a scratch repo, with HOME and SKILL_KIT_SIDECAR_ROOT in scratch dirs.
 #
-# The rung loop's CI-watch block (#722) runs the same way against a stub `gh`:
+# The rung loop's CI-watch block (#721) runs the same way against a stub `gh`:
 # all green, one red, an empty list, a failed list, a run on the second poll,
 # and a second run that registers while the first is watched.
 #
@@ -164,7 +164,7 @@ out="$(cd "$repo" && env -i PATH="/usr/bin:/bin:/opt/homebrew/bin" HOME="$tmp/ho
 check "non-miss resolve failure exits 1 (finding 9)" 1 "$rc"
 if grep -q 'without a SIDECAR MISS line' "$tmp/err"; then ok "non-miss failure is relayed, init not offered"; else bad "non-miss relay: $(cat "$tmp/err")"; fi
 
-# CI-watch block (rung loop step 3, #722). Each case runs the block in a fresh
+# CI-watch block (rung loop step 3, #721). Each case runs the block in a fresh
 # env -i shell, bash and zsh, in a scratch repo with a stub `gh` and a no-op
 # `sleep`. Stub state: $stub/list.N is the Nth `gh run list` answer (the last
 # one repeats; the word FAIL makes the call exit 1), $stub/red names run ids
