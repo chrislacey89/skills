@@ -580,6 +580,38 @@ if [ "$rc" -ne 0 ]; then ok "an unreadable solutions key: trace of a lesson exit
 case "$out" in *MISSING:*) bad "an unreadable solutions key: no MISSING line" "$out" ;; *) ok "an unreadable solutions key: no MISSING line" ;; esac
 case "$err" in *"could not list the lesson directories"*) ok "an unreadable solutions key: stderr names the directory listing" ;; *) bad "an unreadable solutions key: stderr names the directory listing" "$err" ;; esac
 
+# A malformed solutions.related in this project's own sidecar: the group
+# listing refuses, and the trace must say so and stop, never report a lesson in
+# the related project as MISSING and exit 0. A sidecar with no related key at
+# all is an empty group, not a refusal, and still traces.
+mkproj
+RA="$P"
+runo "$RA" init --name rela --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+RAS="$out"
+mkproj
+RB="$P"
+runo "$RB" init --name relb --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+RBS="$out"
+mkdir -p "$RAS/solutions/x" "$RBS/solutions/x"
+printf -- '---\nrelated: [g.md]\n---\n# L\n' > "$RAS/solutions/x/l.md"
+printf '# G\n' > "$RBS/solutions/x/g.md"
+runo "$RA" relate "$RB"
+check "related fixture: relate exits 0" 0 "$rc"
+runo "$RA" trace "$RAS/solutions/x/l.md"
+check "a related project: trace of a lesson exits 0" 0 "$rc"
+case "$out" in *"related project: "*g.md*) ok "a related project: the neighbor resolves" ;; *) bad "a related project: the neighbor resolves" "$out" ;; esac
+cp "$RAS/sidecar.json" "$tmp/relA.json"
+jq '.solutions.related = "oops"' "$tmp/relA.json" > "$RAS/sidecar.json"
+runo "$RA" trace "$RAS/solutions/x/l.md"
+if [ "$rc" -ne 0 ]; then ok "a malformed solutions.related: trace of a lesson exits nonzero"; else bad "a malformed solutions.related: trace of a lesson exits nonzero" "rc=0, stdout [$out]"; fi
+case "$out" in *MISSING:*) bad "a malformed solutions.related: no MISSING line" "$out" ;; *) ok "a malformed solutions.related: no MISSING line" ;; esac
+case "$err" in *"could not list the related lesson directories"*) ok "a malformed solutions.related: stderr names the listing" ;; *) bad "a malformed solutions.related: stderr names the listing" "$err" ;; esac
+jq 'del(.solutions.related)' "$tmp/relA.json" > "$RAS/sidecar.json"
+runo "$RA" trace "$RAS/solutions/x/l.md"
+check "no related key: trace of a lesson exits 0" 0 "$rc"
+case "$out" in *"related  MISSING: g.md"*) ;; *) bad "no related key: the unreachable neighbor is MISSING, as an empty group" "$out" ;; esac
+case "$out" in *"related  MISSING: g.md"*) ok "no related key: the unreachable neighbor is MISSING, as an empty group" ;; esac
+
 # -----------------------------------------------------------------------------
 section "/compound's work-item block, run for real"
 

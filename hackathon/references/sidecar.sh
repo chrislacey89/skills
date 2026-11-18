@@ -2435,7 +2435,7 @@ lesson_links() {
 }
 
 trace_lesson() {
-    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel="" rdirs links
+    local file="$1" json="$2" self top="" raw dirs="" d lines cand by="" out tb="" wsc wf wl wid wkind wstate wpath rel="" rdirs rerr links
     [ -f "$file" ] || refuse "trace: no such work item or file: $file"
     self="$(abs_path "$file")"
     # solutions-dirs names in-tree dirs relative to the cwd, so it is asked from
@@ -2499,7 +2499,12 @@ trace_lesson() {
     # replaces, related, and replaced by, resolved across the project's stores
     # and its group's, read-only. Appended after every existing key.
     rdirs=""
-    if in_repo; then rdirs="$(cd "${top:-.}" && cmd_related_solutions_dirs 2>/dev/null)" || rdirs=""; fi
+    if in_repo; then
+        rerr="$(mktemp)" || refuse "trace: cannot create a temp file"
+        rdirs="$(cd "${top:-.}" && cmd_related_solutions_dirs 2>"$rerr")" \
+            || { cat "$rerr" >&2; rm -f "$rerr"; refuse "trace: could not list the related lesson directories"; }
+        rm -f "$rerr"
+    fi
     links="$(lesson_links "$self" "$dirs" "$rdirs")" || refuse "trace: could not read the lessons $self links to"
     # shellcheck disable=SC2016  # $-names are jq variables
     out="$(printf '%s\n' "$links" | jq -Rnc --argjson base "$out" '
