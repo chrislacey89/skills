@@ -3164,8 +3164,8 @@ lessons_audit_flags() {
     [ -n "$sum" ] || return 0
     all="$(lessons_scan "$own")" || return 1
     # A refused listing of the group's directories returns 1 here, so the
-    # caller prints "flags: could-not-run" like every other section of the
-    # audit; the listing's own refusal message is already on stderr.
+    # caller prints "flags: could-not-run"; the listing's own refusal
+    # message is already on stderr.
     rdirs="$(cmd_related_solutions_dirs)" || return 1
     all="$all"$'\n'"$(lessons_scan_group "$rdirs")"
     for f in "$sc"/lookups/*.jsonl; do [ -f "$f" ] && files+=("$f"); done
