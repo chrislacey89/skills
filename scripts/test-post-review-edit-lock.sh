@@ -1215,9 +1215,22 @@ section "10. neither flag can be committed into this repo"
 # this pack tolerates filesystem state at all. A committed copy would hold the
 # lock shut, or hold it open, across every future branch — so this is measured
 # with git's own matcher rather than by reading .gitignore.
+#
+# The repo's .gitignore text is copied into a FRESH scratch repo created with an
+# EMPTY template, and git is asked there, so nothing else on the machine can
+# answer for a deleted entry: not the real repo's `.git/info/exclude` (#375),
+# not a git template directory's `info/exclude`, and, with
+# `-c core.excludesFile=/dev/null`, not a global excludes file naming
+# `.claude/`. Asking the real repo would pass here while failing on a clean clone.
+
+empty_template="$scratch/empty-template-10"
+ignore_probe="$scratch/ignore-probe-10"
+mkdir -p "$empty_template" "$ignore_probe"
+git init -q --template="$empty_template" "$ignore_probe" || fatal "could not git init a scratch repo for section 10"
+cp "$repo_root/.gitignore" "$ignore_probe/.gitignore" || fatal "could not copy .gitignore into the scratch repo"
 
 for flag in "$stamp_rel" "$fixer_rel"; do
-    if git check-ignore -q "$flag"; then
+    if git -C "$ignore_probe" -c core.excludesFile=/dev/null check-ignore -q -- "$flag"; then
         assert_eq "ignored" "ignored" "$flag is ignored by this repo"
     else
         assert_eq "ignored" "tracked" "$flag is ignored by this repo"
