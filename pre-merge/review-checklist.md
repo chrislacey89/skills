@@ -148,7 +148,7 @@ A consumed upstream slice is already merged, so it has a PR number and no local 
 This is a **reconciliation test, not a gate** — `/pre-merge` is advisory in every mode and merges nothing itself. Escalate only on unmapped Musts. Warn on unmapped Wants. Accept unmapped ~Tildes silently.
 
 **Violation patterns:**
-- **Unmapped Must (Concern — with the withheld action named):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. Classify as **Concern** and state the action inside the finding: the branch should not merge until the Must is covered by a slice or consciously cut with a `Scope Notes` entry on the PRD body. Concern is the strongest tier this skill defines — there is no fourth — and naming the withheld action is how it carries that weight without claiming a gate `/pre-merge` does not own.
+- **Unmapped Must (Concern — with the withheld action named):** A Must-commitment in the PRD has no merged slice covering it, and no `Scope Notes` entry explains why. Classify as **Concern** and state the action inside the finding: the branch should not merge until the Must is covered by a slice or consciously cut with a `Scope Notes` entry on the PRD body. Naming the withheld action is how the Concern carries that weight without claiming a gate `/pre-merge` does not own; § Severity Classification states why there is no stronger tier to use.
 - **Unmapped Want (Suggestion):** A Want-commitment in the PRD has no merged slice covering it. Surface it as a warning — the scope hammer may have cut it consciously; confirm with the user and add a `Scope Notes` entry if so.
 - **Renegotiation not recorded:** A commitment was consciously cut or added mid-cycle but the PRD issue body was not edited to reflect the new state. The matrix is a derived view; the PRD is the single source of truth. Flag for update.
 
@@ -299,6 +299,8 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 - **Suggestion:** A principle is partially stressed. Improvement is possible but the current code is defensible. Example: "Two test names describe implementation details ('calls API twice') — renaming to behavior descriptions would improve readability."
 
 - **Concern:** A clear principle violation with specific evidence from the diff. Cite the principle, show the code, explain why it matters. Example: "The `formatResponse` function in `utils/format.ts` is a pass-through that forwards its arguments to `buildResponse` with no transformation — this is a shallow wrapper (Deep Modules)."
+
+**There is no tier above Concern.** A finding that should stop a merge stays a Concern and names that action inside its text.
 
 **A cap by kind of text, under every dimension.** A finding whose subject is a kind of text listed in [references/restated-claims.md](references/restated-claims.md) § *What is not a prose contract* is at most a Suggestion, whichever dimension raised it.
 

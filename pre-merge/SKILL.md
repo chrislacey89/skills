@@ -421,7 +421,7 @@ Each sub-agent reads the full diff and its assigned dimensions from `review-chec
 
 **Controller-owned dimensions run here, in this session.** Every dimension in `review-checklist.md` whose `**Runs in:**` marker reads `the controller, in Phase 4` is yours to execute — Phase 3 did not delegate it, and no sub-agent could have. The marker is on those dimensions because their procedures need a cross-slice view — the PRD, every slice issue, and the set of merged slices held together at once. Phase 1 assembles exactly that, in this context, which is the whole reason the work lands here.
 
-Read each such dimension's procedure from `review-checklist.md` and run it now. Its findings are ordinary findings: they carry the severity the checklist assigns them, they join the three tiers below, and in loop-mode they get ledger rows like any other. **In particular, a Concern from a controller-owned dimension is still a Concern, named escalation and all** — the relocation moved where the check runs, not what its verdict is worth. There is no tier above Concern; a dimension whose verdict should stop a merge says so by naming that action inside its Concern, which is what Coverage Matrix Reconciliation does for an unmapped Must.
+Read each such dimension's procedure from `review-checklist.md` and run it now. Its findings are ordinary findings: they carry the severity the checklist assigns them, they join the three tiers below, and in loop-mode they get ledger rows like any other. **In particular, a Concern from a controller-owned dimension is still a Concern, named escalation and all** — the relocation moved where the check runs, not what its verdict is worth. `review-checklist.md` § Severity Classification says how a Concern carries a finding that should stop a merge.
 
 Then run them through the same evidence discipline as everything else: a controller-owned dimension is not exempt from citing what supports it. What it *is* exempt from is the delegated-finding check immediately below, which exists to catch a sub-agent misreporting; there is no sub-agent here.
 
@@ -725,10 +725,10 @@ Recorded by `/pre-merge` loop-mode. Every finding below has an owner. Rows marke
 
 | Pass | Finding | Dimension | State | Evidence / outcome |
 |---|---|---|---|---|
-| 1 | Duplicate date formatter in pipeline | 1 — Deep Modules | fixed | `abc1234` — operator |
-| 1 | Same pattern in `lib/export/` | 1 — Deep Modules | filed | #199 — operator |
-| 1 | Stamp block "no-ops" | 7 — docs/solutions | open | refuted — `/execute` Step 5 uses the same shape ("Write verified status back to the issue") |
-| 2 | Presence helper claimed as Effect Layer | 4 — Boundary Map | open | confirmed — `lib/presence.ts:12` exports a plain function |
+| 1 | Duplicate date formatter in pipeline | Deep Modules | fixed | `abc1234` — operator |
+| 1 | Same pattern in `lib/export/` | Deep Modules | filed | #199 — operator |
+| 1 | Stamp block "no-ops" | docs/solutions/ Adherence | open | refuted — `/execute` Step 5 uses the same shape ("Write verified status back to the issue") |
+| 2 | Presence helper claimed as Effect Layer | Boundary Map Contracts | open | confirmed — `lib/presence.ts:12` exports a plain function |
 
 **Checks not run this pass:** `/ts-audit` — delta is 12 changed `.ts` lines across 1 file, below the 50-line / 2-file trigger.
 ```
