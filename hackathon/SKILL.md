@@ -104,8 +104,8 @@ Two homes, split on purpose.
   The dossier's shape is
   [references/dossier-template.md](references/dossier-template.md).
 - **From the start time on, two files live in the event repo:** `PLAN.md` (the
-  ladder, and a `## Submission draft` section holding the submission page's
-  text) and `DECISIONS.md` (the decision log). This is a scoped exception to
+  ladder, the clock plan, and a `## Submission draft` section holding the
+  submission page's text) and `DECISIONS.md` (the decision log). This is a scoped exception to
   the pack's rule that durable state never lives in the project tree. Here the
   repo *is* the judged deliverable, and judges read the decision log. The
   exception covers those two files in an event repo and nothing else.
@@ -415,7 +415,7 @@ nothing in this phase moves the freeze or the submit-by time.
 1. If the build actually starts at a time other than the event profile's start
    time, recompute the kickoff block's end and the checkpoints from the actual
    start, in `PLAN.md` and the dossier alike. The freeze and the submit-by time
-   come from the deadline, so they stay. Add `PLAN.md` (the ladder plus the clock plan) and `DECISIONS.md` (copied from the
+   come from the deadline, so they stay. Add `PLAN.md` (State says what it holds) and `DECISIONS.md` (copied from the
    dossier's seeded log), make the first commit, then push it to the remote added in
    prep with `git push -u origin HEAD`.
 2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
@@ -431,7 +431,8 @@ nothing in this phase moves the freeze or the submit-by time.
 4. Recheck the chosen project against the kickoff remarks (Phase 0, **Kickoff
    remarks are part of the brief**).
 5. Stub the platform page with every required section (Phase 2, **The
-   submission is a rung**).
+   submission is a rung**), and put the stub in `PLAN.md`'s `## Submission
+   draft` section (State).
 
 **Rung loop.** For each rung, in ladder order:
 
