@@ -891,11 +891,16 @@ block_holding() {
 # the line prints $block_stopped, so a check whose right answer is empty cannot
 # pass on a block that never got there.
 range_mark='@@range-line'
+stacked_placeholder='BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"'
+stacked_empty='BASE_BRANCH=""'
 block_stopped='<the block stopped before this line>'
 run_range_line() {
     local dir="$1" block="$2" line="$3" script out
     # shellcheck disable=SC2016  # the awk program reads ENVIRON, not the shell
-    script="$(printf '%s\n' "${block//"$placeholder"/$sidecar}" | LINE="$line" MARK="$range_mark" awk '
+    script="${block//"$placeholder"/$sidecar}"
+    # A stacked-PR placeholder (#606) is left empty, as on an unstacked branch.
+    script="${script//"$stacked_placeholder"/$stacked_empty}"
+    script="$(printf '%s\n' "$script" | LINE="$line" MARK="$range_mark" awk '
         $0 == ENVIRON["LINE"] { print "echo \"" ENVIRON["MARK"] " start\""; print; print "echo \"" ENVIRON["MARK"] " end\""; next }
         { print }')"
     out="$( ( cd "$dir" && env -u BASE_REF -u BASE_BRANCH SKILL_KIT_SIDECAR_ROOT="$no_sidecars" bash -c "$script" 2>&1 </dev/null ) || true )"
@@ -1252,14 +1257,15 @@ done
 
 # -----------------------------------------------------------------------------
 
-section "the checklist's author-mode block refuses to run without a base ref"
+section "the checklist's author-mode block computes its own base (#606)"
 
 # Found by an independent probe of #333: with $BASE_REF unset, git reads the
 # empty left endpoint of `...HEAD` as HEAD itself, exits 0, and prints nothing —
-# which the rung's own prose reads as "nothing deleted, skip." review-checklist.md
-# does not ask base-ref itself (Phase 1 resolves the ref), so a reviewer who
-# copies the author-mode block without Phase 1 gets a confident clean pass.
-# The block's first line now refuses instead; this runs the block both ways.
+# which the rung's own prose reads as "nothing deleted, skip." The block first
+# refused to run without a BASE_REF; #606 then had it ask sidecar.sh base-ref
+# itself (or take a stacked sibling through its placeholder), because a review
+# sub-agent runs it in a fresh shell where no earlier block's variable exists.
+# So it runs here with no BASE_REF, with a stale one, and with base-ref refusing.
 extract_block_with() {
     # The first fenced block in $1 whose body contains the literal $2.
     awk -v needle="$2" '
@@ -1278,28 +1284,37 @@ extract_block_with() {
 }
 check_block="$(extract_block_with "$repo_root/pre-merge/review-checklist.md" '--diff-filter=DR')"
 [[ -n "$check_block" ]] || fatal "pre-merge/review-checklist.md has no fenced block carrying the deletion trigger"
-
+checklist_bb='BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"'
+[[ "$check_block" == *"$placeholder"* && "$check_block" == *"$checklist_bb"* ]] \
+    || fatal "the checklist's deletion block lost its sidecar.sh or stacked BASE_BRANCH placeholder"
+# run_check_block <sidecar.sh path> <stacked branch> [env assignments...]
+run_check_block() {
+    local sc="$1" bb="BASE_BRANCH=\"$2\"" blk; shift 2
+    blk="${check_block//"$placeholder"/$sc}"
+    blk="${blk//"$checklist_bb"/$bb}"
+    ( cd "$deltrig" && env -u BASE_REF "$@" SKILL_KIT_SIDECAR_ROOT="$no_sidecars" bash -c "$blk" 2>&1 )
+}
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" "")")" \
+    "with BASE_REF unset the checklist block asks base-ref and reports the planted deletion and rename"
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" "" BASE_REF=origin/nope)")" \
+    "a stale BASE_REF in the environment is not read"
+assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$(run_check_block "$sidecar" prod)")" \
+    "a stacked sibling in the placeholder is the endpoint (origin/prod here)"
+refusing_sc="$base_sandbox/refusing-sidecar.sh"
+printf '#!/bin/sh\necho "base-ref: refused" >&2\nexit 1\n' > "$refusing_sc"
 set +e
-unset_out="$(cd "$deltrig" && env -u BASE_REF bash -c "$check_block" 2>&1)"
-unset_status=$?
+refused_out="$(run_check_block "$refusing_sc" "")"
+refused_status=$?
 set -e
-if [[ "$unset_status" -ne 0 ]]; then
-    printf '  ok   with BASE_REF unset the checklist block exits %s instead of printing an empty pass\n' "$unset_status"
+if [[ "$refused_status" -ne 0 ]]; then
+    printf '  ok   with base-ref refusing the checklist block exits %s instead of printing an empty pass\n' "$refused_status"
     pass=$((pass + 1))
 else
-    printf '  FAIL with BASE_REF unset the checklist block exited 0 with output %q — a silent clean pass\n' "$unset_out"
+    printf '  FAIL with base-ref refusing the checklist block exited 0 with output %q — a silent clean pass\n' "$refused_out"
     fail=$((fail + 1))
 fi
-assert_eq '' "$(printf '%s' "$unset_out" | grep -E '^[DR]' || true)" \
-    "with BASE_REF unset the checklist block reports no deletions it could not have measured"
-
-set +e
-set_out="$(cd "$deltrig" && BASE_REF=origin/prod bash -c "$check_block" 2>&1)"
-set_status=$?
-set -e
-assert_eq 0 "$set_status" "with BASE_REF set the checklist block is a valid invocation"
-assert_eq 'D doomed.txt;R renamed.txt;' "$(del_oracle "$set_out")" \
-    "with BASE_REF set the checklist block reports the planted deletion and rename"
+assert_eq '' "$(printf '%s' "$refused_out" | grep -E '^[DR]' || true)" \
+    "with base-ref refusing the checklist block reports no deletions it could not have measured"
 
 # -----------------------------------------------------------------------------
 

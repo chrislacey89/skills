@@ -140,6 +140,41 @@ scope_block="$(printf '%s\n' "$scope_block" | sed 's/^W="<[^"]*>"$/W="${SCOPE_W:
 [[ "$scope_block" == *'SCOPE_FROM="$REVIEWED_SHA"'* ]] \
     || fatal "scope block extracted from $premerge_skill does not assign SCOPE_FROM from the stamp"
 
+# The stacked-PR placeholder (#606). Step 3, step 4 and the fold each take the
+# sibling slice's branch here, because no earlier block's variable reaches them.
+# Each block is filled in by substitution, the way an agent fills it, and no
+# case below presets BASE_REF: a preset tests a path no run takes
+# (docs/solutions/testing-patterns/a-preset-variable-tests-a-path-no-run-takes-2026-10-26.md).
+bb_placeholder='BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"'
+# fill_base <block> <branch> — the block with its BASE_BRANCH placeholder filled.
+fill_base() {
+    local filled="BASE_BRANCH=\"$2\""
+    [[ "$1" == *"$bb_placeholder"* ]] || { echo "FATAL: a block lost its stacked BASE_BRANCH placeholder" >&2; return 1; }
+    printf '%s' "${1//"$bb_placeholder"/$filled}"
+}
+[[ "$scope_block" == *"$bb_placeholder"* ]] || fatal "scope block has no stacked BASE_BRANCH placeholder (#606)"
+scope_block_template="$scope_block"
+scope_block="$(fill_base "$scope_block_template" "")" || fatal "could not fill the scope block's BASE_BRANCH placeholder"
+
+# fenced_with <file> <needle> — the first fenced block in <file> whose body holds
+# <needle>, whole and de-indented, with the sidecar.sh placeholder pointed at the
+# canonical script.
+fenced_with() {
+    awk -v needle="$2" '
+        /^[[:space:]]*```/ {
+            if (inblock) { if (found) { printf "%s", buf; exit } inblock = 0; next }
+            inblock = 1; buf = ""; found = 0; next
+        }
+        inblock { line = $0; sub(/^[[:space:]]*/, "", line); buf = buf line "\n"; if (index($0, needle)) found = 1 }
+    ' "$1" | sed "s|<this skill's directory>/references/sidecar.sh|$sidecar_sh|"
+}
+
+# Phase 1 step 3's block (#606): the base and the branch's diff against it.
+# shellcheck disable=SC2016  # the needle is the skill's literal text
+step3_block="$(fenced_with "$premerge_skill" 'git log --oneline "$BASE_REF..HEAD"')"
+[[ "$step3_block" == *"$sidecar_sh"* ]] || fatal "no Phase 1 step 3 block found in $premerge_skill"
+[[ "$step3_block" == *"$bb_placeholder"* ]] || fatal "Phase 1 step 3's block has no stacked BASE_BRANCH placeholder (#606)"
+
 # The round-count block from /fix-findings' next-step menu, whole: the fence
 # that holds the RANGE line, through its closing fence. Its github arm counts
 # Fix-Findings-Run lines and its sidecar arm counts fixrun records (#585).
@@ -162,15 +197,15 @@ rounds_block="$(printf '%s\n' "$rounds_block" | sed 's/^W="<the slice[^"]*>"$/W=
 # shellcheck disable=SC2016
 [[ "$rounds_block" == *'W="${ROUNDS_W:-}"'* ]] || fatal "the round-count block's W= placeholder was not substituted"
 
-# The fold block from Phase 4's handoff (#566): from its BASE_REF guard to the
-# `fi` that closes the abort arm. Run in section 11 rather than restated, so a
-# rewrite that rebases onto the base's tip instead of the fork point fails there.
-fold_block="$(awk '
-    /^: "\$\{BASE_REF:\?derive it with the Phase 1 step 3 block/ { on = 1 }
-    on { print }
-    on && /^fi$/ { exit }
-' "$premerge_skill")"
-[[ "$fold_block" == *'git rebase -q -i --autosquash'* ]] || fatal "no fold block found in $premerge_skill"
+# The fold block from Phase 4's handoff (#566), whole. Run in section 11 rather
+# than restated, so a rewrite that rebases onto the base's tip instead of the
+# fork point fails there. It computes its own base (#606), so it runs with no
+# BASE_REF in its environment, as in the fresh shell an agent gives it.
+fold_block_template="$(fenced_with "$premerge_skill" 'git rebase -q -i --autosquash')"
+[[ "$fold_block_template" == *"$sidecar_sh"* ]] || fatal "no fold block found in $premerge_skill, or it does not ask sidecar.sh for its base"
+[[ "$fold_block_template" == *"$bb_placeholder"* ]] || fatal "the fold block has no stacked BASE_BRANCH placeholder (#606)"
+# run_fold <repo> [stacked branch] — the fold, in a shell with no BASE_REF.
+run_fold() { (cd "$1" && env -u BASE_REF bash -c "$(fill_base "$fold_block_template" "${2:-}")" 2>&1); }
 
 # The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
 # out of its list item and whole, from its comment to the line that prints the
@@ -310,14 +345,14 @@ before_count="$(git -C "$repo" rev-list --count HEAD)"
 assert_fixture_committed "$repo" "fixture post-stamp commits" "$before_count" 2 three.txt four.txt
 head_sha="$(git -C "$repo" rev-parse HEAD)"
 
-# run_scope <body> — runs the extracted block in the fixture with BASE_REF=main
+# run_scope <body> — runs the extracted block in the fixture, with no BASE_REF preset,
 # and prints "<scope line>|<files the diff --stat names, sorted, space-joined>".
 run_scope() {
     local body="$1" out files scope
     : > "$GH_STUB_ARGV_LOG"
     : > "$GH_STUB_ARGV_MISS_LOG"
     : > "$GIT_STUB_ARGV_LOG"
-    out="$(cd "$repo" && GH_STUB_BODY="$body" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    out="$(cd "$repo" && GH_STUB_BODY="$body" env -u BASE_REF bash -c "$scope_block" 2>&1)"
     # Exposed for callers that need the raw combined stdout+stderr rather than
     # the parsed "<scope>|<files>" pair (#348 review, finding 5's stderr-noise
     # assertion below).
@@ -561,7 +596,7 @@ run_scope2() {
     local out files scope
     : > "$GH_STUB_ARGV_LOG"
     : > "$GIT_STUB_ARGV_LOG"
-    out="$(cd "$repo2" && GH_STUB_BODY="$(stamped_body "$first_sha2")" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    out="$(cd "$repo2" && GH_STUB_BODY="$(stamped_body "$first_sha2")" env -u BASE_REF bash -c "$scope_block" 2>&1)"
     LAST_SCOPE_RAW="$out"
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -700,6 +735,73 @@ assert_eq "2" "$(run_rounds_slices "")" "on the sidecar backend a trailer line i
     || fatal "fixrun record for an off-branch SHA failed"
 assert_eq "2" "$(run_rounds_slices "")" "a record whose commit is not on the branch (a fold rewrote it) is not counted"
 
+# --- 9c. A stacked slice is measured against its sibling (#606) --------------
+# A stacked PR targets the sibling slice's branch, so step 3's diff and step 4's
+# scope must start there, not at the base: measured from main, the review would
+# re-read the sibling's commits as this slice's. Each block runs in a shell with
+# no BASE_REF, and the sibling reaches it only through its placeholder.
+section "stacked slice: step 3 and step 4 measure from the sibling branch named in their placeholder"
+repo_stack="$sandbox/repo-stack"
+mkdir -p "$repo_stack"
+(
+    cd "$repo_stack" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c slice-1
+    printf 'sibling\n' > s1.txt
+    git add s1.txt && git commit -q -m 'slice 1: sibling'
+    git switch -q -c feature
+    printf 'f1\n' > f1.txt
+    git add f1.txt && git commit -q -m 'slice 2: f1'
+    printf 'f2\n' > f2.txt
+    git add f2.txt && git commit -q -m 'slice 2: f2'
+)
+assert_fixture_committed "$repo_stack" "stacked fixture" 0 4 base.txt s1.txt f1.txt f2.txt
+# stat_files <output> — the files a --stat names, sorted, space-joined.
+stat_files() { printf '%s\n' "$1" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//'; }
+run_step3() { (cd "$repo_stack" && env -u BASE_REF -u BASE_BRANCH bash -c "$(fill_base "$step3_block" "$1")" 2>&1); }
+stack3="$(run_step3 slice-1)"
+assert_eq "f1.txt f2.txt" "$(stat_files "$stack3")" "step 3, stacked on slice-1: the diff names only this slice's files"
+assert_eq 2 "$(printf '%s\n' "$stack3" | grep -cE '^[0-9a-f]{7,} slice 2: ' || true)" "step 3, stacked on slice-1: the log lists only this slice's two commits"
+assert_eq "f1.txt f2.txt s1.txt" "$(stat_files "$(run_step3 "")")" "control: step 3 with an empty placeholder measures from main, sibling included"
+git -C "$repo_stack" update-ref refs/remotes/origin/slice-1 slice-1
+git -C "$repo_stack" update-ref refs/remotes/origin/main main
+git -C "$repo_stack" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+assert_eq "f1.txt f2.txt" "$(stat_files "$(run_step3 slice-1)")" "step 3, stacked, with origin/slice-1 present: still only this slice's files"
+stack3="$(run_step3 no-such-sibling)" && rc=0 || rc=$?
+[[ "$rc" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "step 3, stacked on a branch that does not resolve: the block stops"
+assert_eq "" "$(stat_files "$stack3")" "step 3, stacked on a branch that does not resolve: it measures nothing"
+run_scope_stack() {
+    local out
+    out="$(cd "$repo_stack" && GH_STUB_BODY="" env -u BASE_REF -u BASE_BRANCH bash -c "$(fill_base "$scope_block_template" "$1")" 2>&1)"
+    printf '%s|%s' "$(printf '%s\n' "$out" | grep '^review scope:' || true)" "$(stat_files "$out")"
+}
+(cd "$repo_stack" && git switch -q feature)
+assert_eq "review scope: whole branch, from origin/slice-1|f1.txt f2.txt" "$(run_scope_stack slice-1)" \
+    "step 4, stacked on slice-1: the whole-branch scope starts at the sibling"
+assert_eq "review scope: whole branch, from origin/main|f1.txt f2.txt s1.txt" "$(run_scope_stack "")" \
+    "control: step 4 with an empty placeholder starts at the base"
+
+# The fold, stacked: it rebases onto the fork point with the sibling, in a shell
+# that has a stale BASE_REF it must not read.
+(
+    cd "$repo_stack" || exit 1
+    printf 'f1, fixed\n' > f1.txt
+    git add f1.txt && git commit -q --fixup=HEAD~1 -m 'fix f1'
+)
+sibling_tip="$(git -C "$repo_stack" rev-parse slice-1)"
+stack_fold="$(cd "$repo_stack" && BASE_REF=origin/nope bash -c "$(fill_base "$fold_block_template" slice-1)" 2>&1)"
+case "$stack_fold" in
+    *"folded: tree unchanged"*) assert_eq ok ok "the fold, stacked on slice-1, in a shell with a stale BASE_REF: it folds" ;;
+    *) assert_eq "folded: tree unchanged" "$stack_fold" "the fold, stacked on slice-1, in a shell with a stale BASE_REF: it folds" ;;
+esac
+assert_eq "2 $sibling_tip" "$(git -C "$repo_stack" rev-list --count slice-1..HEAD) $(git -C "$repo_stack" merge-base slice-1 HEAD)" \
+    "the stacked fold leaves the sibling's commits as they were and this slice's two commits on top"
+
 # --- 10. A failed backend -----------------------------------------------------
 
 # #530: `backend stamp` that exits nonzero prints nothing. A block written as
@@ -716,7 +818,7 @@ printf '{"keys": [' > "$broken_root/broken/sidecar.json"
 assert_eq 1 "$?" "fixture precondition: backend stamp exits 1 under the broken root"
 : > "$GH_STUB_ARGV_LOG"
 failed_out="$(cd "$repo" && SKILL_KIT_SIDECAR_ROOT="$broken_root" GH_STUB_BODY="<!-- reviewed-at: $stamp_sha -->" \
-    BASE_REF=main bash -c "$scope_block" 2>&1)"
+    env -u BASE_REF bash -c "$scope_block" 2>&1)"
 failed_rc=$?
 assert_eq 1 "$failed_rc" "failed backend: the scope block exits 1"
 assert_eq "" "$(printf '%s\n' "$failed_out" | grep '^review scope:' || true)" \
@@ -788,9 +890,9 @@ before_count=0
 assert_fixture_committed "$repo3" "fold fixture setup" "$before_count" 4 base.txt one.txt two.txt
 reviewed_sha3="$(git -C "$repo3" rev-parse HEAD)"   # the re-run stamped the fixup head
 # The base moved after the fork, so a fold onto main's tip would change the tree.
-fold_out="$(cd "$repo3" && BASE_REF=main bash -c "$fold_block" 2>&1)"
+fold_out="$(run_fold "$repo3")"
 case "$fold_out" in
-    folded:*) assert_eq ok ok "the documented fold block reports the fold" ;;
+    *"folded: "*) assert_eq ok ok "the documented fold block reports the fold" ;;
     *) assert_eq "folded: ..." "$fold_out" "the documented fold block reports the fold" ;;
 esac
 assert_eq "2" "$(git -C "$repo3" rev-list --count main..HEAD)" \
@@ -805,7 +907,7 @@ assert_eq "" "$(git -C "$repo3" log --format=%B main..HEAD | grep 'Fix-Findings-
 run_scope3() {
     local out files scope
     : > "$GH_STUB_ARGV_LOG"
-    out="$(cd "$repo3" && GH_STUB_BODY="$(stamped_body "$1")" BASE_REF=main bash -c "$scope_block" 2>&1)"
+    out="$(cd "$repo3" && GH_STUB_BODY="$(stamped_body "$1")" env -u BASE_REF bash -c "$scope_block" 2>&1)"
     LAST_SCOPE_RAW="$out"
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(printf '%s\n' "$out" | grep -oE '^ [a-z0-9]+\.txt' | tr -d ' ' | sort | tr '\n' ' ' | sed 's/ $//')"
@@ -844,7 +946,7 @@ first_commit3="${branch_commits3%%$'\n'*}"
     git add one.txt && git commit -q --fixup="$first_commit3"
 )
 conflict_head="$(git -C "$repo3" rev-parse HEAD)"
-conflict_out="$(cd "$repo3" && BASE_REF=main bash -c "$fold_block" 2>&1)"
+conflict_out="$(run_fold "$repo3")"
 case "$conflict_out" in
     *"fold aborted"*) assert_eq ok ok "a conflicting fixup: the fold block names the abort" ;;
     *) assert_eq "fold aborted ..." "$conflict_out" "a conflicting fixup: the fold block names the abort" ;;
@@ -995,8 +1097,8 @@ assert_eq "feature" "$(git -C "$repo6" branch --show-current)" "the trial leaves
 assert_eq "$worktrees_before" "$(git -C "$repo6" worktree list | grep -c .)" "the trial registers no worktree"
 assert_eq "" "$(git -C "$repo6" status --porcelain)" "the trial leaves the working tree clean"
 # The fold /pre-merge offers now succeeds where it would have aborted.
-case "$(cd "$repo6" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
-    folded:*) assert_eq ok ok "after the demotion, /pre-merge's fold applies" ;;
+case "$(run_fold "$repo6")" in
+    *"folded: "*) assert_eq ok ok "after the demotion, /pre-merge's fold applies" ;;
     *) assert_eq "folded: ..." "aborted" "after the demotion, /pre-merge's fold applies" ;;
 esac
 
@@ -1032,8 +1134,8 @@ head9="$(git -C "$repo9" rev-parse HEAD)"
 assert_eq "fold trial: clean" "$(trial_in "$repo9")" \
     "a base that moved after the fork: the trial still reports clean"
 assert_eq "$head9" "$(git -C "$repo9" rev-parse HEAD)" "a base that moved after the fork: the fixup is not demoted"
-case "$(cd "$repo9" && BASE_REF=main bash -c "$fold_block" 2>&1)" in
-    folded:*) assert_eq ok ok "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
+case "$(run_fold "$repo9")" in
+    *"folded: "*) assert_eq ok ok "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
     *) assert_eq "folded: ..." "aborted" "a base that moved after the fork: /pre-merge's fold applies, as the trial said" ;;
 esac
 

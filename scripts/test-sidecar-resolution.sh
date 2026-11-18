@@ -763,6 +763,7 @@ contains "/pre-merge step 3 takes BASE_REF from the verb" 'BASE_REF="$(bash "$SC
 # shellcheck disable=SC2016
 contains "/pre-merge step 3 takes BASE_BRANCH from the verb" 'BASE_BRANCH="$(bash "$SC" base-ref --name)"' "$pm3"
 pm3="${pm3//<this skill\'s directory>\/references\/sidecar.sh/$SC}"
+pm3="${pm3//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"\"}"
 pm3out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$pm3"' >/dev/null; printf "%s|%s" "$BASE_BRANCH" "$BASE_REF"' 2>/dev/null)"
 check "/pre-merge step 3, run, takes the declared base for both forms" "develop|origin/develop" "$pm3out"
 

@@ -91,13 +91,20 @@ If you are running on a branch other than the user's working branch and `--pr` w
 3. **Detect the base branch and assess the diff:**
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
    # $BASE_REF is the range endpoint; $BASE_BRANCH is the name `--base` takes.
-   BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
-   BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
+   if [ -n "$BASE_BRANCH" ]; then
+     if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+     elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+     else echo "neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves: not guessing a base" >&2; exit 1; fi
+   else
+     BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+     BASE_BRANCH="$(bash "$SC" base-ref --name)" || { echo "base-ref --name failed: not guessing a base" >&2; exit 1; }
+   fi
    git diff "$BASE_REF...HEAD" --stat
    git log --oneline "$BASE_REF..HEAD"
    ```
-   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, no variable set here reaches a later block: put the sibling slice's branch name (the upstream the PR will target) in the `BASE_BRANCH=` placeholder of each block that consumes it (the Phase 2 block for your backend and the Phase 4 stamp block). If no diff from the base, tell the user there's nothing to review and stop.
+   `base-ref` prints the sidecar's declared `base_ref` when there is one, and otherwise the `origin/HEAD` default. On a nonzero exit it prints no ref: stop and relay its stderr rather than guessing a base. For a stacked-PR slice, put the sibling slice's branch name (the upstream the PR will target) in the `BASE_BRANCH=` placeholder of every block that takes one: this block, step 4's scope block, the Phase 2 block for your backend, the Phase 4 stamp block, and the fold block in § Handoff. No variable set here reaches a later block, because each block runs in its own shell. If no diff from the base, tell the user there's nothing to review and stop.
 
    **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`. When `origin/<base>` does not resolve, `base-ref` measures against the local branch and says so on stderr; if the counts look wrong, `git fetch` and re-run.
 
@@ -113,9 +120,18 @@ If you are running on a branch other than the user's working branch and `--pr` w
      *) echo "scope aborted: sidecar.sh backend stamp failed; not guessing the github path" >&2; exit 1 ;;
    esac
    W="<the W-<n> step 2 named, or empty on the github backend>"
+   BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
    BASE_REF="$(bash "$SC" base-ref)" || { echo "scope aborted: sidecar.sh base-ref failed" >&2; exit 1; }
    RANGE="$(bash "$SC" range ${W:+"$W"})" || { echo "scope aborted: sidecar.sh range failed" >&2; exit 1; }
    SLICE_FROM="${RANGE%%..*}"
+   if [ -n "$BASE_BRANCH" ]; then
+     # range measures from the declared base; a stacked slice starts at its sibling instead.
+     if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then STACKED_REF="origin/$BASE_BRANCH"
+     elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then STACKED_REF="$BASE_BRANCH"
+     else echo "scope aborted: neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves" >&2; exit 1; fi
+     [ "$SLICE_FROM" != "$BASE_REF" ] || SLICE_FROM="$STACKED_REF"
+     BASE_REF="$STACKED_REF"
+   fi
    SCOPE_FROM="$SLICE_FROM"
    if [ -n "$REVIEWED_SHA" ] \
      && git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
@@ -625,8 +641,7 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 # 4's fenced block and does not survive here. Unset, the range below makes git
 # diff HEAD against itself and print nothing, and the guard below would
 # misread that empty diff as "delta is a /compound entry" on a delta that was
-# never read. Same failure BASE_REF's guard at review-checklist.md:114 exists
-# to catch.
+# never read.
 : "${SCOPE_FROM:?resolve it with the Phase 1 step 4 scope-decision block before running this}"
 # Capture and test for empty rather than asking `grep -qv` for the verdict.
 # Two reasons, and the second is why this shape is not optional: `grep -q` exits
@@ -838,14 +853,23 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 
 **While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Once Phase 2 has run, offer the menu above.
 
-**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in `git log --format=%s "$BASE_REF..HEAD"` starts with `fixup! `, and the branch is unshared (Phase 2's test), add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. On a pick, run:
+**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and the branch is unshared (Phase 2's test), add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. On a pick, run:
 
 ```bash
-: "${BASE_REF:?derive it with the Phase 1 step 3 block before running this}"
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 1 step 3 was given; an earlier block's shell variable does not reach this one
+fold_abort() { echo "fold aborted: ${1}; the branch is as it was" >&2; exit 1; }
+if [ -n "$BASE_BRANCH" ]; then
+  if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+  elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+  else fold_abort "neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves"; fi
+else
+  BASE_REF=$(bash "$SC" base-ref) || fold_abort "sidecar.sh base-ref failed"
+fi
 # Rebase onto the branch's own fork point, not the base's tip: a base that moved
 # since the branch forked would change the tree, and the re-run would then read
 # the fold as new content.
-FORK_POINT=$(git merge-base "$BASE_REF" HEAD)
+FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || fold_abort "no merge base with $BASE_REF"
 TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
 if ! GIT_SEQUENCE_EDITOR=: git rebase -q -i --autosquash "$FORK_POINT"; then
   git rebase --abort

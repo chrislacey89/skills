@@ -110,10 +110,17 @@ For each `Produces` entry in the PR's slice issue:
 
 For each `Consumes` entry referencing an already-closed upstream slice, run the same check against the upstream's declared Produces. If the upstream export is missing or shape-drifted, note it and flag the upstream issue for correction.
 
-**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header. In author-mode and loop-mode, run the same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it, with `$BASE_REF` from `bash "$SC" base-ref`. The first line refuses to run without it, because an empty left endpoint makes git diff `HEAD` against itself and print nothing, which reads as a clean pass:
+**For deletion orphan surfaces (when this PR's diff, or that of any consumed upstream slice, deletes or renames a module):** Read the trigger off the diff, not off a section header. In author-mode and loop-mode, run the same command as `/execute` Step 4's Tier 1 rung, which is the canonical statement of it. The block asks for its own base because it runs in its own shell, where no earlier block's `$BASE_REF` exists; for a stacked PR, fill its `BASE_BRANCH=` placeholder as `SKILL.md` Phase 1 step 3 says:
 
 ```bash
-: "${BASE_REF:?set it from sidecar.sh base-ref before running this}"
+SC="<this skill's directory>/references/sidecar.sh"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # an earlier block's shell variable does not reach this one
+BASE_REF="$(bash "$SC" base-ref)" || { echo "deletion check aborted: sidecar.sh base-ref failed" >&2; exit 1; }
+if [ -n "$BASE_BRANCH" ]; then
+  if git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="origin/$BASE_BRANCH"
+  elif git rev-parse --verify -q "$BASE_BRANCH^{commit}" >/dev/null; then BASE_REF="$BASE_BRANCH"
+  else echo "deletion check aborted: neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves" >&2; exit 1; fi
+fi
 git diff --diff-filter=DR --name-status "$BASE_REF...HEAD"
 ```
 
