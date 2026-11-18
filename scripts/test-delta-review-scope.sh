@@ -1607,7 +1607,22 @@ git init -q -b main "$repo5"
     git switch -q -c feature
 )
 run_shared() { (cd "$repo5" && bash -c "$shared_block" 2>/dev/null); }
-assert_eq "shared: no" "$(run_shared)" "unpushed branch, origin reachable: unshared"
+# The same block under zsh (#574), the shell an agent runs it in on macOS:
+# each verdict below that names "zsh" is checked in both shells.
+have_zsh=no
+if command -v zsh >/dev/null 2>&1; then
+    have_zsh=yes
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the shared-branch block ran under zsh (CI is set, so a missing zsh fails)"
+else
+    printf '  SKIP zsh is not on PATH, so the shared-branch block runs under bash only\n'
+fi
+# shared_both <expected> <label> — the verdict in bash, and in zsh when present.
+shared_both() {
+    assert_eq "$1" "$(run_shared)" "$2"
+    [ "$have_zsh" = no ] || assert_eq "$1" "$(cd "$repo5" && zsh -f -c "$shared_block" 2>/dev/null)" "zsh: $2"
+}
+shared_both "shared: no" "unpushed branch, origin reachable: unshared"
 git -C "$repo5" push -q origin feature:alice/feature 2>/dev/null
 assert_eq "shared: no" "$(run_shared)" "origin holds alice/feature, not feature: an exact refs/heads/ match only, so unshared"
 # ls-remote matches a pattern against the tail of a ref name, so even the full
@@ -1615,14 +1630,14 @@ assert_eq "shared: no" "$(run_shared)" "origin holds alice/feature, not feature:
 git -C "$repo5" push -q origin feature:x/refs/heads/feature 2>/dev/null
 assert_eq "refs/heads/x/refs/heads/feature" "$(git -C "$repo5" ls-remote --heads origin refs/heads/feature | cut -f2)" \
     "fixture precondition: ls-remote's own pattern matches refs/heads/x/refs/heads/feature"
-assert_eq "shared: no" "$(run_shared)" "origin holds x/refs/heads/feature, which ls-remote's pattern matches: the exact match still says unshared"
+shared_both "shared: no" "origin holds x/refs/heads/feature, which ls-remote's pattern matches: the exact match still says unshared"
 git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
-assert_eq "shared: yes" "$(run_shared)" "origin cannot be reached: ls-remote fails, so shared"
+shared_both "shared: yes" "origin cannot be reached: ls-remote fails, so shared"
 git -C "$repo5" remote set-url origin "$bare5"
 git -C "$repo5" push -q fork feature 2>/dev/null
 assert_eq "shared: no" "$(run_shared)" "control: pushed only to fork, and nothing says fork is the push remote: origin is asked, unshared"
 git -C "$repo5" config remote.pushDefault fork
-assert_eq "shared: yes" "$(run_shared)" "remote.pushDefault is fork, which holds the branch: shared"
+shared_both "shared: yes" "remote.pushDefault is fork, which holds the branch: shared"
 git -C "$repo5" config branch.feature.pushRemote origin
 assert_eq "shared: no" "$(run_shared)" "branch.feature.pushRemote is origin, which outranks remote.pushDefault: unshared"
 git -C "$repo5" config --unset branch.feature.pushRemote
@@ -1632,7 +1647,7 @@ assert_eq "shared: yes" "$(run_shared)" "branch.feature.remote is fork, which ho
 git -C "$repo5" config --unset branch.feature.remote
 git -C "$repo5" push -q origin feature 2>/dev/null
 assert_eq "" "$(git -C "$repo5" rev-parse -q --verify '@{u}' 2>/dev/null)" "plain push: still no upstream"
-assert_eq "shared: yes" "$(run_shared)" "plain push to origin without -u: shared"
+shared_both "shared: yes" "plain push to origin without -u: shared"
 git -C "$repo5" branch -q --set-upstream-to=origin/feature
 git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
 assert_eq "shared: yes" "$(run_shared)" "an upstream is set: shared, whatever the remote answers"
