@@ -316,6 +316,21 @@ else
     bad "the After-state table and the Step 3 report block disagree on vocabulary" "$mismatches"
 fi
 
+# The `fixed` verdict's named field for skipped leftovers (#686 box 3): the
+# fixer's report rule names the field, and the Step 3 report block prints it.
+# The field name is read off the rule, so renaming it in one place reddens this.
+report_rule="$(awk '/^The fixer reports back:/ { on = 1 } on { print } on && /Nothing else\./ { exit }' "$fix_findings_skill")"
+[ -n "$report_rule" ] || fatal "no 'The fixer reports back:' paragraph found in $fix_findings_skill"
+# shellcheck disable=SC2016  # the backticks are literal markdown being matched
+leftover_field="$(printf '%s\n' "$report_rule" | { grep -oE '`[a-z]+:` field' || true; } | head -1 | sed -E 's/^`([a-z]+:)` field$/\1/')"
+if [ -z "$leftover_field" ]; then
+    bad "the fixer's report rule names a field for skipped leftovers" "no \`name:\` field in: $report_rule"
+elif grep -qE "^ +$leftover_field " <<<"$real_block_text"; then
+    ok "the fixer's report rule names a $leftover_field field, and the Step 3 report block prints one"
+else
+    bad "the Step 3 report block prints no $leftover_field line, though the fixer's report rule names that field"
+fi
+
 # ============================================================================
 section "2. Every restated-claims.md § *Section* citation names a real heading"
 # ============================================================================

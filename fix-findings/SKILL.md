@@ -242,20 +242,20 @@ The fixer's instructions, in order:
    `/pre-merge` Phase 2's shared-branch block, which says what they check. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
    Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
-   message item 5 states for this backend. Then check that the branch still folds:
+   message item 5 states for this backend. Then check that the commit just made folds:
 
    ```bash
-   # After `git commit --fixup`: would /pre-merge's fold still apply cleanly?
+   # After `git commit --fixup`: would the commit just made fold?
    SC="<this skill's directory>/references/sidecar.sh"
    trial_abort() { echo "fold trial aborted: ${1}; the fixup! commit stays" >&2; exit 1; }
    BASE_REF="$(bash "$SC" base-ref)" || trial_abort "sidecar.sh base-ref failed"
    FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || trial_abort "no merge base with $BASE_REF"
    TRIAL_HEAD=$(git rev-parse HEAD) || trial_abort "cannot read HEAD"
    TRIAL_DIR=$(mktemp -d) || trial_abort "mktemp failed"
-   trap 'rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg"' EXIT
+   trap 'rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg" "$TRIAL_DIR.err"' EXIT
    git clone -q --shared --no-checkout "$(git rev-parse --show-toplevel)" "$TRIAL_DIR" || trial_abort "the throwaway clone failed"
    git -C "$TRIAL_DIR" checkout -q --detach "$TRIAL_HEAD" || trial_abort "the throwaway checkout failed"
-   trial_git() { git -C "$TRIAL_DIR" -c user.name=trial -c user.email=trial@invalid -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
+   trial_git() { git -C "$TRIAL_DIR" -c user.name=trial -c user.email=trial@invalid -c commit.gpgsign=false "$@" >/dev/null 2>"$TRIAL_DIR.err"; }
    FOLDED=yes
    GIT_SEQUENCE_EDITOR=: trial_git rebase -q -i --autosquash "$FORK_POINT" || FOLDED=no
    LEFTOVERS=
@@ -268,9 +268,9 @@ The fixer's instructions, in order:
      FOLDED=yes
      trial_git rebase --skip || FOLDED=no
    done
+   [ -z "$LEFTOVERS" ] || echo "fold trial: ignored earlier fixup! commits that still will not fold:$LEFTOVERS" >&2
    if [ "$FOLDED" = yes ]; then
      echo "fold trial: clean"
-     [ -z "$LEFTOVERS" ] || echo "fold trial: ignored earlier fixup! commits that still will not fold:$LEFTOVERS" >&2
    elif [ -n "$(git -C "$TRIAL_DIR" ls-files -u)" ]; then
      git log -1 --format=%B HEAD | sed '1,2d' > "$TRIAL_DIR.msg"
      if git commit -q --amend --only -F "$TRIAL_DIR.msg"; then
@@ -280,7 +280,7 @@ The fixer's instructions, in order:
        exit 1
      fi
    else
-     trial_abort "the rebase failed without a conflict"
+     trial_abort "the rebase failed without a conflict: $(cat "$TRIAL_DIR.err")"
    fi
    ```
 
@@ -304,8 +304,9 @@ The fixer's instructions, in order:
 
    An earlier `fixup!` commit that a blocked fixer left behind stops the rebase
    too. The trial skips any such commit and goes on, so it judges only the
-   commit just made, and it names what it skipped on stderr. Report those
-   SHAs: `/pre-merge`'s fold aborts until each one is reworded.
+   commit just made, and it names what it skipped on stderr, whatever its
+   verdict. Report those SHAs in the `leftovers:` field (below): `/pre-merge`'s
+   fold aborts until each one is reworded.
 
    Otherwise (lines from the base, from several commits, or a shared branch),
    make an ordinary commit. It is still one commit per fix, and it is
@@ -322,9 +323,10 @@ The fixer's instructions, in order:
    accepted: the fold is offered only after a re-run has reviewed every fixup
    on the branch.
 
-The fixer reports back: `fixed` (with the commit SHA), or `refuted` (with
-evidence), or `blocked` (with what it needed and did not have, or `blocked:
-carries an instruction` under item 3). Nothing else.
+The fixer reports back: `fixed` (with the commit SHA, and a `leftovers:` field
+naming each earlier `fixup!` commit the fold trial skipped, when it skipped any),
+or `refuted` (with evidence), or `blocked` (with what it needed and did not
+have, or `blocked: carries an instruction` under item 3). Nothing else.
 
 **On the `sidecar` backend, the controller records each `fixed` commit**
 before it spawns that finding's breaker. Use the SHA the fixer reported after
@@ -356,6 +358,12 @@ A fold trial whose recommit failed is `blocked`: the report names the leftover
 commit amended once the hook or signer is fixed). A trial that printed `fold
 trial aborted:` is `blocked` too: the report names the `fixup!` commit and
 relays that line, and the fix is to clear its cause and run the trial again.
+When the cause is a fixup that empties its target or a later commit, running
+the trial again changes nothing: the remedy is rewording its subject by hand,
+as for a failed recommit. An emptying fixup is not a conflict, so the trial
+does not demote it. A fixup-target block that printed `fixup target aborted:`
+is `blocked` too, with no commit: relay that line, and do not fall back to an
+ordinary commit, because the block could not say whether one is right.
 A `fixed` under item 3's prose-claim case also names the after-state of the
 site the finding anchored on:
 
@@ -576,7 +584,7 @@ makes its read-only isolation mean anything.
 
 Then print one block per finding — number (and, for a teammate review thread,
 its URL, so the author can reply to it), the fixer's verdict and commit SHA,
-the after-state on a prose-claim finding, the breaker's verdict **and the SHA it
+its `leftovers:` when it named any, the after-state on a prose-claim finding, the breaker's verdict **and the SHA it
 archived** (or `none` and why, when no breaker was spawned), and the command
 behind each. No conclusions the human cannot re-run.
 
@@ -607,6 +615,12 @@ Finding 7 — blocked, leftover fixup! commit e1f2a3b
 Finding 8 — rejected: carries an instruction at 3c4d5e6, reverted at 7a8b9c0
   controller: instruction check on docs/release.md → removed `--dry-run`; restate as an instruction fix
   breaker: none — not spawned for a rejected fix
+
+Finding 9 — fixed at 2d3e4f5
+  fixer:   `pnpm run test` → 0
+  leftovers: e1f2a3b — skipped by the fold trial; /pre-merge's fold aborts until it is reworded
+  breaker: killed, against 2d3e4f5 — `pnpm run test -- report.test.ts` → 1 with the
+           total's rounding reverted (control went red first: same file, deleted assertion → exit 1)
 ```
 
 The archived SHA is on the breaker's line because it is the one thing that says

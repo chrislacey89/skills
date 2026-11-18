@@ -53,6 +53,30 @@ assert_eq() {
 section() { printf '\n== %s\n' "$1"; }
 fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 1; }
 
+# run_bounded <seconds> <command...> — runs the command with stdout and stderr
+# combined, and kills it after <seconds>, exiting 124 as timeout(1) does.
+# The watcher polls once a second and exits as soon as the command does, so it
+# leaves no sleep behind holding the caller's command substitution open.
+run_bounded() {
+    local secs="$1" pid watcher rc; shift
+    "$@" 2>&1 &
+    pid=$!
+    (
+        i=0
+        while [ "$i" -lt "$secs" ]; do
+            sleep 1
+            kill -0 "$pid" 2>/dev/null || exit 0
+            i=$((i + 1))
+        done
+        kill -9 "$pid" 2>/dev/null
+        exit 1
+    ) >/dev/null 2>&1 &
+    watcher=$!
+    wait "$pid"; rc=$?
+    wait "$watcher" || return 124
+    return "$rc"
+}
+
 # assert_fixture_committed <repo> <label> <before_count> <expected_new_commits> <file>...
 #
 # Checks the RESULT of a fixture-building subshell rather than the subshell's
@@ -235,7 +259,7 @@ fixup_target_block="$(printf '%s\n' "$fixup_target_block" | sed -e 's/^FILE="<[^
 # closing fence. Section 12 runs it whole against a fixup that folds, one that
 # does not, and each failure that is not a conflict (#614).
 fold_trial_block="$(awk '
-    /^   # After `git commit --fixup`: would \/pre-merge.s fold still apply cleanly\?/ { on = 1 }
+    /^   # After `git commit --fixup`: would the commit just made fold\?/ { on = 1 }
     on && /^   ```$/ { exit }
     on { sub(/^   /, ""); print }
 ' "$fixfindings_skill")"
@@ -1316,16 +1340,40 @@ out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$signing_config" bas
 assert_eq "fold trial: clean" "$out10" "global signing with a failing signer: the trial still reports clean"
 assert_eq "$head10" "$(git -C "$repo10" rev-parse HEAD)" "global signing with a failing signer: the fixup is not demoted"
 
+# #686 box 11: the trial's own identity. The throwaway clone reads none of the
+# repository's config, so its rebase commits with the -c user.name/user.email
+# the block passes; without them a machine with no global identity aborts a
+# fixup that folds. useConfigOnly stops git guessing one from the host.
+no_identity_config="$sandbox/no-identity.gitconfig"
+printf '[user]\n\tuseConfigOnly = true\n' > "$no_identity_config"
+no_identity_env=(env -u BASE_REF -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL
+    GIT_CONFIG_GLOBAL="$no_identity_config" GIT_CONFIG_NOSYSTEM=1)
+id_probe="$sandbox/id-probe"
+git init -q "$id_probe"
+"${no_identity_env[@]}" git -C "$id_probe" commit -q --allow-empty -m probe 2>/dev/null && r=committed || r=refused
+assert_eq refused "$r" "the instrument: with no identity configured, a commit is refused"
+out10="$(cd "$repo10" && "${no_identity_env[@]}" bash -c "$fold_trial_block" 2>&1)"
+assert_eq "fold trial: clean" "$out10" "no identity anywhere: the trial's own identity still lets a clean fixup fold"
+assert_eq "$head10" "$(git -C "$repo10" rev-parse HEAD)" "no identity anywhere: the fixup is not demoted"
+
 section "fold trial: a rebase that fails without a conflict refuses (#614 item 1)"
 # A global pre-rebase hook refuses before anything is replayed.
 refusing_hooks="$sandbox/refusing-hooks"
 mkdir -p "$refusing_hooks"
-printf '#!/bin/sh\nexit 1\n' > "$refusing_hooks/pre-rebase"
+printf '#!/bin/sh\necho "pre-rebase: frozen until Friday" >&2\nexit 1\n' > "$refusing_hooks/pre-rebase"
 chmod +x "$refusing_hooks/pre-rebase"
 hooks_config="$sandbox/hooks.gitconfig"
 printf '[core]\n\thooksPath = %s\n' "$refusing_hooks" > "$hooks_config"
-out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$hooks_config" bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
+: > "$TRIAL_TMP_LOG"
+out10="$(cd "$repo10" && env -u BASE_REF GIT_CONFIG_GLOBAL="$hooks_config" PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--no-such-arg \
+    bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
 assert_refused "a refusing pre-rebase hook" "$repo10" "$head10" "$rc10" "$out10" "the rebase failed without a conflict"
+# #686 box 6: the rebase's own error reaches the report, so a hook's reason is not lost.
+case "$out10" in
+    *"frozen until Friday"*) assert_eq ok ok "a refusing pre-rebase hook: the abort relays the hook's message" ;;
+    *) assert_eq "the hook's message" "$out10" "a refusing pre-rebase hook: the abort relays the hook's message" ;;
+esac
+assert_trial_dir_gone "a refusing pre-rebase hook"
 
 # A fixup that undoes its target stops the rebase with nothing unmerged: the fold
 # aborts, but this is not a conflict either, so it goes to the human.
@@ -1411,12 +1459,16 @@ assert_eq 0 "$rc11" "a clean fixup after a leftover: the block exits 0"
 assert_eq "$clean11" "$(git -C "$repo11" rev-parse HEAD)" "a clean fixup after a leftover: it is not demoted"
 assert_eq "fixup! feature: two" "$(git -C "$repo11" log -1 --format=%s)" "a clean fixup after a leftover: the subject is still fixup!"
 case "$out11" in
-    "fold trial: clean"*"$leftover11"*) assert_eq ok ok "a clean fixup after a leftover: clean, and the leftover is named" ;;
+    *"$leftover11"*"fold trial: clean"*) assert_eq ok ok "a clean fixup after a leftover: clean, and the leftover is named" ;;
     *) assert_eq "clean, naming $leftover11" "$out11" "a clean fixup after a leftover: clean, and the leftover is named" ;;
 esac
 # A skip that cannot move on must not spin: an AFK fixer has no one to stop it.
-out11="$(cd "$repo11" && env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--skip \
-    bash -c "$fold_trial_block" 2>&1)" && rc11=0 || rc11=$?
+# Bounded (#686 box 13): a regression here spins, so it fails by name after a
+# minute instead of hanging pre-push and CI. macOS ships no `timeout`.
+out11="$(cd "$repo11" && run_bounded 60 env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--skip \
+    bash -c "$fold_trial_block")" && rc11=0 || rc11=$?
+[[ "$rc11" -ne 124 ]] && r=finished || r=timed-out
+assert_eq finished "$r" "a rebase --skip that fails: the block finishes within the bound"
 assert_refused "a rebase --skip that fails" "$repo11" "$clean11" "$rc11" "$out11" "rebase --skip did not move past"
 # The skip must judge the new commit, not wave everything through: a second
 # conflicting fixup after the leftover is still demoted, and the leftover stays.
@@ -1429,6 +1481,10 @@ rm "$repo11/.git/hooks/commit-msg"
 out11="$(trial_in "$repo11")" && rc11=0 || rc11=$?
 assert_eq 0 "$rc11" "a conflicting fixup after a leftover: the block exits 0"
 assert_eq "fix one again" "$(git -C "$repo11" log -1 --format=%s)" "a conflicting fixup after a leftover: it is still demoted"
+case "$out11" in
+    *"$leftover11"*) assert_eq ok ok "a conflicting fixup after a leftover: the demotion still names the leftover (#686 box 2)" ;;
+    *) assert_eq "a line naming $leftover11" "$out11" "a conflicting fixup after a leftover: the demotion still names the leftover (#686 box 2)" ;;
+esac
 assert_eq "fixup! feature: one" "$(git -C "$repo11" log -1 --format=%s "$leftover11")" "the leftover itself is not touched"
 
 section "fold trial: a conflict the fixup causes in a later commit still demotes"
@@ -1450,8 +1506,11 @@ assert_eq 0 "$rc13" "a later commit conflicts: the block exits 0"
 assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out13" "a later commit conflicts: the trial names the demotion"
 assert_eq "add three" "$(git -C "$repo13" log -1 --format=%s)" "a later commit conflicts: the fixup is demoted"
 
-section "fold trial: the block runs under zsh, the shell an agent has on macOS"
-if command -v zsh >/dev/null 2>&1; then
+section "fold trial and fixup target: the blocks run under zsh, the shell an agent has on macOS"
+# docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md:
+# the blocks run in zsh in a real session, so each path runs there too. A missing
+# zsh skips locally and fails when CI is set (#686 box 9).
+zsh_arms() {
     zsh_clean="$(cd "$repo10" && env -u BASE_REF zsh -f -c "$fold_trial_block" 2>&1)"
     assert_eq "fold trial: clean" "$zsh_clean" "zsh: a clean fixup reports clean"
     : > "$TRIAL_TMP_LOG"
@@ -1459,8 +1518,67 @@ if command -v zsh >/dev/null 2>&1; then
         zsh -f -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
     assert_refused "zsh, a failing clone" "$repo10" "$head10" "$rc10" "$zsh_out" "the throwaway clone failed"
     assert_trial_dir_gone "zsh, a failing clone"
+    # The conflict path: a fixup a later commit rewrote over is demoted.
+    local zc="$sandbox/zsh-conflict" zs="$sandbox/zsh-skip" zt="$sandbox/zsh-target" out rc
+    mkdir -p "$zc"
+    (
+        cd "$zc" || exit 1
+        git init -q -b main . && git config user.email t@example.com && git config user.name t
+        printf 'base\n' > base.txt && git add base.txt && git commit -q -m base
+        git switch -q -c feature
+        printf 'one\n' > one.txt && git add one.txt && git commit -q -m 'feature: one'
+        printf 'one, rewritten\n' > one.txt && git add one.txt && git commit -q -m 'feature: rewrite one'
+        printf 'one, fixed\n' > one.txt && git add one.txt && git commit -q --fixup=HEAD~1 -m 'fix one'
+    )
+    point_origin_at_main "$zc"
+    out="$(cd "$zc" && env -u BASE_REF zsh -f -c "$fold_trial_block" 2>&1)" && rc=0 || rc=$?
+    assert_eq "0 fold trial: would not fold; recommitted as an ordinary commit" "$rc $out" "zsh: a conflicting fixup is demoted"
+    assert_eq "fix one" "$(git -C "$zc" log -1 --format=%s)" "zsh: the demoted commit carries the fixer's subject"
+    # The skip path: a leftover that will not fold is skipped and named, and the
+    # clean fixup after it stays a fixup.
+    mkdir -p "$zs"
+    (
+        cd "$zs" || exit 1
+        git init -q -b main . && git config user.email t@example.com && git config user.name t
+        printf 'base\n' > base.txt && git add base.txt && git commit -q -m base
+        git switch -q -c feature
+        printf 'one\n' > one.txt && git add one.txt && git commit -q -m 'feature: one'
+        printf 'one, rewritten\n' > one.txt && git add one.txt && git commit -q -m 'feature: rewrite one'
+        printf 'two\n' > two.txt && git add two.txt && git commit -q -m 'feature: two'
+        printf 'one, fixed\n' > one.txt && git add one.txt && git commit -q --fixup=HEAD~2 -m 'fix one'
+        printf 'two, fixed\n' > two.txt && git add two.txt && git commit -q --fixup=HEAD~1 -m 'fix two'
+    )
+    point_origin_at_main "$zs"
+    local leftover_z head_z
+    leftover_z="$(git -C "$zs" rev-parse HEAD~1)"
+    head_z="$(git -C "$zs" rev-parse HEAD)"
+    out="$(cd "$zs" && run_bounded 60 env -u BASE_REF zsh -f -c "$fold_trial_block")" && rc=0 || rc=$?
+    case "$rc:$out" in
+        "0:"*"$leftover_z"*"fold trial: clean"*) assert_eq ok ok "zsh: a leftover is skipped and named, and the clean fixup reports clean" ;;
+        *) assert_eq "0:fold trial: clean ... $leftover_z" "$rc:$out" "zsh: a leftover is skipped and named, and the clean fixup reports clean" ;;
+    esac
+    assert_eq "$head_z" "$(git -C "$zs" rev-parse HEAD)" "zsh: the clean fixup after a leftover is not demoted"
+    # The fixup-target block: one commit's line is its target, a base line has none.
+    mkdir -p "$zt"
+    (
+        cd "$zt" || exit 1
+        git init -q -b main . && git config user.email t@example.com && git config user.name t
+        printf 'a\nb\n' > f.txt && git add f.txt && git commit -q -m base
+        git switch -q -c feature
+        printf 'a\nB\n' > f.txt && git commit -q -am 'feature: change b'
+    )
+    point_origin_at_main "$zt"
+    out="$(cd "$zt" && env -u BASE_REF TARGET_FILE=f.txt TARGET_START=2 TARGET_END=2 zsh -f -c "$fixup_target_block" 2>/dev/null)"
+    assert_eq "FIXUP_TARGET=$(git -C "$zt" rev-parse HEAD)" "$out" "zsh: the fixup-target block names the one commit that wrote the line"
+    out="$(cd "$zt" && env -u BASE_REF TARGET_FILE=f.txt TARGET_START=1 TARGET_END=1 zsh -f -c "$fixup_target_block" 2>/dev/null)"
+    assert_eq "FIXUP_TARGET=" "$out" "zsh: a base line has no fixup target"
+}
+if command -v zsh >/dev/null 2>&1; then
+    zsh_arms
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the fold-trial and fixup-target blocks ran under zsh (CI is set, so a missing zsh fails)"
 else
-    printf '  skip zsh is not installed\n'
+    printf '  SKIP zsh is not on PATH, so the fold-trial and fixup-target blocks ran under bash only\n'
 fi
 
 # --- 13. "Unshared" means no upstream AND not on the push remote (#566, #572) --

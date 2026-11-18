@@ -814,10 +814,11 @@ verb_marker='BASE_REF="$(bash "$SC" base-ref)"'
 verb_sites="$(cd "$repo_root" && { grep -lF "$verb_marker" ./*/SKILL.md || true; } \
     | sed 's|^\./||' | sort | tr '\n' ' ' | sed 's/ $//')"
 verb_site_count="$(printf '%s\n' "$verb_sites" | tr ' ' '\n' | grep -c . || true)"
-# The floor is today's count: /pre-merge and /respond-to-review from #597, and
-# the five #598 converted. A drop below it means a site lost the assignment, or
-# the derivation above broke and every loop below is running on nothing.
-if [[ "$verb_site_count" -ge 7 ]]; then
+# The floor is today's count: /pre-merge and /respond-to-review from #597, the
+# five #598 converted, and /fix-findings, whose fixup-target and fold-trial
+# blocks ask too. A drop below it means a site lost the assignment, or the
+# derivation above broke and every loop below is running on nothing.
+if [[ "$verb_site_count" -ge 8 ]]; then
     printf '  ok   derived %s skills that ask base-ref for the ref\n' "$verb_site_count"
     pass=$((pass + 1))
 else
