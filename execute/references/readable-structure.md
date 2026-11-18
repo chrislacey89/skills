@@ -14,21 +14,29 @@ stated at two operative sites drifts.
 
 These limits hold for all three defaults.
 
-- **The repo's own conventions win.** Anything under `Conventions` in the repo
-  profile, anything in the host repo's CLAUDE.md or AGENTS.md, and anything its
-  linter or formatter enforces overrides a default here. A lint rule such as
-  `no-use-before-define` is one of those conventions. Martin states the order
-  of authority himself: "Every programmer has his own favorite formatting
-  rules, but if he works in a team, then the team rules" (*Clean Code* ch. 5).
+- **The repo's own conventions win.** A pattern is the team's when it is
+  written down or when the established code shows it across the repo. Written
+  down means under `Conventions` in the repo profile, in the host repo's
+  CLAUDE.md or AGENTS.md, or enforced by its linter or formatter; a lint rule
+  such as `no-use-before-define` is one. Either kind overrides a default here,
+  and a written one settles the question wherever the two disagree. Martin
+  states the order of authority himself: "Every programmer has his own favorite
+  formatting rules, but if he works in a team, then the team rules" (*Clean
+  Code* ch. 5).
 - **New code only.** The defaults cover code the current change adds.
   Reordering, splitting, or converting existing code is its own change, never
   folded into a feature branch. The Surgical Scope review dimension is the
   check on that.
-- **New code in an existing file follows that file's order.** The top-down
-  default below applies to files the change creates. A file that already puts
-  its helpers first gets its new helper with the others, because a file that
-  orders half its functions one way and half the other is harder to read than
-  either order (*The Art of Readable Code* ch. 4, on consistent ordering).
+- **One file is not a convention.** New code in an existing file follows that
+  file's order only when that order is the repo's: the rest of the established
+  code is laid out the same way, or a written convention says so. Then a file
+  that puts its helpers first gets its new helper with the others, because the
+  same order in every file is what lets a reader know where to look (*The Art
+  of Readable Code* ch. 4, on consistent ordering). Where the file is the
+  outlier, laid out differently from the rest of the repo with nothing written
+  to back it, the new code takes the top-down default below: a new function
+  goes above the helpers it calls, and a new helper goes below its caller. The
+  existing code in that file stays where it is.
 
 ## 1. One job per file
 

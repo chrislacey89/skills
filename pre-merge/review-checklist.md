@@ -300,13 +300,13 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 
 **The thresholds, the exceptions, and the scope limits are stated once**, in [references/readable-structure.md](references/readable-structure.md). Read it before raising a finding here. This section names the patterns and does not restate that file.
 
-**Applies to added lines only.** The subject of every finding is code this diff adds. Existing code laid out another way is never a finding, and a diff that only edits existing code produces none. New code in an existing file follows that file's order, so the top-down pattern fires on files the diff creates and on no others.
+**Applies to added lines only.** The subject of every finding is code this diff adds. Existing code laid out another way is never a finding, and a diff that only edits existing code produces none.
 
-**The repo's own conventions win.** Before raising a finding, read the `Conventions` lines of the repo profile in the brief, and read the host repo's CLAUDE.md or AGENTS.md and its lint and formatter configuration at their source. Where any of them settles the layout in question, raise nothing: the reference's Scope section is the rule.
+**The repo's own conventions win, and one file is not a convention.** Before raising a finding, read the `Conventions` lines of the repo profile in the brief, read the host repo's CLAUDE.md or AGENTS.md and its lint and formatter configuration at their source, and read enough of the established code to see how the repo lays its files out: the files beside the one in question, in the same language. Where a written convention or a layout the established code shows across the repo settles the question, raise nothing. The layout of the one file the new code lands in settles nothing by itself. The reference's Scope section is the rule for both.
 
 **Violation patterns:**
 - **A second job in one file.** The diff adds code whose job is unrelated to the job of the file it lands in, as the reference defines unrelated. A helper that only the file's job uses is not a second job.
-- **Details before the point.** A file the diff creates puts helpers, or detail constants and types, above the exported function or component the file exists for, in a language that leaves the order free. The order is the finding. How a function is declared is never one by itself.
+- **Details before the point.** New code puts helpers, or detail constants and types, above the exported function or component they serve, in a language that leaves the order free. It fires on a file the diff creates, and on new code in an existing file whose own order is not the repo's. It does not fire where the new code follows an order the rest of the repo shares. The order is the finding. How a function is declared is never one by itself.
 - **A long positional parameter list.** A function the diff adds has a parameter list over the reference's threshold and falls under none of its exceptions.
 
 **Severity: Suggestion, never Concern.** The code works either way, and each default has exceptions a reviewer can misjudge. A pattern that fires stays a Suggestion however many times it fires in one diff.
