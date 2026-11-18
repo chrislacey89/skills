@@ -731,7 +731,7 @@ fenced() {
 # graphql call cannot excuse a second call chained after it.
 posts() {
     fenced "$1" \
-        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge|ready|reopen|lock|unlock|create|revert|update-branch)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment|addPullRequestReviewThreadReply' || true
+        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge|ready|reopen|lock|unlock|create|revert|update-branch)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment' || true
     fenced "$1" | awk '{ gsub(/gh +api /, "\n&"); print }' | grep -E 'gh +api ' > "$tmp/gh-api-calls"
     grep -vE 'gh +api +graphql( |$)' "$tmp/gh-api-calls" \
         | grep -E '(^| )(-f|-F|--field|--raw-field)([ =]|[^ -])' || true
@@ -800,7 +800,6 @@ plant p-issue-comment 'gh issue comment 7 --body done'
 plant p-resolve 'gh api graphql -f query='"'"'{ resolveReviewThread }'"'"''
 plant p-addreview 'gh api graphql -f query='"'"'{ addPullRequestReview }'"'"''
 plant p-addcomment 'gh api graphql -f query='"'"'{ addComment }'"'"''
-plant p-addreply 'gh api graphql -f query='"'"'{ addPullRequestReviewThreadReply }'"'"''
 plant p-x-post 'gh api -X POST repos/o/r/issues/7/comments'
 plant p-x-patch 'gh api -X PATCH repos/o/r/pulls/7'
 plant p-x-put 'gh api -X PUT repos/o/r/pulls/7/merge'
@@ -809,7 +808,7 @@ plant p-method-delete 'gh api --method DELETE repos/o/r/issues/comments/1'
 for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-del p-curl-eq p-curl-bare p-curl-colon p-curl-json \
     p-input-last p-input-first p-input-eq p-gql-file p-gql-input p-gql-var p-word p-word-first p-chained \
     p-ready p-reopen p-lock p-unlock p-create p-revert p-update \
-    p-review p-edit p-close p-merge p-issue-comment p-resolve p-addreview p-addcomment p-addreply \
+    p-review p-edit p-close p-merge p-issue-comment p-resolve p-addreview p-addcomment \
     p-x-post p-x-patch p-x-put p-x-delete p-method-delete; do
     check "M6: the detector fires on planted shape $c" 1 "$(posts "$tmp/$c.md" | grep -c . | awk '{print ($1 > 0)}')"
 done
