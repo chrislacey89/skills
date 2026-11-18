@@ -317,9 +317,9 @@ blocks read. Each returns the paths it wrote plus a ten-line summary, not the
 data.
 
 - **Miner A, hotspots** (deterministic shell; it runs the blocks in Steps 3 and
-  5 and writes `freq.txt`, `fix.txt`, `loc.txt`, `hotspots.txt`, `pairs.txt`,
-  `soc.txt`, `freq-dedup.txt`, `hotspots-dedup.txt`, `trend-<file>.txt`,
-  `contributors-<file>.txt`; its summary carries the re-rank block's printed
+  5 and writes `freq.txt`, `loc.txt`, `hotspots.txt`, `freq-dedup.txt`,
+  `hotspots-dedup.txt`, `fixshas.txt`, `fix.txt`, `pairs.txt`, `soc.txt`,
+  `revs.txt`, `persist.txt`; its summary carries the re-rank block's printed
   lines). No judgment is asked of it.
 - **Miner B, decisions** (reads, in this order: ADR directories `docs/adr`,
   `docs/adrs`, `docs/decisions`; CHANGELOG and README; PR bodies, reviews,
