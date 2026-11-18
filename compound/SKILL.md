@@ -316,6 +316,8 @@ related: [<lesson file name>, ...]
 
 **Propose `paths` from the files the branch changed.** `paths` is how `/execute` finds this lesson again by file, whatever words a later task uses. List the files the branch changed with `git diff --name-only "$BASE_REF...HEAD"`, where `BASE_REF` is what `bash "$SC" base-ref` prints (`SC` as in Phase 5). On the post-merge fallback that range is empty, because the session is on base, so take the list from the merged PR with `gh pr diff <n> --name-only` instead. Keep the ones the lesson's text names, and write them relative to the project's top level, a folder in place of its files when the lesson is about the whole folder. Show the proposed line to the user with the rest of the entry; it is written only as they confirm or edit it, and `[]` when nothing fits. `replaces` and `related` name other lessons by file name, and are `[]` unless the user names one. Each list is one line in brackets, and no entry may hold a comma, a space, or a bracket.
 
+**Cite what survives a rewrite.** The entry is written while the branch can still be rewritten: `/pre-merge` Phase 4's fold, the `fixup!` commits `/fix-findings` writes for it, and the squash merge each replace commit SHAs, so a SHA that names the commit that taught the lesson stops resolving, or after a short-SHA collision resolves to an unrelated commit. In the body and in `## Related`, cite the PR number, a file path with the symbol or test name, or the merged commit on the base branch. Cite a bare SHA only for a commit already on the base branch. Phase 5's citation check enforces this before the commit.
+
 **Adjust the template to fit the content.** Not every solution needs every section. A simple bug fix might just need Problem, Root Cause, Solution, and Prevention. An architectural decision might skip Symptoms and emphasize Key Decision. Don't pad sections that have nothing to say.
 
 ### Phase 4: Check for Overlaps
@@ -409,6 +411,20 @@ gh issue view -R chrislacey89/skills <n> --json number,title,state
 ```
 
 A non-zero exit means the entry cites an issue that is not there — do not commit it. This is weaker than a contract test and deliberately so: the citation lives in a downstream repo's `docs/solutions/` file, which this repo's CI cannot read, so there is nothing for a `scripts/test-*.sh` to assert against. What the suite *can* pin is that this command is still here, and `scripts/test-q4-mechanism-names.sh` does — the check runs where the claim is made, and the pin stops the check itself from being quietly dropped.
+
+**Citation check (DO-CONFIRM — verify before committing the entry).** Every 7-to-40-character hex token in the entry that contains a digit is either a commit on the base or gets rewritten to a durable anchor (Phase 3) before this commit. A SHA from this branch is not on the base yet and will not be after the fold or the squash. Set `<path/to/entry.md>` to the entry file; `BASE_REF` is the base from Phase 1's block. [`git merge-base --is-ancestor`](https://git-scm.com/docs/git-merge-base) is the test, and a non-zero exit of any kind counts as not on the base:
+
+```bash
+ENTRY=<path/to/entry.md>
+STALE=0
+for tok in $(grep -owE '[0-9a-f]{7,40}' "$ENTRY" | grep '[0-9]' | sort -u); do
+  git merge-base --is-ancestor "$tok" "$BASE_REF" || { echo "not on the base, rewrite it to a durable anchor: $tok"; STALE=1; }
+done
+[ "$STALE" -eq 0 ]
+```
+
+A flagged token is a commit that the fold or the squash will rewrite, or text that only looks like a SHA. Replace the commit with the PR number, or with a path and symbol, and run the block again.
+
 
 After the commit, record the lesson on its work item, below.
 
