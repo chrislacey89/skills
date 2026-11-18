@@ -84,11 +84,11 @@ Every phase reads these values. Change one here and nowhere else.
 | Ladder minimum | 6 rungs, at least 2 of them marked `~` (stretch) |
 | Kickoff block | the first 20 minutes of the build window |
 | Checkpoint interval | every 90 minutes from the end of the kickoff block, until the freeze |
-| Freeze | 75 minutes before the submission deadline |
+| Freeze | 120 minutes before the submission deadline |
 | Submission buffer | submit at least 60 minutes before the deadline, then keep editing the page until it closes |
 | Story checkpoint | the last checkpoint before the freeze: by then the submission page has every required section and the video is recorded |
-| First Q&A drill | at the second checkpoint |
-| Restyle cutoff | no visual redesign after the second checkpoint |
+| First Q&A drill | at the second checkpoint, or at the first when the freeze comes before a second one |
+| Restyle cutoff | no visual redesign after the second checkpoint, or after the first when the freeze comes before a second one |
 | Table script length | 60 seconds |
 | Acceptance script length | 3 minutes, on a phone |
 | Dossier prefix | `hackathon-` |
@@ -534,8 +534,8 @@ session, and a deadline warning given after the deadline is worse than none.
 4. Record the re-plan (kept, cut, added) in the dossier and `PLAN.md`. A
    changed ladder is a real fork, so confirm it with the user before going on.
 5. **Story check.** Re-paste the submission page from the latest draft. At the
-   Locked first Q&A drill, run the five most likely judge questions (Phase 4
-   step 4) once, out loud, and note the weak answers. At the Locked story
+   Locked first Q&A drill, draft the five most likely judge questions from
+   `DECISIONS.md` (Phase 4 step 4 says how), run them once, out loud, and note the weak answers. At the Locked story
    checkpoint, confirm the page has every required section and the video is
    recorded; if either is missing, it takes the next rung's slot.
 
