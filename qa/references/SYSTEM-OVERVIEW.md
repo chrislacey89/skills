@@ -258,7 +258,7 @@ A companion to Boundary Maps. The Boundary Map answers *what flows between slice
 - **Generation difficulty is a PRD-quality signal.** If the matrix is noisy to generate, report that to the user — do not push structure back into the PRD. PRDs stay rough (Shape Up).
 - **Regenerated, not stored.** Whenever a consumer needs the matrix (`/prd-to-issues` Step 5, `/pre-merge` Coverage Matrix Reconciliation), it derives the matrix on the spot from current PRD + slice issues. No stored artifact to drift out of sync.
 
-**Reconciliation gates:** `/prd-to-issues` surfaces unmapped Musts as backpressure before slice creation. `/pre-merge`'s Coverage Matrix Reconciliation raises a Concern on unmapped Musts at the end of a multi-slice PRD — advisory, with the withheld merge named as the action — warns on unmapped Wants, and accepts unmapped ~Tildes silently. `/pre-merge` gates nothing itself; Concern is the strongest tier it defines.
+**Reconciliation gates:** `/prd-to-issues` surfaces unmapped Musts as backpressure before slice creation. `/pre-merge`'s Coverage Matrix Reconciliation raises a Concern on unmapped Musts at the end of a multi-slice PRD — advisory, with the withheld merge named as the action — warns on unmapped Wants, and accepts unmapped ~Tildes silently. The severity tiers and their ceiling are `pre-merge/review-checklist.md`'s to state.
 
 ---
 
