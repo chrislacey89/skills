@@ -101,9 +101,24 @@ bash "$SC" base-ref --name   # the bare branch name: prod, never origin/prod
 
 This site wants the base branch **name**, not a ref — it feeds `git switch <base-branch>` at Step 4, and `git switch` rejects a remote-tracking ref outright (`fatal: a branch is expected, got remote branch 'origin/prod'`) — it wants the local base branch you are about to pull. So it asks `base-ref --name`, and deliberately *not* the ref form `/pre-merge`, `/help`, `/walk-commits`, `/visual-recap`, `/compound`, and `/execute` take; they need a ref only because they use the base as a **range endpoint**, which this skill never does. Do not "fix" this to match them. If `base-ref --name` exits nonzero it has found no base: relay its stderr and stop rather than guessing one.
 
+Then read the PR's state. The client may already have merged it, so this decides the route:
+
+```bash
+PR_STATE="$(gh pr view <number> --json state -q .state)" || { echo "closeout aborted: cannot read the PR's state" >&2; exit 1; }
+case "$PR_STATE" in
+  MERGED) echo "route: already merged (skip Step 2 and the merge; run the lock release, the work close, and the teardown)" ;;
+  OPEN) echo "route: full" ;;
+  *) echo "closeout aborted: the PR is $PR_STATE: closed without merging, nothing to close out" >&2; exit 1 ;;
+esac
+```
+
+On `route: already merged`, the confirmation below names the teardown, not a merge, and Steps 2 and 3's merge are skipped as those steps say. Everything after the merge still runs: the post-review lock release, the work-item close, and Steps 4 through 8.
+
 Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
 
 ### 2. Verify safety preconditions before any destructive step
+
+If `state` is `MERGED`, skip this step: there is nothing left to merge, so the mergeable, checks, and review preconditions no longer apply, and the review-currency comparison below is moot. Go to Step 3's release of the post-review edit lock.
 
 The teardown is destructive; verify it is safe first (self-guard). All of these must hold:
 
@@ -204,6 +219,8 @@ esac
 ```
 
 ### 3. Merge the PR
+
+If the PR already reports `MERGED`, skip the merge and its confirmation (the client merged it), and start at "Then release the post-review edit lock" below. On the `sidecar` backend this route matters: nothing else closes the slice's work item.
 
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it, and **give the squash commit the PR body as its message**. Without `--body-file`, `gh` builds the squash message from the per-unit commit messages, so a reader who runs `git blame` months later lands on every fix-round message concatenated (bodies of 200–400 lines were measured across four repos on 2026-09-10) and never on the walkthrough `/pre-merge` Phase 2 wrote. That is also why authors put history in code comments: it was the only per-line record that survived the merge. `/execute` and `/compound` route incident history to the PR body on the promise that it lasts; this flag is what keeps the promise.
 
