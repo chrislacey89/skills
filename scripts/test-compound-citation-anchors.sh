@@ -98,6 +98,7 @@ if [ -z "$blk" ]; then
 fi
 ok "Phase 5's citation check carries a fenced block"
 
+sidecar_sh="$repo_root/init-pipeline/scripts/sidecar.sh"
 R="$tmp/repo"
 git init -q "$R"
 git -C "$R" commit -q --allow-empty -m "root"
@@ -110,7 +111,8 @@ GONE="0123456789abcdef0123456789abcdef01234567"
 
 run_block() {  # $1 = entry file, $2 = shell, $3 = block text
     local b="${3//<path\/to\/entry.md>/$1}"
-    out="$(cd "$R" && BASE_REF=main "$2" -c "$b" 2>"$tmp/stderr")"; rc=$?
+    b="${b//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+    out="$(cd "$R" && env -u BASE_REF "$2" -c "$b" 2>"$tmp/stderr")"; rc=$?
 }
 
 printf 'The lesson came from %s, merged in PR #12.\nA word that only looks like hex: defaced, and decade.\n' "${ON_BASE:0:10}" > "$tmp/clean.md"

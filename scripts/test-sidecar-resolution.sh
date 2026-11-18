@@ -1727,6 +1727,9 @@ exit 0
 STUB
 # init-pipeline carries the canonical resolver at scripts/, not references/.
 cp "$STUBDIR/references/sidecar.sh" "$STUBDIR/scripts/sidecar.sh"
+# Placeholders such as <path/to/entry.md> become `x` below; /compound's citation
+# check reads that path, so give it an empty file to read.
+: > "$SCREPO/x"
 export STUBLOG STUBSTORE
 for entry in execute:execute/SKILL.md:3 write-a-prd:write-a-prd/SKILL.md:2 pre-merge:pre-merge/review-checklist.md:1 research:research/SKILL.md:4 compound:compound/SKILL.md:3 init-pipeline:init-pipeline/SKILL.md:10 walk-commits:walk-commits/SKILL.md:2; do
     skill="${entry%%:*}"; rest="${entry#*:}"; rel="${rest%%:*}"; min="${rest##*:}"
