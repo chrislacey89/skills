@@ -225,7 +225,7 @@ check "MERGED: no merge or edit call reached gh" "pr view 7 --json url -q .url" 
 
 # The skill prose gives MERGED its own route past Step 2 and the merge.
 # shellcheck disable=SC2016  # the needles are the skill's literal text
-check "Step 2 skips itself on a MERGED PR" 1 "$(grep -c 'If `state` is `MERGED`, skip this step' "$CO")"
+check "Step 2 keeps the fully-pushed check on a MERGED PR" 1 "$(grep -c 'If `state` is `MERGED`, there is nothing left to merge.*the first checkbox, that the feature branch is fully pushed, still holds' "$CO")"
 # shellcheck disable=SC2016
 check "Step 3 skips the merge on a MERGED PR" 1 "$(grep -c 'If the PR already reports `MERGED`, skip the merge' "$CO")"
 

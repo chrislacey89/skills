@@ -112,13 +112,13 @@ case "$PR_STATE" in
 esac
 ```
 
-On `route: already merged`, the confirmation below names the teardown, not a merge, and Steps 2 and 3's merge are skipped as those steps say. Everything after the merge still runs: the post-review lock release, the work-item close, and Steps 4 through 8.
+On `route: already merged`, the confirmation below names the teardown, not a merge, and Step 2 narrows to its fully-pushed check while Step 3's merge is skipped, as those steps say. Everything after the merge still runs: the post-review lock release, the work-item close, and Steps 4 through 8.
 
 Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
 
 ### 2. Verify safety preconditions before any destructive step
 
-If `state` is `MERGED`, skip this step: there is nothing left to merge, so the mergeable, checks, and review preconditions no longer apply, and the review-currency comparison below is moot. Go to Step 3's release of the post-review edit lock.
+If `state` is `MERGED`, there is nothing left to merge, so the mergeable, checks, and review preconditions below no longer apply, and the review-currency comparison is moot. The teardown is still destructive, so the first checkbox, that the feature branch is fully pushed, still holds: a commit made after the client merged (a post-merge `/compound` commit, say) exists only on this branch, and Step 6 would discard it. If it fails, stop and report it. Then go to Step 3's release of the post-review edit lock.
 
 The teardown is destructive; verify it is safe first (self-guard). All of these must hold:
 
