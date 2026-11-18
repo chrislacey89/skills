@@ -46,7 +46,24 @@
 #      one, several, a closed slice, a detached HEAD, and a failed lookup each
 #      print their verdict (#731).
 #   6. The routes and bundles the skill depends on exist.
-# Every detector is mutation-tested below.
+#   7. Step order (#609): Step 4's record write comes ahead of Step 5's handoff,
+#      in the headings and in the steps' bodies, and Step 4 says why. The pin
+#      reads line numbers, so it is mutated by exchanging the two headings, by
+#      exchanging only their numbers, and by deleting the sentence.
+#   8. Surface checks: strings in /closeout, /help, /fix-findings,
+#      SYSTEM-OVERVIEW and state-backend. The checks that read a fixed string
+#      are of two kinds. A presence check (the route names /closeout Step 2, a
+#      row exists) pins that string and nothing more. An absence check (for
+#      example 'threads are still open' in /closeout, the trigger words in this
+#      skill's Invocation Position, 'escaped defect' in the handoff menu, 'in
+#      two ways' in /fix-findings) pins only that the removed phrase is gone.
+#      The property behind each (no route claims a trigger nothing reads, the
+#      menu offers no unreachable option, no invoker count) is held by review,
+#      not by this suite: a reworded claim passes. Widening a grep is not the
+#      fix (docs/solutions/testing-patterns/
+#      a-planted-term-cannot-discriminate-meaning-2026-09-04.md).
+# Item 4's detector carries a planted case per shape it names. The other
+# detectors are mutation-tested where a block says so (M-numbers below).
 
 # Every single-quoted `$` below is the skill's literal text or a planted
 # fixture, never an expansion this script wants.
@@ -146,7 +163,8 @@ OUT="$(runfetch "$tmp/ok.json")"
 GH_OUT="$OUT"
 # The stub answers whatever it is asked, so a block that asked for the wrong PR
 # reads as a whole read here. Only the logged call shows what was asked.
-check "the one gh call asks for the PR the block was given" 1 "$(grep -c -e ' -F n=7 ' "$GH_STUB_CALLS")"
+check "the fetch makes exactly one gh call (a logged call starts with its subcommand, api)" 1 "$(grep -c '^api ' "$GH_STUB_CALLS")"
+check "exactly one logged gh call passes the PR number the block was given (-F n=7)" 1 "$(grep -c -e ' -F n=7 ' "$GH_STUB_CALLS")"
 check "a whole read prints JSON, not unknown" 1 "$(jq -e '.items | type == "array"' <<<"$OUT" >/dev/null 2>&1 && echo 1 || echo 0)"
 check "it keeps exactly the unresolved, non-author threads and the non-empty, non-author reviews" \
     "PRRT_old PRRT_a PRR_cr" "$(jq -r '[.items[].id] | join(" ")' <<<"$OUT" 2>/dev/null)"
@@ -713,7 +731,7 @@ fenced() {
 # graphql call cannot excuse a second call chained after it.
 posts() {
     fenced "$1" \
-        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge|ready|reopen|lock|unlock|create|revert|update-branch)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment|addPullRequestReviewThreadReply' || true
+        | grep -niE 'gh +(pr|issue) +(comment|review|edit|close|merge|ready|reopen|lock|unlock|create|revert|update-branch)|(-X|--method)[ =]*(POST|PATCH|PUT|DELETE)|(^|[^[:alnum:]_])mutation([^[:alnum:]_]|$)|resolveReviewThread|addPullRequestReview|addComment' || true
     fenced "$1" | awk '{ gsub(/gh +api /, "\n&"); print }' | grep -E 'gh +api ' > "$tmp/gh-api-calls"
     grep -vE 'gh +api +graphql( |$)' "$tmp/gh-api-calls" \
         | grep -E '(^| )(-f|-F|--field|--raw-field)([ =]|[^ -])' || true
@@ -771,9 +789,27 @@ plant p-unlock 'gh pr unlock 7'
 plant p-create 'gh pr create --fill'
 plant p-revert 'gh pr revert 7'
 plant p-update 'gh pr update-branch 7'
+# One plant per group in the matcher that no other plant reaches (#684): the
+# verbs review|edit|close|merge, the `|issue` form of `gh (pr|issue)`, the
+# GraphQL write names, and -X with each non-GET method.
+plant p-review 'gh pr review 7 --approve'
+plant p-edit 'gh pr edit 7 --title x'
+plant p-close 'gh pr close 7'
+plant p-merge 'gh pr merge 7 --squash'
+plant p-issue-comment 'gh issue comment 7 --body done'
+plant p-resolve 'gh api graphql -f query='"'"'{ resolveReviewThread }'"'"''
+plant p-addreview 'gh api graphql -f query='"'"'{ addPullRequestReview }'"'"''
+plant p-addcomment 'gh api graphql -f query='"'"'{ addComment }'"'"''
+plant p-x-post 'gh api -X POST repos/o/r/issues/7/comments'
+plant p-x-patch 'gh api -X PATCH repos/o/r/pulls/7'
+plant p-x-put 'gh api -X PUT repos/o/r/pulls/7/merge'
+plant p-x-delete 'gh api -X DELETE repos/o/r/issues/comments/1'
+plant p-method-delete 'gh api --method DELETE repos/o/r/issues/comments/1'
 for c in p-field p-capf p-cont p-eq p-named p-curl-data p-curl-cfg p-curl-del p-curl-eq p-curl-bare p-curl-colon p-curl-json \
     p-input-last p-input-first p-input-eq p-gql-file p-gql-input p-gql-var p-word p-word-first p-chained \
-    p-ready p-reopen p-lock p-unlock p-create p-revert p-update; do
+    p-ready p-reopen p-lock p-unlock p-create p-revert p-update \
+    p-review p-edit p-close p-merge p-issue-comment p-resolve p-addreview p-addcomment \
+    p-x-post p-x-patch p-x-put p-x-delete p-method-delete; do
     check "M6: the detector fires on planted shape $c" 1 "$(posts "$tmp/$c.md" | grep -c . | awk '{print ($1 > 0)}')"
 done
 # A detector that fires on everything would pass every line above, so the
@@ -836,7 +872,7 @@ check "M19: without the before-Step-5 sentence the order pin fails" 0 "$(order_h
 # handoff. The moment this skill still holds the turn is when Step 4 writes.
 check "Step 4 names the compound candidate to the human when it writes the round" 1 \
     "$(step4 "$R2R" | grep -c '^Compound candidate: <n>')"
-check "the handoff menu offers no /compound option" 0 "$(handoff "$R2R" | grep -c 'escaped defect')"
+check "the handoff menu no longer carries the phrase 'escaped defect' (the removed /compound option's wording only)" 0 "$(handoff "$R2R" | grep -c 'escaped defect')"
 
 # -----------------------------------------------------------------------------
 section "Step 5's slice lookup, against a real sidecar (#731)"
@@ -961,17 +997,17 @@ check "/closeout Step 2 routes failed review to /respond-to-review" 1 \
 # /closeout and /help read reviewDecision and no thread signal, so a route that
 # claims one is a trigger nothing reads (#609). /closeout Step 2 is where the
 # trigger is stated; this skill points at it rather than restating it.
-check "/closeout Step 2 claims no thread signal it does not read" 0 \
+check "/closeout Step 2 no longer carries the phrase 'threads are still open' (that phrase only)" 0 \
     "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c 'threads are still open')"
 check "/closeout Step 2 states the trigger it does read" 1 \
     "$(awk '/^### 2\./ { on = 1; next } /^### 3\./ { on = 0 } on' "$CO" | grep -c '`reviewDecision` is `CHANGES_REQUESTED` — the route back is `/respond-to-review`')"
 INVPOS="$(awk '/^## Invocation Position/ { on = 1; next } /^## / { on = 0 } on' "$R2R")"
-check "/respond-to-review's routes point at the trigger rather than restate it" 0 \
+check "/respond-to-review's Invocation Position names none of CHANGES_REQUESTED, reviewDecision, 'unresolved review threads' (those words only)" 0 \
     "$(grep -cE 'CHANGES_REQUESTED|reviewDecision|unresolved review threads' <<<"$INVPOS")"
 check "/respond-to-review's routes name /closeout Step 2 and /help row 1" 2 \
     "$(grep -cE '^- from `/closeout` Step 2, which states the trigger;$|^- from `/help`, whose row 1 recommends it;$' <<<"$INVPOS")"
 # The surfaces that describe this skill's seams, each of which #608 left stale.
-check "/fix-findings' Invocation Position claims no count of its invokers" 0 \
+check "/fix-findings' Invocation Position no longer says 'in two ways' (that phrase only)" 0 \
     "$(awk '/^## Invocation Position/ { on = 1; next } /^## / { on = 0 } on' "$FF" | grep -c 'in two ways')"
 check "SYSTEM-OVERVIEW's tree comment names /respond-to-review as a source" 1 \
     "$(grep -E '^├── fix-findings/' "$SO" | grep -c '/respond-to-review')"
@@ -982,7 +1018,7 @@ check "Where State Lives has a row for this skill's record" 1 \
     "$(grep -cE '^\| .*\| `<sidecar>/review-responses/pr-<n>\.md`' <<<"$SO_STATE")"
 check "state-backend's not-persisted rule ends the paragraph it governs" 1 \
     "$(grep -E '^On the `sidecar` backend with no work item' "$SB" | grep -c 'Notes and a ledger are printed to the terminal')"
-check "and it no longer reads as a rule about this skill's record" 0 \
+check "state-backend's not-persisted rule no longer sits in the paragraph about this skill's record (the phrase 'Notes and a ledger' only)" 0 \
     "$(grep -E '^`/respond-to-review`.s record is not in the table' "$SB" | grep -c 'Notes and a ledger')"
 
 check "/help row 1 recommends /respond-to-review on CHANGES_REQUESTED" 1 \

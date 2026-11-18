@@ -166,23 +166,29 @@ set_minus() { comm -23 <(printf '%s\n' "$1" | awk 'NF') <(printf '%s\n' "$2" | a
 # The members $1 and $2 share.
 set_intersect() { comm -12 <(printf '%s\n' "$1" | awk 'NF') <(printf '%s\n' "$2" | awk 'NF'); }
 
-# Whether git itself — not a grep over the text — would refuse to track <path>
-# inside the git repo rooted at <dir>. `-c core.excludesFile=/dev/null` is set
-# on every call, in both directions this is used (this repo's live .gitignore
-# and a scratch copy of /init-pipeline § 6's block): without it, a machine-local
-# global excludes file naming `.claude/` could make a marker read as ignored
-# for a reason that has nothing to do with the .gitignore under test, and the
-# check would pass here while failing on a clean machine.
-marker_ignored() {  # $1 = git repo dir, $2 = path relative to it
+# Whether git itself — not a grep over the text — would refuse to track
+# <path> under the ignore list <list-text>. The list is copied into a FRESH
+# scratch repo created with an EMPTY template, and git is asked there, so
+# nothing else on the machine can answer for a missing entry: not the real
+# repo's `.git/info/exclude` (#375), not a git template directory's
+# `info/exclude`, and, with `-c core.excludesFile=/dev/null`, not a global
+# excludes file naming `.claude/`. Asking the real repo instead would let any
+# of those pass the check here while it fails on a clean clone.
+marker_ignored() {  # $1 = scratch repo dir, $2 = path relative to it
     git -C "$1" -c core.excludesFile=/dev/null check-ignore -q -- "$2"
 }
 
-# Every member of $1 (newline-separated markers) that marker_ignored refuses for
-# <repo-dir>, space-joined. Empty output means every marker is actually ignored
-# there — not merely named in a .gitignore-shaped file, which grep alone cannot
-# tell apart from a marker that is commented out, mistyped, or simply absent.
-unignored_markers() {  # $1 = repo dir, $2 = newline-separated markers
-    local repo_dir="$1" marker result=""
+# Every member of $2 (newline-separated markers) that git refuses to ignore
+# under the ignore list $1, space-joined. Empty output means every marker is
+# actually ignored there, not merely named in a .gitignore-shaped file, which
+# grep alone cannot tell apart from a marker that is commented out, mistyped,
+# or simply absent.
+unignored_markers() {  # $1 = ignore-list text, $2 = newline-separated markers
+    local repo_dir marker result="" empty_template="$scratch/empty-template"
+    mkdir -p "$empty_template"
+    repo_dir="$(mktemp -d "$scratch/ignore-probe.XXXXXX")" || { echo "FATAL: could not make a scratch repo dir" >&2; return 1; }
+    git init -q --template="$empty_template" "$repo_dir" || { echo "FATAL: could not git init a scratch repo" >&2; return 1; }
+    printf '%s' "$1" > "$repo_dir/.gitignore"
     while IFS= read -r marker; do
         [ -n "$marker" ] || continue
         if ! marker_ignored "$repo_dir" "$marker"; then
@@ -331,16 +337,10 @@ section "4. every marker is reserved, downstream and here"
 
 # /init-pipeline § 6's block is documentation: the literal lines a downstream
 # project pastes into ITS OWN .gitignore, not this repo's. The only way to ask
-# git whether that paste would work is to perform it — so the block is written
-# verbatim into a scratch repo's .gitignore and checked there.
-reserved_repo="$scratch/reserved-gitignore"
-mkdir -p "$reserved_repo"
-if ! git init -q "$reserved_repo"; then
-    fatal "could not git init the scratch repo for /init-pipeline § 6's block"
-fi
-printf '%s' "$reserved_block" > "$reserved_repo/.gitignore"
-
-unreserved="$(unignored_markers "$reserved_repo" "$markers")"
+# git whether that paste would work is to perform it — so unignored_markers
+# writes the block verbatim into a fresh scratch repo's .gitignore and checks
+# there; this repo's own .gitignore is checked the same way, as copied text.
+unreserved="$(unignored_markers "$reserved_block" "$markers")" || fatal "unignored_markers could not build its scratch repo"
 if [ -z "$unreserved" ]; then
     ok "/init-pipeline § 6 reserves every classification marker"
 else
@@ -349,7 +349,7 @@ else
 a downstream project scaffolded from that block can commit the marker, which holds the gate open on every future branch there."
 fi
 
-unignored_here="$(unignored_markers "$repo_root" "$markers")"
+unignored_here="$(unignored_markers "$(cat .gitignore)" "$markers")" || fatal "unignored_markers could not build its scratch repo"
 if [ -z "$unignored_here" ]; then
     ok "this repo's .gitignore ignores every classification marker"
 else
@@ -488,7 +488,8 @@ section "7. the staleness gate greps for every path clause 1 names"
 # clause 1 and not to the gate, and nothing failed. This row is that rule moved
 # out of memory and into the suite.
 #
-# Containment, over clause 1 whole rather than over M: the stand-down flag is a
+# Containment, over clause 1 whole rather than over M (the marker set, derived
+# above as `markers=` from clause 1 less the stand-down flag): the stand-down flag is a
 # legitimate gate term (it is the boundary the gate was built for), so the gate
 # naming it is right, not an extra. The gate may also name terms from neither
 # set — section 6's extension point is where an invented path is caught.
@@ -610,18 +611,57 @@ else
     ok "…and fails on a set missing a member, which is section 3's failure"
 fi
 
+# set_minus backs section 4's "untaught" edge and section 7's gate containment;
+# section 4's two ignore rows ask git (unignored_markers), and are proved below.
 if [ -n "$(set_minus "$fixture_reserved" "$fixture_clause")" ]; then
     ok "set_minus reports the member a containment check is missing"
 else
     bad "set_minus found nothing missing from a strict subset" \
-        "section 4's containment checks cannot fail."
+        "section 4's untaught-paths edge and section 7's gate containment cannot fail."
 fi
 
 if [ -z "$(set_minus "$fixture_clause" "$fixture_reserved")" ]; then
     ok "…and reports nothing when containment holds"
 else
     bad "set_minus reported a member missing from a superset that holds it" \
-        "section 4's containment checks cannot pass."
+        "section 4's untaught-paths edge and section 7's gate containment cannot pass."
+fi
+
+# The git-based ignore check (section 4's two ignore rows): its healthy state is
+# "nothing found", so it needs planted failures of its own. An empty ignore list
+# must report EVERY marker; a list ignoring one marker must report the others,
+# and not that one.
+planted_unignored="$(unignored_markers "" "$markers")" || fatal "unignored_markers could not build its scratch repo"
+if [ "$(tr ' ' '\n' <<<"$planted_unignored" | awk 'NF' | sort)" = "$(awk 'NF' <<<"$markers" | sort)" ]; then
+    ok "unignored_markers reports every marker for an empty ignore list"
+else
+    bad "unignored_markers did not report every marker for an empty ignore list" \
+        "section 4's ignore rows would pass vacuously. got: ${planted_unignored:-nothing}"
+fi
+
+first_marker="$(awk 'NF' <<<"$markers" | head -n1 || true)"
+partial_unignored="$(unignored_markers "$first_marker" "$markers")" || fatal "unignored_markers could not build its scratch repo"
+case " $partial_unignored" in
+    *" $first_marker "*) bad "unignored_markers reported a marker the list ignores" "got: $partial_unignored" ;;
+    *) if [ "$(awk 'NF' <<<"$markers" | wc -l | tr -d ' ')" -le 1 ] || [ -n "$partial_unignored" ]; then
+           ok "unignored_markers drops a marker the list ignores and keeps the rest"
+       else
+           bad "unignored_markers reported nothing for a list ignoring one marker of several"
+       fi ;;
+esac
+
+# #375: a git template directory whose info/exclude names every marker must not
+# mask an empty list. GIT_TEMPLATE_DIR is what a plain `git init` would read;
+# the scratch repo's explicit empty --template overrides it.
+masking_template="$scratch/masking-template"
+mkdir -p "$masking_template/info"
+awk 'NF' <<<"$markers" > "$masking_template/info/exclude"
+masked_unignored="$(GIT_TEMPLATE_DIR="$masking_template" unignored_markers "" "$markers")" || fatal "unignored_markers could not build its scratch repo"
+if [ "$(tr ' ' '\n' <<<"$masked_unignored" | awk 'NF' | sort)" = "$(awk 'NF' <<<"$markers" | sort)" ]; then
+    ok "unignored_markers is not masked by a template directory's info/exclude"
+else
+    bad "unignored_markers let a template directory's info/exclude answer for an empty list" \
+        "got: ${masked_unignored:-nothing}"
 fi
 
 # --- the partial-enumeration detector, on a set whose answers are known ------

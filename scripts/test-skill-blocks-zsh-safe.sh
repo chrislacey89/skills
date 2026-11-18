@@ -41,12 +41,19 @@ EOF
 )"
 
 # Every fenced bash/sh line in hand-authored skill prose, as `file<TAB>line`.
-# Bundled references/ copies are excluded: sync-skill-references.sh pins them
-# to these sources.
+# A fence may be indented (a block inside a list item); the fence's indent is
+# stripped from each line of its block (#723). Bundled references/ copies are
+# excluded: sync-skill-references.sh pins them to these sources.
+extract() { # extract <file>
+    awk -v F="$1" '
+        /^[[:space:]]*```(bash|sh)$/ { on = 1; match($0, /^[[:space:]]*/); ind = RLENGTH; next }
+        /^[[:space:]]*```$/ { on = 0 }
+        on { l = $0; if (substr(l, 1, ind) ~ /^[[:space:]]*$/) l = substr(l, ind + 1); print F "\t" l }' "$1"
+}
 lines() {
     for f in */SKILL.md SYSTEM-OVERVIEW.md docs/*.md; do
         [ -f "$f" ] || continue
-        awk -v F="$f" '/^```(bash|sh)$/{on=1; next} /^```$/{on=0} on{print F "\t" $0}' "$f"
+        extract "$f"
     done
 }
 
@@ -89,6 +96,16 @@ expect 0 "passes a braced \${VAR}:r"                 'git fetch origin "+refs/he
 expect 0 "passes \$VAR:\$VAR (no modifier letter)"   'printf "%s" "$USER:$TOKEN"'
 expect 0 "passes \$VAR:b (not a modifier)"           'echo "$A:b"'
 }
+
+# The extraction itself: a bash fence indented inside a list item is scanned,
+# with its indent stripped, and a prose line is not.
+planted="$(mktemp)"; trap 'rm -f "$planted"' EXIT
+# shellcheck disable=SC2016  # fixture text, not expansions
+printf '1. step\n\n   ```bash\n   for id in $IDS; do\n     echo "$id"\n   done\n   ```\n\n   for id in $PROSE; do\n' >"$planted"
+got="$(extract "$planted")"
+if [ "$(printf '%s\n' "$got" | unsafe | wc -l | tr -d ' ')" = 1 ]; then ok "extracts and flags a fence indented in a list item"; else bad "extracts and flags a fence indented in a list item" "extracted: $got"; fi
+case "$got" in *"$(printf '\t')for id in \$IDS; do"*) ok "strips the fence indent from the block lines" ;; *) bad "strips the fence indent from the block lines" "extracted: $got" ;; esac
+case "$got" in *PROSE*) bad "does not extract prose after the closing fence" "$got" ;; *) ok "does not extract prose after the closing fence" ;; esac
 
 printf '\n=== skill blocks: no zsh-unsafe shape outside the known sites ===\n'
 found="$(lines | unsafe)"
