@@ -694,6 +694,12 @@ normalized=${normalized//\'/}
 # Shell control operators become segment boundaries, so `git status && rm -f x`
 # is not read as one invocation with an -f flag. Two-character operators are
 # replaced before their one-character prefixes.
+# A colon right before a command substitution (`:$(...)`, :`...`) is kept as a
+# named operand before those openers turn into boundaries; otherwise it would
+# arrive as a bare `:`, which is no delete. `:(` is left alone: it is the
+# pathspec long form, which must keep arriving as a bare `:`.
+normalized=${normalized//:\$(/:SUBST$'\n'}
+normalized=${normalized//:\`/:SUBST$'\n'}
 normalized=${normalized//&&/$'\n'}
 normalized=${normalized//||/$'\n'}
 normalized=${normalized//\$(/$'\n'}

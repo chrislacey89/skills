@@ -323,6 +323,12 @@ assert_blocked_form 'git push origin --delete feature' 'remote branch delete, fl
 assert_blocked_form 'git push -d origin feature'       'short remote delete flag'
 assert_blocked_form 'git push origin :feature'         'empty-source refspec deletes the remote branch'
 assert_blocked_form 'git push origin +:'                'the bare colon with + is still a force push'
+# shellcheck disable=SC2016  # the unexpanded $( and backtick ARE the test data
+assert_blocked_form 'git push origin :$(git branch --show-current)' 'a colon before a command substitution names the ref to delete'
+# shellcheck disable=SC2016
+assert_blocked_form 'git push origin :`git branch --show-current`' 'a colon before a backtick substitution names the ref to delete'
+# shellcheck disable=SC2016
+assert_blocked_form 'git push origin :"$(git branch --show-current)"' 'the quoted substitution form deletes the same way'
 
 # -----------------------------------------------------------------------------
 
@@ -404,6 +410,8 @@ assert_allowed_form 'git push origin feature'          'an ordinary push of a br
 assert_allowed_form 'git push origin HEAD:feature'     'a refspec with a source is not a delete'
 assert_allowed_form 'git push origin :'                'the bare colon pushes matching branches, it deletes nothing'
 assert_allowed_form 'git push origin : main'           'a bare colon beside a plain branch is not a delete'
+assert_allowed_form 'git push origin : && echo ok'     'a bare colon before a separator is still no delete'
+assert_allowed_form 'git push origin :; echo ok'       'a bare colon before a semicolon is still no delete'
 assert_allowed_form 'git push --dry-run origin feature' 'a long flag that is not --delete'
 
 # The guard must not choke on input that is not a git command at all.
