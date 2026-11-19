@@ -255,7 +255,25 @@ The fixer's instructions, in order:
    **The printed line decides, not your own diff:** a SHA means a `--fixup`
    commit of that SHA, and an empty `FIXUP_TARGET=` means an ordinary commit.
    Run the block and use its answer; do not judge the target from the lines
-   your fix changed, which are not the lines the finding anchors on.
+   your fix changed, which are not the lines the finding anchors on. The
+   block settles which commit; the intent check next is the one reason to
+   decline its SHA.
+
+   **Intent check, before the commit.** Blame names the last commit that
+   touched the lines, and that commit can be about something else: a
+   formatting pass, a rename, a move. Read what the target says it does:
+
+   ```bash
+   git log -1 --format=%B "<the SHA FIXUP_TARGET printed>"
+   ```
+
+   Keep the fixup only when the fix finishes or corrects what that message
+   says the commit does. When the fix changes behavior the message does not
+   describe, or the message describes a different kind of change, clear the
+   target: make an ordinary commit whose message names the finding and the
+   fix, and skip the fold trial. A fold would otherwise put the fix under a
+   message that does not describe it.
+
    Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
    message item 5 states for this backend. Then check that the commit just made folds:
 
