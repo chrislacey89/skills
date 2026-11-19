@@ -25,8 +25,17 @@ Do not treat it as part of the normal feature pipeline. It is a repo or user set
 - `git branch -D` / `git branch --delete --force` / `git branch -f -d`
 - `git checkout .` / `git restore .` / `git checkout -- .` / `git restore -- .`
 - `git checkout ./` / `git checkout ./.` / `git checkout :/` / `git restore :/`
+- `git checkout -f` / `git checkout --force` / `git switch -f` / `git switch --force` / `git switch --discard-changes`
+- `git rm -rf .`
+- `git worktree remove --force ../wt` / `git worktree remove -f ../wt`
+- `git stash clear`
+- `git reflog expire --expire=now --all`
+- `git filter-branch --force`
+- `git push --delete origin feature` / `git push -d origin feature` / `git push origin :feature`
 
-The guard reads the command as tokens and never evaluates it, so a destructive command assembled at run time — a flag or subcommand held in a variable, spliced with `${IFS}`, or produced by command substitution — is not visible to it. That is a limit of the design, not a missing entry; chrislacey89/skills#334 records it alongside the destructive commands the lists do not yet cover.
+The last seven bullets follow one rule: block a command that throws away uncommitted work, removes the means of recovering work, or deletes something on the remote. `git stash drop`, `git branch -f` and `git submodule deinit -f` are left allowed on purpose.
+
+The guard reads the command as tokens and never evaluates it, so a destructive command assembled at run time — a flag or subcommand held in a variable, spliced with `${IFS}`, or produced by command substitution — is not visible to it. That is a limit of the design, not a missing entry; chrislacey89/skills#334 records that limit.
 
 ## What Gets Blocked Conditionally
 
@@ -84,6 +93,13 @@ It inherits the design limit recorded above for the git rules, and for the same 
 - `git restore --staged .` (unstages; never touches the working tree)
 - `git checkout -p .` (prompts per hunk before discarding anything)
 - `git commit -m "ordinary message"`
+- `git stash drop`
+- `git branch -f feature main`
+- `git submodule deinit -f vendor/lib`
+- `git checkout -b f` / `git switch -c fix` (a flag letter that is not `-f`)
+- `git worktree remove ../wt`
+- `git rm -r --cached notes.txt` / `git rm -rf src/old` (a named path, not the whole tree)
+- `git reflog show`
 
 Both lists are executable, not decorative. `scripts/test-git-guardrails.sh` extracts every command in them and runs it through the real script, asserting exit 2 for the first list and exit 0 for the second. Adding a line to either list without making the script agree fails CI.
 
