@@ -1585,10 +1585,10 @@ assert_eq 0 "$rc13" "a later commit conflicts: the block exits 0"
 assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out13" "a later commit conflicts: the trial names the demotion"
 assert_eq "add three" "$(git -C "$repo13" log -1 --format=%s)" "a later commit conflicts: the fixup is demoted"
 
-# The two limits the fold-trial prose states (#686 boxes 1, 4, 12). These pin
-# today's behavior, wrong answer included, so a change to either is a decision
-# someone makes on purpose rather than a drift nobody sees.
-section "fold trial, stated limit: the throwaway clone does not read the repository's own config"
+# The limits the fold-trial prose states (#686 boxes 1, 4, 12), each with its
+# own cause. These pin today's behavior, wrong answer included, so a change to
+# any is a decision someone makes on purpose rather than a drift nobody sees.
+section "fold trial, stated limit: signing is off in the trial, so a repo-local signer is not exercised"
 repo15="$sandbox/repo15"
 clean_fixup_repo "$repo15"
 git -C "$repo15" config commit.gpgsign true
@@ -1596,10 +1596,6 @@ git -C "$repo15" config gpg.program "$failing_signer"
 head15="$(git -C "$repo15" rev-parse HEAD)"
 git -C "$repo15" commit -q --allow-empty -m 'probe' 2>/dev/null && r=signed || r=refused
 assert_eq refused "$r" "the instrument: the repo-local failing signer refuses a real commit in the repository"
-clone15="$sandbox/repo15-clone"
-git clone -q --shared --no-checkout "$repo15" "$clone15"
-assert_eq "" "$(git -C "$clone15" config --get gpg.program || true)" \
-    "a --shared clone carries none of the repository's own config: no gpg.program"
 assert_eq "fold trial: clean" "$(trial_in "$repo15")" "a repo-local failing signer: the trial reports clean"
 assert_eq "$head15" "$(git -C "$repo15" rev-parse HEAD)" "a repo-local failing signer: the fixup is not demoted"
 case "$(run_fold "$repo15")" in
@@ -1610,7 +1606,8 @@ assert_eq "$head15" "$(git -C "$repo15" rev-parse HEAD)" "a repo-local failing s
 
 # The clone-config claim needs a repo-local setting the trial's own -c flags do
 # not override. The signer above cannot show it (the trial turns signing off
-# itself), so a repo-local merge driver does: it resolves a text conflict in the
+# itself), so a repo-local merge driver does, and a --shared clone is checked
+# below to carry none of the repository's own config: it resolves a text conflict in the
 # repository and is absent in the clone, so the trial demotes a fixup the real
 # fold applies (#686 box 4). A trial that started reading the repository's config
 # would report clean here.
@@ -1635,6 +1632,10 @@ mkdir -p "$repo17"
     git config merge.keepours.driver true
 )
 point_origin_at_main "$repo17"
+clone17="$sandbox/repo17-clone"
+git clone -q --shared --no-checkout "$repo17" "$clone17"
+assert_eq "" "$(git -C "$clone17" config --get merge.keepours.driver || true)" \
+    "a --shared clone carries none of the repository's own config: no merge.keepours.driver"
 real17="$sandbox/repo17-real"
 cp -R "$repo17" "$real17"
 run_fold "$real17" >/dev/null
