@@ -224,12 +224,19 @@ count_faults() {
     local hit f rest ln text num lower base ones val
     # one grep over every file; each hit is "file:line:text"
     count_scan_files | (cd "$root" && xargs grep -HinE '(^|[^A-Za-z0-9-])([0-9]+|twenty|thirty|forty|fifty)[ -]?(one|two|three|four|five|six|seven|eight|nine)? (composable |pipeline )?skills?([^A-Za-z]|$)' 2>/dev/null) \
-        | grep -viE 'cited by|a skill|one skill|^[^:]*:[0-9]+:[[:space:]]*(//|/\*|\*)' \
+        | grep -viE 'cited by' \
         | while IFS= read -r hit; do
             f="${hit%%:*}"
             rest="${hit#*:}"
             ln="${rest%%:*}"
             text="${rest#*:}"
+            # A source comment may quote an old count; a markdown line that
+            # starts with `*` (bold, bullet) is prose and is checked.
+            case "$f" in
+                */site/src/*|site/src/*)
+                    if printf '%s' "$text" | grep -qE '^[[:space:]]*(//|/\*|\*)'; then continue; fi
+                    ;;
+            esac
             num="$(printf '%s' "$text" | grep -oiE '([0-9]+|twenty|thirty|forty|fifty)[ -]?(one|two|three|four|five|six|seven|eight|nine)? (composable |pipeline )?skills?' | head -1 | sed -E 's/ (composable |pipeline )?skills?$//' || true)"
             case "$num" in
                 [0-9]*) val="$num" ;;

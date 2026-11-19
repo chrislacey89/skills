@@ -189,6 +189,22 @@ d="$(fresh count-comment)"
 printf '\n// An old comment once said "Thirty skills" here.\n' >> "$d/site/src/lib/data.ts"
 expect_clean "a source comment quoting an old count is not a stated count" "$d"
 
+d="$(fresh count-star-comment)"
+printf '\n * An old block comment once said "Thirty skills" here.\n' >> "$d/site/src/lib/data.ts"
+expect_clean "a star-prefixed source comment quoting an old count is not a stated count" "$d"
+
+d="$(fresh count-compound-one)"
+printf '\nIt has thirty-one skills.\n' >> "$d/README.md"
+expect_fault "a tens-plus-one wrong count is not hidden by the words one skill" "$d" "says thirty-one, but there are $dir_count skill directories"
+
+d="$(fresh count-bold)"
+printf '\n**30 skills** ship in this pack.\n' >> "$d/README.md"
+expect_fault "a bold wrong count in markdown is checked" "$d" "says 30, but there are $dir_count skill directories"
+
+d="$(fresh count-bullet)"
+printf '\n* The pack has 30 skills.\n' >> "$d/README.md"
+expect_fault "a bulleted wrong count in markdown is checked" "$d" "says 30, but there are $dir_count skill directories"
+
 d="$(fresh count-citations)"
 printf '\nThis book is cited by 9 skills in the canon.\n' >> "$d/README.md"
 expect_clean "a citation count is not a skill count" "$d"
