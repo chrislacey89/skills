@@ -30,7 +30,7 @@
 #      site/src outside generated files). CHANGELOG.md and docs/solutions/
 #      are dated records and are not read. A line about book citations
 #      ("Cited by N skills") counts books, not the pack, and a source comment
-#      (a line starting `//`, `/*` or `*`) can quote an old count while
+#      under `site/src` (a line starting `//`, `/*` or `*`) can quote an old count while
 #      explaining it; both are skipped.
 #   4. References resolve. Every `/name` that is a skill mention in a
 #      top-level */SKILL.md is a pack skill or is in the allowlist below.
