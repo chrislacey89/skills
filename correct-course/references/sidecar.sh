@@ -1992,6 +1992,7 @@ work_create() {
     while [ "$i" -lt 50 ]; do
         i=$((i + 1))
         max=0
+        work_dir_listable "work create" "$WORK_DIR"
         for b in "$WORK_DIR"/W-*.md; do
             b="${b##*/W-}"; b="${b%.md}"
             [[ "$b" =~ ^[0-9]+$ ]] || continue
@@ -2061,12 +2062,20 @@ work_edit() {
     work_rewrite "$id" "sidecar: work edit $id" '.body = $body' --arg body "$new"
 }
 
+# work_dir_listable <verb> <dir>: refuse when <dir> cannot be listed. A
+# directory that can be entered but not read matches no W-*.md glob, so a scan
+# of it reads as an empty store: no items, or an id that is already taken.
+work_dir_listable() {
+    [ -r "$2" ] || refuse "$1: cannot list $2"
+}
+
 # work_all_fm <verb>: every work item's frontmatter, one compact JSON object
 # per line. A file that does not parse is refused with its path, never skipped:
 # an item left out of a listing reads as an item that is not there.
 work_all_fm() {
     local verb="$1" f one
     [ -d "$WORK_DIR" ] || return 0
+    work_dir_listable "$verb" "$WORK_DIR"
     for f in "$WORK_DIR"/W-*.md; do
         [ -f "$f" ] || continue
         # A parse failure is the assignment's exit status, never a word in the
@@ -2291,6 +2300,7 @@ trace_work() {
     sc="$(cd "$sc" && pwd -P)"
     dir="$sc/work"
     [ -f "$dir/$id.md" ] || refuse "trace: no such work item: $id"
+    work_dir_listable trace "$dir"
     for f in "$dir"/W-*.md; do
         [ -f "$f" ] || continue
         one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm + {body, comments: comments}" "$f")" \

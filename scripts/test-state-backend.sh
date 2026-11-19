@@ -966,6 +966,38 @@ check "every raced file's id field matches its name" "" \
 clean "racing creates leave the project clean" "$P"
 
 # -----------------------------------------------------------------------------
+section "work: a work directory that cannot be listed is a refusal, never an empty store"
+
+# A directory that can be entered but not listed (mode 311) matches no W-*.md
+# glob, so listing, trace and create's max-id scan read it as an empty store:
+# list printed nothing, set wrote a blocked_by cycle, create reused W-1.
+# uid 0 lists mode-311 directories, so root skips.
+if [ "$(id -u)" -eq 0 ]; then
+    skipped "unlistable work directory: root lists mode-311 directories, so the arms cannot run"
+else
+    mkproj none
+    runo "$P" init --name unlist --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+    S="$out"
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"; u1="$out"
+    runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"; u2="$out"
+    chmod 311 "$S/work"
+    runo "$P" work list
+    check "work list on an unlistable work directory exits 1" 1 "$rc"
+    check "work list on an unlistable work directory prints nothing on stdout" "" "$out"
+    case "$err" in *"$S/work"*) ok "work list names the unlistable directory on stderr" ;; *) bad "work list names the unlistable directory on stderr" "got [$err]" ;; esac
+    runo "$P" work list --unblocked
+    check "work list --unblocked on an unlistable work directory exits 1" 1 "$rc"
+    runo "$P" work set "$u1" blocked_by "$u2"
+    check "work set blocked_by on an unlistable work directory exits 1 (no cycle written)" 1 "$rc"
+    runo "$P" trace "$u1"
+    check "trace on an unlistable work directory exits 1" 1 "$rc"
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"
+    check "work create on an unlistable work directory exits 1 (no id reused)" 1 "$rc"
+    chmod 755 "$S/work"
+    check "the unlistable arms left the blockers as they were" "[]" "$(jq -c .blocked_by < <(cd "$P" && bash "$SC" work view "$u1" --json))"
+fi
+
+# -----------------------------------------------------------------------------
 section "work: no sidecar"
 
 mkproj none
