@@ -13,37 +13,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Validate SKILL.md files
-        run: |
-          errors=0
-          count=0
-
-          for dir in */; do
-            skill_file="${dir}SKILL.md"
-            [ ! -f "$skill_file" ] && continue
-
-            count=$((count + 1))
-            dir_name="${dir%/}"
-
-            # Extract frontmatter
-            frontmatter=$(sed -n '2,/^---$/p' "$skill_file" | head -n -1)
-
-            # Check name field
-            name=$(echo "$frontmatter" | grep '^name:' | sed 's/name: *//')
-            if [ -z "$name" ]; then
-              echo "ERROR: $skill_file missing 'name' field"
-              errors=$((errors + 1))
-            elif [ "$name" != "$dir_name" ]; then
-              echo "ERROR: $skill_file name '$name' does not match directory '$dir_name'"
-              errors=$((errors + 1))
-            fi
-          done
-
-          echo ""
-          echo "Validated $count skills, $errors errors"
-
-          if [ $errors -gt 0 ]; then
-            exit 1
-          fi
+        run: bash scripts/check-skill-names.sh
 
   check-skill-references:
     runs-on: ubuntu-latest
