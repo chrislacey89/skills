@@ -261,7 +261,7 @@ the flag would otherwise survive indefinitely:
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 rm -f "$PROJECT_DIR/.claude/.review-stamped"
 SC="<this skill's directory>/references/sidecar.sh"
-BRANCH="<the feature branch Step 1 printed, else empty>"   # empty only when the PR was already merged and its local branch is gone
+BRANCH="<the feature branch Step 1 printed, else empty>"   # empty when the PR was already merged and its local branch is gone: Step 1 then printed the base branch, which is not this branch
 case "$(bash "$SC" backend stamp)" in
   sidecar)
     [ -n "$BRANCH" ] || BRANCH="$(gh pr view <number> --json headRefName -q .headRefName)" \
@@ -272,7 +272,7 @@ case "$(bash "$SC" backend stamp)" in
 esac
 ```
 
-On the sidecar backend the stamp is spent with the review, so it is cleared here too, under the local branch name: the one Step 1 printed and Step 2 reads the stamp with. That name is filled in, as `<number>` is, because no earlier block's shell variable reaches this one, and it is not read again here: `--delete-branch` removes the local branch ([`gh pr merge`](https://cli.github.com/manual/gh_pr_merge) says what it does and when), so `git branch --show-current` may by now name the base. The PR's head name is not a substitute, since a branch pushed under another name (`git push origin local:other`) was stamped under its local one. It is the fallback only when `/closeout` started on an already-merged PR whose local branch is gone. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
+On the sidecar backend the stamp is spent with the review, so it is cleared here too, under the local branch name: the one Step 1 printed and Step 2 reads the stamp with. That name is filled in, as `<number>` is, because no earlier block's shell variable reaches this one, and it is not read again here: `--delete-branch` removes the local branch ([`gh pr merge`](https://cli.github.com/manual/gh_pr_merge) says what it does and when), so `git branch --show-current` may by now name the base. The PR's head name is not a substitute, since a branch pushed under another name (`git push origin local:other`) was stamped under its local one. It is the fallback only when `/closeout` started on an already-merged PR whose local branch is gone, and then Step 1's `git branch --show-current` printed the base branch, not a feature branch: fill `BRANCH` empty in that case, never with the base branch's name, because `stamp clear` of the base name exits 0 and leaves the merged branch's stamp. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
 
 **Then close the merged slice's work item.** On the `github` backend the `Closes #N` line `/pre-merge` wrote into the PR body closed the issue the PR body names at merge. On the `sidecar` backend nothing does, and an item left `open` is offered again by `work list --unblocked` and keeps gating every slice that lists it in `blocked_by` ([references/state-backend.md](references/state-backend.md)). The item to close is the open slice whose `pr` field holds the merged PR's URL. `/pre-merge` Phase 2 records that URL on whichever item Phase 1 was given, the slice or its PRD, so the block matches slices only and leaves a PRD that holds it untouched:
 
