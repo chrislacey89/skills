@@ -422,14 +422,31 @@ nothing in this phase moves the freeze or the submit-by time.
    holds) and `DECISIONS.md` (copied from the dossier's seeded log), make the
    first commit, then push it to the remote added in prep with
    `git push -u origin HEAD`.
-2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Add CI that
-   runs `lefthook run pre-commit --all-files --fail-on-changes` and then
-   `lefthook run pre-push`, so `lefthook.yml` stays the one source for what the
-   hooks run. See [`lefthook run`](https://lefthook.dev/usage/commands/run/)
+2. Run `/init-pipeline` to scaffold the hooks and pre-commit gates. Then run
+   `lefthook run pre-commit --all-files` once, locally, and commit whatever it
+   changes as its own commit, before the CI config is pushed. The first commit
+   (step 1) stays first and holds `PLAN.md` and `DECISIONS.md`, which no hook
+   saw; this commit is where the hooks see them, so CI's first run does not
+   fail on files committed before the hooks existed.
+
+   Then add CI that runs `lefthook run pre-commit --all-files --fail-on-changes`
+   and then `lefthook run pre-push`, so `lefthook.yml` stays the one source for
+   what the hooks run. See [`lefthook run`](https://lefthook.dev/usage/commands/run/)
    for `--all-files` and [`fail_on_changes`](https://lefthook.dev/configuration/fail_on_changes/)
    for the failing-on-changes setting; `lefthook run --help` lists both flags.
    Never write a different command into CI: a CI step that checks other files
    than the hook fails on files every local commit passed.
+
+   One CI step is the exception, and it is not taken from `lefthook.yml`: a
+   secret scan of the repository's history. The scaffolded `gitleaks git
+   --pre-commit --staged --redact` reads the staged changes, and in CI nothing
+   is staged, so it would scan nothing. Add a step that runs `gitleaks git` from
+   the repo root, on a checkout that carries the full history. Per
+   [gitleaks' documentation](https://github.com/gitleaks/gitleaks#git), the
+   `git` command scans a repository's commit history through `git log -p`, and
+   scans the current directory when no path is given; its
+   [exit codes](https://github.com/gitleaks/gitleaks#exit-codes) are 0 for no
+   leaks and 1 for leaks or an error, so the step fails the run on a finding.
 3. Deploy a hello-world to the deploy target, so the slowest unknown is resolved
    first.
 4. Recheck the chosen project against the kickoff remarks (Phase 0, **Kickoff

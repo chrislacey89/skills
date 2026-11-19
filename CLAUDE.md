@@ -176,6 +176,8 @@ When modifying a skill:
 
 A stale surface routes agents and users to a skill that no longer exists, or under a role it no longer holds — the drift #143 reconciled once by hand. Keeping the surfaces in lockstep with the change that causes the drift makes that reconciliation standing rather than after-the-fact, and puts the inventory knowledge in the world instead of the maintainer's head.
 
+The README and the site group skills by the phase where they are used; the role lists here and in `SYSTEM-OVERVIEW.md` say how a skill is entered. They are different axes, so a skill's group in one is not its role in the other. `scripts/check-skill-inventory.sh` checks these surfaces against the skill directories (its header lists the checks); `scripts/test-skill-inventory.sh` pins it.
+
 ### Commands a skill documents
 
 Skills ship executable prose: a downstream agent copies a fenced block out of a `SKILL.md` and runs it unsupervised in someone else's repo. A wrong command does not fail here — it fails later, quietly, somewhere the author will never see. Two rules govern it, and they apply in this order.
@@ -204,7 +206,7 @@ Install Lefthook (`brew install lefthook` or see <https://github.com/evilmartian
 - **Pre-commit** — runs `sync-skill-references.sh --check` and `shellcheck` on any staged shell script. Cheap (<1s), catches drift and shell gotchas before CI does.
 - **Pre-push** — runs every `scripts/test-*.sh` suite plus `shellcheck` across all scripts, except `test-fixture-git-isolation.sh`, which re-runs all the others and so runs in CI only (its header says why). The list is not repeated here; `lefthook.yml` and `.github/workflows/validate-skills.yml` are the two places a new suite must be registered.
 
-Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The repo intentionally has no `package.json` — no JS/TS to tend — so Biome and other Node-ecosystem linters are out of scope until that changes. `scripts/test-skill-frontmatter-loads.sh` also needs the Claude Code CLI (`claude`) at the version in `.claude-code-version`; without it that suite prints a SKIP line locally, and CI installs the pinned version and runs it.
+Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The skills themselves have no JS/TS to tend, and `site/` is a separate Astro app whose tooling is not wired into these hooks, so Biome and other Node-ecosystem linters are out of scope until that changes. `scripts/test-skill-frontmatter-loads.sh` also needs the Claude Code CLI (`claude`) at the version in `.claude-code-version`; without it that suite prints a SKIP line locally, and CI installs the pinned version and runs it.
 
 ### Reading a prose diff
 

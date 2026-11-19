@@ -23,7 +23,7 @@
 #   3. WHERE THE ATTRIBUTE LIVES — `:root[data-theme]` only matches <html>, so
 #      no example element other than <html> carries `data-theme=`, and every
 #      script that writes the theme writes it on `document.documentElement`.
-#   4. COVERAGE — every light token except the layout-only ones (`--sans`,
+#   4. COVERAGE — every light token except the layout-only ones (`--sans`, `--measure`,
 #      `--mono`, `--s<n>`, `--r<n>`) is also defined in both dark copies, so a
 #      new light color cannot land without a dark value. Each `--flag-*` color is
 #      reported by name (#769). Names are read from every `;`-separated field
@@ -32,6 +32,8 @@
 #      `_` or uppercase all count. Before this, deleting `--flag-fw`
 #      from both dark copies still passed, and dark pages fell back to the light
 #      value (#772).
+#   5. MEASURE — the literal `74ch` appears exactly once in the design doc, on the
+#      `--measure:` declaration, so a fifth `max-width:74ch` cannot land unseen.
 #
 # The native-Mermaid exception is prose, and a grep over prose passes a sentence
 # that reverses it, so it is not pinned here; core §6 and design §5 both state it (#772,
@@ -138,7 +140,7 @@ check "every theme write targets document.documentElement" \
 
 # 4. COVERAGE
 # Layout tokens are theme-independent, so light is their only home.
-themed="$(printf '%s\n' "$light_names" | grep -vE '^--(sans|mono|s[0-9]+|r[0-9]+)$' || true)"
+themed="$(printf '%s\n' "$light_names" | grep -vE '^--(sans|mono|measure|s[0-9]+|r[0-9]+)$' || true)"
 check "light declares themed tokens to check" "no themed tokens found in the light block" test -n "$themed"
 for copy in guarded attr; do
     if [[ "$copy" == guarded ]]; then have="$guarded_names"; label='the media-guarded dark copy'
@@ -158,6 +160,19 @@ while IFS= read -r flag; do
         bad "$flag is defined in light but missing from a dark copy"
     fi
 done <<< "$flags"
+
+# 5. THE MEASURE LIVES IN ONE TOKEN
+# `--measure` names the reading width once, and every width that wants it says
+# `var(--measure)`. A second literal `74ch` anywhere in the file (a `max-width`
+# in a rule, an inline style) is the measure held in two places. Count the
+# literal over the whole file, in any markup, and require its one occurrence to
+# be the `--measure:` declaration. Other `ch` values are not the measure.
+measure_is_one_token() { [[ "$1" == 1 && "$2" =~ ^[0-9]+:[[:space:]]*--measure:[[:space:]]*74ch ]]; }
+measure_hits="$(grep -n '74ch' "$design" || true)"
+measure_count="$(printf '%s' "$measure_hits" | grep -c . || true)"
+check "the 74ch measure appears once, as the --measure declaration" \
+    "74ch appears $measure_count times, or not as --measure:; use var(--measure): $measure_hits" \
+    measure_is_one_token "$measure_count" "$measure_hits"
 
 if [[ "$fail" -ne 0 ]]; then
     printf '\nFAILED\n'; exit 1

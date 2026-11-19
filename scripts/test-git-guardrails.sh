@@ -156,8 +156,8 @@ done < <(section_commands '## What Stays Allowed')
 # (a claim nothing executes) relocated into the test that was meant to end it.
 # Changing either documented list is expected to change these numbers; that is
 # the forcing function, not an obstacle.
-EXPECTED_BLOCKED=21
-EXPECTED_ALLOWED=10
+EXPECTED_BLOCKED=35
+EXPECTED_ALLOWED=19
 [ "${#documented_blocked[@]}" -eq "$EXPECTED_BLOCKED" ] || \
     fatal "extracted ${#documented_blocked[@]} blocked forms, expected $EXPECTED_BLOCKED. If you changed '## What Gets Blocked', update EXPECTED_BLOCKED; if you did not, the extractor is dropping entries."
 [ "${#documented_allowed[@]}" -eq "$EXPECTED_ALLOWED" ] || \
@@ -302,6 +302,34 @@ assert_blocked_form 'git restore -SW .'                'the same two, bundled'
 # guard honoring `--` from one that ignores it.
 assert_blocked_form 'git clean -f -- -n'               'a flag-shaped filename after -- is not a flag'
 
+# #334: commands that throw away uncommitted work, remove the means of
+# recovering work, or delete something on the remote. Each rule has its blocked
+# spellings here and its near-misses in the allowed section below.
+assert_blocked_form 'git checkout -f main'             'checkout -f discards the working tree'
+assert_blocked_form 'git checkout main --force'        'long force flag after the operand'
+assert_blocked_form 'git checkout -fb new main'        'force bundled with -b'
+assert_blocked_form 'git -C /tmp/repo switch --discard-changes main' 'switch long discard flag behind a global option'
+assert_blocked_form 'git switch -f main'               'switch -f discards the working tree'
+assert_blocked_form 'git rm -rf .'                     'removes every tracked file'
+assert_blocked_form 'git rm -r -f ./'                  'split flags, trailing-slash cwd'
+assert_blocked_form 'git rm -fr :/'                    'reordered bundle, top-level magic pathspec'
+assert_blocked_form 'git rm -rf -- .'                  'whole tree after the -- separator'
+assert_blocked_form 'git worktree remove -f ../wt'     'forced worktree removal'
+assert_blocked_form 'git worktree remove ../wt --force' 'long force flag after the operand'
+assert_blocked_form 'git stash clear'                  'drops every stash'
+assert_blocked_form 'git reflog expire --all'          'deletes recovery history'
+assert_blocked_form 'git filter-branch --tree-filter true HEAD' 'rewrites history, with no force flag'
+assert_blocked_form 'git push origin --delete feature' 'remote branch delete, flag after the remote'
+assert_blocked_form 'git push -d origin feature'       'short remote delete flag'
+assert_blocked_form 'git push origin :feature'         'empty-source refspec deletes the remote branch'
+assert_blocked_form 'git push origin +:'                'the bare colon with + is still a force push'
+# shellcheck disable=SC2016  # the unexpanded $( and backtick ARE the test data
+assert_blocked_form 'git push origin :$(git branch --show-current)' 'a colon before a command substitution names the ref to delete'
+# shellcheck disable=SC2016
+assert_blocked_form 'git push origin :`git branch --show-current`' 'a colon before a backtick substitution names the ref to delete'
+# shellcheck disable=SC2016
+assert_blocked_form 'git push origin :"$(git branch --show-current)"' 'the quoted substitution form deletes the same way'
+
 # -----------------------------------------------------------------------------
 
 section "benign near-misses stay allowed"
@@ -357,6 +385,34 @@ assert_allowed_form 'git --version push -f'            'bare --version prints an
 assert_allowed_form 'git --html-path push -f'          'bare --html-path prints and runs nothing'
 assert_allowed_form 'git --man-path reset --hard'      'bare --man-path prints and runs nothing'
 assert_allowed_form 'git --info-path reset --hard'     'bare --info-path prints and runs nothing'
+
+# #334 near-misses, one or more per new rule. Three are allowed on purpose and
+# stated as such by the owner's rule: stash drop, branch -f, submodule deinit -f.
+assert_allowed_form 'git checkout -b f'                'a branch named f is an operand, not -f'
+assert_allowed_form 'git switch -c f'                  'creating a branch with switch'
+assert_allowed_form 'git switch main'                  'an ordinary switch'
+assert_allowed_form 'git rm -r --cached somefile'      'index-only removal of a named path'
+assert_allowed_form 'git rm -rf --cached .'            'index-only removal leaves the working tree'
+assert_allowed_form 'git rm -rf src/old'               'a named directory, not the whole tree'
+assert_allowed_form 'git rm -rf -n .'                  'a dry run removes nothing'
+assert_allowed_form 'git rm old.txt'                   'removing one named file'
+assert_allowed_form 'git worktree remove ../wt'        'unforced worktree removal'
+assert_allowed_form 'git worktree add ../wt -f'        'only remove is forced-destructive'
+assert_allowed_form 'git stash drop'                   'one stash, allowed on purpose'
+assert_allowed_form 'git stash drop stash@{1}'         'a named stash, allowed on purpose'
+assert_allowed_form 'git stash push -m clear'          'clear as a message, not the subcommand'
+assert_allowed_form 'git stash -m clear'               'a message named clear, with a flag before it'
+assert_allowed_form 'git branch -f feature main'       'moves a branch pointer, allowed on purpose'
+assert_allowed_form 'git submodule deinit -f vendor/lib' 'allowed on purpose'
+assert_allowed_form 'git reflog show'                  'reading the reflog'
+assert_allowed_form 'git reflog'                       'reading the reflog, bare'
+assert_allowed_form 'git push origin feature'          'an ordinary push of a branch'
+assert_allowed_form 'git push origin HEAD:feature'     'a refspec with a source is not a delete'
+assert_allowed_form 'git push origin :'                'the bare colon pushes matching branches, it deletes nothing'
+assert_allowed_form 'git push origin : main'           'a bare colon beside a plain branch is not a delete'
+assert_allowed_form 'git push origin : && echo ok'     'a bare colon before a separator is still no delete'
+assert_allowed_form 'git push origin :; echo ok'       'a bare colon before a semicolon is still no delete'
+assert_allowed_form 'git push --dry-run origin feature' 'a long flag that is not --delete'
 
 # The guard must not choke on input that is not a git command at all.
 assert_allowed_form 'echo hello'                       'a non-git command'
@@ -1161,6 +1217,20 @@ assert_eq guard-sidecar-stale "$(run_chk "$chk_proj")" 'a guard whose sidecar.sh
 
 unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL SKILL_KIT_SIDECAR_ROOT SKILL_KIT_RESEARCH_ARCHIVE
 rm -rf "$sc_tmp"
+
+# -----------------------------------------------------------------------------
+# The repo's own installed copy. .claude/settings.json runs
+# .claude/hooks/block-dangerous-git.sh, while every check above reads the
+# canonical script, so a copy that drifts is a guard nothing here exercises.
+
+section "the repo's installed guard copy matches the canonical script"
+
+repo_guard="$repo_root/.claude/hooks/block-dangerous-git.sh"
+if cmp -s "$script" "$repo_guard"; then
+    assert_eq same same '.claude/hooks/block-dangerous-git.sh is byte-identical to the canonical script'
+else
+    assert_eq same differs '.claude/hooks/block-dangerous-git.sh differs from git-guardrails-claude-code/scripts/block-dangerous-git.sh: copy the canonical script over it'
+fi
 
 # -----------------------------------------------------------------------------
 

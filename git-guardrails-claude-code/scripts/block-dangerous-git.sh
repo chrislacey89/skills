@@ -70,6 +70,25 @@ has_force_refspec() {
     return 1
 }
 
+# has_delete_refspec <operands> — true when any operand is a refspec with an
+# empty source (`:feature`), which git reads as "delete that ref on the remote".
+# Like the leading `+`, it arrives as an operand, so the `--delete` flag check
+# alone cannot see it. An operand that is exactly `:` is not a delete: per
+# https://git-scm.com/docs/git-push (<refspec>), "The special refspec `:` (or
+# `+:` to allow non-fast-forward updates) directs Git to push "matching"
+# branches", while "If <src> is empty, it deletes the <dst> ref" applies only
+# when a name follows the colon. (`+:` stays refused by the force rule.)
+has_delete_refspec() {
+    local word
+    for word in $1; do
+        case "$word" in
+            :) ;;
+            :*) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 # pathspec_is_everything <operands> — true when the operands name the whole
 # working tree. Recognized by reduction rather than by listing spellings, since
 # enumerating spellings is how the substring matcher this replaced kept leaking.
@@ -243,6 +262,16 @@ inspect_git() {
                 REASON="force push via + refspec — rewrites published history"
                 return 1
             fi
+            # Deleting a remote branch, by flag or by the `:branch` refspec,
+            # removes something on the remote that a push cannot bring back.
+            if has "$flags" -d || has "$flags" --delete; then
+                REASON="remote branch delete — deletes a ref on the remote"
+                return 1
+            fi
+            if has_delete_refspec "$operands"; then
+                REASON="remote branch delete via :ref refspec — deletes a ref on the remote"
+                return 1
+            fi
             ;;
         reset)
             # --soft, --mixed, and --keep all leave the working tree intact.
@@ -277,6 +306,13 @@ inspect_git() {
             fi
             ;;
         checkout|restore)
+            # `checkout -f` throws away local changes to switch branches, with
+            # no pathspec for the check below to see. `restore` has no such
+            # flag, so only checkout is asked.
+            if [ "$subcommand" = checkout ] && { has "$flags" -f || has "$flags" --force; }; then
+                REASON="forced checkout — discards uncommitted work"
+                return 1
+            fi
             # Patch mode prompts per hunk before discarding anything, so the
             # operator is already being asked.
             if has "$flags" -p || has "$flags" --patch; then
@@ -298,6 +334,60 @@ inspect_git() {
                 REASON="discards all working-tree changes"
                 return 1
             fi
+            ;;
+        switch)
+            # -f is the short spelling of --discard-changes (and of --force).
+            if has "$flags" -f || has "$flags" --force || has "$flags" --discard-changes; then
+                REASON="forced switch — discards uncommitted work"
+                return 1
+            fi
+            ;;
+        rm)
+            # Only the whole-tree forced form. A dry run removes nothing, and
+            # --cached touches the index and leaves the working tree alone.
+            if has "$flags" -n || has "$flags" --dry-run || has "$flags" --cached; then
+                return 0
+            fi
+            if { has "$flags" -f || has "$flags" --force; } && has "$flags" -r \
+               && pathspec_is_everything "$operands"; then
+                REASON="forced recursive removal of the whole tree — deletes every tracked file"
+                return 1
+            fi
+            ;;
+        worktree)
+            case "$operands" in
+                " remove "*)
+                    if has "$flags" -f || has "$flags" --force; then
+                        REASON="forced worktree removal — discards its uncommitted work"
+                        return 1
+                    fi
+                    ;;
+            esac
+            ;;
+        stash)
+            # `clear` takes no options and drops every stash. `stash drop` is
+            # one stash and is allowed on purpose. Requiring no flags keeps
+            # `git stash -m clear` (a message) from reading as the subcommand.
+            if [ "$flags" = " " ]; then
+                case "$operands" in
+                    " clear "*)
+                        REASON="stash clear — drops every stash"
+                        return 1
+                        ;;
+                esac
+            fi
+            ;;
+        reflog)
+            case "$operands" in
+                " expire "*)
+                    REASON="reflog expire — deletes the history used to recover work"
+                    return 1
+                    ;;
+            esac
+            ;;
+        filter-branch)
+            REASON="filter-branch — rewrites history"
+            return 1
             ;;
     esac
 
@@ -604,6 +694,12 @@ normalized=${normalized//\'/}
 # Shell control operators become segment boundaries, so `git status && rm -f x`
 # is not read as one invocation with an -f flag. Two-character operators are
 # replaced before their one-character prefixes.
+# A colon right before a command substitution (`:$(...)`, :`...`) is kept as a
+# named operand before those openers turn into boundaries; otherwise it would
+# arrive as a bare `:`, which is no delete. `:(` is left alone: it is the
+# pathspec long form, which must keep arriving as a bare `:`.
+normalized=${normalized//:\$(/:SUBST$'\n'}
+normalized=${normalized//:\`/:SUBST$'\n'}
 normalized=${normalized//&&/$'\n'}
 normalized=${normalized//||/$'\n'}
 normalized=${normalized//\$(/$'\n'}

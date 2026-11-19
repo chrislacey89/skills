@@ -53,6 +53,8 @@ The pipeline is the default path, not a prison. Skills can backtrack when assump
 
 ## Skills
 
+The tables below group skills by the phase where they are used. The role lists in `CLAUDE.md` and `SYSTEM-OVERVIEW.md` say how a skill is entered instead (primary, helper, side-route, infrastructure), so the two are different axes and a skill can sit in one group here and a different role there.
+
 ### Planning & Design
 
 | Skill | Description |

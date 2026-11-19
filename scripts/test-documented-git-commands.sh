@@ -1793,6 +1793,48 @@ for g in $excavate_gh_list; do
 done
 assert_eq "$excavate_total" "$((excavate_setup_n + excavate_gh_n + excavate_git_n))" "setup + gh + git partition the census, every block in exactly one class"
 
+# --- Miner A's output-file list is derived, not trusted (#518) ---------------
+#
+# Step 2 hands Miner A a list of the files it writes and has it report the
+# paths it wrote against that list. The list was prose with no check behind it,
+# and it had drifted from the blocks in both directions. So the list is read
+# from the prose and compared with the `> "$WORK/<file>"` targets of the fenced
+# blocks in the steps the same sentence says Miner A runs. Any difference, in
+# either direction, fails.
+
+excavate_miner_a_text() {
+    awk '
+        /^- \*\*Miner A/ { on = 1 }
+        /^- \*\*Miner B/ { on = 0 }
+        on { printf "%s ", $0 }
+    ' "$excavate_skill"
+}
+
+# shellcheck disable=SC2016  # backticks are literal markdown
+excavate_prose_files="$(excavate_miner_a_text | sed 's/.* writes //; s/;.*//' | grep -o '`[^`]*`' | tr -d '`' | sort -u)"
+excavate_miner_steps="$(excavate_miner_a_text | grep -o 'blocks in Steps [0-9 and]*' | grep -o '[0-9]\+' | sort -u)"
+[[ -n "$excavate_prose_files" ]] || fatal "no files found in the Miner A bullet of $excavate_skill"
+[[ -n "$excavate_miner_steps" ]] || fatal "no 'blocks in Steps N and M' phrase in the Miner A bullet of $excavate_skill"
+
+# Targets written by fenced bash blocks under the named `### N.` headings.
+excavate_block_files=""
+# shellcheck disable=SC2016  # the patterns are literal text to match against, not expansions
+for step in $excavate_miner_steps; do
+    excavate_block_files="$excavate_block_files
+$(awk -v step="$step" '
+        /^### / { inside = ($0 ~ "^### " step "\\.") }
+        /^```/ { fence = !fence; next }
+        inside && fence { print }
+    ' "$excavate_skill" | { grep -o '> "\$WORK/[^"]*"' || true; } | sed 's/^> "\$WORK\///; s/"$//')"
+done
+excavate_block_files="$(printf '%s\n' "$excavate_block_files" | { grep . || true; } | sort -u)"
+[[ -n "$excavate_block_files" ]] || fatal "no > \"\$WORK/...\" targets found under Steps $excavate_miner_steps of $excavate_skill"
+
+excavate_only_prose="$(comm -23 <(printf '%s\n' "$excavate_prose_files") <(printf '%s\n' "$excavate_block_files") | tr '\n' ' ')"
+excavate_only_blocks="$(comm -13 <(printf '%s\n' "$excavate_prose_files") <(printf '%s\n' "$excavate_block_files") | tr '\n' ' ')"
+assert_eq "" "$excavate_only_prose" "Miner A's list names no file that none of its blocks writes"
+assert_eq "" "$excavate_only_blocks" "Miner A's blocks write no file its list leaves out"
+
 # --- Locating blocks by content ----------------------------------------------
 
 excavate_find() {   # $1 = fixed substring that must occur in exactly one block; $2 = variable to set
