@@ -18,7 +18,7 @@
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
 #   sidecar.sh config set system <label>   (joins this project's group for related-solutions-dirs; "" leaves it)
-#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager> <cmd>   ("" declares none)
+#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager|runtime_check> <cmd>   ("" declares none)
 #   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
 #   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
 #   sidecar.sh config set design <json {ref, note?}>   (one pointer the pack names and never fetches; "" declares none)
@@ -44,7 +44,7 @@
 #                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
 #   sidecar.sh work view <W-n> [--json]
 #   sidecar.sh work edit <W-n> --body-file <f>   (refuses a body shorter than the one it replaces)
-#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|branch|reviewed_sha|start_sha> <value>
+#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|branch|reviewed_sha|start_sha> <value>
 #   sidecar.sh work comment <W-n> --body-file <f>
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
 #   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
@@ -102,9 +102,11 @@
 # below can parse what the writer writes without a YAML library. A new id is
 # max(existing)+1, claimed by hard-linking a finished temp file to W-<n>.md,
 # which fails if another writer got there first; the loser takes the next
-# number. decomposed_into is replaced on every set, never appended to. edit
-# compares byte counts against the body it read and refuses a shorter one. A
-# body may not contain a comment heading, because the reader splits on it.
+# number. decomposed_into and blocked_by are replaced on every set, never
+# appended to; a set blocked_by is validated as create's is, and refused when
+# it would make a cycle. edit compares byte counts against the body it read
+# and refuses a shorter one. A body may not contain a comment heading, because
+# the reader splits on it.
 # The id regex is WORK_ID_RE, the one docs/state-backend.md states.
 #
 # require resolution order. The first candidate that exists wins; each step runs
@@ -1008,7 +1010,7 @@ config_set_system() {
 # The verify command fields, in the order profile prints them. config set
 # accepts exactly these plus hazards, and VERIFY_FIELDS is derived from this
 # list, so a field added here is both writable and rendered.
-VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager)
+VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager runtime_check)
 VERIFY_FIELDS="[$(printf '"%s",' "${VERIFY_FIELD_NAMES[@]}")"
 VERIFY_FIELDS="${VERIFY_FIELDS%,}]"
 
@@ -1515,14 +1517,20 @@ cited_probe() {
     case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
     # A link may carry a section anchor (name.md#section); look up the file.
     case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
-    # An anchor may carry a line suffix (path:12, :12-20, :12+, :12, 30-31);
-    # look up the file. Only a suffix that is all line numbers is stripped, and
-    # only when the path does not exist with it, so a real name holding a
-    # colon is still found as named.
-    if [ ! -e "$probe" ] && [[ "$probe" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
-        probe="${BASH_REMATCH[1]}"
+    strip_line_anchor "$probe"
+}
+
+# strip_line_anchor <path>: the path without a line suffix (path:12, :12-20,
+# :12+, :12, 30-31), so an anchor looks up its file. Only a suffix that is all
+# line numbers is stripped, and only when the path does not exist with it, so
+# a real name holding a colon is still found as named. require (through
+# cited_probe), lessons match and lessons flag --for share it.
+strip_line_anchor() {
+    local p="$1"
+    if [ ! -e "$p" ] && [[ "$p" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
+        p="${BASH_REMATCH[1]}"
     fi
-    printf '%s\n' "$probe"
+    printf '%s\n' "$p"
 }
 
 # resolve_cited <path> <referrer>: require's lookup, shared with trace. Prints
@@ -1724,7 +1732,12 @@ cmd_fixrun() {
     case "$sub" in
         record)
             # cmd_work sets WORK_DIR; this verb does not go through it.
-            [ -z "$work" ] || [ -f "$sc/work/$work.md" ] || refuse "fixrun record refused: --work names $work, which does not exist"
+            if [ -n "$work" ]; then
+                [ -f "$sc/work/$work.md" ] || {
+                    [ ! -d "$sc/work" ] || work_dir_listable "fixrun record" "$sc/work"
+                    refuse "fixrun record refused: --work names $work, which does not exist"
+                }
+            fi
             mkdir -p "$sc/fix-runs" || refuse "fixrun record: cannot create $sc/fix-runs"
             line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" --arg w "$work" \
                 '{branch: $b, run: $r, sha: $s} + (if $t == "" then {} else {thread: $t} end)
@@ -1847,7 +1860,10 @@ work_ids_csv() {
         id="$(printf '%s' "$id" | tr -d ' ')"
         [ -n "$id" ] || continue
         is_work_id "$id" || die_usage "work: $label must be ids like W-3: $id"
-        [ -f "$WORK_DIR/$id.md" ] || refuse "work: $label names $id, which does not exist"
+        [ -f "$WORK_DIR/$id.md" ] || {
+            work_dir_listable work "$WORK_DIR"
+            refuse "work: $label names $id, which does not exist"
+        }
         out="${out:+$out,}$id"
     done
     printf '%s' "$out"
@@ -1882,7 +1898,10 @@ work_rewrite() {
 # work_existing <id>: refuse unless the id is well-formed and its file exists.
 work_existing() {
     is_work_id "$1" || die_usage "work: expected an id like W-3, got: $1"
-    [ -f "$WORK_DIR/$1.md" ] || refuse "work: no such work item: $1"
+    [ -f "$WORK_DIR/$1.md" ] || {
+        [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
+        refuse "work: no such work item: $1"
+    }
 }
 
 cmd_work() {
@@ -1976,7 +1995,10 @@ work_create() {
     mkdir -p "$WORK_DIR" || refuse "work create: cannot create $WORK_DIR"
     if [ -n "$parent" ]; then
         is_work_id "$parent" || die_usage "work create: --parent must be an id like W-3: $parent"
-        [ -f "$WORK_DIR/$parent.md" ] || refuse "work create: --parent names $parent, which does not exist"
+        [ -f "$WORK_DIR/$parent.md" ] || {
+            work_dir_listable "work create" "$WORK_DIR"
+            refuse "work create: --parent names $parent, which does not exist"
+        }
     fi
     blocked="$(work_ids_csv --blocked-by "$blocked")" || exit $?
     body="$(work_body "$bf")" || exit 1
@@ -1984,6 +2006,7 @@ work_create() {
     while [ "$i" -lt 50 ]; do
         i=$((i + 1))
         max=0
+        work_dir_listable "work create" "$WORK_DIR"
         for b in "$WORK_DIR"/W-*.md; do
             b="${b##*/W-}"; b="${b%.md}"
             [[ "$b" =~ ^[0-9]+$ ]] || continue
@@ -2053,9 +2076,53 @@ work_edit() {
     work_rewrite "$id" "sidecar: work edit $id" '.body = $body' --arg body "$new"
 }
 
+# work_dir_listable <verb> <dir>: refuse when <dir> cannot be listed.
+work_dir_listable() {
+    { [ -r "$2" ] && [ -x "$2" ]; } || refuse "$1: cannot list $2"
+}
+
+# work_all_fm <verb>: every work item's frontmatter, one compact JSON object
+# per line. A file that does not parse is refused with its path, never skipped:
+# an item left out of a listing reads as an item that is not there.
+work_all_fm() {
+    local verb="$1" f one
+    [ -d "$WORK_DIR" ] || return 0
+    work_dir_listable "$verb" "$WORK_DIR"
+    for f in "$WORK_DIR"/W-*.md; do
+        [ -f "$f" ] || continue
+        # A parse failure is the assignment's exit status, never a word in the
+        # output: an item's own frontmatter (a milestone, a pr URL) can say anything.
+        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f")" || refuse "$verb: $f does not parse"
+        printf '%s\n' "$one"
+    done
+}
+
+# work_blocked_by_cycle <id> <csv>: refuse when giving <id> these blockers
+# would make <id> wait on itself through the stored edges. create cannot make
+# a cycle (its blockers exist before it does); set can, and a cycle leaves
+# every item on it blocked for good.
+work_blocked_by_cycle() {
+    local id="$1" csv="$2" all
+    [ -n "$csv" ] || return 0
+    all="$(work_all_fm "work set")" || exit 1
+    # shellcheck disable=SC2016  # $-names are jq variables
+    printf '%s\n' "$all" | jq -se --arg id "$id" --arg v "$csv" '
+        (map({key: .id, value: (.blocked_by // [])}) | from_entries) as $m
+        | def reach($seen; $todo):
+            if $todo == [] then $seen
+            elif any($seen[]; . == $todo[0]) then reach($seen; $todo[1:])
+            else reach($seen + [$todo[0]]; $todo[1:] + ($m[$todo[0]] // [])) end;
+          reach([]; $v | split(",")) | any(.[]; . == $id) | not' >/dev/null
+    case $? in
+        0) return 0 ;;
+        1) refuse "work set refused: blocked_by $csv would make a cycle, since one of them already waits on $id; $id is unchanged" ;;
+        *) refuse "work set: could not check blocked_by $csv for a cycle; $id is unchanged" ;;
+    esac
+}
+
 work_set() {
     local id="${1:-}" field="${2:-}" value="${3-}" kind
-    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|branch|reviewed_sha|start_sha> <value>"
+    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|branch|reviewed_sha|start_sha> <value>"
     work_existing "$id"
     case "$value" in *$'\n'*) die_usage "work set: the value must be one line" ;; esac
     kind="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.kind" "$WORK_DIR/$id.md")" || refuse "work set: $WORK_DIR/$id.md does not parse"
@@ -2067,16 +2134,20 @@ work_set() {
         decomposed_into)
             [ "$kind" = prd ] || refuse "work set: decomposed_into is for prds; $id is a $kind"
             value="$(work_ids_csv decomposed_into "$value")" || exit $? ;;
+        blocked_by)
+            # Validated as create's --blocked-by is; "" declares no blockers.
+            value="$(work_ids_csv blocked_by "$value")" || exit $?
+            work_blocked_by_cycle "$id" "$value" ;;
         pr) [ -n "$value" ] || die_usage "work set: pr needs a value" ;;
         branch) [ -n "$value" ] || die_usage "work set: branch needs a value" ;;
         reviewed_sha|start_sha)
             printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: $field must be 40 lowercase hex characters: $value" ;;
-        *) die_usage "work set: field must be state, maturity, decomposed_into, pr, branch, reviewed_sha, or start_sha" ;;
+        *) die_usage "work set: field must be state, maturity, decomposed_into, blocked_by, pr, branch, reviewed_sha, or start_sha" ;;
     esac
-    if [ "$field" = decomposed_into ]; then
-        # Replaced, never appended to: the reader always sees the latest decomposition.
+    if [ "$field" = decomposed_into ] || [ "$field" = blocked_by ]; then
+        # Replaced, never appended to: the reader always sees the latest list.
         # shellcheck disable=SC2016  # $-names are jq variables
-        work_rewrite "$id" "sidecar: work set $id $field" '.fm.decomposed_into = ($v | split(",") | map(select(length > 0)))' --arg v "$value"
+        work_rewrite "$id" "sidecar: work set $id $field" '.fm[$k] = ($v | split(",") | map(select(length > 0)))' --arg k "$field" --arg v "$value"
     else
         # shellcheck disable=SC2016  # $-names are jq variables
         work_rewrite "$id" "sidecar: work set $id $field" '.fm[$k] = $v' --arg k "$field" --arg v "$value"
@@ -2123,7 +2194,7 @@ work_close() {
 }
 
 work_list() {
-    local kind="" parent="" branch="" unblocked=0 state=open f all one
+    local kind="" parent="" branch="" unblocked=0 state=open all
     while [ $# -gt 0 ]; do
         case "$1" in
             --kind)   [ $# -ge 2 ] || die_usage "work list: --kind needs a value"; kind="$2"; shift 2 ;;
@@ -2138,14 +2209,7 @@ work_list() {
     case "$state" in open|closed|all) ;; *) die_usage "work list: --state must be open, closed, or all" ;; esac
     [ -z "$parent" ] || is_work_id "$parent" || die_usage "work list: --parent must be an id like W-3: $parent"
     [ -d "$WORK_DIR" ] || return 0
-    # A parse failure is the assignment's exit status, never a word in the
-    # output: an item's own frontmatter (a milestone, a pr URL) can say anything.
-    all=""
-    for f in "$WORK_DIR"/W-*.md; do
-        [ -f "$f" ] || continue
-        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f")" || { printf 'sidecar.sh: work list: %s does not parse\n' "$f" >&2; exit 1; }
-        all="$all$one"$'\n'
-    done
+    all="$(work_all_fm "work list")" || exit 1
     # An --unblocked item is open and every blocked_by id is closed; an id
     # missing from the store counts as open, so a typo never unblocks.
     printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg br "$branch" --arg s "$state" --argjson u "$unblocked" '
@@ -2247,6 +2311,7 @@ trace_work() {
     sc="$(do_resolve)" || exit 1
     sc="$(cd "$sc" && pwd -P)"
     dir="$sc/work"
+    [ ! -d "$dir" ] || work_dir_listable trace "$dir"
     [ -f "$dir/$id.md" ] || refuse "trace: no such work item: $id"
     for f in "$dir"/W-*.md; do
         [ -f "$f" ] || continue
@@ -2798,8 +2863,9 @@ lessons_match() {
             --*) die_usage "lessons match: unknown argument: $arg" ;;
             *$'\n'*) die_usage "lessons match: an argument holds a newline; pass one path per argument" ;;
         esac
-        # A Context anchor names a line or a range after the path: path:12, path:12-40.
-        if [[ "$arg" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then arg="${BASH_REMATCH[1]}"; fi
+        # A Context anchor names a line or a range after the path; strip it the
+        # way require does.
+        arg="$(strip_line_anchor "$arg")"
         case "$arg" in
             "$top") arg="" ;;
             "$top"/*) arg="${arg#"$top"/}" ;;
@@ -3332,7 +3398,7 @@ lessons_flag() {
     # ranks them.
     top="$(pgit rev-parse --show-toplevel)" || refuse "lessons flag: cannot find the project's top level"
     prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons flag: cannot find the project's top level"
-    if [[ "$for" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then for="${BASH_REMATCH[1]}"; fi
+    for="$(strip_line_anchor "$for")"
     case "$for" in
         "$top"/*) for="${for#"$top"/}" ;;
         /*) refuse "lessons flag: $for is outside the project at $top" ;;

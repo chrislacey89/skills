@@ -131,6 +131,21 @@ check "a path with a :line suffix matches as the path" \
 runo "$P" lessons match tools/run.sh:120-131
 check "a path with a :start-end suffix matches as the path" \
     "exact${TAB}docs/solutions/testing/h-2026-01-01.md${TAB}Exact file" "$(printf '%s\n' "$out" | head -n 1)"
+# The other anchor forms `require` strips (#577), and its rule that only a
+# suffix of line numbers on a path that does not exist as written is stripped.
+runo "$P" lessons match "tools/run.sh:12+"
+check "a path with a :line+ suffix matches as the path" \
+    "exact${TAB}docs/solutions/testing/h-2026-01-01.md${TAB}Exact file" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match "tools/run.sh:12, 30-31"
+check "a path with a :line, range list matches as the path" \
+    "exact${TAB}docs/solutions/testing/h-2026-01-01.md${TAB}Exact file" "$(printf '%s\n' "$out" | head -n 1)"
+runo "$P" lessons match "tools/run.sh:1b"
+check "a suffix that is not all line numbers is kept" "no lesson points at these files" "$(printf '%s\n' "$out" | head -n 1)"
+lesson "$P" "testing/i-2026-01-01.md" "Colon name" "paths: [tools/log:12]"
+mkdir -p "$P/tools"; : > "$P/tools/log:12"
+runo "$P" lessons match "tools/log:12"
+check "a real file named with a :line suffix matches as named" \
+    "exact${TAB}docs/solutions/testing/i-2026-01-01.md${TAB}Colon name" "$(printf '%s\n' "$out" | head -n 1)"
 
 # -----------------------------------------------------------------------------
 section "order: exact first, then folders deepest first"
@@ -1203,6 +1218,14 @@ check "flag from a subfolder: match returns the lesson for the ../ and // path" 
 runo "$FLP/sub" lessons flag ../docs/solutions/x/broad-2026-01-01.md --for ../lib//core/a.sh --reason "dotdot"
 check "flag from a subfolder with ../ and //: exits 0" 0 "$rc"
 check "flag from a subfolder with ../ and //: the exact entry is recorded" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .entry)"
+# --for takes every anchor form lessons match takes, through the same helper
+# (strip_line_anchor), so a flag raised from a Context anchor finds its entry.
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for "lib/core/a.sh:12+" --reason "plus anchor"
+check "flag --for a :line+ anchor: exits 0" 0 "$rc"
+check "flag --for a :line+ anchor: for is the path" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .for)"
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for "lib/core/a.sh:12, 30-31" --reason "list anchor"
+check "flag --for a :line, range list anchor: exits 0" 0 "$rc"
+check "flag --for a :line, range list anchor: for is the path" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .for)"
 
 mkproj
 lesson "$P" "x/solo-2026-01-01.md" "Solo" "paths: [a.sh]"

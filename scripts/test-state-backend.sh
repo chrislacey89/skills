@@ -785,6 +785,61 @@ runo "$P" work set "$prd" state finished
 check "set refuses an unknown state" 2 "$rc"
 runo "$P" work set "$prd" milestone other
 check "set refuses a field outside its list" 2 "$rc"
+
+# set blocked_by (#564): rewrites the edge in place, validated as create's
+# --blocked-by is, and refused rather than guessed whenever a read fails.
+runo "$P" work set "$s2" blocked_by ""
+check "set blocked_by to empty exits 0" 0 "$rc"
+runo "$P" work view "$s2" --json
+check "set blocked_by to empty clears the list" "[]" "$(printf '%s' "$out" | jq -c '.blocked_by // []')"
+runo "$P" work list --unblocked --kind slice
+check "a cleared blocked_by unblocks the slice" "$s1
+$s2" "$out"
+runo "$P" work set "$s2" blocked_by " $s1 , "
+check "set blocked_by exits 0" 0 "$rc"
+check "set blocked_by commits in the sidecar" "sidecar: work set $s2 blocked_by" "$(git -C "$S" log -1 --format=%s)"
+runo "$P" work view "$s2" --json
+check "set blocked_by normalizes and records the list" "[\"$s1\"]" "$(printf '%s' "$out" | jq -c .blocked_by)"
+check "the file holds one blocked_by line, written as a list" "blocked_by: [$s1]" "$(grep '^blocked_by:' "$W/$s2.md")"
+before="$(cat "$W/$s2.md")"
+head_before="$(git -C "$S" rev-parse HEAD)"
+runo "$P" work set "$s2" blocked_by "$s1,W-999"
+check "set blocked_by refuses an id that does not exist" 1 "$rc"
+case "$err" in *"W-999, which does not exist"*) named=1 ;; *) named=0 ;; esac
+check "the refusal names the missing id" 1 "$named"
+runo "$P" work set "$s2" blocked_by "#12"
+check "set blocked_by refuses a bare #N as a usage error" 2 "$rc"
+runo "$P" work set "$s2" blocked_by "$s2"
+check "set blocked_by refuses an item blocking itself (a cycle of one)" 1 "$rc"
+runo "$P" work set "$s1" blocked_by "$s2"
+check "set blocked_by refuses a cycle" 1 "$rc"
+case "$err" in *cycle*) named=1 ;; *) named=0 ;; esac
+check "the cycle refusal says so" 1 "$named"
+printf 'not frontmatter at all\n' > "$W/W-97.md"
+runo "$P" work set "$s2" blocked_by "$prd"
+check "set blocked_by refuses when another work file does not parse" 1 "$rc"
+case "$err" in *"$W/W-97.md does not parse"*) named=1 ;; *) named=0 ;; esac
+check "the read refusal names the unparseable file" 1 "$named"
+# An empty list is not checked (docs/state-backend.md): it names no blocker, so
+# the unreadable file does not matter. $s1 holds no blockers, so this changes
+# nothing the later arms read.
+runo "$P" work set "$s1" blocked_by ""
+check "set blocked_by to empty exits 0 even when another work file does not parse" 0 "$rc"
+rm -f "$W/W-97.md"
+# A cycle check that cannot run is a refusal, never "no cycle": a jq that fails
+# only on the cycle filter stands in for one that breaks.
+mkdir -p "$tmp/cyclejq"
+real_jq="$(command -v jq)"
+printf '#!/bin/sh\ncase "$*" in *"reach("*) exit 5 ;; esac\nexec "%s" "$@"\n' "$real_jq" > "$tmp/cyclejq/jq"
+chmod +x "$tmp/cyclejq/jq"
+out="$(cd "$P" && PATH="$tmp/cyclejq:$PATH" bash "$SC" work set "$s2" blocked_by "$prd" 2>"$tmp/stderr")"; rc=$?
+err="$(cat "$tmp/stderr")"
+check "set blocked_by refuses when the cycle check fails" 1 "$rc"
+case "$err" in *"could not check blocked_by"*) named=1 ;; *) named=0 ;; esac
+check "the failed cycle check is named on stderr" 1 "$named"
+check "refused blocked_by sets leave the file byte-identical" "$before" "$(cat "$W/$s2.md")"
+check "refused blocked_by sets make no sidecar commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
+check "refused blocked_by sets leave no temp file behind" "" "$(find "$W" -name '.work.*')"
 runo "$P" work view "#1"
 check "a bare #N is not an id" 2 "$rc"
 
@@ -916,6 +971,97 @@ check "every raced file's id field matches its name" "" \
 clean "racing creates leave the project clean" "$P"
 
 # -----------------------------------------------------------------------------
+section "work: a work directory that cannot be listed is a refusal, never an empty store"
+
+# uid 0 lists mode-311 directories, so root skips.
+if [ "$(id -u)" -eq 0 ]; then
+    skipped "unlistable work directory: root lists mode-311 directories, so the arms cannot run"
+else
+    mkproj none
+    runo "$P" init --name unlist --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+    S="$out"
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"; u1="$out"
+    runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"; u2="$out"
+    runo "$P" work create --kind prd --body-file "$tmp/prd.md"; u3="$out"
+    chmod 311 "$S/work"
+    runo "$P" work list
+    check "work list on an unlistable work directory exits 1" 1 "$rc"
+    check "work list on an unlistable work directory prints nothing on stdout" "" "$out"
+    case "$err" in *"$S/work"*) ok "work list names the unlistable directory on stderr" ;; *) bad "work list names the unlistable directory on stderr" "got [$err]" ;; esac
+    runo "$P" work list --unblocked
+    check "work list --unblocked on an unlistable work directory exits 1" 1 "$rc"
+    runo "$P" work set "$u1" blocked_by "$u2"
+    check "work set blocked_by on an unlistable work directory exits 1 (no cycle written)" 1 "$rc"
+    runo "$P" trace "$u1"
+    check "trace on an unlistable work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "trace on an unlistable work directory says cannot list on stderr" ;; *) bad "trace on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"
+    check "work create on an unlistable work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create on an unlistable work directory says cannot list on stderr" ;; *) bad "work create on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
+    # A direct read of a named item is not a listing: mode 311 can enter the
+    # directory, so an existing item opens; only a miss is double-checked (a miss
+    # in a directory that cannot be listed is refused, not read as absent).
+    runo "$P" work view "$u1"
+    check "work view of an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" work set "$u3" decomposed_into "$u1"
+    check "work set decomposed_into an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" fixrun record feat-x "$run1" "$sha_a" --work "$u1"
+    check "fixrun record --work an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" work view W-99
+    check "work view of a missing item on a searchable-not-readable work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work view of a missing item on a searchable-not-readable work directory says cannot list on stderr" ;; *) bad "work view of a missing item on a searchable-not-readable work directory says cannot list on stderr" "got [$err]" ;; esac
+    chmod 755 "$S/work"
+    check "the unlistable arms left the blockers as they were" "[]" "$(jq -c .blocked_by < <(cd "$P" && bash "$SC" work view "$u1" --json))"
+    # Read but not entered (mode 644): the glob still expands to the names, but
+    # every stat fails, so a scan that tests only -r skips each item and reads
+    # the store as empty.
+    chmod 644 "$S/work"
+    runo "$P" work list
+    check "work list on a read-only-listing work directory exits 1" 1 "$rc"
+    check "work list on a read-only-listing work directory prints nothing on stdout" "" "$out"
+    runo "$P" work list --unblocked
+    check "work list --unblocked on a read-only-listing work directory exits 1" 1 "$rc"
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"
+    check "work create on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" trace "$u1"
+    check "trace on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "trace on a read-only-listing work directory says cannot list on stderr" ;; *) bad "trace on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work set "$u1" blocked_by "$u2"
+    check "work set on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work set on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work set on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --parent "$u1" --body-file "$tmp/prd.md"
+    check "work create --parent on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create --parent on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create --parent on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"
+    check "work create --blocked-by on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" fixrun record feat-x "$run1" "$sha_a" --work "$u1"
+    check "fixrun record --work on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "fixrun record --work on a read-only-listing work directory says cannot list on stderr" ;; *) bad "fixrun record --work on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    chmod 755 "$S/work"
+fi
+
+# -----------------------------------------------------------------------------
+section "work: a sidecar with no work directory refuses a named item as absent"
+
+# The per-item guards skip the listability check when work/ does not exist;
+# a miss there is a plain "no such work item", not a "cannot list".
+mkproj none
+runo "$P" init --name nowork --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+S="$out"
+rm -rf "$S/work"
+runo "$P" work view W-1
+check "work view on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"no such work item"*) ok "work view on a sidecar with no work directory says no such work item" ;; *) bad "work view on a sidecar with no work directory says no such work item" "got [$err]" ;; esac
+runo "$P" trace W-1
+check "trace on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"no such work item"*) ok "trace on a sidecar with no work directory says no such work item" ;; *) bad "trace on a sidecar with no work directory says no such work item" "got [$err]" ;; esac
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work W-1
+check "fixrun record --work on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"which does not exist"*) ok "fixrun record --work on a sidecar with no work directory says the item does not exist" ;; *) bad "fixrun record --work on a sidecar with no work directory says the item does not exist" "got [$err]" ;; esac
+
+# -----------------------------------------------------------------------------
 section "work: no sidecar"
 
 mkproj none
@@ -987,6 +1133,29 @@ check "/prd-to-issues states work set replaces decomposed_into" 1 \
 # shellcheck disable=SC2016
 check "/execute states work set replaces decomposed_into" 1 \
     "$(grep -c '`work set` replaces it on every write' "$EXEC" | awk '{print ($1 > 0)}')"
+
+# The GitHub path's pair (#520): /prd-to-issues §8 writes a `Decomposed into:`
+# comment and /execute Step 0's issue-shape gate matches it. Both texts are
+# extracted from the real files, and the writer's line is run through the
+# reader's own regex with jq, the reader's engine. §8 says what the reader
+# does (any matching comment among the last N passes, not the newest), so the
+# regex and N it quotes are tied to the reader's too.
+# shellcheck disable=SC2016  # the needles are the skills' literal text
+{
+d_re="$(grep -o 'select(test("^Decomposed into[^"]*"))' "$EXEC" | head -n 1 | sed 's/^select(test("//; s/"))$//')"
+d_last="$(grep -o 'comments(last: [0-9]*)' "$EXEC" | head -n 1 | grep -o '[0-9][0-9]*')"
+}
+pti8="$(awk '/^### 8\. /{on=1} /^### 9\. /{on=0} on' "$PTI")"
+d_tpl="$(printf '%s\n' "$pti8" | awk '/^```$/{if (on) exit; on=1; next} on' | grep '^Decomposed into:')"
+check "/execute's issue-shape gate carries the Decomposed into matcher" '^Decomposed into: #[0-9]+' "$d_re"
+check "/prd-to-issues §8 carries one Decomposed into template line" 1 "$(printf '%s\n' "$d_tpl" | grep -c .)"
+d_line="$(printf '%s' "$d_tpl" | sed 's/#<slice-\([0-9]*\)>/#4\1/g')"
+check "the template, filled in, has no placeholder left" 0 "$(printf '%s' "$d_line" | grep -c '<')"
+check "the reader's regex matches the line /prd-to-issues §8 writes" true \
+    "$(jq -n --arg l "$d_line" --arg re "$d_re" '$l | test($re)' 2>&1)"
+check "§8 quotes the reader's regex" 1 "$(printf '%s\n' "$pti8" | grep -cF "\`$d_re\`" | awk '{print ($1 > 0)}')"
+check "§8 states the reader's comment window" 1 "$(printf '%s\n' "$pti8" | grep -cF "last $d_last comments" | awk '{print ($1 > 0)}')"
+check "§8: the words 'consume the most recent' are absent (wording only)" 0 "$(printf '%s\n' "$pti8" | grep -ci 'consume the most recent')"
 
 gate_shells="bash"
 if command -v zsh >/dev/null 2>&1; then gate_shells="bash zsh"
@@ -1242,6 +1411,36 @@ check "the closed item stays closed" closed "$(cd "$LP" && bash "$SC" work view 
 check "the closed item holds the lesson" '["docs/solutions/testing/x-2026-01-01.md"]' "$(cd "$LP" && bash "$SC" work view "$lc" --json | jq -c .lessons)"
 runo "$LP" work set "$lc" lessons x
 check "work set does not take the lessons field" 2 "$rc"
+
+# -----------------------------------------------------------------------------
+section "the loop-mode disposition ledger's first-line marker (#583)"
+
+# On the sidecar backend the ledger is a work-item comment, found by its first
+# line. Three files carry that line: /pre-merge's ledger template (the writer),
+# this doc's records table (where /fix-findings is sent to read it), and
+# sidecar.sh trace's note() (the reader that dates it). They are extracted, not
+# restated, and the writer's real block is then written and read back.
+PM="$repo_root/pre-merge/SKILL.md"
+ledger_tpl="$(awk '/^```markdown$/{on=1; buf=""; next} on && /^```$/{on=0; if (buf ~ /^## Review Disposition Ledger\n/) {printf "%s", buf; exit}; next} on {buf = buf $0 "\n"}' "$PM")"
+w_marker="$(printf '%s\n' "$ledger_tpl" | head -n 1)"
+# shellcheck disable=SC2016  # the patterns are the files' literal text
+{
+d_marker="$(grep '^| Loop-mode `## Review Disposition Ledger`' "$DOC" | sed -n 's/.*whose first line is `\([^`]*\)`.*/\1/p')"
+r_marker="$(grep -o 'disposition_ledger: (\$it | note("[^"]*"))' "$SC" | sed 's/.*note("\([^"]*\)").*/\1/')"
+}
+check "/pre-merge's ledger template opens with the marker" "## Review Disposition Ledger" "$w_marker"
+check "the doc names the writer's first line as the ledger's marker" "$w_marker" "$d_marker"
+check "trace's note() reads the writer's first line" "$w_marker" "$r_marker"
+printf '%s\n' "$ledger_tpl" > "$tmp/ledger.md"
+runo "$LP" work create --kind slice --body-file "$tmp/lbody.md"; lw="$out"
+runo "$LP" trace "$lw" --json
+check "no ledger is dated before one is written" null "$(printf '%s' "$out" | jq -r '.disposition_ledger')"
+runo "$LP" work comment "$lw" --body-file "$tmp/ledger.md"
+check "the writer's block is stored as a comment" 0 "$rc"
+runo "$LP" work view "$lw" --json
+check "the stored comment's first line is the marker" "$w_marker" "$(printf '%s' "$out" | jq -r '.comments[-1].body | split("\n")[0]')"
+runo "$LP" trace "$lw" --json
+check "trace dates the ledger the writer's block left" 1 "$(printf '%s' "$out" | jq -r '.disposition_ledger // ""' | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T')"
 
 printf '\n---\n%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skip"
 [ "$fail" -eq 0 ]

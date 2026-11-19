@@ -326,7 +326,7 @@ bash "$SC" work create "$@" --body-file "$f"
 
 The §3 QA slice goes last, with every other slice's id in `BLOCKED_BY`. Count them against the slice list.
 
-**Reconcile, by reading back.** The `blocked_by` field and the prose `## Blocked by` section encode the same fact, so the reconciliation above applies here too. Run this once per slice, with `ID` set to its id. It prints `match` or `MISMATCH`; on a mismatch it exits 1. Fix whichever side is wrong before §8 runs. A body can be fixed with `work edit`; a wrong field means the slice is closed with `work close` and created again, since no verb rewrites `blocked_by`. Closing a slice is not free: a closed blocker no longer gates, so every open slice that named the closed one must be re-created too, which §8's dependents check finds.
+**Reconcile, by reading back.** The `blocked_by` field and the prose `## Blocked by` section encode the same fact, so the reconciliation above applies here too. Run this once per slice, with `ID` set to its id. It prints `match` or `MISMATCH`; on a mismatch it exits 1. Fix whichever side is wrong before §8 runs. A body can be fixed with `work edit`, and a wrong field with `work set W-<n> blocked_by W-<a>,W-<b>`, which rewrites the list in place.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -436,9 +436,9 @@ Decomposed into: #<slice-1>, #<slice-2>, #<slice-3>
 
 This comment is the signal downstream skills read to know the PRD has been decomposed. `/execute`'s issue-shape and blocker gate checks for it before accepting a PRD-shaped issue as a slice task.
 
-If a PRD is re-decomposed later (e.g., after `/correct-course`), post a new `Decomposed into:` comment; readers consume the most recent one. Keeping only one authoritative comment is this skill's responsibility.
+If a PRD is re-decomposed later (e.g., after `/correct-course`), post a new `Decomposed into:` comment. `/execute` Step 0 does not pick the newest one: it passes the PRD when any of its last 100 comments has a line matching `^Decomposed into: #[0-9]+`, so a superseded comment still satisfies it.
 
-On the sidecar backend, the signal is the PRD's `decomposed_into` field instead of a comment. Set `SLICES` to every id §7 created, in creation order:
+On the sidecar backend, the signal is the PRD's `decomposed_into` field instead of a comment. Set `SLICES` to the open slices of this decomposition, in creation order: on a first decomposition every id §7 created, and on a re-decomposition the slices it kept plus the ones it created, never a superseded one.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -447,22 +447,42 @@ SLICES="W-<a>,W-<b>"
 bash "$SC" work set "$PRD" decomposed_into "$SLICES"
 ```
 
-`work set` replaces the field rather than appending to it, so after a re-decomposition it holds only the new ids, and no older value has to be retired. The superseded slices are still open work items: close each one with `work close W-<old> --superseded-by W-<new>` so `/execute` never takes one.
+`work set` replaces the field rather than appending to it, so after a re-decomposition it holds only the ids given, and no older value has to be retired.
 
-**Closing a slice un-gates its dependents.** `work list --unblocked` treats a closed blocker as non-gating, and no verb rewrites `blocked_by`, so an open slice that named the closed one (the QA slice, usually) would be handed to `/execute` before its replacement is built. This applies to every close this skill makes: a superseded slice here, or a wrong `blocked_by` fixed in §7. After each close, list the open slices under the PRD that still name the closed id:
+**Re-decomposing on the sidecar backend.** `work list --unblocked` treats a closed blocker as done, so a superseded slice is closed only after every open item it gated has been pointed at what replaces it. Edges are rewritten in place with `work set W-<n> blocked_by`; no dependent is closed or created again. Work in this order:
+
+1. Create the new slices through §7, blockers first.
+2. List the open work items whose `blocked_by` names a superseded slice. Set `OLD` to every superseded id. The check reads every open item in the store, not only this PRD's slices, because a slice under another PRD can be blocked by one of these. It skips the superseded slices themselves, and it stops on any read that fails rather than treating that item as not dependent. Each line it prints is a dependent and its current blockers.
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-PRD="W-<prd>"
-OLD="W-<closed>"
-IDS="$(bash "$SC" work list --parent "$PRD")" || exit 1
+OLD="W-<old>"
+IDS="$(bash "$SC" work list)" || exit 1
 while IFS= read -r id; do
   [ -n "$id" ] || continue
-  bash "$SC" work view "$id" --json | jq -r --arg o "$OLD" --arg i "$id" 'select((.blocked_by // []) | index($o)) | $i'
+  case ",$OLD," in *",$id,"*) continue ;; esac
+  J="$(bash "$SC" work view "$id" --json)" || exit 1
+  jq -r --arg o "$OLD" '($o | split(",")) as $old | (.blocked_by // []) as $b
+    | select(any($b[]; . as $x | any($old[]; . == $x))) | "\(.id) \($b | join(","))"' <<<"$J" || exit 1
 done <<<"$IDS"
 ```
 
-Work one id at a time, and never down the list the check first printed: the QA slice names every slice, so it shows up in more than one dependents list, and a stale list re-creates it twice. Take the first id the check prints and create its replacement through §7, with its body read from `work view "$id" --json`. In its `BLOCKED_BY` and its body (`## Blocked by`, `Consumes: From W-<n>`, and anywhere else the body names an id), swap *every* id that is closed and has a replacement for that replacement, not only `OLD`: `work view <blocker> --json` shows a closed blocker's `superseded_by`. Run the §7 read-back on the replacement and fix any `MISMATCH` before going on, then close the dependent with `work close W-<dependent> --superseded-by W-<replacement>`. Then run the check again from the top: once for the same `OLD` (the closed dependent drops out of its list, because the check only lists open slices, and so does any dependent that was already re-created) and once with `OLD` set to that dependent, because its own dependents now lose a gate too. Repeat until every run prints nothing, and only then run the `work set` above with the final ids.
+3. Rewrite each dependent with the block below. In `BLOCKED_BY`, replace each superseded id with every slice that takes over its work: one id when one slice replaces it, each of them when it was split, and none when it was dropped with nothing in its place. Keep the dependent's other blockers. The QA slice is blocked by every other slice, so its list also gains each new slice not already on it. Make the same change in the body wherever it names an id (`## Blocked by`, `Consumes: From W-<n>`, and anywhere else), and end the body with a `## Re-decomposed` section (or add to the one already there) holding one line per change, such as `- W-3 replaced by W-8` or `- W-5 dropped, no replacement`. Those lines tell a reader why the edges moved, and they keep the new body from being shorter than the old one, which `work edit` refuses. Then run the §7 read-back on the dependent and fix any `MISMATCH`.
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+ID="W-<dependent>"
+BLOCKED_BY="W-<a>,W-<b>"
+f="$(mktemp)"
+cat > "$f" <<'SLICE'
+<the dependent's body, with its ids changed and its ## Re-decomposed lines added>
+SLICE
+bash "$SC" work edit "$ID" --body-file "$f" || exit 1
+bash "$SC" work set "$ID" blocked_by "$BLOCKED_BY"
+```
+
+4. Close each superseded slice: `work close W-<old> --superseded-by W-<new>` when one slice replaces it, and `work close W-<old>` when it was split or dropped, because `--superseded-by` takes one id.
+5. Run the step 2 check again with the same `OLD`. It must print nothing. A line it prints is a dependent step 3 missed: rewrite it, and run the check again. Then run the `decomposed_into` block at the top of this section with the final `SLICES`, not the rewrite block from step 3.
 
 ### 9. Summary
 
