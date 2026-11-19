@@ -32,6 +32,8 @@
 #      `_` or uppercase all count. Before this, deleting `--flag-fw`
 #      from both dark copies still passed, and dark pages fell back to the light
 #      value (#772).
+#   5. MEASURE — the literal `74ch` appears exactly once in the design doc, on the
+#      `--measure:` declaration, so a fifth `max-width:74ch` cannot land unseen.
 #
 # The native-Mermaid exception is prose, and a grep over prose passes a sentence
 # that reverses it, so it is not pinned here; core §6 and design §5 both state it (#772,
@@ -158,6 +160,19 @@ while IFS= read -r flag; do
         bad "$flag is defined in light but missing from a dark copy"
     fi
 done <<< "$flags"
+
+# 5. THE MEASURE LIVES IN ONE TOKEN
+# `--measure` names the reading width once, and every width that wants it says
+# `var(--measure)`. A second literal `74ch` anywhere in the file (a `max-width`
+# in a rule, an inline style) is the measure held in two places. Count the
+# literal over the whole file, in any markup, and require its one occurrence to
+# be the `--measure:` declaration. Other `ch` values are not the measure.
+measure_is_one_token() { [[ "$1" == 1 && "$2" =~ ^[0-9]+:[[:space:]]*--measure:[[:space:]]*74ch ]]; }
+measure_hits="$(grep -n '74ch' "$design" || true)"
+measure_count="$(printf '%s' "$measure_hits" | grep -c . || true)"
+check "the 74ch measure appears once, as the --measure declaration" \
+    "74ch appears $measure_count times, or not as --measure:; use var(--measure): $measure_hits" \
+    measure_is_one_token "$measure_count" "$measure_hits"
 
 if [[ "$fail" -ne 0 ]]; then
     printf '\nFAILED\n'; exit 1
