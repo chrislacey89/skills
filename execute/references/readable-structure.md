@@ -118,12 +118,17 @@ above its callees, in the order they are called. Detail goes down.
 **Avoid:**
 
 ```ts
-const greeting = (name: string) => `Hi ${name},`;
+function greeting(name: string): string {
+  return `Hi ${name},`;
+}
 
-const joinLink = (token: string) => `https://example.com/join/${token}`;
+function joinLink(token: string): string {
+  return `https://example.com/join/${token}`;
+}
 
-export const buildInviteEmail = (invite: Invite) =>
-  [greeting(invite.name), joinLink(invite.token)].join("\n\n");
+export function buildInviteEmail(invite: Invite): string {
+  return [greeting(invite.name), joinLink(invite.token)].join("\n\n");
+}
 ```
 
 **Prefer:**
