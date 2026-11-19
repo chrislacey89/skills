@@ -1619,7 +1619,7 @@ mkdir -p "$repo17"
     git init -q -b main .
     git config user.email t@example.com
     git config user.name t
-    printf 'one.txt merge=keepours\n' > .gitattributes
+    printf 'one.txt merge=theirs\n' > .gitattributes
     printf 'base\n' > base.txt
     git add .gitattributes base.txt && git commit -q -m 'base'
     git switch -q -c feature
@@ -1629,17 +1629,18 @@ mkdir -p "$repo17"
     git add one.txt && git commit -q -m 'feature: edit one'
     printf 'one, fixed\n' > one.txt
     git add one.txt && git commit -q --fixup=HEAD~1 -m 'fix one' -m 'Fix-Findings-Run: 20261030T000006Z'
-    git config merge.keepours.driver true
+    git config merge.theirs.driver 'cp %B %A'
 )
 point_origin_at_main "$repo17"
 clone17="$sandbox/repo17-clone"
 git clone -q --shared --no-checkout "$repo17" "$clone17"
-assert_eq "" "$(git -C "$clone17" config --get merge.keepours.driver || true)" \
-    "a --shared clone carries none of the repository's own config: no merge.keepours.driver"
+assert_eq "" "$(git -C "$clone17" config --get merge.theirs.driver || true)" \
+    "a --shared clone carries none of the repository's own config: no merge.theirs.driver"
 real17="$sandbox/repo17-real"
 cp -R "$repo17" "$real17"
 run_fold "$real17" >/dev/null
 assert_eq "feature: edit one" "$(git -C "$real17" log -1 --format=%s)" "a repo-local merge driver: the real fold applies the fixup (the driver resolves the text conflict)"
+assert_eq "one, fixed" "$(git -C "$real17" show HEAD~1:one.txt)" "a repo-local merge driver: the folded commit carries the fix (the take-theirs driver kept the fix's text, not the later edit's)"
 out17="$(trial_in "$repo17")" && rc17=0 || rc17=$?
 assert_eq 0 "$rc17" "a repo-local merge driver: the block exits 0"
 assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out17" \
