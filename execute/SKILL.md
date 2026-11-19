@@ -454,7 +454,7 @@ P="$(jq -r '.parent // empty' <<<"$J")"
 [ -z "$P" ] || bash "$SC" work view "$P" --json | jq -r '.body'
 ```
 
-The `comments=<m>` check above applies unchanged, and so do the precedence and disposal rules below. A comment that qualifies for its own item is filed with `work create --kind slice --parent <prd>`, and the item it blocks gets no edge, because no verb rewrites `blocked_by`: name the new id in a `work comment` on the blocked item instead.
+The `comments=<m>` check above applies unchanged, and so do the precedence and disposal rules below. A comment that qualifies for its own item is filed with `work create --kind slice --parent <prd>`. This step gives the item it blocks no edge: name the new id in a `work comment` on the blocked item instead.
 
 **Precedence rule.** The issue body remains the durable contract. Comments augment it; they do not silently override it. A comment is an authoritative addition only when it is (a) a pipeline-authored continuation or correction comment, or (b) an explicit human scope change. Freeform discussion is context, never an override. If a comment appears to contradict the body on scope, and it is not a clear pipeline-authored correction or human scope change, flag the conflict to the user rather than acting on the comment.
 
