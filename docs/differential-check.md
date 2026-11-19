@@ -39,12 +39,12 @@ message and the Step 6 review notes; it is never left for a reviewer to find.
 
 ## The base copy
 
-The base version is the commit the slice started from: the merge-base of `HEAD`
-and the left end `sidecar.sh range` prints for the slice. That left end is the
-recorded start while it still bounds only this branch, and the base otherwise,
-so a branch rebased onto an advanced base, or a fold that rewrote the start, does
-not make other PRs' landed changes look like disagreements. The block computes
-`BASE_SHA` itself, since an `export` from an earlier call does not reach it, and
+The base version is the merge-base of `HEAD` and the left end `sidecar.sh range`
+prints for the slice. That left end is the recorded start while it still bounds
+only this branch, and the base otherwise; in that case the copy also predates any
+earlier slice committed on this branch, so that slice's changes show as
+disagreements too, and the author names them as such rather than as this slice's
+bug or intended change. The block computes `BASE_SHA` itself, since an `export` from an earlier call does not reach it, and
 then extracts it into a throwaway directory. It uses the same `git archive` form
 as `/fix-findings`' breaker copy, and for the same reason: a plain directory with
 no `.git`, so no worktree is registered in a git directory other sessions share.
