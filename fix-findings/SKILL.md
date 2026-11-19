@@ -252,6 +252,10 @@ The fixer's instructions, in order:
    line and the branch is unshared: the four lines above the `printf` are
    `/pre-merge` Phase 2's shared-branch block, which says what they check. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
+   **The printed line decides, not your own diff:** a SHA means a `--fixup`
+   commit of that SHA, and an empty `FIXUP_TARGET=` means an ordinary commit.
+   Run the block and use its answer; do not judge the target from the lines
+   your fix changed, which are not the lines the finding anchors on.
    Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
    message item 5 states for this backend. Then check that the commit just made folds:
 
