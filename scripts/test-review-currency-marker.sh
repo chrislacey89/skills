@@ -234,6 +234,37 @@ assert_eq "$newer_sha" "$extracted" "the last stamp in the body wins"
 
 # -----------------------------------------------------------------------------
 
+section "the stamp records the SHA Phase 3 read, not HEAD at write time (#292)"
+
+# The incident: a round-2 review read F1, a fix landed as F2, and Phase 4's
+# `REVIEWED_SHA=$(git rev-parse HEAD)` stamped F2, a commit no review read.
+# /closeout then saw stamp == head and passed silently. So Phase 3 prints the
+# SHA the review reads, and both Phase 4 blocks take it as a filled-in literal.
+# This pins the prose, not a session's runtime: it cannot show that an agent
+# filled in the right value, only that no block computes the value at write time.
+# test-post-review-edit-lock.sh runs the filled-in blocks with a later commit on top.
+phase3="$(awk '/^### Phase 3/ { on = 1; next } /^### Phase 4/ { exit } on' "$premerge_skill")"
+phase3_prints="$(awk '/^```bash$/ { on = 1; next } on && /^```$/ { on = 0 } on' <<<"$phase3" | grep -cE '^git rev-parse HEAD([[:space:]]|$)' || true)"
+assert_eq 1 "$phase3_prints" "Phase 3 has one fenced block line that prints git rev-parse HEAD"
+phase4_stamp_blocks=""
+for needle in 'stamp write' 'gh pr edit <pr-number>'; do
+    blk="$(awk -v n="$needle" '
+        /^### Phase 4/ { p4 = 1 } /^### Phase 5/ { p4 = 0 }
+        p4 && /^```bash$/ { buf = ""; on = 1; next }
+        on && /^```$/ { if (index(buf, n) && index(buf, "review-stamped")) { printf "%s", buf; exit } on = 0; next }
+        on { buf = buf $0 "\n" }
+    ' "$premerge_skill")"
+    [[ -n "$blk" ]] || { printf 'FATAL: no Phase 4 stamp block holding %s and review-stamped\n' "$needle" >&2; exit 2; }
+    phase4_stamp_blocks+="$blk"$'\n'
+    # shellcheck disable=SC2016  # the pattern is the skill's literal text
+    assert_eq 1 "$(grep -cE '^REVIEWED_SHA="<[^"]*>"' <<<"$blk" || true)" \
+        "the Phase 4 block holding '$needle' assigns REVIEWED_SHA once, from a filled-in placeholder"
+done
+# Every spelling of the write-time read: $(git rev-parse HEAD), `git rev-parse HEAD`,
+# and with options between (`rev-parse --verify HEAD`).
+assert_eq "" "$(grep -nE 'rev-parse([[:space:]]+-[-a-z]+)*[[:space:]]+"?HEAD"?([[:space:]]|\)|$)' <<<"$phase4_stamp_blocks" || true)" \
+    "neither Phase 4 stamp block evaluates git rev-parse HEAD"
+
 section "exactly one skill writes the stamp"
 
 # The template is extracted above from pre-merge/SKILL.md, so this searches for
@@ -598,6 +629,15 @@ if [[ -z "$clear_block" ]]; then
 fi
 clear_block="${clear_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
 clear_block="${clear_block//<number>/1}"
+# #531: the block takes the merged PR's local branch name as a
+# filled-in literal, the way it takes <number>, because no earlier block's shell
+# variable reaches it. fill_branch <name> is the block with that line filled.
+branch_line_re='^BRANCH="<[^"]*>"'
+grep -qE "$branch_line_re" <<<"$clear_block" \
+    || { printf 'FATAL: the stamp clear block in %s has no BRANCH="<...>" placeholder line\n' "$closeout_skill" >&2; exit 2; }
+clear_template="$clear_block"
+fill_branch() { sed -E "s|${branch_line_re}|BRANCH=\"$1\"|" <<<"$clear_template"; }
+clear_block="$(fill_branch "")"
 
 cat > "$fx/bin/gh" <<STUB
 #!/usr/bin/env bash
@@ -618,11 +658,32 @@ other_sha='0123456789abcdef0123456789abcdef01234567'
     || { printf 'FATAL: could not stamp a second branch in the closeout fixture\n' >&2; exit 2; }
 assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
     "control: a second branch's stamp exists before the clear block runs"
+# Started on an already-merged PR whose local branch is gone: the placeholder
+# is empty and the block falls back to the PR's head name.
 (cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" CLAUDE_PROJECT_DIR="$fx/proj" bash -c "$clear_block" >/dev/null 2>&1)
 assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
-    "after the clear block, run on base, the merged branch's stamp is gone"
+    "local branch gone, placeholder empty: the clear falls back to the PR's head name and the stamp is gone"
 assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
     "after the clear block, a second branch's stamp is still there"
+
+# #531 item 1: the local name and the PR's head name differ (pushed with
+# `git push origin local-feature:feature`). /pre-merge wrote the stamp under the
+# local name, so that is the one to clear; a stamp under the head name belongs
+# to some other local branch and stays, as does any other branch's.
+local_sha='89abcdef0123456789abcdef0123456789abcdef'
+(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp write local-feature "$local_sha" >/dev/null 2>&1 \
+    && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp write feature "$stamp_sha" >/dev/null 2>&1) \
+    || { printf 'FATAL: could not stamp the renamed-branch fixture\n' >&2; exit 2; }
+assert_eq "$local_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read local-feature)" \
+    "control: the stamp under the local branch name exists before the clear block runs"
+(cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" CLAUDE_PROJECT_DIR="$fx/proj" \
+    bash -c "$(fill_branch local-feature)" >/dev/null 2>&1)
+assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read local-feature)" \
+    "local name differs from the PR's head name: the stamp under the local name is cleared"
+assert_eq "$stamp_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
+    "local name differs from the PR's head name: a stamp under the head name is left alone"
+assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
+    "local name differs from the PR's head name: a second branch's stamp is still there"
 
 section "/closeout Steps 2 and 3 abort on a failed backend rather than taking the gh path"
 

@@ -150,6 +150,8 @@ esac
 
 ### Step 1. Per finding, spawn a fresh fixer
 
+**Invoking this skill is the request for its sub-agents**; `/pre-merge` Phase 3 states once what "unavailable" means (*Invoking this skill is the request to delegate*). A standing instruction against sub-agents does not make this skill run its fixes in-session.
+
 **Spawn both sub-agents on the cheaper tier — `model: "sonnet"` on the `Agent` call.** What this skill buys is independence, not capability: the defect it exists to close is that the authoring session cannot see its own work, and a fresh Sonnet context removes that as completely as a fresh Opus one. Escalate to the session's own tier only on a signal — a fixer that returns `blocked`, or a finding that turns on a contract spanning several files. Per finding this skill spends two sub-agent runs, so the tier is where its cost actually lives. This is a default, not a rule anything enforces; issue chrislacey89/skills#339 carries the hypothesis and the three signals that would refute it.
 
 **One sub-agent per finding, never one for all of them.** A single fixer holding
@@ -252,6 +254,28 @@ The fixer's instructions, in order:
    line and the branch is unshared: the four lines above the `printf` are
    `/pre-merge` Phase 2's shared-branch block, which says what they check. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
+   **The printed line decides, not your own diff:** a SHA means a `--fixup`
+   commit of that SHA, and an empty `FIXUP_TARGET=` means an ordinary commit.
+   Run the block and use its answer; do not judge the target from the lines
+   your fix changed, which are not the lines the finding anchors on. The
+   block settles which commit; the intent check next is the one reason to
+   decline its SHA.
+
+   **Intent check, before the commit.** Blame names the last commit that
+   touched the lines, and that commit can be about something else: a
+   reformat, a rename, a move. Read what the target says it does:
+
+   ```bash
+   git log -1 --format=%B "<the SHA FIXUP_TARGET printed>"
+   ```
+
+   Keep the fixup only when the fix finishes or corrects what that message
+   says the commit does. When the fix changes behavior the message does not
+   describe, or the message describes a different kind of change, clear the
+   target: make the ordinary commit this item states for this backend,
+   and skip the fold trial. A fold would otherwise put the fix under a
+   message that does not describe it.
+
    Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
    message item 5 states for this backend. Then check that the commit just made folds:
 
@@ -268,7 +292,7 @@ The fixer's instructions, in order:
      BASE_REF="$(bash "$SC" base-ref)" || trial_abort "sidecar.sh base-ref failed"
    fi
    FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || trial_abort "no merge base with $BASE_REF"
-   TRIAL_HEAD=$(git rev-parse HEAD) || trial_abort "cannot read HEAD"
+   TRIAL_HEAD=$(git rev-parse HEAD)
    TRIAL_DIR=$(mktemp -d) || trial_abort "mktemp failed"
    trap 'rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg" "$TRIAL_DIR.err"' EXIT
    git clone -q --shared --no-checkout "$(git rev-parse --show-toplevel)" "$TRIAL_DIR" || trial_abort "the throwaway clone failed"
@@ -315,19 +339,30 @@ The fixer's instructions, in order:
    `fixed`. Report the SHA after it ran.
 
    The trial answers one question, whether the content folds, so signing is
-   off for its rebase. A throwaway commit needs no signature, a signer can fail
-   in a clone with no one to approve it, and a `--shared` clone does not read
-   the repository's own config anyway. A signing failure in the real fold is
-   not something a demotion could fix.
+   off for its rebase. A throwaway commit needs no signature, and a signer can
+   fail in a clone with no one to approve it. A signing failure in the real
+   fold is not something a demotion could fix.
+
+   The trial has two wrong answers, each with its own cause. Because signing
+   is off in the trial, a signer set in the repository's config fails the real
+   fold while the trial reports `clean`. Because the throwaway clone does not
+   read the repository's own config, a merge driver defined there, for a
+   `merge=` attribute in `.gitattributes`, does not run in the trial, which
+   falls back to a text merge and can demote a fixup the real fold applies.
 
    An earlier `fixup!` commit that a blocked fixer left behind stops the rebase
    too. The trial skips any such commit and goes on, so it judges only the
    commit just made, and it names what it skipped on stderr, whatever its
    verdict. Report those SHAs in the `leftovers:` field (below): `/pre-merge`'s
    fold aborts until each one is reworded.
+   The skip works only when the rebase stops on the leftover itself. A leftover
+   that breaks a later ordinary commit (it adds a file a later commit also
+   adds) stops the rebase on that commit, which the trial cannot tell from a
+   conflict of the commit just made: a clean fixup after it is demoted, or
+   reported `blocked` when its recommit is refused, and the leftover is not named.
 
-   Otherwise (lines from the base, from several commits, or a shared branch),
-   make an ordinary commit. It is still one commit per fix, and it is
+   Otherwise (an empty `FIXUP_TARGET=` line, or the intent check cleared the
+   target), make an ordinary commit. It is still one commit per fix, and it is
    reviewed on its own. The `fixup!` subject only lets `/pre-merge`'s handoff
    offer to fold the fix into its target later. Git's docs on what that fold
    does to this message: *"The -m option may be used to supplement the log

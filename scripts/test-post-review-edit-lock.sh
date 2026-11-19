@@ -165,20 +165,42 @@ command -v jq >/dev/null || fatal "jq is not installed — the hook body parses 
 
 # --- One reader, used by every extraction and by the apparatus check ----------
 #
-# Emits the first ```bash fenced block in <file> whose body matches <regex>;
-# exits 1 when there is none. It does not call fatal: a helper that aborts from
+# Emits the one ```bash fenced block in <file> whose body matches <regex>;
+# exits 1 when there is none, and exits 2 with a line on stderr, emitting
+# nothing, when more than one matches (#387): an anchor that also matches a
+# later-added block must fail here, not four assertions away. It does not call fatal: a helper that aborts from
 # inside a command substitution exits only the subshell (test-guards-can-fire.sh
 # detector C), so the caller in the main shell decides what an empty capture
 # means.
 fenced_bash_block() {  # $1 = file, $2 = ERE matched against the block body
-    awk -v re="$2" '
+    awk -v re="$2" -v file="$1" '
         /^```bash$/        { buf = ""; inblock = 1; next }
-        inblock && /^```$/ { if (buf ~ re) { printf "%s", buf; found = 1; exit }
+        inblock && /^```$/ { if (buf ~ re) { found++; if (found == 1) hit = buf }
                              inblock = 0; next }
         inblock            { buf = buf $0 "\n" }
-        END                { exit(found ? 0 : 1) }
+        END                { if (found > 1) { printf "fenced_bash_block: %d fenced bash blocks in %s match /%s/; narrow the anchor\n", found, file, re > "/dev/stderr"; exit 2 }
+                             if (found == 1) { printf "%s", hit; exit 0 }
+                             exit 1 }
     ' "$1"
 }
+
+# The reader's own contract (#387): an anchor that matches two blocks is a bet
+# lost, and the first-match reader used to pick the earlier one in silence. It
+# must refuse loudly, with a status distinct from "no block matches", so the
+# failure is named at the point of selection. Planted files, not the skills.
+reader_probe="$(mktemp -d)"
+# shellcheck disable=SC2016  # the backticks are markdown fences being planted, not command substitution
+printf '```bash\necho one anchor\n```\n\ntext\n\n```bash\necho another anchor\n```\n' > "$reader_probe/two.md"
+# shellcheck disable=SC2016  # as above
+printf '```bash\necho one anchor\n```\n\n```bash\necho other\n```\n' > "$reader_probe/one.md"
+probe_rc=0; probe_out="$(fenced_bash_block "$reader_probe/two.md" 'anchor' 2>"$reader_probe/err")" || probe_rc=$?
+reader_two="$probe_rc|$probe_out"
+reader_two_err="$(cat "$reader_probe/err")"
+probe_rc=0; probe_out="$(fenced_bash_block "$reader_probe/one.md" 'anchor' 2>"$reader_probe/err")" || probe_rc=$?
+reader_one="$probe_rc|$probe_out"
+probe_rc=0; probe_out="$(fenced_bash_block "$reader_probe/one.md" 'nowhere' 2>"$reader_probe/err")" || probe_rc=$?
+reader_none="$probe_rc|$probe_out|$(cat "$reader_probe/err")"
+rm -rf "$reader_probe"
 
 # --- Pull the subject out of the skills that document it ---------------------
 
@@ -207,8 +229,17 @@ hook_body="$(fenced_bash_block init-pipeline/SKILL.md 'IMPL_PATTERNS' || true)"
 # one, picked by its `gh pr edit`. The sidecar one is section 7b's.
 stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'gh pr edit.*review-stamped' || true)"
 [ -n "$stamp_block" ] || fatal "no stamp block found in pre-merge/SKILL.md"
-sidecar_stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'stamp write.*review-stamped' || true)"
+# Anchored on the call, not the words: the PR-body block's comments say "the
+# stamp write succeeded" too, and the reader refuses an anchor two blocks match.
+sidecar_stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'SC" stamp write.*review-stamped' || true)"
 [ -n "$sidecar_stamp_block" ] || fatal "no sidecar stamp block found in pre-merge/SKILL.md"
+# Both take the reviewed SHA Phase 3 printed as a filled-in literal (#292).
+# fill_reviewed <block> <sha> — the block with that placeholder filled.
+reviewed_placeholder='REVIEWED_SHA="<the full SHA Phase 3 printed>"'
+for blk in "$stamp_block" "$sidecar_stamp_block"; do
+    [[ "$blk" == *"$reviewed_placeholder"* ]] || fatal "a Phase 4 stamp block has no $reviewed_placeholder line"
+done
+fill_reviewed() { printf '%s' "${1//"$reviewed_placeholder"/REVIEWED_SHA=\"$2\"}"; }
 
 stamp_write="$(sed -n '/^PROJECT_DIR=/,$p' <<<"$stamp_block")"
 [ -n "$stamp_write" ] || fatal "no PROJECT_DIR-anchored stamp-flag write found in pre-merge/SKILL.md"
@@ -344,6 +375,16 @@ run_documented() {  # $1 = directory, $2 = command text, $3 = CLAUDE_PROJECT_DIR
 }
 
 # -----------------------------------------------------------------------------
+
+
+section "0. the block reader refuses an anchor that matches more than one block (#387)"
+assert_eq "2|" "$reader_two" "two blocks match the anchor: exit 2, and no block is emitted"
+case "$reader_two_err" in
+    *"2 fenced bash blocks"*"anchor"*) assert_eq ok ok "…and stderr names the count and the anchor" ;;
+    *) assert_eq "2 fenced bash blocks ... anchor" "$reader_two_err" "…and stderr names the count and the anchor" ;;
+esac
+assert_eq "0|echo one anchor" "$reader_one" "one block matches: it is emitted, exit 0"
+assert_eq "1||" "$reader_none" "no block matches: exit 1, silent, as before"
 
 section "1. the hook is a runnable script, and the five files agree on two paths"
 
@@ -841,12 +882,12 @@ ghbin="$scratch/ghbin"
 mkdir -p "$ghbin"
 
 stamp_block_status=0
-run_stamp_block() {  # $1 = the exit status the stub's `pr edit` reports
+run_stamp_block() {  # $1 = the exit status the stub's `pr edit` reports; $2 = the reviewed SHA filled in (default: HEAD)
     cat > "$ghbin/gh" <<STUB
 #!/usr/bin/env bash
 case "\$2" in
   view) printf '## Summary\n\nfixture body\n' ;;
-  edit) exit $1 ;;
+  edit) echo edited >> "$ghbin/edits"; exit $1 ;;
   *)    exit 9 ;;
 esac
 STUB
@@ -855,7 +896,7 @@ STUB
     stamp_block_status=0
     ( cd "$stamprepo" \
         && PATH="$ghbin:$PATH" CLAUDE_PROJECT_DIR="$stamprepo" \
-           bash -c "${stamp_block//<pr-number>/1}" ) >/dev/null 2>&1 || stamp_block_status=$?
+           bash -c "$(fill_reviewed "${stamp_block//<pr-number>/1}" "${2:-$(git -C "$stamprepo" rev-parse HEAD)}")" ) >/dev/null 2>&1 || stamp_block_status=$?
 }
 
 run_stamp_block 1
@@ -880,6 +921,25 @@ else
     assert_eq "flag written" "no flag" "…and the flag is written on that path, which is what makes the abort above a measurement"
 fi
 
+# #292: the PR-body block takes the reviewed SHA as a filled-in literal. Left
+# unfilled, it is not a SHA, and the block stops before it edits the PR body:
+# a marker the reader rejects would read as "no stamp" at /closeout.
+rm -f "$ghbin/edits"
+run_stamp_block 0 "<the full SHA Phase 3 printed>"
+assert_eq 1 "$stamp_block_status" "REVIEWED_SHA left unfilled: the PR-body stamp block aborts"
+assert_eq "" "$(cat "$ghbin/edits" 2>/dev/null || true)" "…before it edits the PR body"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "no flag" "flag written" "…and leaves no $stamp_rel behind"
+else
+    assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
+fi
+# An abbreviated SHA of a real commit resolves as a commit but is not the full
+# SHA Phase 3 printed: a short marker reads as "no stamp" at /closeout.
+rm -f "$ghbin/edits"
+run_stamp_block 0 "$(git -C "$stamprepo" rev-parse --short=7 HEAD)"
+assert_eq 1 "$stamp_block_status" "REVIEWED_SHA filled with a short SHA of a real commit: the PR-body stamp block aborts"
+assert_eq "" "$(cat "$ghbin/edits" 2>/dev/null || true)" "…before it edits the PR body"
+
 # -----------------------------------------------------------------------------
 
 section "7b. on the sidecar backend, the flag is written only if the stamp commit succeeded"
@@ -900,10 +960,12 @@ git config --file "$sc_gitconfig" user.email "lock@example.invalid"
 sidecar_block_status=0
 sidecar_stacked_base=""
 sidecar_stamp_w=""
+sidecar_reviewed=""   # the SHA filled into REVIEWED_SHA; empty means the current HEAD
 run_sidecar_stamp_block() {
     rm -f "$stamprepo/$stamp_rel"
     sidecar_block_status=0
     local blk="${sidecar_stamp_block//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"$sidecar_stacked_base\"}"
+    blk="$(fill_reviewed "$blk" "${sidecar_reviewed:-$(git -C "$stamprepo" rev-parse HEAD)}")"
     blk="${blk//W=\"W-<n>\"/W=\"$sidecar_stamp_w\"}"
     ( cd "$stamprepo" \
         && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" \
@@ -1004,6 +1066,36 @@ else
 fi
 sidecar_stamp_w=""
 rm -f "$stamprepo/$stamp_rel"
+
+# #292: a commit made after the review is not what the stamp names. The block is
+# filled with the SHA Phase 3 printed, then a fix lands on top, then it runs.
+rm -f "$sc_root"/lock/reviews/*.json
+sidecar_reviewed="$(git -C "$stamprepo" rev-parse HEAD)"
+printf 'export const x = 2\n' > "$stamprepo/service.ts"
+git -C "$stamprepo" -c user.email=t@example.invalid -c user.name=Test -c commit.gpgsign=false \
+    commit -q --no-verify -am "a fix after the review" || fatal "could not commit a fix after the review"
+[ "$sidecar_reviewed" != "$(git -C "$stamprepo" rev-parse HEAD)" ] || fatal "fixture: the fix did not move HEAD"
+run_sidecar_stamp_block
+assert_eq 0 "$sidecar_block_status" "a fix landed after the review: the sidecar stamp block exits 0"
+assert_eq "$sidecar_reviewed" "$(stamp_sc stamp read "$(git -C "$stamprepo" branch --show-current)" 2>/dev/null)" \
+    "…and the stamp names the SHA the review read, not the newer HEAD"
+rm -f "$stamprepo/$stamp_rel" "$sc_root"/lock/reviews/*.json
+# An unfilled placeholder is not a SHA: the block stops before any stamp or flag.
+sidecar_reviewed="<the full SHA Phase 3 printed>"
+run_sidecar_stamp_block
+assert_eq 1 "$sidecar_block_status" "REVIEWED_SHA left unfilled: the sidecar stamp block aborts"
+assert_eq "" "$(ls "$sc_root"/lock/reviews/*.json 2>/dev/null || true)" "…and writes no reviews/*.json"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "no flag" "flag written" "…and leaves no $stamp_rel behind"
+else
+    assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
+fi
+# An abbreviated SHA of a real commit is not the full SHA either.
+sidecar_reviewed="$(git -C "$stamprepo" rev-parse --short=7 HEAD)"
+run_sidecar_stamp_block
+assert_eq 1 "$sidecar_block_status" "REVIEWED_SHA filled with a short SHA of a real commit: the sidecar stamp block aborts"
+assert_eq "" "$(ls "$sc_root"/lock/reviews/*.json 2>/dev/null || true)" "…and writes no reviews/*.json"
+sidecar_reviewed=""
 
 # -----------------------------------------------------------------------------
 

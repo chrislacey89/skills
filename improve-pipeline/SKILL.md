@@ -171,7 +171,7 @@ Each book loaded should contribute something specific the dialectic can cite —
 
 Use a structured tension pattern before writing the proposal. Spawn the Advocate and the Skeptic as sub-agents **in a single message**, so each writes its opening case without the other's in context — two cases formed at the same moment cannot anchor on each other, and weighing them against each other only means something if they were formed apart. The Mediator runs after both return.
 
-When sub-agents are unavailable, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly. Degraded mode has no sub-agents to reply, so the reply round below does not run.
+Invoking this skill is the request for those sub-agents; `/pre-merge` Phase 3 states once what "unavailable" means (*Invoking this skill is the request to delegate*). When sub-agents are unavailable in that sense, simulate the roles sequentially and name the run **degraded mode** in the issue body: the Skeptic reads the Advocate's case before writing, so its independence is gone and the verdict should be read accordingly. Degraded mode has no sub-agents to reply, so the reply round below does not run.
 
 The Mediator may then call **one** reply round — see its gate below. Send both replies in a single message, so the independence that governs the opening cases governs the replies too. Each reply quotes the specific claim it answers, says what it concedes and what still stands, and stays under 250 words. The roles need not agree; the objective is the right answer rather than the win (Liang et al., *Multi-Agent Debate*).
 

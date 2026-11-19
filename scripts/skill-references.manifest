@@ -83,3 +83,6 @@ init-pipeline/scripts/sidecar.sh  walk-commits
 init-pipeline/scripts/sidecar.sh  visual-recap
 init-pipeline/scripts/sidecar.sh  setup-ralph-loop
 docs/state-backend.md      compound
+tdd/tests.md               pre-merge
+tdd/tests.md               execute
+tdd/tests.md               fix-findings
