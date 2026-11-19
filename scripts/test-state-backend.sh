@@ -991,8 +991,10 @@ else
     check "work set blocked_by on an unlistable work directory exits 1 (no cycle written)" 1 "$rc"
     runo "$P" trace "$u1"
     check "trace on an unlistable work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "trace on an unlistable work directory says cannot list on stderr" ;; *) bad "trace on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
     check "work create on an unlistable work directory exits 1 (no id reused)" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create on an unlistable work directory says cannot list on stderr" ;; *) bad "work create on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
     chmod 755 "$S/work"
     check "the unlistable arms left the blockers as they were" "[]" "$(jq -c .blocked_by < <(cd "$P" && bash "$SC" work view "$u1" --json))"
     # Read but not entered (mode 644): the glob still expands to the names, but
@@ -1006,6 +1008,7 @@ else
     check "work list --unblocked on a read-only-listing work directory exits 1" 1 "$rc"
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
     check "work create on a read-only-listing work directory exits 1 (no id reused)" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
     chmod 755 "$S/work"
 fi
 
