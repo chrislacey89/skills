@@ -1524,7 +1524,7 @@ cited_probe() {
 # :12+, :12, 30-31), so an anchor looks up its file. Only a suffix that is all
 # line numbers is stripped, and only when the path does not exist with it, so
 # a real name holding a colon is still found as named. require (through
-# cited_probe) and lessons match share it.
+# cited_probe), lessons match and lessons flag --for share it.
 strip_line_anchor() {
     local p="$1"
     if [ ! -e "$p" ] && [[ "$p" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
@@ -3376,7 +3376,7 @@ lessons_flag() {
     # ranks them.
     top="$(pgit rev-parse --show-toplevel)" || refuse "lessons flag: cannot find the project's top level"
     prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons flag: cannot find the project's top level"
-    if [[ "$for" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then for="${BASH_REMATCH[1]}"; fi
+    for="$(strip_line_anchor "$for")"
     case "$for" in
         "$top"/*) for="${for#"$top"/}" ;;
         /*) refuse "lessons flag: $for is outside the project at $top" ;;

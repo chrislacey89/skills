@@ -1218,6 +1218,14 @@ check "flag from a subfolder: match returns the lesson for the ../ and // path" 
 runo "$FLP/sub" lessons flag ../docs/solutions/x/broad-2026-01-01.md --for ../lib//core/a.sh --reason "dotdot"
 check "flag from a subfolder with ../ and //: exits 0" 0 "$rc"
 check "flag from a subfolder with ../ and //: the exact entry is recorded" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .entry)"
+# --for takes every anchor form lessons match takes, through the same helper
+# (strip_line_anchor), so a flag raised from a Context anchor finds its entry.
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for "lib/core/a.sh:12+" --reason "plus anchor"
+check "flag --for a :line+ anchor: exits 0" 0 "$rc"
+check "flag --for a :line+ anchor: for is the path" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .for)"
+runo "$FLP" lessons flag docs/solutions/x/broad-2026-01-01.md --for "lib/core/a.sh:12, 30-31" --reason "list anchor"
+check "flag --for a :line, range list anchor: exits 0" 0 "$rc"
+check "flag --for a :line, range list anchor: for is the path" "lib/core/a.sh" "$(tail -n 1 "$FLAGS" | jq -r .for)"
 
 mkproj
 lesson "$P" "x/solo-2026-01-01.md" "Solo" "paths: [a.sh]"
