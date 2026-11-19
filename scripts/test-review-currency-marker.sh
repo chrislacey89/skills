@@ -234,6 +234,37 @@ assert_eq "$newer_sha" "$extracted" "the last stamp in the body wins"
 
 # -----------------------------------------------------------------------------
 
+section "the stamp records the SHA Phase 3 read, not HEAD at write time (#292)"
+
+# The incident: a round-2 review read F1, a fix landed as F2, and Phase 4's
+# `REVIEWED_SHA=$(git rev-parse HEAD)` stamped F2, a commit no review read.
+# /closeout then saw stamp == head and passed silently. So Phase 3 prints the
+# SHA the review reads, and both Phase 4 blocks take it as a filled-in literal.
+# This pins the prose, not a session's runtime: it cannot show that an agent
+# filled in the right value, only that no block computes the value at write time.
+# test-post-review-edit-lock.sh runs the filled-in blocks with a later commit on top.
+phase3="$(awk '/^### Phase 3/ { on = 1; next } /^### Phase 4/ { exit } on' "$premerge_skill")"
+phase3_prints="$(awk '/^```bash$/ { on = 1; next } on && /^```$/ { on = 0 } on' <<<"$phase3" | grep -cE '^git rev-parse HEAD([[:space:]]|$)' || true)"
+assert_eq 1 "$phase3_prints" "Phase 3 has one fenced block line that prints git rev-parse HEAD"
+phase4_stamp_blocks=""
+for needle in 'stamp write' 'gh pr edit <pr-number>'; do
+    blk="$(awk -v n="$needle" '
+        /^### Phase 4/ { p4 = 1 } /^### Phase 5/ { p4 = 0 }
+        p4 && /^```bash$/ { buf = ""; on = 1; next }
+        on && /^```$/ { if (index(buf, n) && index(buf, "review-stamped")) { printf "%s", buf; exit } on = 0; next }
+        on { buf = buf $0 "\n" }
+    ' "$premerge_skill")"
+    [[ -n "$blk" ]] || { printf 'FATAL: no Phase 4 stamp block holding %s and review-stamped\n' "$needle" >&2; exit 2; }
+    phase4_stamp_blocks+="$blk"$'\n'
+    # shellcheck disable=SC2016  # the pattern is the skill's literal text
+    assert_eq 1 "$(grep -cE '^REVIEWED_SHA="<[^"]*>"' <<<"$blk" || true)" \
+        "the Phase 4 block holding '$needle' assigns REVIEWED_SHA once, from a filled-in placeholder"
+done
+# Every spelling of the write-time read: $(git rev-parse HEAD), `git rev-parse HEAD`,
+# and with options between (`rev-parse --verify HEAD`).
+assert_eq "" "$(grep -nE 'rev-parse([[:space:]]+-[-a-z]+)*[[:space:]]+"?HEAD"?([[:space:]]|\)|$)' <<<"$phase4_stamp_blocks" || true)" \
+    "neither Phase 4 stamp block evaluates git rev-parse HEAD"
+
 section "exactly one skill writes the stamp"
 
 # The template is extracted above from pre-merge/SKILL.md, so this searches for

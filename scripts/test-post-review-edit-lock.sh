@@ -209,6 +209,13 @@ stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'gh pr edit.*review-stamped'
 [ -n "$stamp_block" ] || fatal "no stamp block found in pre-merge/SKILL.md"
 sidecar_stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'stamp write.*review-stamped' || true)"
 [ -n "$sidecar_stamp_block" ] || fatal "no sidecar stamp block found in pre-merge/SKILL.md"
+# Both take the reviewed SHA Phase 3 printed as a filled-in literal (#292).
+# fill_reviewed <block> <sha> — the block with that placeholder filled.
+reviewed_placeholder='REVIEWED_SHA="<the full SHA Phase 3 printed>"'
+for blk in "$stamp_block" "$sidecar_stamp_block"; do
+    [[ "$blk" == *"$reviewed_placeholder"* ]] || fatal "a Phase 4 stamp block has no $reviewed_placeholder line"
+done
+fill_reviewed() { printf '%s' "${1//"$reviewed_placeholder"/REVIEWED_SHA=\"$2\"}"; }
 
 stamp_write="$(sed -n '/^PROJECT_DIR=/,$p' <<<"$stamp_block")"
 [ -n "$stamp_write" ] || fatal "no PROJECT_DIR-anchored stamp-flag write found in pre-merge/SKILL.md"
@@ -841,12 +848,12 @@ ghbin="$scratch/ghbin"
 mkdir -p "$ghbin"
 
 stamp_block_status=0
-run_stamp_block() {  # $1 = the exit status the stub's `pr edit` reports
+run_stamp_block() {  # $1 = the exit status the stub's `pr edit` reports; $2 = the reviewed SHA filled in (default: HEAD)
     cat > "$ghbin/gh" <<STUB
 #!/usr/bin/env bash
 case "\$2" in
   view) printf '## Summary\n\nfixture body\n' ;;
-  edit) exit $1 ;;
+  edit) echo edited >> "$ghbin/edits"; exit $1 ;;
   *)    exit 9 ;;
 esac
 STUB
@@ -855,7 +862,7 @@ STUB
     stamp_block_status=0
     ( cd "$stamprepo" \
         && PATH="$ghbin:$PATH" CLAUDE_PROJECT_DIR="$stamprepo" \
-           bash -c "${stamp_block//<pr-number>/1}" ) >/dev/null 2>&1 || stamp_block_status=$?
+           bash -c "$(fill_reviewed "${stamp_block//<pr-number>/1}" "${2:-$(git -C "$stamprepo" rev-parse HEAD)}")" ) >/dev/null 2>&1 || stamp_block_status=$?
 }
 
 run_stamp_block 1
@@ -880,6 +887,19 @@ else
     assert_eq "flag written" "no flag" "…and the flag is written on that path, which is what makes the abort above a measurement"
 fi
 
+# #292: the PR-body block takes the reviewed SHA as a filled-in literal. Left
+# unfilled, it is not a SHA, and the block stops before it edits the PR body:
+# a marker the reader rejects would read as "no stamp" at /closeout.
+rm -f "$ghbin/edits"
+run_stamp_block 0 "<the full SHA Phase 3 printed>"
+assert_eq 1 "$stamp_block_status" "REVIEWED_SHA left unfilled: the PR-body stamp block aborts"
+assert_eq "" "$(cat "$ghbin/edits" 2>/dev/null || true)" "…before it edits the PR body"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "no flag" "flag written" "…and leaves no $stamp_rel behind"
+else
+    assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
+fi
+
 # -----------------------------------------------------------------------------
 
 section "7b. on the sidecar backend, the flag is written only if the stamp commit succeeded"
@@ -900,10 +920,12 @@ git config --file "$sc_gitconfig" user.email "lock@example.invalid"
 sidecar_block_status=0
 sidecar_stacked_base=""
 sidecar_stamp_w=""
+sidecar_reviewed=""   # the SHA filled into REVIEWED_SHA; empty means the current HEAD
 run_sidecar_stamp_block() {
     rm -f "$stamprepo/$stamp_rel"
     sidecar_block_status=0
     local blk="${sidecar_stamp_block//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"$sidecar_stacked_base\"}"
+    blk="$(fill_reviewed "$blk" "${sidecar_reviewed:-$(git -C "$stamprepo" rev-parse HEAD)}")"
     blk="${blk//W=\"W-<n>\"/W=\"$sidecar_stamp_w\"}"
     ( cd "$stamprepo" \
         && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$sc_root" \
@@ -1004,6 +1026,31 @@ else
 fi
 sidecar_stamp_w=""
 rm -f "$stamprepo/$stamp_rel"
+
+# #292: a commit made after the review is not what the stamp names. The block is
+# filled with the SHA Phase 3 printed, then a fix lands on top, then it runs.
+rm -f "$sc_root"/lock/reviews/*.json
+sidecar_reviewed="$(git -C "$stamprepo" rev-parse HEAD)"
+printf 'export const x = 2\n' > "$stamprepo/service.ts"
+git -C "$stamprepo" -c user.email=t@example.invalid -c user.name=Test -c commit.gpgsign=false \
+    commit -q --no-verify -am "a fix after the review" || fatal "could not commit a fix after the review"
+[ "$sidecar_reviewed" != "$(git -C "$stamprepo" rev-parse HEAD)" ] || fatal "fixture: the fix did not move HEAD"
+run_sidecar_stamp_block
+assert_eq 0 "$sidecar_block_status" "a fix landed after the review: the sidecar stamp block exits 0"
+assert_eq "$sidecar_reviewed" "$(stamp_sc stamp read "$(git -C "$stamprepo" branch --show-current)" 2>/dev/null)" \
+    "…and the stamp names the SHA the review read, not the newer HEAD"
+rm -f "$stamprepo/$stamp_rel" "$sc_root"/lock/reviews/*.json
+# An unfilled placeholder is not a SHA: the block stops before any stamp or flag.
+sidecar_reviewed="<the full SHA Phase 3 printed>"
+run_sidecar_stamp_block
+assert_eq 1 "$sidecar_block_status" "REVIEWED_SHA left unfilled: the sidecar stamp block aborts"
+assert_eq "" "$(ls "$sc_root"/lock/reviews/*.json 2>/dev/null || true)" "…and writes no reviews/*.json"
+if [ -f "$stamprepo/$stamp_rel" ]; then
+    assert_eq "no flag" "flag written" "…and leaves no $stamp_rel behind"
+else
+    assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
+fi
+sidecar_reviewed=""
 
 # -----------------------------------------------------------------------------
 
