@@ -482,7 +482,7 @@ bash "$SC" work set "$ID" blocked_by "$BLOCKED_BY"
 ```
 
 4. Close each superseded slice: `work close W-<old> --superseded-by W-<new>` when one slice replaces it, and `work close W-<old>` when it was split or dropped, because `--superseded-by` takes one id.
-5. Run the step 2 check again with the same `OLD`. It must print nothing. A line it prints is a dependent step 3 missed: rewrite it, and run the check again. Then run the `work set` block above.
+5. Run the step 2 check again with the same `OLD`. It must print nothing. A line it prints is a dependent step 3 missed: rewrite it, and run the check again. Then run the `decomposed_into` block at the top of this section with the final `SLICES`, not the rewrite block from step 3.
 
 ### 9. Summary
 

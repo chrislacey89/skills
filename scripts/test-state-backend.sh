@@ -966,6 +966,97 @@ check "every raced file's id field matches its name" "" \
 clean "racing creates leave the project clean" "$P"
 
 # -----------------------------------------------------------------------------
+section "work: a work directory that cannot be listed is a refusal, never an empty store"
+
+# uid 0 lists mode-311 directories, so root skips.
+if [ "$(id -u)" -eq 0 ]; then
+    skipped "unlistable work directory: root lists mode-311 directories, so the arms cannot run"
+else
+    mkproj none
+    runo "$P" init --name unlist --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+    S="$out"
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"; u1="$out"
+    runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"; u2="$out"
+    runo "$P" work create --kind prd --body-file "$tmp/prd.md"; u3="$out"
+    chmod 311 "$S/work"
+    runo "$P" work list
+    check "work list on an unlistable work directory exits 1" 1 "$rc"
+    check "work list on an unlistable work directory prints nothing on stdout" "" "$out"
+    case "$err" in *"$S/work"*) ok "work list names the unlistable directory on stderr" ;; *) bad "work list names the unlistable directory on stderr" "got [$err]" ;; esac
+    runo "$P" work list --unblocked
+    check "work list --unblocked on an unlistable work directory exits 1" 1 "$rc"
+    runo "$P" work set "$u1" blocked_by "$u2"
+    check "work set blocked_by on an unlistable work directory exits 1 (no cycle written)" 1 "$rc"
+    runo "$P" trace "$u1"
+    check "trace on an unlistable work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "trace on an unlistable work directory says cannot list on stderr" ;; *) bad "trace on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"
+    check "work create on an unlistable work directory exits 1 (no id reused)" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create on an unlistable work directory says cannot list on stderr" ;; *) bad "work create on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
+    # A direct read of a named item is not a listing: mode 311 can enter the
+    # directory, so an existing item opens; only a miss is double-checked (a miss
+    # in a directory that cannot be listed is refused, not read as absent).
+    runo "$P" work view "$u1"
+    check "work view of an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" work set "$u3" decomposed_into "$u1"
+    check "work set decomposed_into an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" fixrun record feat-x "$run1" "$sha_a" --work "$u1"
+    check "fixrun record --work an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" work view W-99
+    check "work view of a missing item on a searchable-not-readable work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work view of a missing item on a searchable-not-readable work directory says cannot list on stderr" ;; *) bad "work view of a missing item on a searchable-not-readable work directory says cannot list on stderr" "got [$err]" ;; esac
+    chmod 755 "$S/work"
+    check "the unlistable arms left the blockers as they were" "[]" "$(jq -c .blocked_by < <(cd "$P" && bash "$SC" work view "$u1" --json))"
+    # Read but not entered (mode 644): the glob still expands to the names, but
+    # every stat fails, so a scan that tests only -r skips each item and reads
+    # the store as empty.
+    chmod 644 "$S/work"
+    runo "$P" work list
+    check "work list on a read-only-listing work directory exits 1" 1 "$rc"
+    check "work list on a read-only-listing work directory prints nothing on stdout" "" "$out"
+    runo "$P" work list --unblocked
+    check "work list --unblocked on a read-only-listing work directory exits 1" 1 "$rc"
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"
+    check "work create on a read-only-listing work directory exits 1 (no id reused)" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" trace "$u1"
+    check "trace on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "trace on a read-only-listing work directory says cannot list on stderr" ;; *) bad "trace on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work set "$u1" blocked_by "$u2"
+    check "work set on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work set on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work set on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --parent "$u1" --body-file "$tmp/prd.md"
+    check "work create --parent on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create --parent on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create --parent on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"
+    check "work create --blocked-by on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" fixrun record feat-x "$run1" "$sha_a" --work "$u1"
+    check "fixrun record --work on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "fixrun record --work on a read-only-listing work directory says cannot list on stderr" ;; *) bad "fixrun record --work on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    chmod 755 "$S/work"
+fi
+
+# -----------------------------------------------------------------------------
+section "work: a sidecar with no work directory refuses a named item as absent"
+
+# The per-item guards skip the listability check when work/ does not exist;
+# a miss there is a plain "no such work item", not a "cannot list".
+mkproj none
+runo "$P" init --name nowork --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+S="$out"
+rm -rf "$S/work"
+runo "$P" work view W-1
+check "work view on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"no such work item"*) ok "work view on a sidecar with no work directory says no such work item" ;; *) bad "work view on a sidecar with no work directory says no such work item" "got [$err]" ;; esac
+runo "$P" trace W-1
+check "trace on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"no such work item"*) ok "trace on a sidecar with no work directory says no such work item" ;; *) bad "trace on a sidecar with no work directory says no such work item" "got [$err]" ;; esac
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work W-1
+check "fixrun record --work on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"which does not exist"*) ok "fixrun record --work on a sidecar with no work directory says the item does not exist" ;; *) bad "fixrun record --work on a sidecar with no work directory says the item does not exist" "got [$err]" ;; esac
+
+# -----------------------------------------------------------------------------
 section "work: no sidecar"
 
 mkproj none
@@ -1059,7 +1150,7 @@ check "the reader's regex matches the line /prd-to-issues §8 writes" true \
     "$(jq -n --arg l "$d_line" --arg re "$d_re" '$l | test($re)' 2>&1)"
 check "§8 quotes the reader's regex" 1 "$(printf '%s\n' "$pti8" | grep -cF "\`$d_re\`" | awk '{print ($1 > 0)}')"
 check "§8 states the reader's comment window" 1 "$(printf '%s\n' "$pti8" | grep -cF "last $d_last comments" | awk '{print ($1 > 0)}')"
-check "§8 no longer says readers take the most recent comment" 0 "$(printf '%s\n' "$pti8" | grep -ci 'consume the most recent')"
+check "§8: the words 'consume the most recent' are absent (wording only)" 0 "$(printf '%s\n' "$pti8" | grep -ci 'consume the most recent')"
 
 gate_shells="bash"
 if command -v zsh >/dev/null 2>&1; then gate_shells="bash zsh"

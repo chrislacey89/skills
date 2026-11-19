@@ -356,8 +356,9 @@ check "§7: the read-back reads the real template's Blocked by section" "match $
 s8text="$(awk '/^### 8\. /{on=1} /^### 9\. /{on=0} on' "$SKILL")"
 case "$s8text" in *"no dependent is closed or created again"*) ok "§8: says no dependent is closed or created again" ;;
     *) bad "§8: says no dependent is closed or created again" "sentence missing" ;; esac
-case "$s8text" in *re-creat*|*"created again through"*) bad "§8: no longer re-creates dependents" "found re-create wording" ;;
-    *) ok "§8: no longer re-creates dependents" ;; esac
+# Wording only: this reaches the two literal phrases below, not the procedure; the blocks run above guard that.
+case "$s8text" in *re-creat*|*"created again through"*) bad "§8: the words 're-creat' and 'created again through' are absent (wording only)" "found re-create wording" ;;
+    *) ok "§8: the words 're-creat' and 'created again through' are absent (wording only)" ;; esac
 # shellcheck disable=SC2016  # the needles are the skill's literal text
 {
 rw_line="$(printf '%s\n' "$s8text" | grep -n 'work set "$ID" blocked_by' | head -n 1 | cut -d: -f1)"

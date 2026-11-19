@@ -1524,7 +1524,7 @@ cited_probe() {
 # :12+, :12, 30-31), so an anchor looks up its file. Only a suffix that is all
 # line numbers is stripped, and only when the path does not exist with it, so
 # a real name holding a colon is still found as named. require (through
-# cited_probe) and lessons match share it.
+# cited_probe), lessons match and lessons flag --for share it.
 strip_line_anchor() {
     local p="$1"
     if [ ! -e "$p" ] && [[ "$p" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
@@ -1732,7 +1732,12 @@ cmd_fixrun() {
     case "$sub" in
         record)
             # cmd_work sets WORK_DIR; this verb does not go through it.
-            [ -z "$work" ] || [ -f "$sc/work/$work.md" ] || refuse "fixrun record refused: --work names $work, which does not exist"
+            if [ -n "$work" ]; then
+                [ -f "$sc/work/$work.md" ] || {
+                    [ ! -d "$sc/work" ] || work_dir_listable "fixrun record" "$sc/work"
+                    refuse "fixrun record refused: --work names $work, which does not exist"
+                }
+            fi
             mkdir -p "$sc/fix-runs" || refuse "fixrun record: cannot create $sc/fix-runs"
             line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" --arg w "$work" \
                 '{branch: $b, run: $r, sha: $s} + (if $t == "" then {} else {thread: $t} end)
@@ -1855,7 +1860,10 @@ work_ids_csv() {
         id="$(printf '%s' "$id" | tr -d ' ')"
         [ -n "$id" ] || continue
         is_work_id "$id" || die_usage "work: $label must be ids like W-3: $id"
-        [ -f "$WORK_DIR/$id.md" ] || refuse "work: $label names $id, which does not exist"
+        [ -f "$WORK_DIR/$id.md" ] || {
+            work_dir_listable work "$WORK_DIR"
+            refuse "work: $label names $id, which does not exist"
+        }
         out="${out:+$out,}$id"
     done
     printf '%s' "$out"
@@ -1890,7 +1898,10 @@ work_rewrite() {
 # work_existing <id>: refuse unless the id is well-formed and its file exists.
 work_existing() {
     is_work_id "$1" || die_usage "work: expected an id like W-3, got: $1"
-    [ -f "$WORK_DIR/$1.md" ] || refuse "work: no such work item: $1"
+    [ -f "$WORK_DIR/$1.md" ] || {
+        [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
+        refuse "work: no such work item: $1"
+    }
 }
 
 cmd_work() {
@@ -1984,7 +1995,10 @@ work_create() {
     mkdir -p "$WORK_DIR" || refuse "work create: cannot create $WORK_DIR"
     if [ -n "$parent" ]; then
         is_work_id "$parent" || die_usage "work create: --parent must be an id like W-3: $parent"
-        [ -f "$WORK_DIR/$parent.md" ] || refuse "work create: --parent names $parent, which does not exist"
+        [ -f "$WORK_DIR/$parent.md" ] || {
+            work_dir_listable "work create" "$WORK_DIR"
+            refuse "work create: --parent names $parent, which does not exist"
+        }
     fi
     blocked="$(work_ids_csv --blocked-by "$blocked")" || exit $?
     body="$(work_body "$bf")" || exit 1
@@ -1992,6 +2006,7 @@ work_create() {
     while [ "$i" -lt 50 ]; do
         i=$((i + 1))
         max=0
+        work_dir_listable "work create" "$WORK_DIR"
         for b in "$WORK_DIR"/W-*.md; do
             b="${b##*/W-}"; b="${b%.md}"
             [[ "$b" =~ ^[0-9]+$ ]] || continue
@@ -2061,12 +2076,18 @@ work_edit() {
     work_rewrite "$id" "sidecar: work edit $id" '.body = $body' --arg body "$new"
 }
 
+# work_dir_listable <verb> <dir>: refuse when <dir> cannot be listed.
+work_dir_listable() {
+    { [ -r "$2" ] && [ -x "$2" ]; } || refuse "$1: cannot list $2"
+}
+
 # work_all_fm <verb>: every work item's frontmatter, one compact JSON object
 # per line. A file that does not parse is refused with its path, never skipped:
 # an item left out of a listing reads as an item that is not there.
 work_all_fm() {
     local verb="$1" f one
     [ -d "$WORK_DIR" ] || return 0
+    work_dir_listable "$verb" "$WORK_DIR"
     for f in "$WORK_DIR"/W-*.md; do
         [ -f "$f" ] || continue
         # A parse failure is the assignment's exit status, never a word in the
@@ -2290,6 +2311,7 @@ trace_work() {
     sc="$(do_resolve)" || exit 1
     sc="$(cd "$sc" && pwd -P)"
     dir="$sc/work"
+    [ ! -d "$dir" ] || work_dir_listable trace "$dir"
     [ -f "$dir/$id.md" ] || refuse "trace: no such work item: $id"
     for f in "$dir"/W-*.md; do
         [ -f "$f" ] || continue
@@ -3376,7 +3398,7 @@ lessons_flag() {
     # ranks them.
     top="$(pgit rev-parse --show-toplevel)" || refuse "lessons flag: cannot find the project's top level"
     prefix="$(pgit rev-parse --show-prefix)" || refuse "lessons flag: cannot find the project's top level"
-    if [[ "$for" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then for="${BASH_REMATCH[1]}"; fi
+    for="$(strip_line_anchor "$for")"
     case "$for" in
         "$top"/*) for="${for#"$top"/}" ;;
         /*) refuse "lessons flag: $for is outside the project at $top" ;;
