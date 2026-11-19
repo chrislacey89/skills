@@ -1091,7 +1091,7 @@ check "the reader's regex matches the line /prd-to-issues §8 writes" true \
     "$(jq -n --arg l "$d_line" --arg re "$d_re" '$l | test($re)' 2>&1)"
 check "§8 quotes the reader's regex" 1 "$(printf '%s\n' "$pti8" | grep -cF "\`$d_re\`" | awk '{print ($1 > 0)}')"
 check "§8 states the reader's comment window" 1 "$(printf '%s\n' "$pti8" | grep -cF "last $d_last comments" | awk '{print ($1 > 0)}')"
-check "§8 no longer says readers take the most recent comment" 0 "$(printf '%s\n' "$pti8" | grep -ci 'consume the most recent')"
+check "§8: the words 'consume the most recent' are absent (wording only)" 0 "$(printf '%s\n' "$pti8" | grep -ci 'consume the most recent')"
 
 gate_shells="bash"
 if command -v zsh >/dev/null 2>&1; then gate_shells="bash zsh"
