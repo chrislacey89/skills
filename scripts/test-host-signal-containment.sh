@@ -174,17 +174,24 @@ else
     git -C "$ft/nobase" commit -q --allow-empty -m "root $ft/nobase"
     git -C "$ft/nobase" worktree add -q -b nobase-task "$ft/wt-nobase" nobase
 
-    tree_of() { (cd "$1" && env -u CONDUCTOR_WORKSPACE_PATH -u CODESPACES -u REMOTE_CONTAINERS bash "$ft/fresh.sh" 2>/dev/null) | sed -n 's/^tree=\([a-z]*\).*/\1/p'; }
+    # Agents run the block in zsh, so both shells must read each tree state.
+    tree_of() { (cd "$2" && env -u CONDUCTOR_WORKSPACE_PATH -u CODESPACES -u REMOTE_CONTAINERS "$1" "$ft/fresh.sh" 2>/dev/null) | sed -n 's/^tree=\([a-z]*\).*/\1/p'; }
     expect_tree() {
         local want="$1" label="$2" got
-        got="$(tree_of "$3")"
-        if [ "$got" = "$want" ]; then ok "$label -> tree=$want"; else bad "$label -> tree=$want" "got '$got'"; fi
+        got="$(tree_of "$4" "$3")"
+        if [ "$got" = "$want" ]; then ok "$label -> tree=$want ($4)"; else bad "$label -> tree=$want ($4)" "got '$got'"; fi
     }
-    expect_tree primary "the primary checkout"                         "$ft/main"
-    expect_tree fresh   "a pipeline-made worktree with nothing in it"  "$ft/wt-fresh"
-    expect_tree used    "a worktree with a commit past the base"       "$ft/wt-committed"
-    expect_tree used    "a worktree with an uncommitted file"          "$ft/wt-dirty"
-    expect_tree unknown "a fresh worktree whose base cannot be read"   "$ft/wt-nobase"
+    for sh in bash zsh; do
+        if ! command -v "$sh" > /dev/null 2>&1; then
+            bad "$sh is available to run the # fresh-tree block" "$sh not found on PATH"
+            continue
+        fi
+        expect_tree primary "the primary checkout"                         "$ft/main"         "$sh"
+        expect_tree fresh   "a pipeline-made worktree with nothing in it"  "$ft/wt-fresh"     "$sh"
+        expect_tree used    "a worktree with a commit past the base"       "$ft/wt-committed" "$sh"
+        expect_tree used    "a worktree with an uncommitted file"          "$ft/wt-dirty"     "$sh"
+        expect_tree unknown "a fresh worktree whose base cannot be read"   "$ft/wt-nobase"    "$sh"
+    done
 
     got="$(cd "$ft/wt-committed" && env -u CODESPACES -u REMOTE_CONTAINERS CONDUCTOR_WORKSPACE_PATH="$ft/wt-committed" bash "$ft/host.sh" | sed -n 's/^host_owned=//p')"
     if [ "$got" = yes ]; then
