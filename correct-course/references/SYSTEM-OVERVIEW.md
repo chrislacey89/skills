@@ -444,6 +444,16 @@ One row per skill. For quick orientation — what each skill expects, what it pr
 ├── excavate/SKILL.md               # Mine a legacy repo's git and PR history into hotspots, cited decisions, and docs/solutions/ entries (user-invoked, never merges)
 ├── help/SKILL.md                   # Read repo state and recommend the next pipeline skill (advisory only)
 ├── correct-course/SKILL.md         # Diagnose stale artifacts and walk the cleanup when an upstream assumption fails
+├── handoff/SKILL.md                # Compact the session into a transient handoff doc when no pipeline artifact fits (ad hoc)
+├── mermaid/                        # Mermaid diagram code from a description
+│   ├── SKILL.md
+│   └── references/                 # vendored upstream Mermaid syntax docs, plus contrast-for-github.md
+├── lfg/                            # Proof of concept: short shaping, then AFK to a stamped PR (user-invoked, never merges)
+│   ├── SKILL.md
+│   └── references/                 # tracer-test.md, plus trivial-task-rule.md, state-backend.md, sidecar.sh (bundled)
+├── hackathon/                      # A judged, time-boxed hackathon day in two sittings (user-invoked)
+│   ├── SKILL.md
+│   └── references/                 # dossier-template.md, plus next-step-menu.md, sidecar.sh (bundled)
 └── re-pitch/SKILL.md               # Re-state an explanation that did not land, in controlled technical English with every domain term glossed
 ```
 
