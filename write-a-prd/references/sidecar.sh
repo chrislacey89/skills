@@ -2063,10 +2063,12 @@ work_edit() {
 }
 
 # work_dir_listable <verb> <dir>: refuse when <dir> cannot be listed. A
-# directory that can be entered but not read matches no W-*.md glob, so a scan
-# of it reads as an empty store: no items, or an id that is already taken.
+# directory that can be entered but not read matches no W-*.md glob, and one
+# that can be read but not entered (no search permission) expands the glob but
+# fails every stat, so a scan of either reads as an empty store: no items, or
+# an id that is already taken.
 work_dir_listable() {
-    [ -r "$2" ] || refuse "$1: cannot list $2"
+    { [ -r "$2" ] && [ -x "$2" ]; } || refuse "$1: cannot list $2"
 }
 
 # work_all_fm <verb>: every work item's frontmatter, one compact JSON object

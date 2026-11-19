@@ -995,6 +995,18 @@ else
     check "work create on an unlistable work directory exits 1 (no id reused)" 1 "$rc"
     chmod 755 "$S/work"
     check "the unlistable arms left the blockers as they were" "[]" "$(jq -c .blocked_by < <(cd "$P" && bash "$SC" work view "$u1" --json))"
+    # Read but not entered (mode 644): the glob still expands to the names, but
+    # every stat fails, so a scan that tests only -r skips each item and reads
+    # the store as empty.
+    chmod 644 "$S/work"
+    runo "$P" work list
+    check "work list on a read-only-listing work directory exits 1" 1 "$rc"
+    check "work list on a read-only-listing work directory prints nothing on stdout" "" "$out"
+    runo "$P" work list --unblocked
+    check "work list --unblocked on a read-only-listing work directory exits 1" 1 "$rc"
+    runo "$P" work create --kind slice --body-file "$tmp/prd.md"
+    check "work create on a read-only-listing work directory exits 1 (no id reused)" 1 "$rc"
+    chmod 755 "$S/work"
 fi
 
 # -----------------------------------------------------------------------------
