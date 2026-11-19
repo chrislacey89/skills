@@ -591,7 +591,7 @@ Do not write all tests upfront — write one, make it pass, then move to the nex
 - **Highest level on top.** The exported function or component comes first, and the helpers it calls go below it.
 - **Parameter objects.** A long parameter list, or one a caller could swap unnoticed, becomes one named object.
 - **No flag arguments.** An argument that only picks which behavior runs becomes one named function per behavior.
-- **A name owns up to its side effects.** A function whose name reads as a lookup does not write.
+- **A name owns up to its side effects.** The reference's default 5 states the rule and its exceptions.
 - **A visible call order.** Steps that must run in a fixed order pass each result to the next.
 
 The reference's Scope section limits all of them: the repo's own conventions win, and the defaults cover new code only.
