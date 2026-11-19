@@ -268,7 +268,7 @@ The fixer's instructions, in order:
      BASE_REF="$(bash "$SC" base-ref)" || trial_abort "sidecar.sh base-ref failed"
    fi
    FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || trial_abort "no merge base with $BASE_REF"
-   TRIAL_HEAD=$(git rev-parse HEAD) || trial_abort "cannot read HEAD"
+   TRIAL_HEAD=$(git rev-parse HEAD)
    TRIAL_DIR=$(mktemp -d) || trial_abort "mktemp failed"
    trap 'rm -rf "$TRIAL_DIR" "$TRIAL_DIR.msg" "$TRIAL_DIR.err"' EXIT
    git clone -q --shared --no-checkout "$(git rev-parse --show-toplevel)" "$TRIAL_DIR" || trial_abort "the throwaway clone failed"
@@ -315,16 +315,26 @@ The fixer's instructions, in order:
    `fixed`. Report the SHA after it ran.
 
    The trial answers one question, whether the content folds, so signing is
-   off for its rebase. A throwaway commit needs no signature, a signer can fail
-   in a clone with no one to approve it, and a `--shared` clone does not read
-   the repository's own config anyway. A signing failure in the real fold is
-   not something a demotion could fix.
+   off for its rebase. A throwaway commit needs no signature, and a signer can
+   fail in a clone with no one to approve it. A signing failure in the real
+   fold is not something a demotion could fix.
+
+   The throwaway clone does not read the repository's own config, and the
+   trial accepts two wrong answers from that. A signer set there fails the real
+   fold while the trial reports `clean`. A merge driver defined there, for a
+   `merge=` attribute in `.gitattributes`, does not run in the trial, which
+   falls back to a text merge and can demote a fixup the real fold applies.
 
    An earlier `fixup!` commit that a blocked fixer left behind stops the rebase
    too. The trial skips any such commit and goes on, so it judges only the
    commit just made, and it names what it skipped on stderr, whatever its
    verdict. Report those SHAs in the `leftovers:` field (below): `/pre-merge`'s
    fold aborts until each one is reworded.
+   The skip works only when the rebase stops on the leftover itself. A leftover
+   that breaks a later ordinary commit (it adds a file a later commit also
+   adds) stops the rebase on that commit, which the trial cannot tell from a
+   conflict of the commit just made: a clean fixup after it is demoted, or
+   reported `blocked` when its recommit is refused, and the leftover is not named.
 
    Otherwise (lines from the base, from several commits, or a shared branch),
    make an ordinary commit. It is still one commit per fix, and it is

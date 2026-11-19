@@ -1350,6 +1350,7 @@ mkdir -p "$TRIAL_TMP"
 cat > "$fail_bin/mktemp" <<'STUB'
 #!/usr/bin/env bash
 if [ "${1:-}" = -d ]; then
+    if [ -n "${MKTEMP_FAIL:-}" ]; then echo "stub: mktemp -d fails" >&2; exit 1; fi
     dir="$("${REAL_MKTEMP:?}" -d "${TRIAL_TMP:?}/trial.XXXXXX")" || exit 1
     printf '%s\n' "$dir" >> "${TRIAL_TMP_LOG:?}"
     printf '%s\n' "$dir"
@@ -1371,6 +1372,30 @@ for verb in clone checkout; do
     assert_refused "a failing $verb" "$repo10" "$head10" "$rc10" "$out10" "the throwaway $verb failed"
     assert_trial_dir_gone "a failing $verb"
 done
+
+# #686 box 14: the mktemp guard, reached. Without it TRIAL_DIR is empty and the
+# block's .msg and .err files land in the repository's own working directory.
+out10="$(cd "$repo10" && env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--no-such-arg MKTEMP_FAIL=1 \
+    bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
+assert_refused "a failing mktemp" "$repo10" "$head10" "$rc10" "$out10" "fold trial aborted: mktemp failed"
+assert_eq "" "$(git -C "$repo10" status --porcelain --ignored)" "a failing mktemp: nothing is written into the repository"
+
+# #686 box 14: HEAD that cannot be read has no guard of its own. The throwaway
+# checkout of an empty TRIAL_HEAD fails, and that guard refuses (a mutation of a
+# separate rev-parse guard showed it, so the separate guard was dropped).
+head_bin="$sandbox/head-bin"
+mkdir -p "$head_bin"
+cat > "$head_bin/git" <<'STUB'
+#!/usr/bin/env bash
+if [ "$#" -eq 2 ] && [ "$1" = rev-parse ] && [ "$2" = HEAD ]; then echo "stub: git rev-parse HEAD fails" >&2; exit 128; fi
+exec "${REAL_GIT:?}" "$@"
+STUB
+chmod +x "$head_bin/git"
+: > "$TRIAL_TMP_LOG"
+out10="$(cd "$repo10" && env -u BASE_REF PATH="$head_bin:$fail_bin:$PATH" \
+    bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
+assert_refused "HEAD that cannot be read" "$repo10" "$head10" "$rc10" "$out10" "the throwaway checkout failed"
+assert_trial_dir_gone "HEAD that cannot be read"
 
 section "fold trial: a failing signer does not read as a conflict (#614 item 2)"
 # This suite never saw this while global config was isolated: GIT_CONFIG_GLOBAL
@@ -1552,6 +1577,84 @@ out13="$(trial_in "$repo13")" && rc13=0 || rc13=$?
 assert_eq 0 "$rc13" "a later commit conflicts: the block exits 0"
 assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out13" "a later commit conflicts: the trial names the demotion"
 assert_eq "add three" "$(git -C "$repo13" log -1 --format=%s)" "a later commit conflicts: the fixup is demoted"
+
+# The two limits the fold-trial prose states (#686 boxes 1, 4, 12). These pin
+# today's behavior, wrong answer included, so a change to either is a decision
+# someone makes on purpose rather than a drift nobody sees.
+section "fold trial, stated limit: the throwaway clone does not read the repository's own config"
+repo15="$sandbox/repo15"
+clean_fixup_repo "$repo15"
+git -C "$repo15" config commit.gpgsign true
+git -C "$repo15" config gpg.program "$failing_signer"
+head15="$(git -C "$repo15" rev-parse HEAD)"
+git -C "$repo15" commit -q --allow-empty -m 'probe' 2>/dev/null && r=signed || r=refused
+assert_eq refused "$r" "the instrument: the repo-local failing signer refuses a real commit in the repository"
+clone15="$sandbox/repo15-clone"
+git clone -q --shared --no-checkout "$repo15" "$clone15"
+assert_eq "" "$(git -C "$clone15" config --get gpg.program || true)" \
+    "a --shared clone carries none of the repository's own config: no gpg.program"
+assert_eq "fold trial: clean" "$(trial_in "$repo15")" "a repo-local failing signer: the trial reports clean"
+assert_eq "$head15" "$(git -C "$repo15" rev-parse HEAD)" "a repo-local failing signer: the fixup is not demoted"
+case "$(run_fold "$repo15")" in
+    *"fold aborted: "*) assert_eq ok ok "a repo-local failing signer: /pre-merge's real fold aborts where the trial said clean" ;;
+    *) assert_eq "fold aborted: ..." "$(run_fold "$repo15")" "a repo-local failing signer: /pre-merge's real fold aborts where the trial said clean" ;;
+esac
+assert_eq "$head15" "$(git -C "$repo15" rev-parse HEAD)" "a repo-local failing signer: the aborted fold leaves HEAD where it was"
+
+section "fold trial, stated limit: a leftover that breaks a later ordinary commit misjudges a clean fixup"
+# #665's four commits: one, three, drop three, two. The blocked leftover
+# `fixup! one` adds three.txt, so the rebase stops on 'feature: three', an
+# ordinary commit the skip loop cannot pass. A clean `fixup! two` after it is
+# then reported blocked while the recommit hook refuses, and demoted once it does not.
+repo16="$sandbox/repo16"
+mkdir -p "$repo16"
+(
+    cd "$repo16" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'base\n' > base.txt
+    git add base.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'one\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'three\n' > three.txt
+    git add three.txt && git commit -q -m 'feature: three'
+    git rm -q three.txt && git commit -q -m 'feature: drop three'
+    printf 'two\n' > two.txt
+    git add two.txt && git commit -q -m 'feature: two'
+    printf 'three, from the leftover\n' > three.txt
+    git add three.txt && git commit -q --fixup=HEAD~3 -m 'add three' -m 'Fix-Findings-Run: 20261118T000002Z'
+    # shellcheck disable=SC2016  # the hook body is literal text for sh
+    printf '#!/bin/sh\ncase "$(head -1 "$1")" in "fixup! "*) exit 0 ;; *) echo "commit-msg: bad subject" >&2; exit 1 ;; esac\n' > .git/hooks/commit-msg
+    chmod +x .git/hooks/commit-msg
+)
+point_origin_at_main "$repo16"
+assert_fixture_committed "$repo16" "the four-commit leftover fixture" 0 6 one.txt two.txt three.txt
+leftover16="$(git -C "$repo16" rev-parse HEAD)"
+out16="$(trial_in "$repo16")" && rc16=0 || rc16=$?
+[[ "$rc16" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "the leftover conflicts on a later ordinary commit and its recommit is refused: blocked"
+(
+    cd "$repo16" || exit 1
+    printf 'two, fixed\n' > two.txt
+    git add two.txt && git commit -q --fixup=HEAD~1 -m 'fix two' -m 'Fix-Findings-Run: 20261118T000003Z'
+)
+clean16="$(git -C "$repo16" rev-parse HEAD)"
+out16="$(trial_in "$repo16")" && rc16=0 || rc16=$?
+[[ "$rc16" -ne 0 ]] && r=nonzero || r=zero
+assert_eq nonzero "$r" "a clean fixup behind that leftover, recommit refused: reported blocked"
+case "$out16" in
+    *"fold trial: would not fold, and the recommit failed"*) assert_eq ok ok "a clean fixup behind that leftover, recommit refused: the trial calls it a conflict" ;;
+    *) assert_eq "fold trial: would not fold, and the recommit failed ..." "$out16" "a clean fixup behind that leftover, recommit refused: the trial calls it a conflict" ;;
+esac
+assert_eq "$clean16" "$(git -C "$repo16" rev-parse HEAD)" "a clean fixup behind that leftover, recommit refused: HEAD is untouched"
+rm "$repo16/.git/hooks/commit-msg"
+out16="$(trial_in "$repo16")" && rc16=0 || rc16=$?
+assert_eq "0 fold trial: would not fold; recommitted as an ordinary commit" "$rc16 $out16" \
+    "a clean fixup behind that leftover, no hook: demoted"
+assert_eq "fix two" "$(git -C "$repo16" log -1 --format=%s)" "a clean fixup behind that leftover, no hook: the fixup! subject is gone"
+assert_eq "fixup! feature: one" "$(git -C "$repo16" log -1 --format=%s "$leftover16")" "the leftover itself is not touched"
 
 # --- 12d. A stacked slice: the fixup target and the trial use the fold's base (RB-2)
 # The fold rebases from the sibling's tip, so a sibling commit is not in its
