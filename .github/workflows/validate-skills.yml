@@ -133,6 +133,12 @@ jobs:
       - name: Run recap pair-row contract suite
         run: bash scripts/test-recap-pair-contract.sh
 
+      - name: Check the skill inventory against the skill directories
+        run: bash scripts/check-skill-inventory.sh
+
+      - name: Run skill-inventory checker suite
+        run: bash scripts/test-skill-inventory.sh
+
       - name: Run documented git command contract suite
         run: bash scripts/test-documented-git-commands.sh
 

@@ -57,6 +57,10 @@ pre-push:
       run: bash scripts/test-per-unit-series-contract.sh
     recap-pair-contract-tests:
       run: bash scripts/test-recap-pair-contract.sh
+    skill-inventory-check:
+      run: bash scripts/check-skill-inventory.sh
+    skill-inventory-tests:
+      run: bash scripts/test-skill-inventory.sh
     documented-git-command-tests:
       run: bash scripts/test-documented-git-commands.sh
     git-guardrail-tests:
