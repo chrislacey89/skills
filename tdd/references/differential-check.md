@@ -39,15 +39,23 @@ message and the Step 6 review notes; it is never left for a reviewer to find.
 
 ## The base copy
 
-The base version is the commit the slice started from: the work item's
-`start_sha` when one is recorded, otherwise the merge-base of `HEAD` and the ref
-`sidecar.sh base-ref` prints. Export it as `BASE_SHA` before running the block,
-which extracts it into a throwaway directory. It uses the same `git archive`
-form as `/fix-findings`' breaker copy, and for the same reason: a plain
-directory with no `.git`, so no worktree is registered in a git directory other
-sessions share.
+The base version is the commit the slice started from: the merge-base of `HEAD`
+and the left end `sidecar.sh range` prints for the slice. That left end is the
+recorded start while it still bounds only this branch, and the base otherwise,
+so a branch rebased onto an advanced base, or a fold that rewrote the start, does
+not make other PRs' landed changes look like disagreements. The block computes
+`BASE_SHA` itself, since an `export` from an earlier call does not reach it, and
+then extracts it into a throwaway directory. It uses the same `git archive` form
+as `/fix-findings`' breaker copy, and for the same reason: a plain directory with
+no `.git`, so no worktree is registered in a git directory other sessions share.
+The block is `/execute`'s, which bundles `sidecar.sh`; `/tdd` reads only the
+inputs section above.
 
 ```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="<W-n, or empty>"
+RANGE="$(bash "$SC" range ${W:+"$W"})" || { echo "differential check aborted: sidecar.sh range failed" >&2; exit 1; }
+BASE_SHA="$(git merge-base "${RANGE%%..*}" HEAD)" || { echo "differential check aborted: merge-base failed for $RANGE" >&2; exit 1; }
 # pipefail is load-bearing: without it the pipeline reports tar's status, and a
 # `git archive` that resolved nothing exits 0 having extracted an empty tree.
 set -o pipefail
