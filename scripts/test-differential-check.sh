@@ -130,6 +130,7 @@ for sh in bash zsh; do
             if [ -f "$copy/pre.txt" ] && [ ! -e "$copy/base.txt" ]; then ok "a recorded start bounds the slice: the copy is that commit"; else bad "a recorded start bounds the slice: the copy is that commit" "pre.txt/base.txt wrong in $copy"; fi
         else
             if [ -f "$copy/base.txt" ]; then ok "a base that moved after the start is in the copy, so landed changes are not disagreements"; else bad "a base that moved after the start is in the copy, so landed changes are not disagreements" "base.txt missing from $copy"; fi
+            if [ ! -e "$copy/pre.txt" ]; then ok "the fallback copy predates this branch's earlier slices (pre.txt absent), the trade the doc states"; else bad "the fallback copy predates this branch's earlier slices (pre.txt absent), the trade the doc states" "pre.txt present in $copy"; fi
         fi
     done
 
