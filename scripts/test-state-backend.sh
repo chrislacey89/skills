@@ -977,6 +977,7 @@ else
     S="$out"
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"; u1="$out"
     runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"; u2="$out"
+    runo "$P" work create --kind prd --body-file "$tmp/prd.md"; u3="$out"
     chmod 311 "$S/work"
     runo "$P" work list
     check "work list on an unlistable work directory exits 1" 1 "$rc"
@@ -997,6 +998,10 @@ else
     # in a directory that cannot be listed is refused, not read as absent).
     runo "$P" work view "$u1"
     check "work view of an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" work set "$u3" decomposed_into "$u1"
+    check "work set decomposed_into an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" fixrun record feat-x "$run1" "$sha_a" --work "$u1"
+    check "fixrun record --work an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
     runo "$P" work view W-99
     check "work view of a missing item on a searchable-not-readable work directory exits 1" 1 "$rc"
     chmod 755 "$S/work"
