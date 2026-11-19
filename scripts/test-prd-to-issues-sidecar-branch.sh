@@ -9,7 +9,12 @@
 # three behaviors only a run can show: the §7 read-back reports a prose/field
 # blocker mismatch, §8's `decomposed_into` holds only the latest ids, and §9
 # picks the lowest-numbered unblocked slice of THIS decomposition or reports a
-# cycle. `gh` on PATH is a stub that logs its argv; no arm may call it.
+# cycle. #564 replaced §8's close-and-re-create with an in-place rewrite of each
+# dependent's blocked_by, so the re-decomposition fixtures run §8's dependents
+# check (every open item, any parent; a failed read stops it) and its rewrite
+# block, and #562 adds a two-unblocked tiebreak, the real issue template through
+# the §7 read-back, §8's step order read from the prose, and the CI zsh step.
+# `gh` on PATH is a stub that logs its argv; no arm may call it.
 #
 # SHELLS. Agents run these blocks in zsh as often as bash, and the two split
 # unquoted expansions differently (`${X:+--flag "$X"}` stays one word, `for id in
@@ -25,6 +30,17 @@ set -u
 if [ -z "${PTI_SHELL:-}" ]; then
     arms_rc=0
     PTI_SHELL=bash bash "$0" || arms_rc=1
+    # CI installs zsh in a workflow step; that step must exist and run before
+    # this suite, or CI reaches the FAIL branch below on every run (#562).
+    wf="$(cd "$(dirname "$0")/.." && pwd -P)/.github/workflows/validate-skills.yml"
+    zl="$(grep -n 'name: Install zsh' "$wf" | head -n 1 | cut -d: -f1)"
+    sl="$(grep -n 'run: bash scripts/test-prd-to-issues-sidecar-branch.sh' "$wf" | head -n 1 | cut -d: -f1)"
+    if [ -n "$zl" ] && [ -n "$sl" ] && [ "$zl" -lt "$sl" ]; then
+        printf '  ok   CI installs zsh before it runs this suite\n'
+    else
+        printf '  FAIL CI installs zsh before it runs this suite\n       Install zsh at line [%s], this suite at line [%s] in %s\n' "$zl" "$sl" "$wf"
+        arms_rc=1
+    fi
     if command -v zsh >/dev/null 2>&1; then
         PTI_SHELL=zsh bash "$0" || arms_rc=1
     elif [ -n "${CI:-}" ]; then
@@ -316,6 +332,46 @@ check "a failed read stops the dependents check" 1 "$([ "$rc" -ne 0 ] && echo 1 
 printf '#!/bin/sh\nif [ "$1" = work ] && [ "$2" = view ] && [ "$3" = "%s" ]; then echo "not json"; exit 0; fi\nexec bash "%s" "$@"\n' "$SX" "$SC_REAL" > "$failsc"
 runb "$P" "${fb//OLD=\"W-<old>\"/OLD=\"$R1\"}"
 check "an unparseable read stops the dependents check" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+# §9's tiebreak (#562 item 1): two slices unblocked at once, recorded in
+# decomposed_into in reverse order, so neither the list order nor a loop that
+# keeps the last match can pass for "lowest-numbered wins".
+printf 'fifth pitch\n' > "$tmp/pitch5"
+PL="$(cd "$P" && bash "$SC_REAL" work create --kind prd --body-file "$tmp/pitch5" 2>/dev/null)"
+slice "$PL" "" "" ""; L1="$out"
+slice "$PL" "" "" ""; L2="$out"
+s8 "$PL" "$L2,$L1"
+s9 "$PL"
+check "§9: of two unblocked slices, the lower id is picked" "**Next session:** /execute $L1" "$out"
+
+# The §7 read-back against the real issue template (#562 item 2), with every
+# #<n> naming the PRD or a slice written W-<n>, as §7's sidecar rule says.
+tpl="$(awk '/^<issue-template>$/{on=1; next} /^<\/issue-template>$/{on=0} on' "$SKILL")"
+[ -n "$tpl" ] || fatal "no <issue-template> block in $SKILL"
+tbody="$(printf '%s\n' "$tpl" | sed -e "s/#<prd-issue-number>/$PL/g" -e "s/#<issue-number>/$L1/g")"
+slice "$PL" "$L1" "" "" "$tbody"; TS="$out"
+runb "$P" "${reconcile_block//W-<slice>/$TS}"
+check "§7: the read-back reads the real template's Blocked by section" "match $TS: [$L1]" "$out"
+
+# §8's prose, read from the skill (#562 item 3, against the in-place procedure).
+s8text="$(awk '/^### 8\. /{on=1} /^### 9\. /{on=0} on' "$SKILL")"
+case "$s8text" in *"no dependent is closed or created again"*) ok "§8: says no dependent is closed or created again" ;;
+    *) bad "§8: says no dependent is closed or created again" "sentence missing" ;; esac
+case "$s8text" in *re-creat*|*"created again through"*) bad "§8: no longer re-creates dependents" "found re-create wording" ;;
+    *) ok "§8: no longer re-creates dependents" ;; esac
+# shellcheck disable=SC2016  # the needles are the skill's literal text
+{
+rw_line="$(printf '%s\n' "$s8text" | grep -n 'work set "$ID" blocked_by' | head -n 1 | cut -d: -f1)"
+close_line="$(printf '%s\n' "$s8text" | grep -n 'Close each superseded slice' | head -n 1 | cut -d: -f1)"
+recheck_line="$(printf '%s\n' "$s8text" | grep -n 'Run the step 2 check again' | head -n 1 | cut -d: -f1)"
+}
+check "§8: the superseded slices close after the dependents are rewritten" 1 \
+    "$([ -n "$rw_line" ] && [ -n "$close_line" ] && [ "$rw_line" -lt "$close_line" ] && echo 1 || echo 0)"
+check "§8: the check is re-run after the closes" 1 \
+    "$([ -n "$close_line" ] && [ -n "$recheck_line" ] && [ "$close_line" -lt "$recheck_line" ] && echo 1 || echo 0)"
+s7text="$(awk '/^### 7\. /{on=1} /^<issue-template>$/{on=0} on' "$SKILL")"
+case "$s7text" in *'`work set W-<n> blocked_by'*) ok "§7: a wrong field is fixed with work set blocked_by" ;;
+    *) bad "§7: a wrong field is fixed with work set blocked_by" "not found in §7" ;; esac
+
 check "sidecar: no gh call at all" "" "$(cat "$GH_LOG")"
 check "sidecar: the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
 
