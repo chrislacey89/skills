@@ -1374,11 +1374,18 @@ for verb in clone checkout; do
 done
 
 # #686 box 14: the mktemp guard, reached. Without it TRIAL_DIR is empty and the
-# block's .msg and .err files land in the repository's own working directory.
+# EXIT trap runs rm -rf "" ".msg" ".err", which deletes any .msg and .err in the
+# working directory. So the files are planted first and must survive.
+printf 'keep\n' > "$repo10/.msg"
+printf 'keep\n' > "$repo10/.err"
+status_before="$(git -C "$repo10" status --porcelain --ignored)"
 out10="$(cd "$repo10" && env -u BASE_REF PATH="$fail_bin:$PATH" GIT_FAIL_VERB=--no-such-arg MKTEMP_FAIL=1 \
     bash -c "$fold_trial_block" 2>&1)" && rc10=0 || rc10=$?
 assert_refused "a failing mktemp" "$repo10" "$head10" "$rc10" "$out10" "fold trial aborted: mktemp failed"
-assert_eq "" "$(git -C "$repo10" status --porcelain --ignored)" "a failing mktemp: nothing is written into the repository"
+assert_eq "keep" "$(cat "$repo10/.msg" 2>/dev/null)" "a failing mktemp: a .msg in the working directory survives"
+assert_eq "keep" "$(cat "$repo10/.err" 2>/dev/null)" "a failing mktemp: an .err in the working directory survives"
+assert_eq "$status_before" "$(git -C "$repo10" status --porcelain --ignored)" "a failing mktemp: nothing new is written into the repository"
+rm -f "$repo10/.msg" "$repo10/.err"
 
 # #686 box 14: HEAD that cannot be read has no guard of its own. The throwaway
 # checkout of an empty TRIAL_HEAD fails, and that guard refuses (a mutation of a
