@@ -629,7 +629,7 @@ if [[ -z "$clear_block" ]]; then
 fi
 clear_block="${clear_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
 clear_block="${clear_block//<number>/1}"
-# #531: the block takes the local branch name Step 2 read the stamp with as a
+# #531: the block takes the merged PR's local branch name as a
 # filled-in literal, the way it takes <number>, because no earlier block's shell
 # variable reaches it. fill_branch <name> is the block with that line filled.
 branch_line_re='^BRANCH="<[^"]*>"'
