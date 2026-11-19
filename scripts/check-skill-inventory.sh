@@ -52,37 +52,29 @@
 
 set -uo pipefail
 
-# Skills that live outside this pack but are named in its skills. One line each,
-# with the reason: a name that is not here and not a directory is a fault.
-OUTSIDE_SKILLS="
-excalidraw-diagram
-library
-next-cache-components-adoption
-next-cache-components-optimizer
-vercel-composition-patterns
-vercel-react-best-practices
-worktrunk
-zod
-zod-testing
+# Skills that live outside this pack but are named in its skills, and tokens that
+# pass check 4's line and are not skills. One entry per line, each with the
+# reason; a name that is in neither list and is not a directory is a fault. No
+# built-in Claude Code command, such as /clear or /compact, is named in any skill
+# today; add one here with its reason if that changes.
+OUTSIDE_RAW="
+excalidraw-diagram            # free-form diagramming; mermaid and visual-recap route to it
+library                       # the book library; improve-pipeline grounds proposals in it
+next-cache-components-adoption  # Next.js skill that execute names for matching stacks
+next-cache-components-optimizer # Next.js skill that execute names for matching stacks
+vercel-composition-patterns   # React skill that execute names for matching stacks
+vercel-react-best-practices   # React skill that execute names for matching stacks
+worktrunk                     # the worktree CLI's skill; execute names it
+zod                           # the Zod skill ts-audit loads when a file imports zod
+zod-testing                   # the Zod testing skill ts-audit loads alongside zod
 "
-#   excalidraw-diagram              free-form diagramming; mermaid and visual-recap route to it
-#   library                         the book library; improve-pipeline grounds proposals in it
-#   next-cache-components-*         Next.js skills execute names for matching stacks
-#   vercel-*                        React skills execute names for matching stacks
-#   worktrunk                       the worktree CLI's skill; execute names it
-#   zod, zod-testing                the Zod skills ts-audit loads when a file imports zod
-#   (no built-in Claude Code command, such as /clear or /compact, is named in
-#    any skill today; add one here with its reason if that changes)
-
-# Tokens that pass the line drawn above and are not skills at all.
-NOT_A_SKILL="
-deps
-login
-visual-plan
+NOT_A_SKILL_RAW="
+deps                          # .env.local/deps in prose: a slash between two nouns
+login                         # a route in an example manual-verification checklist
+visual-plan                   # named only to say no such skill exists (visual-recap/SKILL.md)
 "
-#   deps         `.env.local`/deps in prose: a slash between two nouns
-#   login        a route in an example manual-verification checklist
-#   visual-plan  named only to say no such skill exists (visual-recap/SKILL.md)
+OUTSIDE_SKILLS="$(printf '%s\n' "$OUTSIDE_RAW" | sed 's/[[:space:]]*#.*$//' | grep . || true)"
+NOT_A_SKILL="$(printf '%s\n' "$NOT_A_SKILL_RAW" | sed 's/[[:space:]]*#.*$//' | grep . || true)"
 
 root="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 faults=0
@@ -215,7 +207,7 @@ check_count() {
     [ "$stated" = "$skill_count" ] || fault "skill count: $where says $stated, but there are $skill_count skill directories"
 }
 
-badge="$(sed -n 's/.*img\.shields\.io\/badge\/skills-\([0-9]*\)-.*/\1/p' "$root/README.md" | head -1)"
+badge="$(sed -n 's/.*img\.shields\.io\/badge\/skills-\([0-9]*\)-.*/\1/p' "$root/README.md" | head -1 || true)"
 if [ -n "$badge" ]; then check_count "README.md badge" "$badge"; else fault "README.md has no skills badge, so its stated count cannot be read"; fi
 
 count_scan_files() {
@@ -238,7 +230,7 @@ count_faults() {
             rest="${hit#*:}"
             ln="${rest%%:*}"
             text="${rest#*:}"
-            num="$(printf '%s' "$text" | grep -oiE '([0-9]+|twenty|thirty|forty|fifty)[ -]?(one|two|three|four|five|six|seven|eight|nine)? (composable |pipeline )?skills?' | head -1 | sed -E 's/ (composable |pipeline )?skills?$//')"
+            num="$(printf '%s' "$text" | grep -oiE '([0-9]+|twenty|thirty|forty|fifty)[ -]?(one|two|three|four|five|six|seven|eight|nine)? (composable |pipeline )?skills?' | head -1 | sed -E 's/ (composable |pipeline )?skills?$//' || true)"
             case "$num" in
                 [0-9]*) val="$num" ;;
                 *)
