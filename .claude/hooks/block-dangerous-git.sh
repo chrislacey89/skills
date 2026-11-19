@@ -73,11 +73,16 @@ has_force_refspec() {
 # has_delete_refspec <operands> — true when any operand is a refspec with an
 # empty source (`:feature`), which git reads as "delete that ref on the remote".
 # Like the leading `+`, it arrives as an operand, so the `--delete` flag check
-# alone cannot see it.
+# alone cannot see it. An operand that is exactly `:` is not a delete: per
+# https://git-scm.com/docs/git-push (<refspec>), "The special refspec `:` (or
+# `+:` to allow non-fast-forward updates) directs Git to push "matching"
+# branches", while "If <src> is empty, it deletes the <dst> ref" applies only
+# when a name follows the colon. (`+:` stays refused by the force rule.)
 has_delete_refspec() {
     local word
     for word in $1; do
         case "$word" in
+            :) ;;
             :*) return 0 ;;
         esac
     done

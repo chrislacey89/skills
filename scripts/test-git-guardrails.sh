@@ -322,6 +322,7 @@ assert_blocked_form 'git filter-branch --tree-filter true HEAD' 'rewrites histor
 assert_blocked_form 'git push origin --delete feature' 'remote branch delete, flag after the remote'
 assert_blocked_form 'git push -d origin feature'       'short remote delete flag'
 assert_blocked_form 'git push origin :feature'         'empty-source refspec deletes the remote branch'
+assert_blocked_form 'git push origin +:'                'the bare colon with + is still a force push'
 
 # -----------------------------------------------------------------------------
 
@@ -401,6 +402,8 @@ assert_allowed_form 'git reflog show'                  'reading the reflog'
 assert_allowed_form 'git reflog'                       'reading the reflog, bare'
 assert_allowed_form 'git push origin feature'          'an ordinary push of a branch'
 assert_allowed_form 'git push origin HEAD:feature'     'a refspec with a source is not a delete'
+assert_allowed_form 'git push origin :'                'the bare colon pushes matching branches, it deletes nothing'
+assert_allowed_form 'git push origin : main'           'a bare colon beside a plain branch is not a delete'
 assert_allowed_form 'git push --dry-run origin feature' 'a long flag that is not --delete'
 
 # The guard must not choke on input that is not a git command at all.
