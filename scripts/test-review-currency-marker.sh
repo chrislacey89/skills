@@ -598,6 +598,15 @@ if [[ -z "$clear_block" ]]; then
 fi
 clear_block="${clear_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
 clear_block="${clear_block//<number>/1}"
+# #531: the block takes the local branch name Step 2 read the stamp with as a
+# filled-in literal, the way it takes <number>, because no earlier block's shell
+# variable reaches it. fill_branch <name> is the block with that line filled.
+branch_line_re='^BRANCH="<[^"]*>"'
+grep -qE "$branch_line_re" <<<"$clear_block" \
+    || { printf 'FATAL: the stamp clear block in %s has no BRANCH="<...>" placeholder line\n' "$closeout_skill" >&2; exit 2; }
+clear_template="$clear_block"
+fill_branch() { sed -E "s|${branch_line_re}|BRANCH=\"$1\"|" <<<"$clear_template"; }
+clear_block="$(fill_branch "")"
 
 cat > "$fx/bin/gh" <<STUB
 #!/usr/bin/env bash
@@ -618,11 +627,32 @@ other_sha='0123456789abcdef0123456789abcdef01234567'
     || { printf 'FATAL: could not stamp a second branch in the closeout fixture\n' >&2; exit 2; }
 assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
     "control: a second branch's stamp exists before the clear block runs"
+# Started on an already-merged PR whose local branch is gone: the placeholder
+# is empty and the block falls back to the PR's head name.
 (cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" CLAUDE_PROJECT_DIR="$fx/proj" bash -c "$clear_block" >/dev/null 2>&1)
 assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
-    "after the clear block, run on base, the merged branch's stamp is gone"
+    "local branch gone, placeholder empty: the clear falls back to the PR's head name and the stamp is gone"
 assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
     "after the clear block, a second branch's stamp is still there"
+
+# #531 item 1: the local name and the PR's head name differ (pushed with
+# `git push origin local-feature:feature`). /pre-merge wrote the stamp under the
+# local name, so that is the one to clear; a stamp under the head name belongs
+# to some other local branch and stays, as does any other branch's.
+local_sha='89abcdef0123456789abcdef0123456789abcdef'
+(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp write local-feature "$local_sha" >/dev/null 2>&1 \
+    && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp write feature "$stamp_sha" >/dev/null 2>&1) \
+    || { printf 'FATAL: could not stamp the renamed-branch fixture\n' >&2; exit 2; }
+assert_eq "$local_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read local-feature)" \
+    "control: the stamp under the local branch name exists before the clear block runs"
+(cd "$fx/proj" && PATH="$fx/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" CLAUDE_PROJECT_DIR="$fx/proj" \
+    bash -c "$(fill_branch local-feature)" >/dev/null 2>&1)
+assert_eq "" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read local-feature)" \
+    "local name differs from the PR's head name: the stamp under the local name is cleared"
+assert_eq "$stamp_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read feature)" \
+    "local name differs from the PR's head name: a stamp under the head name is left alone"
+assert_eq "$other_sha" "$(cd "$fx/proj" && SKILL_KIT_SIDECAR_ROOT="$fx/sidecars" bash "$sidecar_sh" stamp read other-branch)" \
+    "local name differs from the PR's head name: a second branch's stamp is still there"
 
 section "/closeout Steps 2 and 3 abort on a failed backend rather than taking the gh path"
 
