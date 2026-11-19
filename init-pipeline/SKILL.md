@@ -347,7 +347,7 @@ Append these lines if not already present:
 
 `/execute` Step 0 and `/closeout` consult an optional `.claude/settings.json` key, `worktree.provisioning`, to decide whether the *pipeline* owns worktree provisioning and teardown or whether the *host* environment does. It mirrors the existing `research.storage` precedent — a single, in-repo, authoritative representation of an environment fact (Hunt/Thomas, DRY) rather than env-sniffing scattered across skills.
 
-- `"auto"` (default when the key is absent) — `/execute` stands down if a host env var describes the current tree (the block below) or the current tree is not the repo's primary working tree; otherwise it provisions via worktrunk or plain git.
+- `"auto"` (default when the key is absent) — the answer is re-derived on every run from the tree, by the rule stated once in `/execute` Step 0; the host env-var half of it is the block below.
 - `"host"` — isolation is always host-owned. `/execute` works in place; `/closeout` merges but cedes worktree teardown and branch pruning to the host.
 - `"pipeline"` — the pipeline always provisions and tears down (the pre-host behavior).
 
