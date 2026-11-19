@@ -1316,5 +1316,35 @@ check "the closed item holds the lesson" '["docs/solutions/testing/x-2026-01-01.
 runo "$LP" work set "$lc" lessons x
 check "work set does not take the lessons field" 2 "$rc"
 
+# -----------------------------------------------------------------------------
+section "the loop-mode disposition ledger's first-line marker (#583)"
+
+# On the sidecar backend the ledger is a work-item comment, found by its first
+# line. Three files carry that line: /pre-merge's ledger template (the writer),
+# this doc's records table (where /fix-findings is sent to read it), and
+# sidecar.sh trace's note() (the reader that dates it). They are extracted, not
+# restated, and the writer's real block is then written and read back.
+PM="$repo_root/pre-merge/SKILL.md"
+ledger_tpl="$(awk '/^```markdown$/{on=1; buf=""; next} on && /^```$/{on=0; if (buf ~ /^## Review Disposition Ledger\n/) {printf "%s", buf; exit}; next} on {buf = buf $0 "\n"}' "$PM")"
+w_marker="$(printf '%s\n' "$ledger_tpl" | head -n 1)"
+# shellcheck disable=SC2016  # the patterns are the files' literal text
+{
+d_marker="$(grep '^| Loop-mode `## Review Disposition Ledger`' "$DOC" | sed -n 's/.*whose first line is `\([^`]*\)`.*/\1/p')"
+r_marker="$(grep -o 'disposition_ledger: (\$it | note("[^"]*"))' "$SC" | sed 's/.*note("\([^"]*\)").*/\1/')"
+}
+check "/pre-merge's ledger template opens with the marker" "## Review Disposition Ledger" "$w_marker"
+check "the doc names the writer's first line as the ledger's marker" "$w_marker" "$d_marker"
+check "trace's note() reads the writer's first line" "$w_marker" "$r_marker"
+printf '%s\n' "$ledger_tpl" > "$tmp/ledger.md"
+runo "$LP" work create --kind slice --body-file "$tmp/lbody.md"; lw="$out"
+runo "$LP" trace "$lw" --json
+check "no ledger is dated before one is written" null "$(printf '%s' "$out" | jq -r '.disposition_ledger')"
+runo "$LP" work comment "$lw" --body-file "$tmp/ledger.md"
+check "the writer's block is stored as a comment" 0 "$rc"
+runo "$LP" work view "$lw" --json
+check "the stored comment's first line is the marker" "$w_marker" "$(printf '%s' "$out" | jq -r '.comments[-1].body | split("\n")[0]')"
+runo "$LP" trace "$lw" --json
+check "trace dates the ledger the writer's block left" 1 "$(printf '%s' "$out" | jq -r '.disposition_ledger // ""' | grep -cE '^[0-9]{4}-[0-9]{2}-[0-9]{2}T')"
+
 printf '\n---\n%d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skip"
 [ "$fail" -eq 0 ]
