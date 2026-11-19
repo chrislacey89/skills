@@ -357,9 +357,9 @@ Either way, confirm the shell is no longer inside the feature worktree before pr
 Now that the shell is anchored to the base checkout, removing the worktree is safe:
 
 ```bash
-wt remove <worktree-or-branch>          # if worktrunk is available
+wt remove <worktree-or-branch>          # if worktrunk made the worktree
 # or
-git worktree remove <worktree-path>     # plain git
+git worktree remove <worktree-path>     # if plain git made it
 ```
 
 When worktrunk made the worktree, remove it with `wt remove`: worktrunk's [hook docs](https://worktrunk.dev/hook/#hook-types) list `pre-remove` (cleanup before deletion, run in the worktree being removed) among the hooks it runs during `wt remove`, and `git worktree remove` is not a worktrunk command.
