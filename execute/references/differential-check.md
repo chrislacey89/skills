@@ -8,9 +8,7 @@ for the inputs. Neither restates it.
 
 Only when the slice is meant to keep behavior the same: a refactor, a
 performance change, a dependency swap. `/execute` Step 1 reads the slice that way
-and says so in one line; the check fires on that line, and on nothing else. A
-slice that adds or changes behavior skips it, and the skip is stated rather than
-left silent.
+and says so in one line; the check fires on that line, and on nothing else.
 
 A green suite does not settle a behavior-preserving change. It shows the new code
 agrees with the old on the cases someone already wrote, and those cases come from
