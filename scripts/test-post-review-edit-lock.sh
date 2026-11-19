@@ -165,20 +165,42 @@ command -v jq >/dev/null || fatal "jq is not installed — the hook body parses 
 
 # --- One reader, used by every extraction and by the apparatus check ----------
 #
-# Emits the first ```bash fenced block in <file> whose body matches <regex>;
-# exits 1 when there is none. It does not call fatal: a helper that aborts from
+# Emits the one ```bash fenced block in <file> whose body matches <regex>;
+# exits 1 when there is none, and exits 2 with a line on stderr, emitting
+# nothing, when more than one matches (#387): an anchor that also matches a
+# later-added block must fail here, not four assertions away. It does not call fatal: a helper that aborts from
 # inside a command substitution exits only the subshell (test-guards-can-fire.sh
 # detector C), so the caller in the main shell decides what an empty capture
 # means.
 fenced_bash_block() {  # $1 = file, $2 = ERE matched against the block body
-    awk -v re="$2" '
+    awk -v re="$2" -v file="$1" '
         /^```bash$/        { buf = ""; inblock = 1; next }
-        inblock && /^```$/ { if (buf ~ re) { printf "%s", buf; found = 1; exit }
+        inblock && /^```$/ { if (buf ~ re) { found++; if (found == 1) hit = buf }
                              inblock = 0; next }
         inblock            { buf = buf $0 "\n" }
-        END                { exit(found ? 0 : 1) }
+        END                { if (found > 1) { printf "fenced_bash_block: %d fenced bash blocks in %s match /%s/; narrow the anchor\n", found, file, re > "/dev/stderr"; exit 2 }
+                             if (found == 1) { printf "%s", hit; exit 0 }
+                             exit 1 }
     ' "$1"
 }
+
+# The reader's own contract (#387): an anchor that matches two blocks is a bet
+# lost, and the first-match reader used to pick the earlier one in silence. It
+# must refuse loudly, with a status distinct from "no block matches", so the
+# failure is named at the point of selection. Planted files, not the skills.
+reader_probe="$(mktemp -d)"
+# shellcheck disable=SC2016  # the backticks are markdown fences being planted, not command substitution
+printf '```bash\necho one anchor\n```\n\ntext\n\n```bash\necho another anchor\n```\n' > "$reader_probe/two.md"
+# shellcheck disable=SC2016  # as above
+printf '```bash\necho one anchor\n```\n\n```bash\necho other\n```\n' > "$reader_probe/one.md"
+probe_rc=0; probe_out="$(fenced_bash_block "$reader_probe/two.md" 'anchor' 2>"$reader_probe/err")" || probe_rc=$?
+reader_two="$probe_rc|$probe_out"
+reader_two_err="$(cat "$reader_probe/err")"
+probe_rc=0; probe_out="$(fenced_bash_block "$reader_probe/one.md" 'anchor' 2>"$reader_probe/err")" || probe_rc=$?
+reader_one="$probe_rc|$probe_out"
+probe_rc=0; probe_out="$(fenced_bash_block "$reader_probe/one.md" 'nowhere' 2>"$reader_probe/err")" || probe_rc=$?
+reader_none="$probe_rc|$probe_out|$(cat "$reader_probe/err")"
+rm -rf "$reader_probe"
 
 # --- Pull the subject out of the skills that document it ---------------------
 
@@ -207,7 +229,9 @@ hook_body="$(fenced_bash_block init-pipeline/SKILL.md 'IMPL_PATTERNS' || true)"
 # one, picked by its `gh pr edit`. The sidecar one is section 7b's.
 stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'gh pr edit.*review-stamped' || true)"
 [ -n "$stamp_block" ] || fatal "no stamp block found in pre-merge/SKILL.md"
-sidecar_stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'stamp write.*review-stamped' || true)"
+# Anchored on the call, not the words: the PR-body block's comments say "the
+# stamp write succeeded" too, and the reader refuses an anchor two blocks match.
+sidecar_stamp_block="$(fenced_bash_block pre-merge/SKILL.md 'SC" stamp write.*review-stamped' || true)"
 [ -n "$sidecar_stamp_block" ] || fatal "no sidecar stamp block found in pre-merge/SKILL.md"
 # Both take the reviewed SHA Phase 3 printed as a filled-in literal (#292).
 # fill_reviewed <block> <sha> — the block with that placeholder filled.
@@ -351,6 +375,16 @@ run_documented() {  # $1 = directory, $2 = command text, $3 = CLAUDE_PROJECT_DIR
 }
 
 # -----------------------------------------------------------------------------
+
+
+section "0. the block reader refuses an anchor that matches more than one block (#387)"
+assert_eq "2|" "$reader_two" "two blocks match the anchor: exit 2, and no block is emitted"
+case "$reader_two_err" in
+    *"2 fenced bash blocks"*"anchor"*) assert_eq ok ok "…and stderr names the count and the anchor" ;;
+    *) assert_eq "2 fenced bash blocks ... anchor" "$reader_two_err" "…and stderr names the count and the anchor" ;;
+esac
+assert_eq "0|echo one anchor" "$reader_one" "one block matches: it is emitted, exit 0"
+assert_eq "1||" "$reader_none" "no block matches: exit 1, silent, as before"
 
 section "1. the hook is a runnable script, and the five files agree on two paths"
 
