@@ -188,7 +188,10 @@ this section).
 
   /* A few stateful classes — the one place classes beat inline styles, because the
      active state is toggled by the small script in §10. Everything else stays inline. */
-  .vr-callout{border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev)}
+  .vr-callout{border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev);max-width:74ch}
+  /* Prose keeps a reading measure on a wide viewport: callouts, note-pairs and §12 unit ledes.
+     Code, tables and diagrams stay full width. 74ch is the measure `.lede` already uses (§D4). */
+  .vr-measure{max-width:74ch}
   .vr-callout.is-active{box-shadow:0 0 0 1px var(--accent),0 18px 40px -16px var(--accent-glow)}
   .vr-line.is-active{background:var(--mark-bg)}
   .vr-marker{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
@@ -221,7 +224,17 @@ this section).
   /* Embedded Mermaid (the §5 OPT-IN, complex graphs only) sizes to its frame, never its
      intrinsic size. The init script in §5 is enhancement-only; this rule keeps an
      already-rendered SVG full-width. */
-  .mermaid svg{width:100%;max-width:100%;height:auto;display:block}
+  .mermaid svg{width:100%;max-width:min(100%,56rem);height:auto;display:block}
+
+  /* A §12 per-unit series decides its before/after layout ONCE, so every pair in it renders
+     alike. The series wrapper carries data-layout="split" or "stacked"; §12 says how
+     the author picks. The pair row is the block's one horizontal scroller: lines never scroll
+     on their own. Both columns are sized as one grid, so stacked frames have equal width.
+     Pairs outside a series (§6, §7) keep their own inline automatic wrap. */
+  .vr-pair{display:grid;gap:var(--s4);align-items:start;overflow-x:auto}
+  .vr-series[data-layout="split"] .vr-pair{grid-template-columns:repeat(2,minmax(max-content,1fr))}
+  .vr-series[data-layout="stacked"] .vr-pair{grid-template-columns:minmax(max-content,1fr)}
+  @media (max-width:1279px){.vr-series[data-layout="split"] .vr-pair{grid-template-columns:minmax(max-content,1fr)}}
 </style>
 ```
 
@@ -565,7 +578,8 @@ local file, keep the loader and the note.
 
 ## 6. Block: annotated-diff + callouts
 
-A card per hunk: header (flag · path · one-line intent), a split BEFORE/AFTER grid with
+A card per hunk: header (flag · path · one-line intent), a BEFORE/AFTER pair (side by side
+when both fit, stacked when one does not) with
 **identical scale and frame on both sides** (small-multiples constancy), and callout cards
 below. Diff lines carry a 2px colored left spine and a 12%-opacity wash; the line-number
 gutter is 36px. Added/removed line backgrounds use `--add-bg` / `--del-bg`. Each annotated
@@ -611,7 +625,8 @@ no listed decision: an unlinked callout is information, not a fault.
     </div>
 
     <!-- split diff: this row is the block's one horizontal scroller; lines never scroll on their own.
-         Sides sit together when both fit and stack when one is too long, so AFTER never starts off screen. -->
+         Sides sit together when both fit and stack when one is too long. The row is one scroller, so a long
+         BEFORE line scrolled sideways takes AFTER with it. -->
     <div style="display:flex;flex-wrap:wrap;overflow-x:auto">
       <div style="flex:1 0 max-content;min-width:50%;box-sizing:border-box;border-right:1px solid var(--border)">
         <div style="padding:6px var(--s4);font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--del);border-bottom:1px solid var(--border);background:var(--bg-subtle)">BEFORE</div>
@@ -674,7 +689,7 @@ that one as a lone `good` half.
 
 ```html
 <!-- nests inside the .vr-callout card above, under its note line -->
-<div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+<div class="vr-measure" style="display:grid;gap:var(--s2);margin-top:var(--s3)">
   <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0">
     <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span>
     <span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke — one sentence, in the reader's own words.</span>
@@ -804,7 +819,8 @@ A secret-masked value renders as an inert chip, never the value (per
 
 ## 7. Block: before/after comparison + review
 
-**Before/after — labeled columns are the default.** Two identical frames side by side, with
+**Before/after — labeled columns are the default.** Two identical frames, side by side when
+both fit and stacked when one does not, with
 `Before` / `After` as column *headers* above each frame — never a label baked inside the
 frame, where it reads as part of the product UI and lands in a random corner. Both frames
 share the same scale, padding, and density (small-multiples constancy), so the eye reads the
@@ -812,8 +828,10 @@ share the same scale, padding, and density (small-multiples constancy), so the e
 Columns are the structured-comparison primitive: two states of a config, a schema shape, a
 rendered surface (§9), or a short code unit — read in one glance, no interaction required.
 
-**Too wide to halve?** Long code lines or a dense full-width table make columns crush.
-**Stack the two frames instead — `Before` above, `After` below, identical frame and scale,
+**Too wide to halve?** Long code lines or a dense full-width table make columns crush. Outside
+a per-unit series the row wraps by itself: the frames sit together while both fit and stack
+when one does not, each frame as wide as its own longest line. Inside a series the author
+decides once for every pair (§12). **Stack the two frames instead — `Before` above, `After` below, identical frame and scale,
 both fully visible.** Stacking costs eye travel; hiding one state costs the comparison
 itself, which is why there is no toggle here (Tufte: *"The viewer cannot compare what they
 cannot see at the same time. Memory is not vision."*). If even stacked frames are
@@ -822,7 +840,8 @@ unreadable, the unit is too big — narrow the excerpt to the lines that actuall
 **One comparison or many — the ids carry a slug.** The section id is
 `sec-compare-<slug>`, where `<slug>` names the unit being compared (`sec-compare-closeout`,
 `sec-compare-session-ts`). A recap that compares two states of one thing renders one of
-these; a per-unit series (§12) renders one per unit, in the same frame, down the page. A
+these; a per-unit series (§12) renders one per unit, in the same frame and the same layout, down
+the page. A
 singular hardcoded id would make the second case collide with the first.
 
 ```html
@@ -1313,6 +1332,17 @@ oversight without reading a word of prose, so an `exempt` unit **must** also car
 reason in its `good` note. An exempt unit with no stated reason is the oversight it is
 trying not to look like.
 
+**One layout for the whole series.** A pair that wraps by itself lays out by its own
+content, so in a series one unit would sit side by side and the next stack, and the reader
+would compare layouts instead of sites. The author decides once, before rendering any
+unit: take the longest line, in characters, across every BEFORE and AFTER in the series. At
+most **48 characters**, the series is `split`; longer, it is `stacked`. Mark the series
+wrapper with that value in `data-layout`, and every pair in it renders the same way. The
+figure is the most a frame holds, with its gutter and padding, in half the column at a 1280px
+viewport (measured with the §1 mono stack at 13px). A `split` series therefore stacks all its
+pairs together below 1280px (the `@media` rule in §1), never some of them. This is the one
+place the threshold is stated; the CSS carries only the 1280px breakpoint it implies.
+
 **Prose here is per-unit and short.** Each unit gets a one-sentence lede in the reader's own
 words plus the §6 note-pair; the length cap on the §3 overview does not reach it, and the
 bar that does is `writing-for-humans.md` — the revision bar and the mental-model test.
@@ -1346,28 +1376,31 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
   <p style="margin:var(--s3) 0 0;font-size:12px;color:var(--fg-faint)">Every site is a row — the population, not a sample. An empty cell is a gap, not an omission.</p>
 </section>
 
-<!-- One real <section> per unit. No stage, no innerHTML swap: the rail scrolls to these. -->
+<!-- One real <section> per unit. No stage, no innerHTML swap: the rail scrolls to these.
+     All of them sit inside ONE .vr-series wrapper, whose data-layout is chosen once (see
+     "One layout for the whole series"); every .vr-pair below inherits it. -->
+<div class="vr-series" data-layout="split">
 <section id="unit-execute" data-feedback-id="u-execute" data-feedback-kind="unit" style="margin-top:var(--s8);scroll-margin-top:var(--s7)">
   <div style="display:flex;align-items:flex-start;gap:var(--s3);margin-bottom:var(--s4);flex-wrap:wrap">
     <span style="border:1px solid var(--add);color:var(--add);background:var(--add-bg);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">fixed</span>
     <div>
       <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">execute/SKILL.md:118</div>
-      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">One-sentence lede, in the reader's own words — what this site did wrong and what it does now.</div>
+      <div class="vr-measure" style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">One-sentence lede, in the reader's own words — what this site did wrong and what it does now.</div>
     </div>
   </div>
   <!-- the §7 comparison, unchanged: identical frame and scale in every unit -->
-  <div style="display:flex;flex-wrap:wrap;gap:var(--s4);align-items:start;overflow-x:auto">
-    <div style="flex:1 0 max-content;min-width:calc(50% - var(--s2))">
+  <div class="vr-pair">
+    <div>
       <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--del);margin-bottom:var(--s2)">Before</div>
       <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the BEFORE state, one row per line, exactly as §7… --></div>
     </div>
-    <div style="flex:1 0 max-content;min-width:calc(50% - var(--s2))">
+    <div>
       <div style="font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--add);margin-bottom:var(--s2)">After</div>
       <div style="border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);box-shadow:var(--shadow);padding:var(--s4) 0"><!-- …the AFTER state, identical frame and scale… --></div>
     </div>
   </div>
   <!-- the §6 typed note-pair, and the note input the §4 serializer reads -->
-  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+  <div class="vr-measure" style="display:grid;gap:var(--s2);margin-top:var(--s3)">
     <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--del);background:var(--del-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--del)">bad</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The mechanism that broke here.</span></div>
     <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The rule this site now encodes.</span></div>
   </div>
@@ -1379,15 +1412,17 @@ bar that does is `writing-for-humans.md` — the revision bar and the mental-mod
     <span style="border:1px solid var(--risk);color:var(--risk);background:color-mix(in srgb,var(--risk) 12%,transparent);border-radius:999px;padding:2px 9px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:1px">exempt</span>
     <div>
       <div style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--fg)">closeout/SKILL.md:64</div>
-      <div style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">This site keeps the old form on purpose — the lede says why, so the reader never has to guess whether it was missed.</div>
+      <div class="vr-measure" style="font-size:13.5px;color:var(--fg-muted);margin-top:2px;text-wrap:pretty">This site keeps the old form on purpose — the lede says why, so the reader never has to guess whether it was missed.</div>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--s4);align-items:start"><!-- …identical §7 comparison frame… --></div>
-  <div style="display:grid;gap:var(--s2);margin-top:var(--s3)">
+  <div class="vr-pair"><!-- …the same §7 pair as the unit above: this wrapper, these frames… --></div>
+  <div class="vr-measure" style="display:grid;gap:var(--s2);margin-top:var(--s3)">
     <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s3);align-items:baseline;border-left:2px solid var(--add);background:var(--add-bg);padding:var(--s2) var(--s3);border-radius:0 var(--r2) var(--r2) 0"><span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--add)">good</span><span style="font-size:13px;color:var(--fg);line-height:1.5;text-wrap:pretty">The stated reason this site is exempt — required on every exempt unit.</span></div>
   </div>
   <textarea data-feedback-note placeholder="Notes on this site…" style="width:100%;margin-top:var(--s3);min-height:52px;resize:vertical;padding:var(--s3);border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font-family:var(--sans);font-size:12.5px;outline:none"></textarea>
 </section>
+
+</div><!-- /.vr-series -->
 
 <!-- §7's review block still closes the page: verdict chips, notes, and the Copy feedback
      button wired to the core §4 copyFeedback(). Each unit above serializes as
@@ -1887,8 +1922,9 @@ budget needs, each one sized from its own excerpts.
 - **Don't** put `overflow` on a code line. Long lines keep `white-space:pre` and the block that
   holds them is the one horizontal scroller, so a block has a single scrollbar along its bottom
   edge and the row washes reach the end of the longest line. Before/after pairs wrap instead of
-  squeezing: side by side when both fit, stacked when one does not, so a long BEFORE line can
-  never push AFTER off screen. Per-line `overflow-x:auto` paints a
+  squeezing: side by side when both fit, stacked when one does not, so a long BEFORE line does
+  not crush AFTER into a sliver. The pair row is one scroller, so a long line scrolled sideways
+  takes both frames with it. Per-line `overflow-x:auto` paints a
   scrollbar under every long line, and scrolls each line out of step with its neighbors.
 - **Don't** introduce a third font family or a web font — two native system stacks only, so
   the file reads identically offline.
@@ -1958,7 +1994,8 @@ a deck that breaks either one is worse than the scroll it replaced.
 
 **Rule 1 — no comparison may span screens.** Any before/after pair, any A-vs-B, any
 option-comparison shares a single screen. Paging separates **topics**; it never separates the
-halves of a comparison. This is why `.panes` (§D5) is a side-by-side grid rather than a toggle:
+halves of a comparison. This is why `.panes` (§D5) is a wrapping pair, side by side when both fit and stacked when one
+does not, rather than a toggle:
 the comparison is the payload, and the payload is never the thing you page away from.
 
 **Rule 2 — never page a population.** When N sites are near-identical instances of one cause,
@@ -2086,7 +2123,7 @@ slots the screen needs, in this order.
 | headline | `<h1>` | one sentence, the claim this screen proves | authored |
 | lede | `.lede` | 1–3 sentences; **every domain term glossed on first use** (§D6) | authored |
 | chips | `.chip` | 2–4 status pills — `fix` / `op` / `keep` / `miss` | authored flags over derived facts |
-| panes | `.panes` | the before/after pair, side by side, in this screen (Rule 1) | hunk text derived; pane headers authored |
+| panes | `.panes` | the before/after pair, together on this screen (Rule 1), side by side or stacked | hunk text derived; pane headers authored |
 | blocks | `.mmd-wrap` / `.term` / `.defs` / any §3–§12 block | diagram, terminal transcript, definition table, contract card, per-unit series | per the block's own rule |
 | notes | `.note` + `.good`/`.warn`/`.bad` | a typed aside — what to notice, what nearly went wrong | authored |
 | keyline | `.keyline` | **one sentence**, the lesson this screen leaves behind. At most one per screen, and not on every screen | authored |
@@ -2118,7 +2155,7 @@ lesson.
   .pane .code{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.75;padding:var(--s3) 0}
   .pane .ln{display:block;padding:0 var(--s4);white-space:pre}
   .pane .ln.d{background:var(--del-bg)} .pane .ln.a{background:var(--add-bg)}
-  .note{border-left:3px solid var(--accent);background:var(--bg-subtle);padding:var(--s3) var(--s4);border-radius:0 var(--r2) var(--r2) 0;font-size:13.5px;line-height:1.65;color:var(--fg-muted);margin-top:var(--s4);text-wrap:pretty}
+  .note{max-width:74ch;border-left:3px solid var(--accent);background:var(--bg-subtle);padding:var(--s3) var(--s4);border-radius:0 var(--r2) var(--r2) 0;font-size:13.5px;line-height:1.65;color:var(--fg-muted);margin-top:var(--s4);text-wrap:pretty}
   .note.warn{border-left-color:var(--risk)} .note.bad{border-left-color:var(--del)} .note.good{border-left-color:var(--add)}
   .note .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s1)}
   .note.warn .lbl{color:var(--risk)} .note.bad .lbl{color:var(--del)} .note.good .lbl{color:var(--add)}
@@ -2131,7 +2168,9 @@ lesson.
   .stat.bad .v{color:var(--del)} .stat.good .v{color:var(--add)}
   .term{border:1px solid var(--border);border-radius:var(--r3);background:var(--bg-elev);overflow:hidden;box-shadow:var(--shadow);margin:var(--s4) 0}
   .term-hd{display:flex;align-items:center;gap:var(--s2);padding:var(--s2) var(--s4);border-bottom:1px solid var(--border);background:var(--bg-subtle);font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-muted)}
-  .term pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.9;padding:var(--s3) 0;overflow-x:auto}
+  /* the pre is the one scroller, and its lines share one grid column as wide as the longest line,
+     so every wash reaches the end of that line */
+  .term pre{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.9;padding:var(--s3) 0;overflow-x:auto;display:grid;grid-template-columns:minmax(max-content,1fr)}
   .term .tl{display:block;padding:0 var(--s4);white-space:pre;color:var(--fg-muted)}
   .term .tl.cmd{color:var(--fg);font-weight:500}
   .term .tl.cmd::before{content:"$ ";color:var(--accent);font-weight:700}

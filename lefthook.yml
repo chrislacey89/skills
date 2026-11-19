@@ -55,6 +55,8 @@ pre-push:
       run: bash scripts/test-options-comparison-contract.sh
     per-unit-series-contract-tests:
       run: bash scripts/test-per-unit-series-contract.sh
+    recap-pair-contract-tests:
+      run: bash scripts/test-recap-pair-contract.sh
     documented-git-command-tests:
       run: bash scripts/test-documented-git-commands.sh
     git-guardrail-tests:

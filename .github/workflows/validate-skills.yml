@@ -130,6 +130,9 @@ jobs:
       - name: Run per-unit-series contract suite
         run: bash scripts/test-per-unit-series-contract.sh
 
+      - name: Run recap pair-row contract suite
+        run: bash scripts/test-recap-pair-contract.sh
+
       - name: Run documented git command contract suite
         run: bash scripts/test-documented-git-commands.sh
 
