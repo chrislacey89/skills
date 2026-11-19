@@ -1733,9 +1733,11 @@ cmd_fixrun() {
         record)
             # cmd_work sets WORK_DIR; this verb does not go through it.
             if [ -n "$work" ]; then
-                [ ! -d "$sc/work" ] || work_dir_listable "fixrun record" "$sc/work"
+                [ -f "$sc/work/$work.md" ] || {
+                    [ ! -d "$sc/work" ] || work_dir_listable "fixrun record" "$sc/work"
+                    refuse "fixrun record refused: --work names $work, which does not exist"
+                }
             fi
-            [ -z "$work" ] || [ -f "$sc/work/$work.md" ] || refuse "fixrun record refused: --work names $work, which does not exist"
             mkdir -p "$sc/fix-runs" || refuse "fixrun record: cannot create $sc/fix-runs"
             line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" --arg w "$work" \
                 '{branch: $b, run: $r, sha: $s} + (if $t == "" then {} else {thread: $t} end)
@@ -1854,12 +1856,14 @@ is_work_id() { [[ "$1" =~ ^${WORK_ID_RE}$ ]]; }
 # $WORK_DIR; prints the normalized list (comma-separated, no spaces).
 work_ids_csv() {
     local label="$1" csv="$2" id out=""
-    [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
     for id in $(printf '%s' "$csv" | tr ',' '\n'); do
         id="$(printf '%s' "$id" | tr -d ' ')"
         [ -n "$id" ] || continue
         is_work_id "$id" || die_usage "work: $label must be ids like W-3: $id"
-        [ -f "$WORK_DIR/$id.md" ] || refuse "work: $label names $id, which does not exist"
+        [ -f "$WORK_DIR/$id.md" ] || {
+            [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
+            refuse "work: $label names $id, which does not exist"
+        }
         out="${out:+$out,}$id"
     done
     printf '%s' "$out"
@@ -1894,8 +1898,10 @@ work_rewrite() {
 # work_existing <id>: refuse unless the id is well-formed and its file exists.
 work_existing() {
     is_work_id "$1" || die_usage "work: expected an id like W-3, got: $1"
-    [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
-    [ -f "$WORK_DIR/$1.md" ] || refuse "work: no such work item: $1"
+    [ -f "$WORK_DIR/$1.md" ] || {
+        [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
+        refuse "work: no such work item: $1"
+    }
 }
 
 cmd_work() {
@@ -1989,8 +1995,10 @@ work_create() {
     mkdir -p "$WORK_DIR" || refuse "work create: cannot create $WORK_DIR"
     if [ -n "$parent" ]; then
         is_work_id "$parent" || die_usage "work create: --parent must be an id like W-3: $parent"
-        work_dir_listable "work create" "$WORK_DIR"
-        [ -f "$WORK_DIR/$parent.md" ] || refuse "work create: --parent names $parent, which does not exist"
+        [ -f "$WORK_DIR/$parent.md" ] || {
+            work_dir_listable "work create" "$WORK_DIR"
+            refuse "work create: --parent names $parent, which does not exist"
+        }
     fi
     blocked="$(work_ids_csv --blocked-by "$blocked")" || exit $?
     body="$(work_body "$bf")" || exit 1

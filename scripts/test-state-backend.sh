@@ -992,6 +992,13 @@ else
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
     check "work create on an unlistable work directory exits 1 (no id reused)" 1 "$rc"
     case "$err" in *"cannot list"*) ok "work create on an unlistable work directory says cannot list on stderr" ;; *) bad "work create on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
+    # A direct read of a named item is not a listing: mode 311 can enter the
+    # directory, so an existing item opens; only a miss is double-checked (a miss
+    # in a directory that cannot be listed is refused, not read as absent).
+    runo "$P" work view "$u1"
+    check "work view of an existing item on a searchable-not-readable work directory exits 0" 0 "$rc"
+    runo "$P" work view W-99
+    check "work view of a missing item on a searchable-not-readable work directory exits 1" 1 "$rc"
     chmod 755 "$S/work"
     check "the unlistable arms left the blockers as they were" "[]" "$(jq -c .blocked_by < <(cd "$P" && bash "$SC" work view "$u1" --json))"
     # Read but not entered (mode 644): the glob still expands to the names, but
