@@ -178,7 +178,7 @@ if [ -z "$primary" ]; then
   echo "tree=unknown"
 elif [ "$top" = "$primary" ]; then
   echo "tree=primary"
-elif base=$(bash "$SC" base-ref) && ahead=$(git rev-list --count "$base..HEAD") && dirty=$(git status --porcelain); then
+elif BASE_REF=$(bash "$SC" base-ref) && ahead=$(git rev-list --count HEAD --not "$BASE_REF") && dirty=$(git status --porcelain); then
   if [ "$ahead" = 0 ] && [ -z "$dirty" ]; then echo "tree=fresh"; else echo "tree=used ahead=$ahead"; fi
 else
   echo "tree=unknown"
