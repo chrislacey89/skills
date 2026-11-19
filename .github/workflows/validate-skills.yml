@@ -351,6 +351,11 @@ jobs:
       - name: Run differential check suite
         run: bash scripts/test-differential-check.sh
 
+      # #586: /walk-commits given a work item walks that slice's range from
+      # sidecar.sh range; run on a two-slice branch under bash and zsh.
+      - name: Run walk-commits range suite
+        run: bash scripts/test-walk-commits-range.sh
+
       # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
       # from branch state by a block in Phase 1 step 4, and /fix-findings' menu
       # counts rounds from a commit line. Both are executable prose; this runs
