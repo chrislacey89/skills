@@ -44,7 +44,7 @@
 #                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
 #   sidecar.sh work view <W-n> [--json]
 #   sidecar.sh work edit <W-n> --body-file <f>   (refuses a body shorter than the one it replaces)
-#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|branch|reviewed_sha|start_sha> <value>
+#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|branch|reviewed_sha|start_sha> <value>
 #   sidecar.sh work comment <W-n> --body-file <f>
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
 #   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
@@ -102,9 +102,11 @@
 # below can parse what the writer writes without a YAML library. A new id is
 # max(existing)+1, claimed by hard-linking a finished temp file to W-<n>.md,
 # which fails if another writer got there first; the loser takes the next
-# number. decomposed_into is replaced on every set, never appended to. edit
-# compares byte counts against the body it read and refuses a shorter one. A
-# body may not contain a comment heading, because the reader splits on it.
+# number. decomposed_into and blocked_by are replaced on every set, never
+# appended to; a set blocked_by is validated as create's is, and refused when
+# it would make a cycle. edit compares byte counts against the body it read
+# and refuses a shorter one. A body may not contain a comment heading, because
+# the reader splits on it.
 # The id regex is WORK_ID_RE, the one docs/state-backend.md states.
 #
 # require resolution order. The first candidate that exists wins; each step runs
@@ -2053,9 +2055,47 @@ work_edit() {
     work_rewrite "$id" "sidecar: work edit $id" '.body = $body' --arg body "$new"
 }
 
+# work_all_fm <verb>: every work item's frontmatter, one compact JSON object
+# per line. A file that does not parse is refused with its path, never skipped:
+# an item left out of a listing reads as an item that is not there.
+work_all_fm() {
+    local verb="$1" f one
+    [ -d "$WORK_DIR" ] || return 0
+    for f in "$WORK_DIR"/W-*.md; do
+        [ -f "$f" ] || continue
+        # A parse failure is the assignment's exit status, never a word in the
+        # output: an item's own frontmatter (a milestone, a pr URL) can say anything.
+        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f")" || refuse "$verb: $f does not parse"
+        printf '%s\n' "$one"
+    done
+}
+
+# work_blocked_by_cycle <id> <csv>: refuse when giving <id> these blockers
+# would make <id> wait on itself through the stored edges. create cannot make
+# a cycle (its blockers exist before it does); set can, and a cycle leaves
+# every item on it blocked for good.
+work_blocked_by_cycle() {
+    local id="$1" csv="$2" all
+    [ -n "$csv" ] || return 0
+    all="$(work_all_fm "work set")" || exit 1
+    # shellcheck disable=SC2016  # $-names are jq variables
+    printf '%s\n' "$all" | jq -se --arg id "$id" --arg v "$csv" '
+        (map({key: .id, value: (.blocked_by // [])}) | from_entries) as $m
+        | def reach($seen; $todo):
+            if $todo == [] then $seen
+            elif any($seen[]; . == $todo[0]) then reach($seen; $todo[1:])
+            else reach($seen + [$todo[0]]; $todo[1:] + ($m[$todo[0]] // [])) end;
+          reach([]; $v | split(",")) | any(.[]; . == $id) | not' >/dev/null
+    case $? in
+        0) return 0 ;;
+        1) refuse "work set refused: blocked_by $csv would make a cycle, since one of them already waits on $id; $id is unchanged" ;;
+        *) refuse "work set: could not check blocked_by $csv for a cycle; $id is unchanged" ;;
+    esac
+}
+
 work_set() {
     local id="${1:-}" field="${2:-}" value="${3-}" kind
-    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|pr|branch|reviewed_sha|start_sha> <value>"
+    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|branch|reviewed_sha|start_sha> <value>"
     work_existing "$id"
     case "$value" in *$'\n'*) die_usage "work set: the value must be one line" ;; esac
     kind="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.kind" "$WORK_DIR/$id.md")" || refuse "work set: $WORK_DIR/$id.md does not parse"
@@ -2067,16 +2107,20 @@ work_set() {
         decomposed_into)
             [ "$kind" = prd ] || refuse "work set: decomposed_into is for prds; $id is a $kind"
             value="$(work_ids_csv decomposed_into "$value")" || exit $? ;;
+        blocked_by)
+            # Validated as create's --blocked-by is; "" declares no blockers.
+            value="$(work_ids_csv blocked_by "$value")" || exit $?
+            work_blocked_by_cycle "$id" "$value" ;;
         pr) [ -n "$value" ] || die_usage "work set: pr needs a value" ;;
         branch) [ -n "$value" ] || die_usage "work set: branch needs a value" ;;
         reviewed_sha|start_sha)
             printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: $field must be 40 lowercase hex characters: $value" ;;
-        *) die_usage "work set: field must be state, maturity, decomposed_into, pr, branch, reviewed_sha, or start_sha" ;;
+        *) die_usage "work set: field must be state, maturity, decomposed_into, blocked_by, pr, branch, reviewed_sha, or start_sha" ;;
     esac
-    if [ "$field" = decomposed_into ]; then
-        # Replaced, never appended to: the reader always sees the latest decomposition.
+    if [ "$field" = decomposed_into ] || [ "$field" = blocked_by ]; then
+        # Replaced, never appended to: the reader always sees the latest list.
         # shellcheck disable=SC2016  # $-names are jq variables
-        work_rewrite "$id" "sidecar: work set $id $field" '.fm.decomposed_into = ($v | split(",") | map(select(length > 0)))' --arg v "$value"
+        work_rewrite "$id" "sidecar: work set $id $field" '.fm[$k] = ($v | split(",") | map(select(length > 0)))' --arg k "$field" --arg v "$value"
     else
         # shellcheck disable=SC2016  # $-names are jq variables
         work_rewrite "$id" "sidecar: work set $id $field" '.fm[$k] = $v' --arg k "$field" --arg v "$value"
@@ -2123,7 +2167,7 @@ work_close() {
 }
 
 work_list() {
-    local kind="" parent="" branch="" unblocked=0 state=open f all one
+    local kind="" parent="" branch="" unblocked=0 state=open all
     while [ $# -gt 0 ]; do
         case "$1" in
             --kind)   [ $# -ge 2 ] || die_usage "work list: --kind needs a value"; kind="$2"; shift 2 ;;
@@ -2138,14 +2182,7 @@ work_list() {
     case "$state" in open|closed|all) ;; *) die_usage "work list: --state must be open, closed, or all" ;; esac
     [ -z "$parent" ] || is_work_id "$parent" || die_usage "work list: --parent must be an id like W-3: $parent"
     [ -d "$WORK_DIR" ] || return 0
-    # A parse failure is the assignment's exit status, never a word in the
-    # output: an item's own frontmatter (a milestone, a pr URL) can say anything.
-    all=""
-    for f in "$WORK_DIR"/W-*.md; do
-        [ -f "$f" ] || continue
-        one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm" "$f")" || { printf 'sidecar.sh: work list: %s does not parse\n' "$f" >&2; exit 1; }
-        all="$all$one"$'\n'
-    done
+    all="$(work_all_fm "work list")" || exit 1
     # An --unblocked item is open and every blocked_by id is closed; an id
     # missing from the store counts as open, so a typo never unblocks.
     printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg br "$branch" --arg s "$state" --argjson u "$unblocked" '

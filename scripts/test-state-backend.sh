@@ -785,6 +785,56 @@ runo "$P" work set "$prd" state finished
 check "set refuses an unknown state" 2 "$rc"
 runo "$P" work set "$prd" milestone other
 check "set refuses a field outside its list" 2 "$rc"
+
+# set blocked_by (#564): rewrites the edge in place, validated as create's
+# --blocked-by is, and refused rather than guessed whenever a read fails.
+runo "$P" work set "$s2" blocked_by ""
+check "set blocked_by to empty exits 0" 0 "$rc"
+runo "$P" work view "$s2" --json
+check "set blocked_by to empty clears the list" "[]" "$(printf '%s' "$out" | jq -c '.blocked_by // []')"
+runo "$P" work list --unblocked --kind slice
+check "a cleared blocked_by unblocks the slice" "$s1
+$s2" "$out"
+runo "$P" work set "$s2" blocked_by " $s1 , "
+check "set blocked_by exits 0" 0 "$rc"
+check "set blocked_by commits in the sidecar" "sidecar: work set $s2 blocked_by" "$(git -C "$S" log -1 --format=%s)"
+runo "$P" work view "$s2" --json
+check "set blocked_by normalizes and records the list" "[\"$s1\"]" "$(printf '%s' "$out" | jq -c .blocked_by)"
+check "the file holds one blocked_by line, written as a list" "blocked_by: [$s1]" "$(grep '^blocked_by:' "$W/$s2.md")"
+before="$(cat "$W/$s2.md")"
+head_before="$(git -C "$S" rev-parse HEAD)"
+runo "$P" work set "$s2" blocked_by "$s1,W-999"
+check "set blocked_by refuses an id that does not exist" 1 "$rc"
+case "$err" in *"W-999, which does not exist"*) named=1 ;; *) named=0 ;; esac
+check "the refusal names the missing id" 1 "$named"
+runo "$P" work set "$s2" blocked_by "#12"
+check "set blocked_by refuses a bare #N as a usage error" 2 "$rc"
+runo "$P" work set "$s2" blocked_by "$s2"
+check "set blocked_by refuses an item blocking itself (a cycle of one)" 1 "$rc"
+runo "$P" work set "$s1" blocked_by "$s2"
+check "set blocked_by refuses a cycle" 1 "$rc"
+case "$err" in *cycle*) named=1 ;; *) named=0 ;; esac
+check "the cycle refusal says so" 1 "$named"
+printf 'not frontmatter at all\n' > "$W/W-97.md"
+runo "$P" work set "$s2" blocked_by "$prd"
+check "set blocked_by refuses when another work file does not parse" 1 "$rc"
+case "$err" in *"$W/W-97.md does not parse"*) named=1 ;; *) named=0 ;; esac
+check "the read refusal names the unparseable file" 1 "$named"
+rm -f "$W/W-97.md"
+# A cycle check that cannot run is a refusal, never "no cycle": a jq that fails
+# only on the cycle filter stands in for one that breaks.
+mkdir -p "$tmp/cyclejq"
+real_jq="$(command -v jq)"
+printf '#!/bin/sh\ncase "$*" in *"reach("*) exit 5 ;; esac\nexec "%s" "$@"\n' "$real_jq" > "$tmp/cyclejq/jq"
+chmod +x "$tmp/cyclejq/jq"
+out="$(cd "$P" && PATH="$tmp/cyclejq:$PATH" bash "$SC" work set "$s2" blocked_by "$prd" 2>"$tmp/stderr")"; rc=$?
+err="$(cat "$tmp/stderr")"
+check "set blocked_by refuses when the cycle check fails" 1 "$rc"
+case "$err" in *"could not check blocked_by"*) named=1 ;; *) named=0 ;; esac
+check "the failed cycle check is named on stderr" 1 "$named"
+check "refused blocked_by sets leave the file byte-identical" "$before" "$(cat "$W/$s2.md")"
+check "refused blocked_by sets make no sidecar commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
+check "refused blocked_by sets leave no temp file behind" "" "$(find "$W" -name '.work.*')"
 runo "$P" work view "#1"
 check "a bare #N is not an id" 2 "$rc"
 

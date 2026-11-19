@@ -87,7 +87,7 @@ An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest re
 |---|---|---|
 | Create a PRD or slice | `gh issue create --body-file f` | `work create --kind prd\|slice --body-file f` (prints the id) |
 | Attach a milestone | `--milestone "<name>"` on a milestone object | `--milestone "<name>"` on `work create`; a plain string, and no milestone object is created |
-| Parent and blockers | sub-issue and `blockedBy` edges | `--parent W-n` and `--blocked-by W-n,...` on `work create` |
+| Parent and blockers | sub-issue and `blockedBy` edges | `--parent W-n` and `--blocked-by W-n,...` on `work create`; `work set W-n blocked_by W-a,W-b` rewrites the blockers in place (`""` for none) |
 | Read | `gh issue view <n> --json …` | `work view W-n --json`: the frontmatter fields, plus `body` and `comments: [{at, body}]` |
 | Replace the body | `gh issue edit <n> --body-file f` | `work edit W-n --body-file f` |
 | Comment | `gh issue comment <n> --body-file f` | `work comment W-n --body-file f` |
@@ -100,7 +100,7 @@ An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest re
 Three rules differ from the GitHub side:
 
 - `work edit` refuses a body shorter than the one it read and leaves the file unchanged. Ticking a checkbox keeps the length the same, so a shorter body means something was dropped. That is the same guard the pipeline's PR-body and issue-body edits run by hand.
-- `decomposed_into` is replaced on every `set`, never appended to, so a reader always sees the latest decomposition.
+- `decomposed_into` and `blocked_by` are replaced on every `set`, never appended to, so a reader always sees the latest list. A `blocked_by` set takes only ids that exist, as `create --blocked-by` does, and is refused when it would make an item wait on itself; when any work item cannot be read, it is refused rather than checked against the rest.
 - `work comment` is the only writer of a `## Comment <ISO-8601>` section. A body that contains such a line is refused.
 
 `work list --unblocked` prints items that are open and whose `blocked_by` ids are all closed. An id that does not exist counts as open.
