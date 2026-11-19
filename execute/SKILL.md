@@ -171,6 +171,7 @@ echo "host_owned=$host_owned"
 ```bash
 # fresh-tree: may the generic signal stand down here? Only in a fresh tree.
 SC="<this skill's directory>/references/sidecar.sh"
+BASE_REF=$(bash "$SC" base-ref) || BASE_REF=
 top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
 primary=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 primary=$(cd "$primary" 2>/dev/null && pwd -P) || primary=
@@ -178,7 +179,7 @@ if [ -z "$primary" ]; then
   echo "tree=unknown"
 elif [ "$top" = "$primary" ]; then
   echo "tree=primary"
-elif BASE_REF=$(bash "$SC" base-ref) && ahead=$(git rev-list --count HEAD --not "$BASE_REF") && dirty=$(git status --porcelain); then
+elif [ -n "$BASE_REF" ] && ahead=$(git rev-list --count HEAD --not "$BASE_REF") && dirty=$(git status --porcelain); then
   if [ "$ahead" = 0 ] && [ -z "$dirty" ]; then echo "tree=fresh"; else echo "tree=used ahead=$ahead"; fi
 else
   echo "tree=unknown"

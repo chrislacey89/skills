@@ -168,6 +168,11 @@ else
     git -C "$ft/wt-committed" commit -q --allow-empty -m "someone else's slice"
     git -C "$ft/main" worktree add -q -b dirty-task "$ft/wt-dirty" main
     printf 'edit\n' > "$ft/wt-dirty/file.txt"
+    # No base branch resolves here (no origin, none of the fallback names), so
+    # base-ref refuses and the block must not read the tree as fresh.
+    git init -q -b nobase "$ft/nobase"
+    git -C "$ft/nobase" commit -q --allow-empty -m "root $ft/nobase"
+    git -C "$ft/nobase" worktree add -q -b nobase-task "$ft/wt-nobase" nobase
 
     tree_of() { (cd "$1" && env -u CONDUCTOR_WORKSPACE_PATH -u CODESPACES -u REMOTE_CONTAINERS bash "$ft/fresh.sh" 2>/dev/null) | sed -n 's/^tree=\([a-z]*\).*/\1/p'; }
     expect_tree() {
@@ -179,6 +184,7 @@ else
     expect_tree fresh   "a pipeline-made worktree with nothing in it"  "$ft/wt-fresh"
     expect_tree used    "a worktree with a commit past the base"       "$ft/wt-committed"
     expect_tree used    "a worktree with an uncommitted file"          "$ft/wt-dirty"
+    expect_tree unknown "a fresh worktree whose base cannot be read"   "$ft/wt-nobase"
 
     got="$(cd "$ft/wt-committed" && env -u CODESPACES -u REMOTE_CONTAINERS CONDUCTOR_WORKSPACE_PATH="$ft/wt-committed" bash "$ft/host.sh" | sed -n 's/^host_owned=//p')"
     if [ "$got" = yes ]; then
