@@ -1861,7 +1861,7 @@ work_ids_csv() {
         [ -n "$id" ] || continue
         is_work_id "$id" || die_usage "work: $label must be ids like W-3: $id"
         [ -f "$WORK_DIR/$id.md" ] || {
-            [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
+            work_dir_listable work "$WORK_DIR"
             refuse "work: $label names $id, which does not exist"
         }
         out="${out:+$out,}$id"

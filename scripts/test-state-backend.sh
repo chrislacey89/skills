@@ -1032,6 +1032,25 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+section "work: a sidecar with no work directory refuses a named item as absent"
+
+# The per-item guards skip the listability check when work/ does not exist;
+# a miss there is a plain "no such work item", not a "cannot list".
+mkproj none
+runo "$P" init --name nowork --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+S="$out"
+rm -rf "$S/work"
+runo "$P" work view W-1
+check "work view on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"no such work item"*) ok "work view on a sidecar with no work directory says no such work item" ;; *) bad "work view on a sidecar with no work directory says no such work item" "got [$err]" ;; esac
+runo "$P" trace W-1
+check "trace on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"no such work item"*) ok "trace on a sidecar with no work directory says no such work item" ;; *) bad "trace on a sidecar with no work directory says no such work item" "got [$err]" ;; esac
+runo "$P" fixrun record feat-x "$run1" "$sha_a" --work W-1
+check "fixrun record --work on a sidecar with no work directory exits 1" 1 "$rc"
+case "$err" in *"which does not exist"*) ok "fixrun record --work on a sidecar with no work directory says the item does not exist" ;; *) bad "fixrun record --work on a sidecar with no work directory says the item does not exist" "got [$err]" ;; esac
+
+# -----------------------------------------------------------------------------
 section "work: no sidecar"
 
 mkproj none
