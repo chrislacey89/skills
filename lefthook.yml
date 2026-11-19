@@ -121,6 +121,8 @@ pre-push:
       run: bash scripts/test-host-signal-containment.sh
     execute-worktree-handoff-tests:
       run: bash scripts/test-execute-worktree-handoff.sh
+    differential-check-tests:
+      run: bash scripts/test-differential-check.sh
     delta-review-scope-tests:
       run: bash scripts/test-delta-review-scope.sh
     prd-amendment-gate-tests:

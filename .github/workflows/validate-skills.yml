@@ -346,6 +346,11 @@ jobs:
       - name: Run execute worktree hand-off suite
         run: bash scripts/test-execute-worktree-handoff.sh
 
+      # #744: the differential check's base-copy block, run against a fixture
+      # under bash and zsh: it extracts the base commit, and a bad SHA aborts clean.
+      - name: Run differential check suite
+        run: bash scripts/test-differential-check.sh
+
       # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
       # from branch state by a block in Phase 1 step 4, and /fix-findings' menu
       # counts rounds from a commit line. Both are executable prose; this runs
