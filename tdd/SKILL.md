@@ -91,6 +91,8 @@ An acceptance criterion already written in EARS form (`When`/`While`/`If … the
 
 This produces the list, not the order. Step 3 still writes one test at a time, one block per cycle — enumerating blocks up front is not the horizontal slicing forbidden above; writing them all as tests up front is. [tests.md § Cover Both Failure Directions](tests.md) is this applied to a classifier; an `If … then` criterion is that guard stated at requirement time.
 
+For a behavior-preserving change, the partition also needs the inputs built to break the new mechanism, stated once in [references/differential-check.md](references/differential-check.md).
+
 ### 2. Tracer Bullet
 
 Write ONE test that confirms ONE thing about the system:

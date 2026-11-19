@@ -24,6 +24,10 @@
 #      the current toplevel and no when it names some other directory —
 #      including a sibling whose path merely shares a string prefix.
 #   3. /init-pipeline § 7 no longer scaffolds `host` into the committed file.
+#   4. /execute's `# fresh-tree` block (#712), executed: the generic signal
+#      (toplevel is not the primary checkout) stands down only in a tree with
+#      no commits past the base and nothing uncommitted; the env var still
+#      stands down on its own in a tree with history.
 #
 # WHAT THIS DOES NOT PIN. CODESPACES and REMOTE_CONTAINERS are still read for
 # presence: they carry no path to compare, and they are container-scoped, so a
@@ -118,6 +122,102 @@ else
     expect yes "CODESPACES present"                        "$scratch/repo" CODESPACES=true
     expect yes "REMOTE_CONTAINERS present"                 "$scratch/repo" REMOTE_CONTAINERS=true
 fi
+
+section "/execute: the generic signal stands down only in a fresh tree (#712)"
+# THE DRIFT CLASS, second half. Under `auto`, /execute also stood down on the
+# generic signal alone (toplevel is not the primary checkout). A worktree this
+# pipeline made satisfies that too, so a second session started inside another
+# session's worktree read "already isolated", skipped rule 3's stale-branch
+# stop, and worked in place on someone else's slice. The generic signal now
+# counts only in a fresh tree: no commits past the base, nothing uncommitted.
+# The env-var signal above is unchanged and still stands down on its own.
+extract_marked() {
+    awk -v mark="$2" '
+        /^```bash$/ { inb = 1; buf = ""; hit = 0; next }
+        inb && /^```$/ { if (hit) { printf "%s", buf; exit } inb = 0; next }
+        inb { buf = buf $0 "\n"; if (index($0, mark) == 1) hit = 1 }
+    ' "$1"
+}
+fresh_block="$(extract_marked execute/SKILL.md '# fresh-tree')"
+if [ -z "$fresh_block" ]; then
+    bad "execute/SKILL.md has a # fresh-tree block" "no \`\`\`bash fence containing '# fresh-tree' found"
+elif [ -z "$reference" ]; then
+    bad "host-signal block available to execute" "no site carried one"
+else
+    ok "execute/SKILL.md has a # fresh-tree block"
+    ft="$(mktemp -d)"
+    ft="$(cd "$ft" && pwd -P)"
+    trap 'rm -rf "${scratch:-}" "$ft"' EXIT
+    export GIT_CONFIG_NOSYSTEM=1
+    export GIT_CONFIG_GLOBAL="$ft/gitconfig"
+    git config --file "$GIT_CONFIG_GLOBAL" user.name "Fresh Tester"
+    git config --file "$GIT_CONFIG_GLOBAL" user.email "tester@example.com"
+    git config --file "$GIT_CONFIG_GLOBAL" init.defaultBranch main
+    export SKILL_KIT_SIDECAR_ROOT="$ft/sidecars"
+    placeholder="<this skill's directory>/references/sidecar.sh"
+    printf '%s' "${fresh_block//"$placeholder"/$repo_root/init-pipeline/scripts/sidecar.sh}" > "$ft/fresh.sh"
+    if grep -qF "$placeholder" "$ft/fresh.sh" || ! grep -qF "$repo_root/init-pipeline/scripts/sidecar.sh" "$ft/fresh.sh"; then
+        bad "the block reads sidecar.sh through the placeholder" "placeholder '$placeholder' not found once and substituted"
+    fi
+    printf '%s' "$reference" > "$ft/host.sh"
+
+    git init -q "$ft/main"
+    git -C "$ft/main" commit -q --allow-empty -m "root $ft/main"
+    git -C "$ft/main" worktree add -q -b fresh-task "$ft/wt-fresh" main
+    git -C "$ft/main" worktree add -q -b committed-task "$ft/wt-committed" main
+    git -C "$ft/wt-committed" commit -q --allow-empty -m "someone else's slice"
+    git -C "$ft/main" worktree add -q -b dirty-task "$ft/wt-dirty" main
+    printf 'edit\n' > "$ft/wt-dirty/file.txt"
+    # No base branch resolves here (no origin, none of the fallback names), so
+    # base-ref refuses and the block must not read the tree as fresh.
+    git init -q -b nobase "$ft/nobase"
+    git -C "$ft/nobase" commit -q --allow-empty -m "root $ft/nobase"
+    git -C "$ft/nobase" worktree add -q -b nobase-task "$ft/wt-nobase" nobase
+
+    # Agents run the block in zsh, so both shells must read each tree state.
+    tree_of() { (cd "$2" && env -u CONDUCTOR_WORKSPACE_PATH -u CODESPACES -u REMOTE_CONTAINERS "$1" "$ft/fresh.sh" 2>/dev/null) | sed -n 's/^tree=\([a-z]*\).*/\1/p'; }
+    expect_tree() {
+        local want="$1" label="$2" got
+        got="$(tree_of "$4" "$3")"
+        if [ "$got" = "$want" ]; then ok "$label -> tree=$want ($4)"; else bad "$label -> tree=$want ($4)" "got '$got'"; fi
+    }
+    for sh in bash zsh; do
+        if ! command -v "$sh" > /dev/null 2>&1; then
+            bad "$sh is available to run the # fresh-tree block" "$sh not found on PATH"
+            continue
+        fi
+        expect_tree primary "the primary checkout"                         "$ft/main"         "$sh"
+        expect_tree fresh   "a pipeline-made worktree with nothing in it"  "$ft/wt-fresh"     "$sh"
+        expect_tree used    "a worktree with a commit past the base"       "$ft/wt-committed" "$sh"
+        expect_tree used    "a worktree with an uncommitted file"          "$ft/wt-dirty"     "$sh"
+        expect_tree unknown "a fresh worktree whose base cannot be read"   "$ft/wt-nobase"    "$sh"
+    done
+
+    got="$(cd "$ft/wt-committed" && env -u CODESPACES -u REMOTE_CONTAINERS CONDUCTOR_WORKSPACE_PATH="$ft/wt-committed" bash "$ft/host.sh" | sed -n 's/^host_owned=//p')"
+    if [ "$got" = yes ]; then
+        ok "a host env var naming a worktree with commits still stands down -> host_owned=yes"
+    else
+        bad "a host env var naming a worktree with commits still stands down -> host_owned=yes" "got '$got'"
+    fi
+fi
+
+# The prose that acts on the block's verdict: rule 3's stop names the way out,
+# and the restated sites point at /execute Step 0 rather than restating the
+# old generic rule.
+# shellcheck disable=SC2016 # the backticks are literal Markdown
+if grep -qF '`worktree.provisioning`' < <(grep -E '^3\. ' execute/SKILL.md); then
+    ok "rule 3's stop names worktree.provisioning as the way out"
+else
+    bad "rule 3's stop names worktree.provisioning as the way out" "no '\`worktree.provisioning\`' on execute/SKILL.md's rule 3 line"
+fi
+# coverage: the two sites #712 named as restating /execute's auto rule.
+for f in init-pipeline/SKILL.md SYSTEM-OVERVIEW.md; do
+    if grep -qE 'or the current tree is not the repo.s primary working tree|or "toplevel ≠ primary working tree\."' "$f"; then
+        bad "$f no longer restates the generic stand-down" "it still names toplevel ≠ primary as a stand-down on its own"
+    else
+        ok "$f no longer restates the generic stand-down"
+    fi
+done
 
 section "/init-pipeline § 7 does not scaffold host into the committed file"
 if grep -qF 'merge {"worktree":{"provisioning":"host"}}' init-pipeline/SKILL.md; then

@@ -48,7 +48,7 @@ Cohen and Rigby both cap effective review at roughly **100–300 LOC and 30–60
 
 ### 1. Establish the range and give the overview first
 
-Resolve the commit range to walk — the commits on this branch not yet on the base branch:
+Resolve the commit range to walk. With no argument it is the commits on this branch not yet on the base branch:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -58,6 +58,19 @@ git diff --stat "$BASE_REF...HEAD"
 ```
 
 Do not hardcode `main` — detect the base (this repo itself uses `prod`). If the range is empty or the base can't be resolved, ask the user which range to walk. The `git diff` is three-dot (diff from the merge base) while the `git log` stays two-dot (commits reachable from HEAD but not the base) — these are different operators for different questions, and swapping the diff to two-dot reports deletions for base-side work this branch never touched.
+
+**Given a work item id** (`/walk-commits W-<n>`), walk that slice's commits only, so a branch carrying several slices does not walk the earlier ones again. `sidecar.sh range` prints the slice's range: from the start `/execute` recorded on the item, or the base range when it has none. It prints a two-dot range, which is right for the log; the stat takes the merge base of its left end and `HEAD`, which is what the three-dot form above means ([git-diff](https://git-scm.com/docs/git-diff)):
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+RANGE="$(bash "$SC" range "$W")" || { echo "range failed: not guessing a range" >&2; exit 1; }
+git log --oneline --no-merges "$RANGE"
+FROM="$(git merge-base "${RANGE%%..*}" HEAD)" || { echo "merge-base failed for $RANGE" >&2; exit 1; }
+git diff --stat "$FROM" HEAD
+```
+
+When `range` prints a notice on stderr (the recorded start was rewritten, so it walks from the base instead), pass it on to the user.
 
 Then present an **overview before the first commit** (Spinellis: *overview first*). It is short and does two jobs:
 

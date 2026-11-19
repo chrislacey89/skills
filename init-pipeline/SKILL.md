@@ -347,7 +347,7 @@ Append these lines if not already present:
 
 `/execute` Step 0 and `/closeout` consult an optional `.claude/settings.json` key, `worktree.provisioning`, to decide whether the *pipeline* owns worktree provisioning and teardown or whether the *host* environment does. It mirrors the existing `research.storage` precedent — a single, in-repo, authoritative representation of an environment fact (Hunt/Thomas, DRY) rather than env-sniffing scattered across skills.
 
-- `"auto"` (default when the key is absent) — `/execute` stands down if a host env var describes the current tree (the block below) or the current tree is not the repo's primary working tree; otherwise it provisions via worktrunk or plain git.
+- `"auto"` (default when the key is absent) — the answer is re-derived on every run from the tree, by the rule stated once in `/execute` Step 0; the host env-var half of it is the block below.
 - `"host"` — isolation is always host-owned. `/execute` works in place; `/closeout` merges but cedes worktree teardown and branch pruning to the host.
 - `"pipeline"` — the pipeline always provisions and tears down (the pre-host behavior).
 
@@ -480,6 +480,8 @@ SC="<this skill's directory>/scripts/sidecar.sh"
 bash "$SC" config set verify.<key> "<command the user confirmed>"
 bash "$SC" config set verify.<key> ""   # the repo has none
 ```
+
+**`runtime_check`** has no detected default. Ask it this way: "Which command, run from a worktree, exits 0 only when that worktree's own running stack (database, dev server, containers) answers? Answer none if this repo runs no stack." The command reports state; it must not start or stop anything. `/execute` runs it before Step 4's full test run and again at its runtime tier, so a slice is not reported verified against another worktree's stack. The pack cannot tell whether a command checks the right stack; that is the command's job. Worktrunk's [Database per worktree](https://worktrunk.dev/tips-patterns/#database-per-worktree) recipe is one way a repo gives each worktree its own stack.
 
 `""` declares none, which `profile` renders as `none`, while a key never written stays under `Not declared`. On a sidecar `init` wrote before this question existed (schema 1), the first of these writes moves the sidecar to schema 2 in the same commit and drops the empty values that `init` stubbed, so keys not yet answered still read as unasked. `config set` refuses a value that spans lines. Relay a refusal as printed and ask again.
 
