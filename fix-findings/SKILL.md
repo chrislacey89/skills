@@ -343,9 +343,10 @@ The fixer's instructions, in order:
    fail in a clone with no one to approve it. A signing failure in the real
    fold is not something a demotion could fix.
 
-   The throwaway clone does not read the repository's own config, and the
-   trial accepts two wrong answers from that. A signer set there fails the real
-   fold while the trial reports `clean`. A merge driver defined there, for a
+   The trial has two wrong answers, each with its own cause. Because signing
+   is off in the trial, a signer set in the repository's config fails the real
+   fold while the trial reports `clean`. Because the throwaway clone does not
+   read the repository's own config, a merge driver defined there, for a
    `merge=` attribute in `.gitattributes`, does not run in the trial, which
    falls back to a text merge and can demote a fixup the real fold applies.
 

@@ -1601,6 +1601,43 @@ case "$(run_fold "$repo15")" in
 esac
 assert_eq "$head15" "$(git -C "$repo15" rev-parse HEAD)" "a repo-local failing signer: the aborted fold leaves HEAD where it was"
 
+# The clone-config claim needs a repo-local setting the trial's own -c flags do
+# not override. The signer above cannot show it (the trial turns signing off
+# itself), so a repo-local merge driver does: it resolves a text conflict in the
+# repository and is absent in the clone, so the trial demotes a fixup the real
+# fold applies (#686 box 4). A trial that started reading the repository's config
+# would report clean here.
+section "fold trial, stated limit: a repo-local merge driver does not run in the trial"
+repo17="$sandbox/repo17"
+mkdir -p "$repo17"
+(
+    cd "$repo17" || exit 1
+    git init -q -b main .
+    git config user.email t@example.com
+    git config user.name t
+    printf 'one.txt merge=keepours\n' > .gitattributes
+    printf 'base\n' > base.txt
+    git add .gitattributes base.txt && git commit -q -m 'base'
+    git switch -q -c feature
+    printf 'one\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: one'
+    printf 'one, edited later\n' > one.txt
+    git add one.txt && git commit -q -m 'feature: edit one'
+    printf 'one, fixed\n' > one.txt
+    git add one.txt && git commit -q --fixup=HEAD~1 -m 'fix one' -m 'Fix-Findings-Run: 20261030T000006Z'
+    git config merge.keepours.driver true
+)
+point_origin_at_main "$repo17"
+real17="$sandbox/repo17-real"
+cp -R "$repo17" "$real17"
+run_fold "$real17" >/dev/null
+assert_eq "feature: edit one" "$(git -C "$real17" log -1 --format=%s)" "a repo-local merge driver: the real fold applies the fixup (the driver resolves the text conflict)"
+out17="$(trial_in "$repo17")" && rc17=0 || rc17=$?
+assert_eq 0 "$rc17" "a repo-local merge driver: the block exits 0"
+assert_eq "fold trial: would not fold; recommitted as an ordinary commit" "$out17" \
+    "a repo-local merge driver: the trial does not run it, so it demotes what the real fold applies"
+assert_eq "fix one" "$(git -C "$repo17" log -1 --format=%s)" "a repo-local merge driver: the fixup is demoted"
+
 section "fold trial, stated limit: a leftover that breaks a later ordinary commit misjudges a clean fixup"
 # #665's four commits: one, three, drop three, two. The blocked leftover
 # `fixup! one` adds three.txt, so the rebase stops on 'feature: three', an
