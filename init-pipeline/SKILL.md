@@ -481,6 +481,8 @@ bash "$SC" config set verify.<key> "<command the user confirmed>"
 bash "$SC" config set verify.<key> ""   # the repo has none
 ```
 
+**`runtime_check`** has no detected default. Ask it this way: "Which command, run from a worktree, exits 0 only when that worktree's own running stack (database, dev server, containers) answers? Answer none if this repo runs no stack." The command reports state; it must not start or stop anything. `/execute` runs it before its test command and again at its runtime tier, so a test cannot pass against another worktree's stack. The pack cannot tell whether a command checks the right stack; that is the command's job. Worktrunk's [Database per worktree](https://worktrunk.dev/tips-patterns/#database-per-worktree) recipe is one way a repo gives each worktree its own stack.
+
 `""` declares none, which `profile` renders as `none`, while a key never written stays under `Not declared`. On a sidecar `init` wrote before this question existed (schema 1), the first of these writes moves the sidecar to schema 2 in the same commit and drops the empty values that `init` stubbed, so keys not yet answered still read as unasked. `config set` refuses a value that spans lines. Relay a refusal as printed and ask again.
 
 **Q6 — hazards** (`hazards` on the `unasked=` line): commands an agent must not run, or actions it must not take, in this repo without asking first. Nothing is detected, and the default is none. Each hazard needs a `reason`. A hazard may also carry a `command` in Claude Code permission-rule syntax, such as `Bash(pnpm test:e2e*)` ([hooks reference](https://code.claude.com/docs/en/hooks)), so that a later hook can match it. This skill does not enforce hazards. Write the confirmed list as one JSON array, or `[]` for none:
