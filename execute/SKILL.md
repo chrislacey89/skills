@@ -899,11 +899,19 @@ rm -f "$BODY_FILE"
 
 **The guards are not optional, and the AFK writeback in Step 6 reuses them.** This is a read-modify-write against an API that returns 5xx under load, and `gh issue edit --body*` replaces the entire body — so a failed fetch here does not lose a stamp, it loses the acceptance criteria `/prd-to-issues` authored and `/pre-merge` Phase 4 reconciles against. `/pre-merge`'s stamp carries the same two guards for the same reason. Retry the fetch **once**; if the second attempt also aborts, leave the boxes unflipped and say so rather than writing.
 
+#### Requested cleanups
+
+When the user asks for a cleanup partway through the checklist (a rename, a reorder, a comment, a split), add it as a line here and keep reviewing; do not stop to make it. Each edit made mid-review can reopen items the user already checked, and re-runs verification once per edit. When the review is done, apply the queued cleanups in one pass: one commit per cleanup, per **Commit after each logical unit** above, then Tier 1 and Tier 2 once, then present the checklist again with the cleanups ticked.
+
+- [ ] <cleanup the user asked for>
+
+**Exception: "do it now".** When the user asks to see a change right away ("do it now", "show me"), make that one immediately, commit it, and name the checklist items it may have reopened, so the user re-checks those before going on.
+
 #### Ready for PR Review
 
 - [ ] Ready to create the PR and run architectural review now (flows directly into `/pre-merge`)?
 
-Wait for the user to review and confirm. If they flag items that need fixing, address them, commit the fixes, and re-present the checklist. Only proceed to Step 6 after user confirmation.
+Wait for the user to review and confirm. Items they flag as needing a fix go under **Requested cleanups** and are applied as it says. Only proceed to Step 6 after user confirmation.
 
 **Optional comprehension pass before review.** If the person who will merge this branch did not author it, or wants to internalize it commit-by-commit before approving, `/walk-commits` is an option *before* `/pre-merge` — an interactive per-commit walkthrough (intent, riskiest line, deliberate oddities, what's absent by design, per-commit sign-off). It is optional and never auto-invoked; name it as a choice, do not run it automatically.
 
