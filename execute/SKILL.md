@@ -904,7 +904,7 @@ rm -f "$BODY_FILE"
 
 #### Requested cleanups
 
-When the user asks for a cleanup partway through the checklist (a rename, a reorder, a comment, a split), add it as a line here and keep reviewing; do not stop to make it. Each edit made mid-review can reopen items the user already checked, and re-runs verification once per edit. When the review is done, apply the queued cleanups in one pass: one commit per cleanup, per **Commit after each logical unit** above, then Tier 1 and Tier 2 once, then present the checklist again with the cleanups ticked.
+When the user asks for a cleanup partway through the checklist (a rename, a reorder, a comment, a split), add it as a line here and keep reviewing; do not stop to make it. Each edit made mid-review can reopen items the user already checked, and re-runs verification once per edit. When the review is done, apply the queued cleanups in one pass: one commit per cleanup, per **Commit after each logical unit** above, then Tier 1 and Tier 2 once, then present the checklist again with the cleanups ticked. Add one line per requested cleanup, and when none was requested leave this section out of the checklist you show; never show the placeholder.
 
 - [ ] <cleanup the user asked for>
 
