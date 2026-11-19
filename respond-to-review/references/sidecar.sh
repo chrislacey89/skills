@@ -1517,14 +1517,20 @@ cited_probe() {
     case "$probe" in "~/"*) probe="$HOME/${probe#"~/"}" ;; esac
     # A link may carry a section anchor (name.md#section); look up the file.
     case "$probe" in *"#"*) [ -e "$probe" ] || probe="${probe%%#*}" ;; esac
-    # An anchor may carry a line suffix (path:12, :12-20, :12+, :12, 30-31);
-    # look up the file. Only a suffix that is all line numbers is stripped, and
-    # only when the path does not exist with it, so a real name holding a
-    # colon is still found as named.
-    if [ ! -e "$probe" ] && [[ "$probe" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
-        probe="${BASH_REMATCH[1]}"
+    strip_line_anchor "$probe"
+}
+
+# strip_line_anchor <path>: the path without a line suffix (path:12, :12-20,
+# :12+, :12, 30-31), so an anchor looks up its file. Only a suffix that is all
+# line numbers is stripped, and only when the path does not exist with it, so
+# a real name holding a colon is still found as named. require (through
+# cited_probe) and lessons match share it.
+strip_line_anchor() {
+    local p="$1"
+    if [ ! -e "$p" ] && [[ "$p" =~ ^(.+):([0-9]+(-[0-9]+|\+)?(,[[:space:]]*[0-9]+(-[0-9]+|\+)?)*)$ ]]; then
+        p="${BASH_REMATCH[1]}"
     fi
-    printf '%s\n' "$probe"
+    printf '%s\n' "$p"
 }
 
 # resolve_cited <path> <referrer>: require's lookup, shared with trace. Prints
@@ -2835,8 +2841,9 @@ lessons_match() {
             --*) die_usage "lessons match: unknown argument: $arg" ;;
             *$'\n'*) die_usage "lessons match: an argument holds a newline; pass one path per argument" ;;
         esac
-        # A Context anchor names a line or a range after the path: path:12, path:12-40.
-        if [[ "$arg" =~ ^(.+):[0-9]+(-[0-9]+)?$ ]]; then arg="${BASH_REMATCH[1]}"; fi
+        # A Context anchor names a line or a range after the path; strip it the
+        # way require does.
+        arg="$(strip_line_anchor "$arg")"
         case "$arg" in
             "$top") arg="" ;;
             "$top"/*) arg="${arg#"$top"/}" ;;
