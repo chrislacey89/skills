@@ -360,8 +360,8 @@ The fixer's instructions, in order:
    conflict of the commit just made: a clean fixup after it is demoted, or
    reported `blocked` when its recommit is refused, and the leftover is not named.
 
-   Otherwise (lines from the base, from several commits, or a shared branch),
-   make an ordinary commit. It is still one commit per fix, and it is
+   Otherwise (an empty `FIXUP_TARGET=` line, or the intent check cleared the
+   target), make an ordinary commit. It is still one commit per fix, and it is
    reviewed on its own. The `fixup!` subject only lets `/pre-merge`'s handoff
    offer to fold the fix into its target later. Git's docs on what that fold
    does to this message: *"The -m option may be used to supplement the log
