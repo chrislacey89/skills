@@ -379,8 +379,8 @@ finding.
 
 The title is the row's `Finding` cell. The proposed change is the one the row
 states, or one clause naming the fix when the row states only the defect. In text
-copied from a row, write every `#<n>` reference as `issue <n>` (`issue 12`, not
-`#12`), so an item line carries no `#n`.
+copied from a row, write every `#<n>` reference as `issue <n>`, so an item line
+carries no `#n`.
 
 ## Recap
 
