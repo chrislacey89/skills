@@ -1006,6 +1006,18 @@ else
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
     check "work create on a read-only-listing work directory exits 1 (no id reused)" 1 "$rc"
     case "$err" in *"cannot list"*) ok "work create on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" trace "$u1"
+    check "trace on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "trace on a read-only-listing work directory says cannot list on stderr" ;; *) bad "trace on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work set "$u1" blocked_by "$u2"
+    check "work set on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work set on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work set on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --parent "$u1" --body-file "$tmp/prd.md"
+    check "work create --parent on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create --parent on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create --parent on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"
+    check "work create --blocked-by on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
     chmod 755 "$S/work"
 fi
 

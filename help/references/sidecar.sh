@@ -1851,6 +1851,7 @@ is_work_id() { [[ "$1" =~ ^${WORK_ID_RE}$ ]]; }
 # $WORK_DIR; prints the normalized list (comma-separated, no spaces).
 work_ids_csv() {
     local label="$1" csv="$2" id out=""
+    [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
     for id in $(printf '%s' "$csv" | tr ',' '\n'); do
         id="$(printf '%s' "$id" | tr -d ' ')"
         [ -n "$id" ] || continue
@@ -1890,6 +1891,7 @@ work_rewrite() {
 # work_existing <id>: refuse unless the id is well-formed and its file exists.
 work_existing() {
     is_work_id "$1" || die_usage "work: expected an id like W-3, got: $1"
+    [ ! -d "$WORK_DIR" ] || work_dir_listable work "$WORK_DIR"
     [ -f "$WORK_DIR/$1.md" ] || refuse "work: no such work item: $1"
 }
 
@@ -1984,6 +1986,7 @@ work_create() {
     mkdir -p "$WORK_DIR" || refuse "work create: cannot create $WORK_DIR"
     if [ -n "$parent" ]; then
         is_work_id "$parent" || die_usage "work create: --parent must be an id like W-3: $parent"
+        work_dir_listable "work create" "$WORK_DIR"
         [ -f "$WORK_DIR/$parent.md" ] || refuse "work create: --parent names $parent, which does not exist"
     fi
     blocked="$(work_ids_csv --blocked-by "$blocked")" || exit $?
@@ -2297,8 +2300,8 @@ trace_work() {
     sc="$(do_resolve)" || exit 1
     sc="$(cd "$sc" && pwd -P)"
     dir="$sc/work"
+    [ ! -d "$dir" ] || work_dir_listable trace "$dir"
     [ -f "$dir/$id.md" ] || refuse "trace: no such work item: $id"
-    work_dir_listable trace "$dir"
     for f in "$dir"/W-*.md; do
         [ -f "$f" ] || continue
         one="$(work_jq -Rsc "$WORK_JQ parse_work | .fm + {body, comments: comments}" "$f")" \
