@@ -48,7 +48,7 @@ This catches source-vs-destination mismatch at intake — a fix that flips a pro
 
 ### 2. Explore the codebase in the background
 
-While talking to the user, kick off an Agent (subagent_type=Explore) in the background to understand the relevant area. Invoking `/qa` is the request for that sub-agent; explore in-session only when the delegation tool is absent or errors on call, as `/pre-merge` Phase 3 states once (*Invoking this skill is the request to delegate*). The goal is NOT to find a fix — it's to:
+While talking to the user, kick off an Agent (subagent_type=Explore) in the background to understand the relevant area. Invoking `/qa` is the request for that sub-agent; explore in-session only when the sub-agent is unavailable, as `/pre-merge` Phase 3 states once (*Invoking this skill is the request to delegate*). The goal is NOT to find a fix — it's to:
 
 - Start with a lightweight hypothesis about what class of failure might explain the behavior so your exploration is guided rather than wandering. Revise the hypothesis as you gather evidence.
 - Learn the domain language used in that area (check UBIQUITOUS_LANGUAGE.md)
