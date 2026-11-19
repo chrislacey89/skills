@@ -110,6 +110,16 @@ sed -i.bak '/^| \[setup-ralph-loop\](setup-ralph-loop\/)/d' "$d/README.md"
 grep -q 'setup-ralph-loop' "$d/README.md" || fatal "fixture premise gone: README no longer mentions setup-ralph-loop outside its skill table"
 expect_fault "a skill mentioned only outside a skill table is still missing" "$d" "README.md skill tables is missing skill 'setup-ralph-loop'"
 
+# The section scoping itself: a link-form row for the same skill outside
+# "## Skills" must not count, so only the awk scope can make this fault fire.
+d="$(fresh readme-scope)"
+sed -i.bak '/^| \[setup-ralph-loop\](setup-ralph-loop\/)/d' "$d/README.md"
+edit "$d/README.md" '## Repo guide' '## Repo guide
+
+| [setup-ralph-loop](setup-ralph-loop/) | a link-form row outside the Skills section |
+'
+expect_fault "a link-form row outside the Skills section does not count" "$d" "README.md skill tables is missing skill 'setup-ralph-loop'"
+
 d="$(fresh readme-ghost)"
 edit "$d/README.md" '| [help](help/) |' '| [ghost](ghost/) | not a skill |
 | [help](help/) |'
@@ -144,6 +154,16 @@ expect_fault "a skill in different roles in the two lists is named" "$d" "role m
 d="$(fresh role-twice)"
 edit "$d/CLAUDE.md" '`/git-guardrails-claude-code`' '`/git-guardrails-claude-code`, `/tdd`'
 expect_fault "a skill in two roles in one list is named" "$d" "CLAUDE.md Invocation Roles puts 'tdd' in more than one role"
+
+d="$(fresh role-parenthetical)"
+edit "$d/CLAUDE.md" '`/git-guardrails-claude-code`' '`/git-guardrails-claude-code` (`/tdd`, `/qa`)'
+expect_clean "a parenthetical naming other skills adds no role member" "$d"
+
+# Members are an unbroken ", "-separated run: an item with no ", " directly
+# before it ends the run, even when a later ", " exists in the bullet.
+d="$(fresh role-glued)"
+edit "$d/CLAUDE.md" '`/git-guardrails-claude-code`' '`/git-guardrails-claude-code``/tdd`, `/qa`'
+expect_clean "an item with no ', ' before it is not a role member" "$d"
 
 section "check 3: stated counts"
 d="$(fresh badge)"
