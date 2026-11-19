@@ -48,6 +48,8 @@ docs/restated-claims.md         execute
 docs/restated-claims.md         fix-findings
 docs/mutation-at-consumption.md  execute
 docs/mutation-at-consumption.md  fix-findings
+docs/differential-check.md  execute
+docs/differential-check.md  tdd
 docs/next-step-menu.md          fix-findings
 docs/trivial-task-rule.md  execute
 docs/trivial-task-rule.md  lfg
@@ -83,5 +85,3 @@ init-pipeline/scripts/sidecar.sh  walk-commits
 init-pipeline/scripts/sidecar.sh  visual-recap
 init-pipeline/scripts/sidecar.sh  setup-ralph-loop
 docs/state-backend.md      compound
-docs/differential-check.md  execute
-docs/differential-check.md  tdd
