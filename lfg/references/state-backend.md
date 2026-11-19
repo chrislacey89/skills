@@ -100,7 +100,7 @@ An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest re
 Three rules differ from the GitHub side:
 
 - `work edit` refuses a body shorter than the one it read and leaves the file unchanged. Ticking a checkbox keeps the length the same, so a shorter body means something was dropped. That is the same guard the pipeline's PR-body and issue-body edits run by hand.
-- `decomposed_into` and `blocked_by` are replaced on every `set`, never appended to, so a reader always sees the latest list. A `blocked_by` set takes only ids that exist, as `create --blocked-by` does, and is refused when it would make an item wait on itself; when any work item cannot be read, it is refused rather than checked against the rest.
+- `decomposed_into` and `blocked_by` are replaced on every `set`, never appended to, so a reader always sees the latest list. A `blocked_by` set takes only ids that exist, as `create --blocked-by` does, and is refused when it would make an item wait on itself. That check reads every work item, so a set that names at least one blocker is refused when any work item cannot be read. A set with an empty list (`""`) can make no cycle and is not checked.
 - `work comment` is the only writer of a `## Comment <ISO-8601>` section. A body that contains such a line is refused.
 
 `work list --unblocked` prints items that are open and whose `blocked_by` ids are all closed. An id that does not exist counts as open.

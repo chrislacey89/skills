@@ -820,6 +820,11 @@ runo "$P" work set "$s2" blocked_by "$prd"
 check "set blocked_by refuses when another work file does not parse" 1 "$rc"
 case "$err" in *"$W/W-97.md does not parse"*) named=1 ;; *) named=0 ;; esac
 check "the read refusal names the unparseable file" 1 "$named"
+# An empty list is not checked (docs/state-backend.md): it names no blocker, so
+# the unreadable file does not matter. $s1 holds no blockers, so this changes
+# nothing the later arms read.
+runo "$P" work set "$s1" blocked_by ""
+check "set blocked_by to empty exits 0 even when another work file does not parse" 0 "$rc"
 rm -f "$W/W-97.md"
 # A cycle check that cannot run is a refusal, never "no cycle": a jq that fails
 # only on the cycle filter stands in for one that breaks.
@@ -991,7 +996,7 @@ else
     check "trace on an unlistable work directory exits 1" 1 "$rc"
     case "$err" in *"cannot list"*) ok "trace on an unlistable work directory says cannot list on stderr" ;; *) bad "trace on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
-    check "work create on an unlistable work directory exits 1 (no id reused)" 1 "$rc"
+    check "work create on an unlistable work directory exits 1" 1 "$rc"
     case "$err" in *"cannot list"*) ok "work create on an unlistable work directory says cannot list on stderr" ;; *) bad "work create on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
     # A direct read of a named item is not a listing: mode 311 can enter the
     # directory, so an existing item opens; only a miss is double-checked (a miss
@@ -1017,7 +1022,7 @@ else
     runo "$P" work list --unblocked
     check "work list --unblocked on a read-only-listing work directory exits 1" 1 "$rc"
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
-    check "work create on a read-only-listing work directory exits 1 (no id reused)" 1 "$rc"
+    check "work create on a read-only-listing work directory exits 1" 1 "$rc"
     case "$err" in *"cannot list"*) ok "work create on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
     runo "$P" trace "$u1"
     check "trace on a read-only-listing work directory exits 1" 1 "$rc"
