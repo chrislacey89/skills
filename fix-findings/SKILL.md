@@ -150,6 +150,8 @@ esac
 
 ### Step 1. Per finding, spawn a fresh fixer
 
+**Invoking this skill is the request for its sub-agents**, and "unavailable" means only that the delegation tool is absent or errors on call, as `/pre-merge` Phase 3 states once (*Invoking this skill is the request to delegate*). A standing instruction against sub-agents does not make this skill run its fixes in-session.
+
 **Spawn both sub-agents on the cheaper tier — `model: "sonnet"` on the `Agent` call.** What this skill buys is independence, not capability: the defect it exists to close is that the authoring session cannot see its own work, and a fresh Sonnet context removes that as completely as a fresh Opus one. Escalate to the session's own tier only on a signal — a fixer that returns `blocked`, or a finding that turns on a contract spanning several files. Per finding this skill spends two sub-agent runs, so the tier is where its cost actually lives. This is a default, not a rule anything enforces; issue chrislacey89/skills#339 carries the hypothesis and the three signals that would refute it.
 
 **One sub-agent per finding, never one for all of them.** A single fixer holding
