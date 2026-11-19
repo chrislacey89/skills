@@ -6,8 +6,8 @@ for the author-time move, immediately after the scope check on set-claims;
 `docs/restated-claims.md` is the standing account of why a rule stated at two
 operative sites drifts.
 
-Its sibling is `/tdd`'s red-bar rule (`tdd/tests.md` § *The operational check, at
-RED*), which mutates the value a test names. This rung is narrower: it asks
+Its sibling is `/tdd`'s red-bar rule ([tests.md](tests.md), bundled beside this
+file, § *The operational check, at RED*), which mutates the value a test names. This rung is narrower: it asks
 whether the test names the right thing.
 
 ## When it applies

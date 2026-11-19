@@ -23,7 +23,9 @@
 #      a bundled script) in a tracked skill file resolves to a real file, from that file's own directory.
 #   2. No tracked file inside a references/ directory writes a
 #      `](references/...)` link — from there the sibling form is the correct
-#      one and the references/ prefix is the recorded bug.
+#      one and the references/ prefix is the recorded bug. A sibling link it
+#      does write, `](<name>.md)`, resolves beside it (#303: a bundled doc that
+#      points at another bundled file, which exists only in the install layout).
 #   3. Every <skill>/references/ file whose content matches a docs/ or
 #      repo-root file has a manifest row. A hand-copied duplicate with no row
 #      is not synced and not checked, so it drifts silently — which is the
@@ -73,6 +75,19 @@ for f in $skill_md_files; do
                 fi ;;
         esac
     done
+    case "$f" in
+        */references/*)
+            siblings="$(tr '\n' ' ' < "$f" | grep -oE '\]\([A-Za-z0-9._-]+\.(md|sh)\)' | tr -d '](' | sed 's/)$//' | sort -u)"
+            for rel in $siblings; do
+                checked=$((checked + 1))
+                if [ -f "$dir/$rel" ]; then
+                    ok "$f -> $dir/$rel"
+                else
+                    bad "$f points at sibling $rel, which does not resolve" \
+                        "expected $dir/$rel to exist; add a manifest row bundling it into ${f%%/*}, or fix the path."
+                fi
+            done ;;
+    esac
 done
 
 # 3. An un-synced hand copy drifts in silence. Any file under a skill's
