@@ -441,7 +441,11 @@ Print, substituting the real values:
 
 **Open-rows handoff.** When the run ended on the Error path after its PR was
 opened, print this instead. It states the unfinished state plainly and
-points at the record, so it cannot be read as a finished run:
+points at the record, so it cannot be read as a finished run. When the error
+came before Close step 4 ran `/pre-merge --loop` (the PR has no review stamp
+and no ledger), replace the first line with
+`**Next session:** /pre-merge --loop on PR #<n> (the review never ran), then settle the ledger, then /closeout`,
+since `/closeout` refuses a PR with no stamp:
 
 ```
 **Next session:** settle the open ledger rows, then /closeout
