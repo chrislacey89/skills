@@ -88,12 +88,13 @@ for sh in bash zsh; do
     td="$tmp/tmpdir-bad-$sh"; mkdir -p "$td"
     out="$(cd "$P" && PATH="$tmp/shim:$PATH" SHIM_TMP="$td" BASE_SHA=0000000000000000000000000000000000000000 "$sh" "$tmp/block.sh" 2>"$tmp/err")"; rc=$?
     if [ "$rc" -ne 0 ]; then ok "a BASE_SHA that resolves nothing exits non-zero"; else bad "a BASE_SHA that resolves nothing exits non-zero" "rc=0 out=[$out]"; fi
-    if ! printf '%s' "$out" | grep -q '^base copy:'; then ok "and prints no copy path"; else bad "and prints no copy path" "out=[$out]"; fi
+    if ! grep -q '^base copy:' <<<"$out"; then ok "and prints no copy path"; else bad "and prints no copy path" "out=[$out]"; fi
     left="$(find "$td" -mindepth 1 | head -1)"
     if [ -z "$left" ]; then ok "and leaves no temp directory behind"; else bad "and leaves no temp directory behind" "found $left"; fi
 done
 
 section "the two skills point at the bundled copy"
+# coverage: the two skills the manifest bundles docs/differential-check.md into.
 for f in execute/SKILL.md tdd/SKILL.md; do
     if grep -qF '(references/differential-check.md)' "$f"; then ok "$f points at references/differential-check.md"; else bad "$f points at references/differential-check.md"; fi
     d="${f%/SKILL.md}"

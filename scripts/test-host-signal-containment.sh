@@ -198,11 +198,12 @@ fi
 # and the restated sites point at /execute Step 0 rather than restating the
 # old generic rule.
 # shellcheck disable=SC2016 # the backticks are literal Markdown
-if grep -E '^3\. ' execute/SKILL.md | grep -qF '`worktree.provisioning`'; then
+if grep -qF '`worktree.provisioning`' < <(grep -E '^3\. ' execute/SKILL.md); then
     ok "rule 3's stop names worktree.provisioning as the way out"
 else
     bad "rule 3's stop names worktree.provisioning as the way out" "no '\`worktree.provisioning\`' on execute/SKILL.md's rule 3 line"
 fi
+# coverage: the two sites #712 named as restating /execute's auto rule.
 for f in init-pipeline/SKILL.md SYSTEM-OVERVIEW.md; do
     if grep -qE 'or the current tree is not the repo.s primary working tree|or "toplevel ≠ primary working tree\."' "$f"; then
         bad "$f no longer restates the generic stand-down" "it still names toplevel ≠ primary as a stand-down on its own"
