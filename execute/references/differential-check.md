@@ -33,8 +33,9 @@ The inputs:
   straddles two units**: a value split across two files, a record on the boundary
   of two batches.
 
-A disagreement is one of two things, and the author says which: the bug, or a
-behavior change the slice intends. An intended change is stated in the commit
+A disagreement is one of three things, and the author says which: the bug, a
+behavior change the slice intends, or, when the base copy falls back to the base
+(below), a change an earlier slice on this branch made. An intended change is stated in the commit
 message and the Step 6 review notes; it is never left for a reviewer to find.
 
 ## The base copy
