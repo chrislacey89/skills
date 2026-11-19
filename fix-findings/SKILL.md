@@ -272,7 +272,7 @@ The fixer's instructions, in order:
    Keep the fixup only when the fix finishes or corrects what that message
    says the commit does. When the fix changes behavior the message does not
    describe, or the message describes a different kind of change, clear the
-   target: make the ordinary commit this item states (its trailer included),
+   target: make the ordinary commit this item states for this backend,
    and skip the fold trial. A fold would otherwise put the fix under a
    message that does not describe it.
 
