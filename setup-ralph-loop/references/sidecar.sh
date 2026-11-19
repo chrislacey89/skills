@@ -1732,6 +1732,9 @@ cmd_fixrun() {
     case "$sub" in
         record)
             # cmd_work sets WORK_DIR; this verb does not go through it.
+            if [ -n "$work" ]; then
+                [ ! -d "$sc/work" ] || work_dir_listable "fixrun record" "$sc/work"
+            fi
             [ -z "$work" ] || [ -f "$sc/work/$work.md" ] || refuse "fixrun record refused: --work names $work, which does not exist"
             mkdir -p "$sc/fix-runs" || refuse "fixrun record: cannot create $sc/fix-runs"
             line="$(jq -cn --arg b "$branch" --arg r "$run" --arg s "$sha" --arg t "$thread" --arg w "$work" \

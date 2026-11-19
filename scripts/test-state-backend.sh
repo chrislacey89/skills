@@ -1018,6 +1018,9 @@ else
     runo "$P" work create --kind slice --blocked-by "$u1" --body-file "$tmp/prd.md"
     check "work create --blocked-by on a read-only-listing work directory exits 1" 1 "$rc"
     case "$err" in *"cannot list"*) ok "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create --blocked-by on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
+    runo "$P" fixrun record feat-x "$run1" "$sha_a" --work "$u1"
+    check "fixrun record --work on a read-only-listing work directory exits 1" 1 "$rc"
+    case "$err" in *"cannot list"*) ok "fixrun record --work on a read-only-listing work directory says cannot list on stderr" ;; *) bad "fixrun record --work on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
     chmod 755 "$S/work"
 fi
 
