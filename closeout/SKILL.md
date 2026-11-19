@@ -261,7 +261,7 @@ the flag would otherwise survive indefinitely:
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 rm -f "$PROJECT_DIR/.claude/.review-stamped"
 SC="<this skill's directory>/references/sidecar.sh"
-BRANCH="<the merged PR's local branch, as it was when /closeout started, before this step's merge deleted it; empty only if /closeout started on an already-merged PR whose local branch was already gone>"   # judge existence at the start of /closeout, not now
+BRANCH="<the merged PR's local branch, as it was when /closeout started, before any merge in this step; empty only if /closeout started on an already-merged PR whose local branch was already gone>"   # judge existence at the start of /closeout, not now
 case "$(bash "$SC" backend stamp)" in
   sidecar)
     [ -n "$BRANCH" ] || BRANCH="$(gh pr view <number> --json headRefName -q .headRefName)" \
