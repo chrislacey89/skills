@@ -2062,11 +2062,7 @@ work_edit() {
     work_rewrite "$id" "sidecar: work edit $id" '.body = $body' --arg body "$new"
 }
 
-# work_dir_listable <verb> <dir>: refuse when <dir> cannot be listed. A
-# directory that can be entered but not read matches no W-*.md glob, and one
-# that can be read but not entered (no search permission) expands the glob but
-# fails every stat, so a scan of either reads as an empty store: no items, or
-# an id that is already taken.
+# work_dir_listable <verb> <dir>: refuse when <dir> cannot be listed.
 work_dir_listable() {
     { [ -r "$2" ] && [ -x "$2" ]; } || refuse "$1: cannot list $2"
 }
