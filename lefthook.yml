@@ -125,6 +125,8 @@ pre-push:
       run: bash scripts/test-differential-check.sh
     walk-commits-range-tests:
       run: bash scripts/test-walk-commits-range.sh
+    runtime-check-gate-tests:
+      run: bash scripts/test-runtime-check-gate.sh
     delta-review-scope-tests:
       run: bash scripts/test-delta-review-scope.sh
     prd-amendment-gate-tests:

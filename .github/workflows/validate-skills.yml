@@ -356,6 +356,11 @@ jobs:
       - name: Run walk-commits range suite
         run: bash scripts/test-walk-commits-range.sh
 
+      # #711: /execute runs a declared verify.runtime_check before its tests and
+      # at Tier 2.5, stops when it fails, and reads a field sidecar.sh writes.
+      - name: Run runtime-check gate suite
+        run: bash scripts/test-runtime-check-gate.sh
+
       # #347: the post-fix /pre-merge re-run reads the post-stamp delta, decided
       # from branch state by a block in Phase 1 step 4, and /fix-findings' menu
       # counts rounds from a commit line. Both are executable prose; this runs
