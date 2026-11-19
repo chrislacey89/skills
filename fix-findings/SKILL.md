@@ -263,7 +263,7 @@ The fixer's instructions, in order:
 
    **Intent check, before the commit.** Blame names the last commit that
    touched the lines, and that commit can be about something else: a
-   formatting pass, a rename, a move. Read what the target says it does:
+   reformat, a rename, a move. Read what the target says it does:
 
    ```bash
    git log -1 --format=%B "<the SHA FIXUP_TARGET printed>"
