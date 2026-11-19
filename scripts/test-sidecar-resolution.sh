@@ -455,6 +455,9 @@ for a in prds slices stamp; do
 done
 check "a backend read appended the new remote as an alias in the sidecar" 1 \
     "$(jq '[.keys[] | select(. == "remote:github.com/acme/guest-mirror")] | length' "$GSC/sidecar.json")"
+check "the alias a read appends is committed in the sidecar (docs/state-backend.md)" 1 \
+    "$(git -C "$GSC" log --format=%s | grep -c '^sidecar: add alias .*remote:github.com/acme/guest-mirror')"
+check "the alias commit leaves the sidecar clean" "" "$(git -C "$GSC" status --porcelain)"
 runo "$GUEST" stamp write "$gbranch" "$ghead"
 check "stamp write on the guest project succeeds" 0 "$rc"
 runo "$GUEST" stamp read "$gbranch"

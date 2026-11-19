@@ -71,7 +71,7 @@ The file's shape is locked in the parent PRD, chrislacey89/skills#407, § Implem
 
 `stamp clear` leaves no record of what was reviewed, so after a successful `stamp write` `/pre-merge` also copies the SHA to the work item's `reviewed_sha`, when there is a work item. The copy is the item's history. Review currency is still read from the stamp alone, and `scripts/test-review-currency-marker.sh` fails when a skill names the field for anything but that write.
 
-Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`.
+Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`. A read can commit in the sidecar too: a verb that finds the sidecar, `backend` and `stamp read` among them, adds a key of this checkout that the sidecar does not list yet, such as a new remote, as an alias, and commits that.
 
 ## Work items
 
