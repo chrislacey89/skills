@@ -23,7 +23,7 @@
 #   3. WHERE THE ATTRIBUTE LIVES — `:root[data-theme]` only matches <html>, so
 #      no example element other than <html> carries `data-theme=`, and every
 #      script that writes the theme writes it on `document.documentElement`.
-#   4. COVERAGE — every light token except the layout-only ones (`--sans`,
+#   4. COVERAGE — every light token except the layout-only ones (`--sans`, `--measure`,
 #      `--mono`, `--s<n>`, `--r<n>`) is also defined in both dark copies, so a
 #      new light color cannot land without a dark value. Each `--flag-*` color is
 #      reported by name (#769). Names are read from every `;`-separated field
@@ -138,7 +138,7 @@ check "every theme write targets document.documentElement" \
 
 # 4. COVERAGE
 # Layout tokens are theme-independent, so light is their only home.
-themed="$(printf '%s\n' "$light_names" | grep -vE '^--(sans|mono|s[0-9]+|r[0-9]+)$' || true)"
+themed="$(printf '%s\n' "$light_names" | grep -vE '^--(sans|mono|measure|s[0-9]+|r[0-9]+)$' || true)"
 check "light declares themed tokens to check" "no themed tokens found in the light block" test -n "$themed"
 for copy in guarded attr; do
     if [[ "$copy" == guarded ]]; then have="$guarded_names"; label='the media-guarded dark copy'

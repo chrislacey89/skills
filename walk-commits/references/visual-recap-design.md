@@ -74,6 +74,8 @@ this section).
     --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:24px;--s6:32px;--s7:48px;--s8:72px;
     /* radii */
     --r1:5px;--r2:8px;--r3:14px;
+    /* reading measure for prose: callouts, note-pairs, ledes, notes */
+    --measure:74ch;
     /* light — used unless the system is dark or the page pins dark */
     --bg:hsl(225 30% 99%);
     --bg-subtle:hsl(225 28% 97%);
@@ -188,10 +190,10 @@ this section).
 
   /* A few stateful classes — the one place classes beat inline styles, because the
      active state is toggled by the small script in §10. Everything else stays inline. */
-  .vr-callout{border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev);max-width:74ch}
+  .vr-callout{border:1px solid var(--border);border-radius:var(--r2);background:var(--bg-elev);max-width:var(--measure)}
   /* Prose keeps a reading measure on a wide viewport: callouts, note-pairs and §12 unit ledes.
-     Code, tables and diagrams stay full width. 74ch is the measure `.lede` already uses (§D4). */
-  .vr-measure{max-width:74ch}
+     Code, tables and diagrams stay full width. */
+  .vr-measure{max-width:var(--measure)}
   .vr-callout.is-active{box-shadow:0 0 0 1px var(--accent),0 18px 40px -16px var(--accent-glow)}
   .vr-line.is-active{background:var(--mark-bg)}
   .vr-marker{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;
@@ -2139,7 +2141,7 @@ lesson.
   /* screen primitives (§D4) — see §1 for every color used here */
   .ovl{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin:0 0 var(--s2)}
   .screen h1{font-size:31px;font-weight:600;letter-spacing:-0.022em;margin:0 0 var(--s3);line-height:1.15}
-  .lede{color:var(--fg-muted);font-size:15.5px;line-height:1.65;margin:0 0 var(--s5);max-width:74ch;text-wrap:pretty}
+  .lede{color:var(--fg-muted);font-size:15.5px;line-height:1.65;margin:0 0 var(--s5);max-width:var(--measure);text-wrap:pretty}
   .lede b{color:var(--fg)}
   .chips{display:flex;gap:var(--s2);flex-wrap:wrap;margin-bottom:var(--s4)}
   .chip{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid var(--border-strong);color:var(--fg-muted);background:var(--bg-elev)}
@@ -2155,7 +2157,7 @@ lesson.
   .pane .code{margin:0;font-family:var(--mono);font-size:12.5px;line-height:1.75;padding:var(--s3) 0}
   .pane .ln{display:block;padding:0 var(--s4);white-space:pre}
   .pane .ln.d{background:var(--del-bg)} .pane .ln.a{background:var(--add-bg)}
-  .note{max-width:74ch;border-left:3px solid var(--accent);background:var(--bg-subtle);padding:var(--s3) var(--s4);border-radius:0 var(--r2) var(--r2) 0;font-size:13.5px;line-height:1.65;color:var(--fg-muted);margin-top:var(--s4);text-wrap:pretty}
+  .note{max-width:var(--measure);border-left:3px solid var(--accent);background:var(--bg-subtle);padding:var(--s3) var(--s4);border-radius:0 var(--r2) var(--r2) 0;font-size:13.5px;line-height:1.65;color:var(--fg-muted);margin-top:var(--s4);text-wrap:pretty}
   .note.warn{border-left-color:var(--risk)} .note.bad{border-left-color:var(--del)} .note.good{border-left-color:var(--add)}
   .note .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:var(--s1)}
   .note.warn .lbl{color:var(--risk)} .note.bad .lbl{color:var(--del)} .note.good .lbl{color:var(--add)}
