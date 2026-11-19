@@ -10,11 +10,6 @@
 #   - runs it against near-misses that must stay quiet (a path, a URL, a fenced
 #     block, a skill named in a table that is not a skill table);
 #   - requires the unplanted fixture and the real tree to pass.
-#
-# SYSTEM-OVERVIEW.md is read, never edited, by the change that added the
-# checker. If the real tree is missing a row there, the fixtures below add it
-# to their own copy so each planted fault is the ONLY fault in its fixture, and
-# the real-tree assertion still reports the gap.
 
 # shellcheck disable=SC2016  # fixture text is literal markdown with backticks, never an expansion
 set -uo pipefail
@@ -53,25 +48,6 @@ make_fixture() {
         mkdir -p "$dest/$d"
         cp "$f" "$dest/$d/SKILL.md"
     done
-    # A gap the real SYSTEM-OVERVIEW.md has is not what a fixture is testing:
-    # take the Handoff Table rows the baseline needed from the one probe below.
-    if [[ -n "${overview_fix:-}" ]]; then cp "$overview_fix" "$dest/SYSTEM-OVERVIEW.md"; fi
-}
-
-# overview_fix_from <fixture-dir> — add a stand-in Handoff Table row for every
-# skill the real file lacks, once, and remember the repaired copy.
-overview_fix_from() {
-    local dest="$1" missing name
-    missing="$(bash "$checker" "$dest" 2>&1 | sed -n "s/^FAULT: SYSTEM-OVERVIEW.md Handoff Table is missing skill '\(.*\)'\$/\1/p")"
-    for name in $missing; do
-        awk -v row="| \`/$name\` | stand-in | stand-in | stand-in |" '
-            /^### Handoff Table/ { on = 1 }
-            on && /^\| `\// { last = NR }
-            { lines[NR] = $0 }
-            END { for (i = 1; i <= NR; i++) { print lines[i]; if (i == last) print row } }
-        ' "$dest/SYSTEM-OVERVIEW.md" > "$dest/SYSTEM-OVERVIEW.md.new" && mv "$dest/SYSTEM-OVERVIEW.md.new" "$dest/SYSTEM-OVERVIEW.md"
-    done
-    overview_fix="$dest/SYSTEM-OVERVIEW.md"
 }
 
 # expect_fault <label> <fixture-dir> <message-fragment>
@@ -112,9 +88,7 @@ PY
 }
 
 section "the baseline fixture passes, so every fault below is the only one"
-overview_fix=""
 make_fixture "$work/base"
-overview_fix_from "$work/base"
 base="$work/base"
 expect_clean "unplanted fixture exits 0" "$base"
 out="$(bash "$checker" "$base" 2>&1)"
