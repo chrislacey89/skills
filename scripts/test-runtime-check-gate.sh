@@ -81,7 +81,7 @@ section "the field is one sidecar.sh writes (stream 1 adds it)"
 names="$(sed -n 's/^VERIFY_FIELD_NAMES=(\(.*\))$/\1/p' init-pipeline/scripts/sidecar.sh)"
 if [ -z "$names" ]; then
     bad "sidecar.sh has a VERIFY_FIELD_NAMES line" "not found"
-elif tr ' ' '\n' <<<"$names" | grep -qx runtime_check; then
+elif grep -qx runtime_check < <(tr ' ' '\n' <<<"$names"); then
     ok "runtime_check is in sidecar.sh's VERIFY_FIELD_NAMES ($names)"
 else
     bad "runtime_check is in sidecar.sh's VERIFY_FIELD_NAMES" "the list is: $names"
