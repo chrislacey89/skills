@@ -968,9 +968,6 @@ clean "racing creates leave the project clean" "$P"
 # -----------------------------------------------------------------------------
 section "work: a work directory that cannot be listed is a refusal, never an empty store"
 
-# A directory that can be entered but not listed (mode 311) matches no W-*.md
-# glob, so listing, trace and create's max-id scan read it as an empty store:
-# list printed nothing, set wrote a blocked_by cycle, create reused W-1.
 # uid 0 lists mode-311 directories, so root skips.
 if [ "$(id -u)" -eq 0 ]; then
     skipped "unlistable work directory: root lists mode-311 directories, so the arms cannot run"
