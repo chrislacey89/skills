@@ -234,7 +234,7 @@ count_faults() {
             # starts with `*` (bold, bullet) is prose and is checked.
             case "$f" in
                 */site/src/*|site/src/*)
-                    if printf '%s' "$text" | grep -qE '^[[:space:]]*(//|/\*|\*)'; then continue; fi
+                    if grep -qE '^[[:space:]]*(//|/\*|\*)' <<<"$text"; then continue; fi
                     ;;
             esac
             num="$(printf '%s' "$text" | grep -oiE '([0-9]+|twenty|thirty|forty|fifty)[ -]?(one|two|three|four|five|six|seven|eight|nine)? (composable |pipeline )?skills?' | head -1 | sed -E 's/ (composable |pipeline )?skills?$//' || true)"
