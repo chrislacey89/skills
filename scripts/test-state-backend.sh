@@ -991,7 +991,7 @@ else
     check "trace on an unlistable work directory exits 1" 1 "$rc"
     case "$err" in *"cannot list"*) ok "trace on an unlistable work directory says cannot list on stderr" ;; *) bad "trace on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
-    check "work create on an unlistable work directory exits 1 (no id reused)" 1 "$rc"
+    check "work create on an unlistable work directory exits 1" 1 "$rc"
     case "$err" in *"cannot list"*) ok "work create on an unlistable work directory says cannot list on stderr" ;; *) bad "work create on an unlistable work directory says cannot list on stderr" "got [$err]" ;; esac
     # A direct read of a named item is not a listing: mode 311 can enter the
     # directory, so an existing item opens; only a miss is double-checked (a miss
@@ -1017,7 +1017,7 @@ else
     runo "$P" work list --unblocked
     check "work list --unblocked on a read-only-listing work directory exits 1" 1 "$rc"
     runo "$P" work create --kind slice --body-file "$tmp/prd.md"
-    check "work create on a read-only-listing work directory exits 1 (no id reused)" 1 "$rc"
+    check "work create on a read-only-listing work directory exits 1" 1 "$rc"
     case "$err" in *"cannot list"*) ok "work create on a read-only-listing work directory says cannot list on stderr" ;; *) bad "work create on a read-only-listing work directory says cannot list on stderr" "got [$err]" ;; esac
     runo "$P" trace "$u1"
     check "trace on a read-only-listing work directory exits 1" 1 "$rc"
