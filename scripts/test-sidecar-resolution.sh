@@ -849,7 +849,7 @@ git -C "$PF/up" branch develop
 git clone -q "$PF/up" "$PF/clone"
 git -C "$PF/clone" remote set-head origin develop >/dev/null
 PFH="## Repo profile (from the operator's sidecar; follow it)"
-ALL_UNASKED="Not declared (ask before running anything not listed): typecheck, test, lint, package_manager, hook_manager, hazards, conventions"
+ALL_UNASKED="Not declared (ask before running anything not listed): typecheck, test, lint, package_manager, hook_manager, runtime_check, hazards, conventions"
 
 prun "$PF/clone" profile
 check "a miss prints the all-unasked block, with base-ref's fallback" \
@@ -887,7 +887,7 @@ check "config set verify.lint to empty succeeds" 0 "$rc"
 prun "$PF/clone" profile
 contains "a declared-empty field on schema 2 renders as none" "  lint: none" "$out"
 contains "the unasked fields stay under Not declared" \
-    "Not declared (ask before running anything not listed): test, package_manager, hook_manager, hazards, conventions" "$out"
+    "Not declared (ask before running anything not listed): test, package_manager, hook_manager, runtime_check, hazards, conventions" "$out"
 lacks "a declared-empty field is not under Not declared" "lint, " "${out##*Not declared}"
 
 prun "$PF/clone" config set verify.test "pnpm run test"
@@ -904,7 +904,21 @@ Verify:
 Hazards (do not run; ask first):
   - Bash(pnpm test:e2e*): resets the shared staging database
   - never push to the staging branch
-Not declared (ask before running anything not listed): package_manager, hook_manager, conventions" "$rc $out"
+Not declared (ask before running anything not listed): package_manager, hook_manager, runtime_check, conventions" "$rc $out"
+
+# runtime_check (#711): a verify field like the others, so one list entry makes
+# it writable, renders it in the block, and drops it from Not declared.
+cp "$PSJ" "$PF/pre-rc.json"
+prun "$PF/clone" config set verify.runtime_check "docker compose -p app-feat ps --status running -q db"
+check "config set verify.runtime_check succeeds" 0 "$rc"
+check "the runtime_check write is committed" "sidecar: set verify.runtime_check" "$(git -C "$PF_ROOT/pf" log -1 --format=%s)"
+prun "$PF/clone" profile
+contains "profile prints a declared runtime_check" "  runtime_check: docker compose -p app-feat ps --status running -q db" "$out"
+lacks "a declared runtime_check is not under Not declared" "runtime_check" "${out##*Not declared}"
+prun "$PF/clone" config set verify.runtime_check ""
+prun "$PF/clone" profile
+contains "a declared-empty runtime_check renders as none" "  runtime_check: none" "$out"
+cp "$PF/pre-rc.json" "$PSJ"; git -C "$PF_ROOT/pf" commit -q -am "fixture: runtime_check unasked again"
 
 # Every refused hazard list writes nothing and commits nothing.
 cp "$PSJ" "$PF/good.json"
@@ -1081,7 +1095,7 @@ cp "$PF/good.json" "$PSJ"; pset 'del(.verify.lint, .verify.hazards)'
 git -C "$PF_ROOT/pf" commit -q -am "fixture: two keys unasked"
 before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
-check "Q5 names exactly the unasked keys" "unasked=lint, package_manager, hook_manager, hazards, conventions" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
+check "Q5 names exactly the unasked keys" "unasked=lint, package_manager, hook_manager, runtime_check, hazards, conventions" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
 contains "Q5 proposes the lockfile's package manager" "detected.package_manager=pnpm" "$q5out"
 contains "Q5 proposes a package.json script through the package manager" "detected.test=pnpm run test" "$q5out"
 check "Q5 proposes nothing for lint when the script is absent" "detected.lint=" "$(printf '%s\n' "$q5out" | grep '^detected.lint=')"
@@ -1089,7 +1103,7 @@ contains "Q5 proposes the hook manager" "detected.hook_manager=lefthook" "$q5out
 check "Q5 writes nothing to the sidecar before the user confirms" "$before" "$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
 check "Q5 leaves sidecar.json clean" "" "$(git -C "$PF_ROOT/pf" status --porcelain)"
 rm -f "$PF/clone/package.json" "$PF/clone/pnpm-lock.yaml" "$PF/clone/lefthook.yml"
-cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = "" | .conventions = []'
+cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = "" | .verify.runtime_check = "" | .conventions = []'
 git -C "$PF_ROOT/pf" commit -q -am "fixture: every key answered"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"
 check "Q5 on a fully answered sidecar prints no unasked line" "" "$(printf '%s\n' "$q5out" | grep '^unasked=')"
@@ -1104,7 +1118,7 @@ printf '{ not json\n' > "$PSJ"
 q5out="$(cd "$PF/clone" && SKILL_KIT_SIDECAR_ROOT="$PF_ROOT" bash -c "$q5" 2>&1)"; rc=$?
 check "Q5 on an unreadable sidecar.json exits 1" 1 "$rc"
 lacks "Q5 on an unreadable sidecar.json prints no unasked line" "unasked=" "$q5out"
-cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = "" | .conventions = []'
+cp "$PF/good.json" "$PSJ"; pset '.verify.package_manager = "pnpm" | .verify.hook_manager = "" | .verify.runtime_check = "" | .conventions = []'
 
 # /execute Step 4 reads the declared commands from profile and hard-codes no pnpm line.
 ex4="$(awk '/^### 4\. Verify/{f=1} /^#### Tier 1/{f=0} f' "$repo_root/execute/SKILL.md")"

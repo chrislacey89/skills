@@ -18,7 +18,7 @@
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
 #   sidecar.sh config set system <label>   (joins this project's group for related-solutions-dirs; "" leaves it)
-#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager> <cmd>   ("" declares none)
+#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager|runtime_check> <cmd>   ("" declares none)
 #   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
 #   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
 #   sidecar.sh config set design <json {ref, note?}>   (one pointer the pack names and never fetches; "" declares none)
@@ -1010,7 +1010,7 @@ config_set_system() {
 # The verify command fields, in the order profile prints them. config set
 # accepts exactly these plus hazards, and VERIFY_FIELDS is derived from this
 # list, so a field added here is both writable and rendered.
-VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager)
+VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager runtime_check)
 VERIFY_FIELDS="[$(printf '"%s",' "${VERIFY_FIELD_NAMES[@]}")"
 VERIFY_FIELDS="${VERIFY_FIELDS%,}]"
 
