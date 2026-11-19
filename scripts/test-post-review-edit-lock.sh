@@ -933,6 +933,12 @@ if [ -f "$stamprepo/$stamp_rel" ]; then
 else
     assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
 fi
+# An abbreviated SHA of a real commit resolves as a commit but is not the full
+# SHA Phase 3 printed: a short marker reads as "no stamp" at /closeout.
+rm -f "$ghbin/edits"
+run_stamp_block 0 "$(git -C "$stamprepo" rev-parse --short=7 HEAD)"
+assert_eq 1 "$stamp_block_status" "REVIEWED_SHA filled with a short SHA of a real commit: the PR-body stamp block aborts"
+assert_eq "" "$(cat "$ghbin/edits" 2>/dev/null || true)" "…before it edits the PR body"
 
 # -----------------------------------------------------------------------------
 
@@ -1084,6 +1090,11 @@ if [ -f "$stamprepo/$stamp_rel" ]; then
 else
     assert_eq "no flag" "no flag" "…and leaves no $stamp_rel behind"
 fi
+# An abbreviated SHA of a real commit is not the full SHA either.
+sidecar_reviewed="$(git -C "$stamprepo" rev-parse --short=7 HEAD)"
+run_sidecar_stamp_block
+assert_eq 1 "$sidecar_block_status" "REVIEWED_SHA filled with a short SHA of a real commit: the sidecar stamp block aborts"
+assert_eq "" "$(ls "$sc_root"/lock/reviews/*.json 2>/dev/null || true)" "…and writes no reviews/*.json"
 sidecar_reviewed=""
 
 # -----------------------------------------------------------------------------
