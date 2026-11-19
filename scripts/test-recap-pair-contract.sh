@@ -173,6 +173,10 @@ plant "the .vr-pair rule without overflow-x:auto is reported" \
     '.vr-pair{display:grid;gap:var(--s4);align-items:start;overflow-x:auto}' '.vr-pair{display:grid;gap:var(--s4);align-items:start}'
 plant "a .vr-series that does not name its layout is reported" \
     '<div class="vr-series" data-layout="split">' '<div class="vr-series">'
+plant "the .panes rule without overflow-x:auto is reported" \
+    '.panes{display:flex;flex-wrap:wrap;gap:var(--s4);overflow-x:auto}' '.panes{display:flex;flex-wrap:wrap;gap:var(--s4)}'
+plant "a .vr-pair outside any .vr-series is reported" \
+    '<div class="vr-series" data-layout="split">' '<div class="vr-wrap">'
 plant "a code line with its own overflow is reported" \
     '.term .tl{display:block;padding:0 var(--s4);white-space:pre;' '.term .tl{display:block;overflow-x:auto;padding:0 var(--s4);white-space:pre;'
 }
