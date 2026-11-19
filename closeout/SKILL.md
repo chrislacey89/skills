@@ -362,6 +362,8 @@ wt remove <worktree-or-branch>          # if worktrunk is available
 git worktree remove <worktree-path>     # plain git
 ```
 
+When worktrunk made the worktree, remove it with `wt remove`: worktrunk's [hook docs](https://worktrunk.dev/hook/#hook-types) list `pre-remove` (cleanup before deletion, run in the worktree being removed) among the hooks it runs during `wt remove`, and `git worktree remove` is not a worktrunk command.
+
 If the worktree has uncommitted or untracked changes you have not accounted for, `git worktree remove` will refuse — investigate rather than forcing `--force`. (Everything reviewed in the PR is already merged; anything left behind is unexpected.)
 
 ### 6. Prune the merged branch (skip when isolation is host-owned, Step 0)
