@@ -444,9 +444,9 @@ opened, print this instead. It states the unfinished state plainly and
 points at the record, so it cannot be read as a finished run. When the PR
 carries no review stamp (the error came before or during Close step 4's
 `/pre-merge --loop`), replace the first line with
-`**Next session:** /pre-merge --loop on PR #<n> (the review never ran), then settle the ledger, then /closeout`,
-since `/closeout` merges a PR with no stamp after a one-line note and this one
-was never reviewed:
+`**Next session:** /pre-merge --loop on PR #<n> (no review stamp: the review did not finish), then settle the ledger, then /closeout`,
+since `/closeout` merges a PR with no stamp after a one-line note, and nothing
+records that this one's review finished:
 
 ```
 **Next session:** settle the open ledger rows, then /closeout
