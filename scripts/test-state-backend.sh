@@ -1038,6 +1038,29 @@ check "/prd-to-issues states work set replaces decomposed_into" 1 \
 check "/execute states work set replaces decomposed_into" 1 \
     "$(grep -c '`work set` replaces it on every write' "$EXEC" | awk '{print ($1 > 0)}')"
 
+# The GitHub path's pair (#520): /prd-to-issues §8 writes a `Decomposed into:`
+# comment and /execute Step 0's issue-shape gate matches it. Both texts are
+# extracted from the real files, and the writer's line is run through the
+# reader's own regex with jq, the reader's engine. §8 says what the reader
+# does (any matching comment among the last N passes, not the newest), so the
+# regex and N it quotes are tied to the reader's too.
+# shellcheck disable=SC2016  # the needles are the skills' literal text
+{
+d_re="$(grep -o 'select(test("^Decomposed into[^"]*"))' "$EXEC" | head -n 1 | sed 's/^select(test("//; s/"))$//')"
+d_last="$(grep -o 'comments(last: [0-9]*)' "$EXEC" | head -n 1 | grep -o '[0-9][0-9]*')"
+}
+pti8="$(awk '/^### 8\. /{on=1} /^### 9\. /{on=0} on' "$PTI")"
+d_tpl="$(printf '%s\n' "$pti8" | awk '/^```$/{if (on) exit; on=1; next} on' | grep '^Decomposed into:')"
+check "/execute's issue-shape gate carries the Decomposed into matcher" '^Decomposed into: #[0-9]+' "$d_re"
+check "/prd-to-issues §8 carries one Decomposed into template line" 1 "$(printf '%s\n' "$d_tpl" | grep -c .)"
+d_line="$(printf '%s' "$d_tpl" | sed 's/#<slice-\([0-9]*\)>/#4\1/g')"
+check "the template, filled in, has no placeholder left" 0 "$(printf '%s' "$d_line" | grep -c '<')"
+check "the reader's regex matches the line /prd-to-issues §8 writes" true \
+    "$(jq -n --arg l "$d_line" --arg re "$d_re" '$l | test($re)' 2>&1)"
+check "§8 quotes the reader's regex" 1 "$(printf '%s\n' "$pti8" | grep -cF "\`$d_re\`" | awk '{print ($1 > 0)}')"
+check "§8 states the reader's comment window" 1 "$(printf '%s\n' "$pti8" | grep -cF "last $d_last comments" | awk '{print ($1 > 0)}')"
+check "§8 no longer says readers take the most recent comment" 0 "$(printf '%s\n' "$pti8" | grep -ci 'consume the most recent')"
+
 gate_shells="bash"
 if command -v zsh >/dev/null 2>&1; then gate_shells="bash zsh"
 elif [ -n "${CI:-}" ]; then bad "zsh is on PATH for the gate's zsh arm" "zsh missing and CI is set"

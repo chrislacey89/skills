@@ -436,7 +436,7 @@ Decomposed into: #<slice-1>, #<slice-2>, #<slice-3>
 
 This comment is the signal downstream skills read to know the PRD has been decomposed. `/execute`'s issue-shape and blocker gate checks for it before accepting a PRD-shaped issue as a slice task.
 
-If a PRD is re-decomposed later (e.g., after `/correct-course`), post a new `Decomposed into:` comment; readers consume the most recent one. Keeping only one authoritative comment is this skill's responsibility.
+If a PRD is re-decomposed later (e.g., after `/correct-course`), post a new `Decomposed into:` comment. `/execute` Step 0 does not pick the newest one: it passes the PRD when any of its last 100 comments has a line matching `^Decomposed into: #[0-9]+`, so a superseded comment still satisfies it.
 
 On the sidecar backend, the signal is the PRD's `decomposed_into` field instead of a comment. Set `SLICES` to the open slices of this decomposition, in creation order: on a first decomposition every id §7 created, and on a re-decomposition the slices it kept plus the ones it created, never a superseded one.
 
