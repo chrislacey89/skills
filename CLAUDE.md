@@ -176,6 +176,8 @@ When modifying a skill:
 
 A stale surface routes agents and users to a skill that no longer exists, or under a role it no longer holds — the drift #143 reconciled once by hand. Keeping the surfaces in lockstep with the change that causes the drift makes that reconciliation standing rather than after-the-fact, and puts the inventory knowledge in the world instead of the maintainer's head.
 
+The README and the site group skills by the phase where they are used; the role lists here and in `SYSTEM-OVERVIEW.md` say how a skill is entered. They are different axes, so a skill's group in one is not its role in the other. `scripts/check-skill-inventory.sh` checks that the skill directories, the README tables, the Handoff Table, both role lists and the `catalog` array agree, that the two role lists put each skill in the same role, that stated skill counts match, and that every `/name` a `SKILL.md` mentions resolves; `scripts/test-skill-inventory.sh` pins it.
+
 ### Commands a skill documents
 
 Skills ship executable prose: a downstream agent copies a fenced block out of a `SKILL.md` and runs it unsupervised in someone else's repo. A wrong command does not fail here — it fails later, quietly, somewhere the author will never see. Two rules govern it, and they apply in this order.
