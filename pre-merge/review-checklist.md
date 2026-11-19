@@ -292,6 +292,33 @@ Beck's *Two Hats* (TDD, refactoring-catalog): refactor and feature-add are two h
 
 ---
 
+## 12. Readable structure
+
+**Runs in:** sub-agent A.
+
+**Principle:** A reader who opens a file should meet one job, the point of the file before its details, and call sites that say what each argument is. Martin's Stepdown Rule (*Clean Code* ch. 3 "Functions") and newspaper order (ch. 5 "Formatting") put the highest level first so the reader can stop once they have enough detail; the same ch. 3 treats every extra positional argument as a reason to go and check the signature, and Fowler's Introduce Parameter Object (*Refactoring*, 2nd ed., ch. 6) is the remedy. Ousterhout (*A Philosophy of Software Design* ch. 9) supplies the test for when two pieces of code are separate jobs and when they belong together.
+
+**The thresholds, the exceptions, and the scope limits are stated once**, in [references/readable-structure.md](references/readable-structure.md). Read it before raising a finding here. This section names the patterns and does not restate that file.
+
+**Applies to added lines only.** The subject of every finding is code this diff adds. Existing code laid out another way is never a finding, and a diff that only edits existing code produces none.
+
+**The repo's own conventions win, and one file is not a convention.** Before raising a finding, read the `Conventions` lines of the repo profile in the brief, read the host repo's CLAUDE.md or AGENTS.md and its lint and formatter configuration at their source, and read enough of the established code to see how the repo lays its files out: the files beside the one in question, in the same language. Where a written convention or a layout the established code shows across the repo settles the question, raise nothing. The layout of the one file the new code lands in settles nothing by itself. The reference's Scope section is the rule for both.
+
+**Violation patterns:**
+- **A second job in one file.** The diff adds code whose job is unrelated to the job of the file it lands in, as the reference defines unrelated. A helper that only the file's job uses is not a second job.
+- **Details before the point.** New code puts helpers, or detail constants and types, above the exported function or component they serve, in a language that leaves the order free. It fires on a file the diff creates, and on new code in an existing file whose own order is not the repo's. It does not fire where the new code follows an order the rest of the repo shares. The order is the finding. How a function is declared is never one by itself.
+- **A long positional parameter list.** A function the diff adds has a parameter list over the reference's threshold and falls under none of its exceptions.
+
+**Severity: Suggestion, never Concern.** The code works either way, and each default has exceptions a reviewer can misjudge. A pattern that fires stays a Suggestion however many times it fires in one diff.
+
+**Verification procedure — cited lines, not impressions.** A finding cites the file and the line of the added code: the first line of the second job, the first helper above the exported function, the signature. It names the remedy the reference gives (its own file, the order, the object). Zero findings on a diff that adds code is a real outcome; do not invent one to fill the section.
+
+**Out of scope:** Whether a module is deep or shallow (that's Deep Modules). Whether a hunk belongs in the diff at all, including a reorder or conversion of existing code (that's Surgical Scope). Anything a formatter or linter in the repo already decides.
+
+**Review-cadence note.** Added on principle grounds (Martin, Fowler, Ousterhout, Boswell & Foucher), not from a triggering incident. If after a reasonable sample of PRs its findings are routinely declined rather than taken, it is policy-resistant filler and should be removed rather than left as ceremony.
+
+---
+
 ## Severity Classification
 
 - **Observation:** A pattern worth noting but no principle is violated. The reviewer noticed something the developer should be aware of. Example: "The auth module now exports 7 functions — not a violation, but approaching the threshold where consolidation might help."

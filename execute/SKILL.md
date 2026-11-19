@@ -9,6 +9,7 @@ sources:
     - "The Twelve-Factor App — Adam Wiggins"
     - "Release It! — Michael Nygard"
     - "Growing Object-Oriented Software, Guided by Tests — Freeman & Pryce"
+    - "Clean Code — Robert C. Martin"
 ---
 
 # Execute
@@ -583,6 +584,14 @@ If `/tdd` is not available, follow this minimum discipline:
 Do not write all tests upfront — write one, make it pass, then move to the next.
 
 **[TypeScript projects] Library callback returns.** When a logical unit implements a callback the library asks the application to provide (agent hooks, middleware, proxy, tool handlers, render props, lifecycle methods), anchor the returned value to the library's declared return type with `satisfies LibraryReturnType`, a fresh object literal, or a derived type (`ReturnType<typeof …>`). Never return a typed local variable — TypeScript's excess-property check does not run on returns of typed values, so fields the library's signature does not declare are silently dropped at runtime. See `/tdd` Refactor step for the full rationale; if the research artifact (archive file or spike issue) carries a Library Callback Contracts snapshot (`/research` Phase 1.25), use its accepted-fields list as the pinned source.
+
+**Lay out new code for its reader.** Three defaults apply to the code this slice adds. [references/readable-structure.md](references/readable-structure.md) is their one statement: read it for the thresholds and the exceptions before you apply them.
+
+- **One job per file.** When new code adds an unrelated second job to a file, put it in its own file, named for that job.
+- **Highest level on top.** A new file reads top-down: the exported function or component first, the helpers it calls below it, and detail below that (the Stepdown Rule, *Clean Code* ch. 3; the newspaper order, ch. 5). In JavaScript and TypeScript, write named functions as `function` declarations, which hoist, so the order can follow the reading order; keep arrow functions for inline callbacks and values.
+- **Parameter objects.** A function with a long parameter list, or with parameters a caller could swap unnoticed, takes one named object: `createInvite({ email, role, teamId, inviterId })` (*Clean Code* ch. 3 on function arguments; Fowler, *Refactoring*, Introduce Parameter Object).
+
+Two limits hold for all three. The repo's own conventions win: anything under `Conventions` in Step 1's `profile` output, or in the host repo's CLAUDE.md or AGENTS.md, overrides a default. And they cover new code only: reordering, splitting, or converting existing code is its own change, never folded into this branch.
 
 **Comment the code, not the incident.** A comment you write here carries the *current* why — what this code does, and why it is shaped this way. The incident that led you here goes to the commit message and the PR body instead: what the prior behavior was, which earlier attempt this supersedes, what you rejected on the way. Before committing a unit, reread the comments you added to it and move any sentence that explains history rather than code. **Write the comment to the next person who edits this file, never to the reviewer of this diff.** A sentence that answers an objection the review might raise — why this and not the adapter, that the component is the real shipped one, that the parallel path is deliberate — is addressed to the reviewer, and it goes in the PR body with the rest of the review-facing account. The tell is emphasis: a capitalized REAL, SAME, or DELIBERATE is a comment arguing with someone who is not the file's next editor. Say each thing once: a comment that repeats a sentence already in the file, or already on the declaration beside it, is the copy to delete.
 

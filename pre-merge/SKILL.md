@@ -13,6 +13,7 @@ sources:
     - "Noise: A Flaw in Human Judgment — Daniel Kahneman, Olivier Sibony & Cass Sunstein"
     - "Best Kept Secrets of Peer Code Review — Jason Cohen"
     - "Engineering a Safer World — Nancy Leveson"
+    - "Clean Code — Robert C. Martin"
 ---
 
 # Pre-Merge

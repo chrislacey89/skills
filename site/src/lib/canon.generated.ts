@@ -84,6 +84,16 @@ export const canon: CanonWork[] = [
 		],
 	},
 	{
+		full: "Clean Code — Robert C. Martin",
+		title: "Clean Code",
+		author: "Robert C. Martin",
+		type: "book",
+		citations: [
+			{ skill: "execute", tier: "secondary" },
+			{ skill: "pre-merge", tier: "secondary" },
+		],
+	},
+	{
 		full: "Code Reading: The Open Source Perspective — Diomidis Spinellis",
 		title: "Code Reading: The Open Source Perspective",
 		author: "Diomidis Spinellis",
