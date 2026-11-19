@@ -820,6 +820,11 @@ runo "$P" work set "$s2" blocked_by "$prd"
 check "set blocked_by refuses when another work file does not parse" 1 "$rc"
 case "$err" in *"$W/W-97.md does not parse"*) named=1 ;; *) named=0 ;; esac
 check "the read refusal names the unparseable file" 1 "$named"
+# An empty list is not checked (docs/state-backend.md): it names no blocker, so
+# the unreadable file does not matter. $s1 holds no blockers, so this changes
+# nothing the later arms read.
+runo "$P" work set "$s1" blocked_by ""
+check "set blocked_by to empty exits 0 even when another work file does not parse" 0 "$rc"
 rm -f "$W/W-97.md"
 # A cycle check that cannot run is a refusal, never "no cycle": a jq that fails
 # only on the cycle filter stands in for one that breaks.
