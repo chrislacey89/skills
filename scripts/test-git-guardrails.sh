@@ -1208,6 +1208,20 @@ unset GIT_CONFIG_NOSYSTEM GIT_CONFIG_GLOBAL SKILL_KIT_SIDECAR_ROOT SKILL_KIT_RES
 rm -rf "$sc_tmp"
 
 # -----------------------------------------------------------------------------
+# The repo's own installed copy. .claude/settings.json runs
+# .claude/hooks/block-dangerous-git.sh, while every check above reads the
+# canonical script, so a copy that drifts is a guard nothing here exercises.
+
+section "the repo's installed guard copy matches the canonical script"
+
+repo_guard="$repo_root/.claude/hooks/block-dangerous-git.sh"
+if cmp -s "$script" "$repo_guard"; then
+    assert_eq same same '.claude/hooks/block-dangerous-git.sh is byte-identical to the canonical script'
+else
+    assert_eq same differs '.claude/hooks/block-dangerous-git.sh differs from git-guardrails-claude-code/scripts/block-dangerous-git.sh: copy the canonical script over it'
+fi
+
+# -----------------------------------------------------------------------------
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1
