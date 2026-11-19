@@ -69,7 +69,7 @@ These were review findings 1 and 5 on PR #529. The resolver and verb layers land
 
 ## Prevention
 
-**Code-level:** `scripts/test-state-backend.sh` has a no-`jq` arm (3dc734c), corrupt-file and failing-`jq` arms (d958aa2), and an unreadable-file arm (#530), each asserting `backend` exits nonzero with empty stdout on a guest sidecar. The `/pre-merge` and `/closeout` call sites use the three-way `case` (#530), and `test-delta-review-scope.sh` and `test-review-currency-marker.sh` run each extracted block under a `backend` that really refuses.
+**Code-level:** `scripts/test-state-backend.sh` has a no-`jq` arm (3dc734c), corrupt-file and failing-`jq` arms (d958aa2), and an unreadable-file arm (#530), each asserting `backend` exits nonzero with empty stdout on a guest sidecar. The call sites moved to the three-way `case` in #530; the shapes a fenced call site may take now are the ones `docs/state-backend.md` § The routing rule names and `scripts/test-state-backend.sh` checks (#544). `test-delta-review-scope.sh` and `test-review-currency-marker.sh` run the blocks they extract under a `backend` that really refuses.
 
 **Process-level:** the remaining #407 slices each add a consumer of `backend`: #522 (the guard), #523, #525, and #526. Each slice's boundary map should name the third outcome, and each consumer's contract test should include a "backend failed" arm. When shaping any feature whose invariant reads "absent means today's behavior", `/write-a-prd`'s Rabbit Holes should ask: *which population pays when the lookup itself breaks?* PRD #407 asked this for the guard and not for the stamp writer.
 

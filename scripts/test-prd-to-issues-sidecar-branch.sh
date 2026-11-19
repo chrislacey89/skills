@@ -9,7 +9,12 @@
 # three behaviors only a run can show: the §7 read-back reports a prose/field
 # blocker mismatch, §8's `decomposed_into` holds only the latest ids, and §9
 # picks the lowest-numbered unblocked slice of THIS decomposition or reports a
-# cycle. `gh` on PATH is a stub that logs its argv; no arm may call it.
+# cycle. #564 replaced §8's close-and-re-create with an in-place rewrite of each
+# dependent's blocked_by, so the re-decomposition fixtures run §8's dependents
+# check (every open item, any parent; a failed read stops it) and its rewrite
+# block, and #562 adds a two-unblocked tiebreak, the real issue template through
+# the §7 read-back, §8's step order read from the prose, and the CI zsh step.
+# `gh` on PATH is a stub that logs its argv; no arm may call it.
 #
 # SHELLS. Agents run these blocks in zsh as often as bash, and the two split
 # unquoted expansions differently (`${X:+--flag "$X"}` stays one word, `for id in
@@ -25,6 +30,17 @@ set -u
 if [ -z "${PTI_SHELL:-}" ]; then
     arms_rc=0
     PTI_SHELL=bash bash "$0" || arms_rc=1
+    # CI installs zsh in a workflow step; that step must exist and run before
+    # this suite, or CI reaches the FAIL branch below on every run (#562).
+    wf="$(cd "$(dirname "$0")/.." && pwd -P)/.github/workflows/validate-skills.yml"
+    zl="$(grep -n 'name: Install zsh' "$wf" | head -n 1 | cut -d: -f1)"
+    sl="$(grep -n 'run: bash scripts/test-prd-to-issues-sidecar-branch.sh' "$wf" | head -n 1 | cut -d: -f1)"
+    if [ -n "$zl" ] && [ -n "$sl" ] && [ "$zl" -lt "$sl" ]; then
+        printf '  ok   CI installs zsh before it runs this suite\n'
+    else
+        printf '  FAIL CI installs zsh before it runs this suite\n       Install zsh at line [%s], this suite at line [%s] in %s\n' "$zl" "$sl" "$wf"
+        arms_rc=1
+    fi
     if command -v zsh >/dev/null 2>&1; then
         PTI_SHELL=zsh bash "$0" || arms_rc=1
     elif [ -n "${CI:-}" ]; then
@@ -68,8 +84,9 @@ create_block="$(block 3 | subst)"
 reconcile_block="$(block 4 | subst)"
 set_block="$(block 5 | subst)"
 dependents_block="$(block 6 | subst)"
-next_block="$(block 7 | subst)"
-[ -z "$(block 8)" ] || fatal "more than seven sidecar blocks; update this suite's block map"
+rewrite_block="$(block 7 | subst)"
+next_block="$(block 8 | subst)"
+[ -z "$(block 9)" ] || fatal "more than eight sidecar blocks; update this suite's block map"
 # shellcheck disable=SC2016  # the patterns are the skill's literal text
 {
 case "$backend_block"   in *'backend slices'*) ;; *) fatal "block 1 is not the backend slices question" ;; esac
@@ -78,10 +95,11 @@ case "$create_block"    in *'work create "$@"'*) ;; *) fatal "block 3 is not the
 case "$create_block"    in *'set -- --kind slice --parent "$PRD"'*) ;; *) fatal "block 3 is not the slice create" ;; esac
 case "$reconcile_block" in *'MISMATCH'*) ;; *) fatal "block 4 is not the blocked_by reconcile" ;; esac
 case "$set_block"       in *'decomposed_into "$SLICES"'*) ;; *) fatal "block 5 is not the decomposed_into set" ;; esac
-case "$dependents_block" in *'OLD="W-<closed>"'*) ;; *) fatal "block 6 is not the dependents check" ;; esac
-case "$next_block"      in *'--unblocked'*'/execute'*) ;; *) fatal "block 7 is not the next-slice pick" ;; esac
+case "$dependents_block" in *'OLD="W-<old>"'*) ;; *) fatal "block 6 is not the dependents check" ;; esac
+case "$rewrite_block"   in *'blocked_by "$BLOCKED_BY"'*) ;; *) fatal "block 7 is not the dependent rewrite" ;; esac
+case "$next_block"      in *'--unblocked'*'/execute'*) ;; *) fatal "block 8 is not the next-slice pick" ;; esac
 }
-for b in "$backend_block" "$view_block" "$create_block" "$reconcile_block" "$set_block" "$dependents_block" "$next_block"; do
+for b in "$backend_block" "$view_block" "$create_block" "$reconcile_block" "$set_block" "$dependents_block" "$rewrite_block" "$next_block"; do
     case "$b" in *gh\ *) fatal "a sidecar block calls gh" ;; esac
 done
 
@@ -194,46 +212,59 @@ check "§9: lowest-numbered unblocked slice" "**Next session:** /execute W-2" "$
 s9 W-1
 check "§9: a closed blocker does not gate" "**Next session:** /execute W-3" "$out"
 
-# Re-decompose W-1: W-8 replaces W-3. The superseded W-3 is closed, which un-gates
-# W-4 (the QA slice) unless the dependents check finds it and it is re-created.
+# Re-decompose W-1 (§8): W-8 replaces W-3. Closing W-3 alone would un-gate the
+# QA slice W-4, so the procedure rewrites W-4's edge in place before W-3 closes.
 slice W-1 "" "Big batch" ""
 check "re-decompose: new slice W-8" W-8 "$out"
+deps_of() { runb "$P" "${dependents_block//OLD=\"W-<old>\"/OLD=\"$1\"}"; }
+# rw <id> <blocked_by> <body>: the §8 rewrite block with its placeholders filled.
+rw() {
+    local b="${rewrite_block//ID=\"W-<dependent>\"/ID=\"$1\"}"
+    b="${b//BLOCKED_BY=\"W-<a>,W-<b>\"/BLOCKED_BY=\"$2\"}"
+    runb "$P" "${b//<the dependent\'s body, with its ids changed and its \#\# Re-decomposed lines added>/$3}"
+}
+count_items() { find "$SKILL_KIT_SIDECAR_ROOT/guest/work" -name 'W-*.md' | wc -l | tr -d ' '; }
+deps_of W-3
+# W-6 and W-7 sit under the other PRD, W-5, and are blocked by W-3 too.
+check "§8: the dependents check names the QA slice and the other PRD's dependents" "W-4 W-2,W-3
+W-6 W-3
+W-7 W-3" "$out"
+items_before="$(count_items)"
+# A body that only swaps ids can be shorter than the old one; work edit refuses
+# it, and the block stops before it touches blocked_by.
+short="$(field W-4 .body | perl -pe 's/\bW-3\b/W-8/g; s/^- Blocked by W-2\n//')"
+rw W-4 W-2,W-8 "$short"
+check "§8: a shorter body is refused" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+check "§8: a refused body leaves blocked_by alone" "W-2,W-3" "$(field W-4 '.blocked_by | join(",")')"
+swapped="$(field W-4 .body | perl -pe 's/\bW-3\b/W-8/g')"$'\n\n## Re-decomposed\n\n- W-3 replaced by W-8'
+rw W-4 W-2,W-8 "$swapped"
+check "§8: the rewrite block exits 0" 0 "$rc"
+check "§8: the dependent's blocked_by is rewritten in place" "W-2,W-8" "$(field W-4 '.blocked_by | join(",")')"
+runb "$P" "${reconcile_block//W-<slice>/W-4}"
+check "§8: the §7 read-back matches on the rewritten dependent" "match W-4: [W-2,W-8]" "$out"
+check "§8: the rewritten body no longer names the superseded slice in Consumes" 0 "$(field W-4 .body | grep -c 'From W-3:')"
+check "§8: the rewrite creates no work item" "$items_before" "$(count_items)"
+check "§8: the dependent stays open" open "$(field W-4 .state)"
+for d in W-6 W-7; do
+    rw "$d" W-8 "$(field "$d" .body)"$'\n\n## Re-decomposed\n\n- W-3 replaced by W-8'
+    check "§8: the other PRD's dependent $d is rewritten" "W-8" "$(field "$d" '.blocked_by | join(",")')"
+done
 (cd "$P" && bash "$SC_REAL" work close W-3 --superseded-by W-8 >/dev/null 2>&1) || fatal "could not close W-3"
-case "$(cd "$P" && bash "$SC_REAL" work list --parent W-1 --unblocked)" in
-    *W-4*) ok "re-decompose: closing W-3 alone leaves the QA slice W-4 unblocked (the hazard)" ;;
-    *) bad "re-decompose: the hazard fixture" "W-4 was not unblocked after closing W-3" ;;
-esac
-deps_of() { local b="${dependents_block//PRD=\"W-<prd>\"/PRD=\"W-1\"}"; runb "$P" "${b//OLD=\"W-<closed>\"/OLD=\"$1\"}"; }
 deps_of W-3
-check "§8: the dependents check names the QA slice" "W-4" "$out"
-# Follow §8 literally: the replacement's body is the dependent's own body with the
-# closed id swapped for its replacement, and the §7 read-back runs on it.
-swapped="$(field W-4 .body | perl -pe 's/\bW-3\b/W-8/g')"
-case "$swapped" in *W-3*) fatal "the id swap left W-3 in the body" ;; esac
-slice W-1 W-2,W-8 "Big batch" W-2,W-8 "$swapped"
-check "re-decompose: re-created QA slice is W-9" W-9 "$out"
-runb "$P" "${reconcile_block//W-<slice>/W-9}"
-check "§8: the §7 read-back matches on the replacement" "match W-9: [W-2,W-8]" "$out"
-check "§8: the replacement body no longer names the closed slice" 0 "$(field W-9 .body | grep -c 'W-3')"
-check "§8: the replacement body's Consumes names the new id" 1 "$(field W-9 .body | grep -c 'From W-8:')"
-(cd "$P" && bash "$SC_REAL" work close W-4 --superseded-by W-9 >/dev/null 2>&1) || fatal "could not close W-4"
-deps_of W-4
-check "§8: nothing depends on the closed QA slice, so the check ends" "" "$out"
-deps_of W-3
-check "§8: nothing open names W-3 after the re-create" "" "$out"
-s8 W-1 W-8,W-9
-check "re-decompose: decomposed_into holds only the new ids" "W-8,W-9" "$(field W-1 '.decomposed_into | join(",")')"
+check "§8: the re-run check prints nothing once every dependent is rewritten" "" "$out"
+s8 W-1 W-4,W-8
+check "re-decompose: decomposed_into holds only the open slices" "W-4,W-8" "$(field W-1 '.decomposed_into | join(",")')"
 case "$(cd "$P" && bash "$SC_REAL" work list --parent W-1 --unblocked)" in
-    *W-9*) bad "§9: the re-created QA slice waits for W-8" "W-9 was listed unblocked" ;;
-    *) ok "§9: the re-created QA slice waits for W-8" ;;
+    *W-4*) bad "§9: the QA slice waits for the replacement W-8" "W-4 was listed unblocked" ;;
+    *) ok "§9: the QA slice waits for the replacement W-8" ;;
 esac
 s9 W-1
 check "§9: scoped to decomposed_into, not the parent's older slices" "**Next session:** /execute W-8" "$out"
 
 # A decomposition whose only slice waits on an open slice outside it.
 slice W-5 W-7 "" W-7
-check "cycle fixture: slice waiting on an open W-7" W-10 "$out"
-s8 W-5 W-10
+check "cycle fixture: slice waiting on an open W-7" W-9 "$out"
+s8 W-5 W-9
 s9 W-5
 check "§9: none unblocked exits 1" 1 "$rc"
 check "§9: prints no handoff line" "" "$out"
@@ -244,57 +275,102 @@ s9 "$W9"
 check "§9: an undecomposed PRD exits 1" 1 "$rc"
 case "$err" in *"run §8 first"*) ok "§9: names §8 for an empty decomposed_into" ;; *) bad "§9: names §8 for an empty decomposed_into" "got [$err]" ;; esac
 
-# Finding 7: the QA slice names every slice, so it is in more than one dependents
-# list. Slices A, B (blocked by A) and QA (blocked by A, B); R replaces A. Follow
-# §8 literally: one id at a time, the check re-run from the top after each
-# re-create, and every closed blocker that has a replacement swapped, not only OLD.
+# A split, a dependent under another PRD, and a dependent of a dependent (#563).
+# Slices A, B (blocked by A) and QA (blocked by A, B) under PQ; X under PX is
+# blocked by A. A is split into R1 and R2. Every dependent of A is rewritten in
+# place, A is closed without --superseded-by (it names one id), and nothing
+# else is created or closed.
 printf 'fourth pitch\n' > "$tmp/pitch4"
 PQ="$(cd "$P" && bash "$SC_REAL" work create --kind prd --body-file "$tmp/pitch4" 2>/dev/null)"
+PX="$(cd "$P" && bash "$SC_REAL" work create --kind prd --body-file "$tmp/pitch4" 2>/dev/null)"
 slice "$PQ" "" "" ""; SA="$out"
 slice "$PQ" "$SA" "" "$SA"; SB="$out"
 slice "$PQ" "$SA,$SB" "" "$SA,$SB"; SQ="$out"
-slice "$PQ" "" "" ""; SR="$out"
-(cd "$P" && bash "$SC_REAL" work close "$SA" --superseded-by "$SR" >/dev/null 2>&1) || fatal "could not close $SA"
-deps_q() { local b="${dependents_block//PRD=\"W-<prd>\"/PRD=\"$PQ\"}"; runb "$P" "${b//OLD=\"W-<closed>\"/OLD=\"$1\"}"; }
-deps_q "$SA"
-check "finding 7: the first list names both the slice and the QA slice" "$SB
-$SQ" "$out"
-recreate() {
-    local x="$1" bl="" body id rep
-    body="$(field "$x" .body)"
-    for id in $(field "$x" '.blocked_by | join(" ")'); do
-        rep="$(field "$id" '.superseded_by // empty')"
-        if [ "$(field "$id" .state)" = closed ] && [ -n "$rep" ]; then
-            body="$(printf '%s' "$body" | perl -pe "s/\\b$id\\b/$rep/g")"; id="$rep"
-        fi
-        bl="${bl:+$bl,}$id"
-    done
-    slice "$PQ" "$bl" "" "${bl}" "$body"; NEW="$out"
-    runb "$P" "${reconcile_block//W-<slice>/$NEW}"
-    check "finding 7: the read-back matches on $NEW" "match $NEW: [$bl]" "$out"
-    (cd "$P" && bash "$SC_REAL" work close "$x" --superseded-by "$NEW" >/dev/null 2>&1) || fatal "could not close $x"
+slice "$PX" "$SA" "" "$SA"; SX="$out"
+slice "$PQ" "" "" ""; R1="$out"
+slice "$PQ" "" "" ""; R2="$out"
+deps_of "$SA"
+check "split: the check lists every dependent, across parents" "$SB $SA
+$SQ $SA,$SB
+$SX $SA" "$out"
+deps_of "$SA,$SB"
+check "split: a superseded slice is not listed as a dependent of another" "$SQ $SA,$SB
+$SX $SA" "$out"
+items_before="$(count_items)"
+# rewrite_split <id> <blocked_by>: swap A for R1 and R2 in the body, add the note.
+rewrite_split() {
+    local body
+    body="$(field "$1" .body | perl -pe "s/^- Blocked by \Q$SA\E\$/- Blocked by $R1\n- Blocked by $R2/; s/\b\Q$SA\E\b/$R1/g")"$'\n\n## Re-decomposed\n\n'"- $SA split into $R1 and $R2"
+    rw "$1" "$2" "$body"
+    check "split: $1 rewritten" 0 "$rc"
+    runb "$P" "${reconcile_block//W-<slice>/$1}"
+    check "split: the read-back matches on $1" 0 "$rc"
 }
-queue="$SA"; recreated=0
-while [ -n "$queue" ] && [ "$recreated" -lt 10 ]; do
-    old="${queue%% *}"; queue="${queue#"$old"}"; queue="${queue# }"
-    deps_q "$old"
-    first="${out%%$'\n'*}"
-    [ -n "$first" ] || continue
-    recreate "$first"; recreated=$((recreated + 1))
-    queue="$old $first${queue:+ $queue}"
-done
-check "finding 7: exactly two replacements (slice and QA), no duplicate QA" 2 "$recreated"
-open_q="$(cd "$P" && bash "$SC_REAL" work list --parent "$PQ")"
-check "finding 7: three open slices under the PRD (R, B and QA replacements)" 3 "$(printf '%s\n' "$open_q" | grep -c .)"
-bad_blockers=0
-for id in $open_q; do
-    for b in $(field "$id" '.blocked_by // [] | join(" ")'); do
-        [ "$(field "$b" .state)" = open ] || bad_blockers=$((bad_blockers + 1))
-    done
-done
-check "finding 7: every open slice names only open blockers" 0 "$bad_blockers"
-unb="$(cd "$P" && bash "$SC_REAL" work list --parent "$PQ" --unblocked)"
-check "finding 7: only the replacement for the first slice is unblocked (QA not handed out early)" "$SR" "$unb"
+rewrite_split "$SB" "$R1,$R2"
+rewrite_split "$SQ" "$R1,$R2,$SB"
+rewrite_split "$SX" "$R1,$R2"
+(cd "$P" && bash "$SC_REAL" work close "$SA" >/dev/null 2>&1) || fatal "could not close $SA"
+deps_of "$SA"
+check "split: the re-run check prints nothing" "" "$out"
+check "split: no work item was created by the rewrites" "$items_before" "$(count_items)"
+check "split: only the superseded slice was closed" "$SA" "$(cd "$P" && bash "$SC_REAL" work list --kind slice --state closed | grep -x "$SA\|$SB\|$SQ\|$SX")"
+check "split: the two replacements are the only unblocked slices under the PRD" "$R1
+$R2" "$(cd "$P" && bash "$SC_REAL" work list --parent "$PQ" --unblocked)"
+check "split: the dependent under the other PRD still waits" "" "$(cd "$P" && bash "$SC_REAL" work list --parent "$PX" --unblocked)"
+
+# A dependents check whose read of one item fails stops; it never reads that
+# item as not dependent. The stand-in resolver fails `work view` for $SX only.
+failsc="$tmp/failview.sh"
+# shellcheck disable=SC2016  # the stub body is literal sh
+printf '#!/bin/sh\nif [ "$1" = work ] && [ "$2" = view ] && [ "$3" = "%s" ]; then echo "refused" >&2; exit 1; fi\nexec bash "%s" "$@"\n' "$SX" "$SC_REAL" > "$failsc"
+(cd "$P" && bash "$SC_REAL" work set "$SX" blocked_by "$R1") >/dev/null 2>&1 || fatal "could not reset $SX"
+fb="${dependents_block//$SC_REAL/$failsc}"
+runb "$P" "${fb//OLD=\"W-<old>\"/OLD=\"$R1\"}"
+check "a failed read stops the dependents check" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+# A read that exits 0 with output jq cannot parse stops it too.
+# shellcheck disable=SC2016  # the stub body is literal sh
+printf '#!/bin/sh\nif [ "$1" = work ] && [ "$2" = view ] && [ "$3" = "%s" ]; then echo "not json"; exit 0; fi\nexec bash "%s" "$@"\n' "$SX" "$SC_REAL" > "$failsc"
+runb "$P" "${fb//OLD=\"W-<old>\"/OLD=\"$R1\"}"
+check "an unparseable read stops the dependents check" 1 "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+# §9's tiebreak (#562 item 1): two slices unblocked at once, recorded in
+# decomposed_into in reverse order, so neither the list order nor a loop that
+# keeps the last match can pass for "lowest-numbered wins".
+printf 'fifth pitch\n' > "$tmp/pitch5"
+PL="$(cd "$P" && bash "$SC_REAL" work create --kind prd --body-file "$tmp/pitch5" 2>/dev/null)"
+slice "$PL" "" "" ""; L1="$out"
+slice "$PL" "" "" ""; L2="$out"
+s8 "$PL" "$L2,$L1"
+s9 "$PL"
+check "§9: of two unblocked slices, the lower id is picked" "**Next session:** /execute $L1" "$out"
+
+# The §7 read-back against the real issue template (#562 item 2), with every
+# #<n> naming the PRD or a slice written W-<n>, as §7's sidecar rule says.
+tpl="$(awk '/^<issue-template>$/{on=1; next} /^<\/issue-template>$/{on=0} on' "$SKILL")"
+[ -n "$tpl" ] || fatal "no <issue-template> block in $SKILL"
+tbody="$(printf '%s\n' "$tpl" | sed -e "s/#<prd-issue-number>/$PL/g" -e "s/#<issue-number>/$L1/g")"
+slice "$PL" "$L1" "" "" "$tbody"; TS="$out"
+runb "$P" "${reconcile_block//W-<slice>/$TS}"
+check "§7: the read-back reads the real template's Blocked by section" "match $TS: [$L1]" "$out"
+
+# §8's prose, read from the skill (#562 item 3, against the in-place procedure).
+s8text="$(awk '/^### 8\. /{on=1} /^### 9\. /{on=0} on' "$SKILL")"
+case "$s8text" in *"no dependent is closed or created again"*) ok "§8: says no dependent is closed or created again" ;;
+    *) bad "§8: says no dependent is closed or created again" "sentence missing" ;; esac
+case "$s8text" in *re-creat*|*"created again through"*) bad "§8: no longer re-creates dependents" "found re-create wording" ;;
+    *) ok "§8: no longer re-creates dependents" ;; esac
+# shellcheck disable=SC2016  # the needles are the skill's literal text
+{
+rw_line="$(printf '%s\n' "$s8text" | grep -n 'work set "$ID" blocked_by' | head -n 1 | cut -d: -f1)"
+close_line="$(printf '%s\n' "$s8text" | grep -n 'Close each superseded slice' | head -n 1 | cut -d: -f1)"
+recheck_line="$(printf '%s\n' "$s8text" | grep -n 'Run the step 2 check again' | head -n 1 | cut -d: -f1)"
+}
+check "§8: the superseded slices close after the dependents are rewritten" 1 \
+    "$([ -n "$rw_line" ] && [ -n "$close_line" ] && [ "$rw_line" -lt "$close_line" ] && echo 1 || echo 0)"
+check "§8: the check is re-run after the closes" 1 \
+    "$([ -n "$close_line" ] && [ -n "$recheck_line" ] && [ "$close_line" -lt "$recheck_line" ] && echo 1 || echo 0)"
+s7text="$(awk '/^### 7\. /{on=1} /^<issue-template>$/{on=0} on' "$SKILL")"
+case "$s7text" in *'`work set W-<n> blocked_by'*) ok "§7: a wrong field is fixed with work set blocked_by" ;;
+    *) bad "§7: a wrong field is fixed with work set blocked_by" "not found in §7" ;; esac
 
 check "sidecar: no gh call at all" "" "$(cat "$GH_LOG")"
 check "sidecar: the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
