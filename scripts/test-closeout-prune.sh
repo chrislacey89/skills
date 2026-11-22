@@ -357,6 +357,9 @@ has "Step 5 prints the stop message" "$co" "This session's project hooks no long
 has "Step 5 cites the hooks reference rather than restating it" "$co" "https://code.claude.com/docs/en/hooks"
 has "Step 5 tells the user when the check could not tell" "$co" "If the check printed the \`project-dir-unknown:\` line, tell the user in your report that it could not tell"
 has "Step 5 offers no next step that continues in this session" "$co" "offer no next step that continues in this session"
+has "Step 9 carves the /compound invocation out for the project-dir case" "$co" "invoke \`/compound\` now, except when Step 5's check printed its \`project-dir:\` line, where Step 5 says how it is named instead."
+has "Handoff's Comes next by default names the tail for the new session in the project-dir case" "$co" "When Step 5's check printed its \`project-dir:\` line, these are named for the new session and not run here (Step 5)."
+has "Handoff's Next-step menu is skipped in the project-dir case" "$co" "**Next-step menu.** When Step 5's check printed its \`project-dir:\` line, show no menu: the tail is printed as instructions for the new session, as Step 5 says."
 
 # The claims quoted from git's own manual are checked against the installed git,
 # so a changed manual fails here instead of silently drifting.
