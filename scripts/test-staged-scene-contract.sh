@@ -450,6 +450,7 @@ say(views.every(v => !('data-moving' in v.attrs)), 'loading turns no motion on')
 const press = (v, name) => v.querySelector(`button[data-act="${name}"]`).on.click();
 const data = JSON.parse(fig.querySelector('script[data-scene]').textContent);
 const first = views.map(frame);
+say(data.views.some(v => v.steps.some(s => s.c.includes('</script>'))), 'the data parses with a </script> caption inside it');
 press(views[0], 'next');
 say(frame(views[0]) !== first[0] && views.slice(1).every((v, i) => frame(v) === first[i + 1]), 'Next moves its own view and no other');
 say(views[0].querySelector('.vr-scene-n').textContent === `step 2 of ${data.views[0].steps.length}`, 'Next moves one step');
