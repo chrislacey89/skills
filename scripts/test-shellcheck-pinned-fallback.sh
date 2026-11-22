@@ -21,6 +21,10 @@
 #     never 3); the local release is not run
 #   - Docker installed with a daemon that does not answer (fails fast, or
 #     hangs) falls through to the local fallback within a bound
+#   - first use, image not yet present: a successful pull lets the pinned image
+#     lint; a failed pull skips the Docker tier without running the image and
+#     falls through to the local fallback (exit 3). The stub docker only records
+#     the pull; no arm contacts a registry
 #
 # The script is copied into a fixture repository with its own .shellcheck-version,
 # and PATH is a directory of symlinks to the few real tools the script needs plus
@@ -96,6 +100,8 @@ lint_log="$sandbox/lint.log"
 
 # make_stubs <dir> <docker-mode> <cached-mode> <local-version>
 #   docker-mode:  none | ok | ok-findings | daemon-down | daemon-hang | wrong-version
+#                 | absent-pull-ok | absent-pull-fails
+#                 (absent-*: `image inspect` exits 1 until a pull succeeds)
 #   cached-mode:  none | runnable | unrunnable
 #   local-version: version the PATH shellcheck reports, or "none"
 make_stubs() {
@@ -120,6 +126,11 @@ STUB
     if [ "$docker_mode" != none ]; then
         local image_v="$pinned" lint_exit_on_finding=1
         [ "$docker_mode" = wrong-version ] && image_v="0.0.1"
+        # The image is present unless the mode starts absent; only a pull in
+        # absent-pull-ok creates it. A run without it stands in for docker's own
+        # implicit pull, so it is logged and fails rather than answering.
+        local present="$dir/image-present"
+        case "$docker_mode" in absent-*) ;; *) : > "$present" ;; esac
         cat > "$dir/bin/docker" <<STUB
 #!/bin/sh
 mode="$docker_mode"
@@ -128,9 +139,13 @@ case "\$1" in
     [ "\$mode" = daemon-down ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }
     [ "\$mode" = daemon-hang ] && exec sleep 30
     echo 27.0.0; exit 0 ;;
-  image) exit 0 ;;
-  pull) echo "stub docker: pull must never run in this suite" >&2; echo pull >> "$lint_log"; exit 1 ;;
+  image) [ -f "$present" ] && exit 0; exit 1 ;;
+  pull)
+    echo pull >> "$lint_log"
+    [ "\$mode" = absent-pull-ok ] && { : > "$present"; exit 0; }
+    echo "stub docker: pull failed (this suite never contacts a registry)" >&2; exit 1 ;;
   run)
+    if [ ! -f "$present" ]; then echo run-without-image >> "$lint_log"; echo "stub docker: Unable to find image" >&2; exit 125; fi
     # Everything after the image name is shellcheck's own argv.
     shift
     while [ \$# -gt 0 ]; do case "\$1" in koalaman/shellcheck:*) shift; break ;; *) shift ;; esac; done
@@ -254,6 +269,18 @@ section "Docker answers but the image is not the pinned release: fall through to
 run_case wrong-version none 0.11.0 strict clean
 assert_eq 3 "$rc" "exit 3"
 assert_eq local "$log" "the local release linted"
+
+section "first use, image absent, pull succeeds: the pulled pinned image lints"
+run_case absent-pull-ok none 0.11.0 strict clean
+assert_eq 0 "$rc" "exit 0"
+assert_eq "pull docker" "$log" "the image was pulled, then it linted; the local release did not"
+assert_contains "$err" "pulling koalaman/shellcheck:v$pinned (first use)" "stderr names the first-use pull"
+
+section "first use, image absent, pull fails: skip the Docker tier, then the local fallback exits 3"
+run_case absent-pull-fails none 0.11.0 strict clean
+assert_eq 3 "$rc" "exit 3"
+assert_eq "pull local" "$log" "the pull was tried, the image never ran, and the local release linted"
+assert_contains "$err" "could not pull koalaman/shellcheck:v$pinned" "stderr names the failed pull"
 
 # --- 5. Docker installed, daemon not answering -----------------------------------
 section "Docker installed, daemon down: falls through to the local fallback"
