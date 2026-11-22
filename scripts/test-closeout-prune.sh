@@ -324,9 +324,9 @@ for sh in bash zsh; do
     if [ "$sh" = zsh ] && ! command -v zsh >/dev/null 2>&1; then printf '  SKIP zsh not installed\n'; continue; fi
     run_projdir "$tmp/proj/wt" "$tmp/proj/wt" "$sh"
     check "[$sh] same path: the block exits 0" 0 "$rc"
-    has "[$sh] same path: it reports the project directory is being removed" "$out" "this session's project directory"
+    has "[$sh] same path: it reports the project directory is being removed" "$out" "project-dir: the worktree being removed is this session's project directory"
     run_projdir "$tmp/proj/wt" "$tmp/link-to-wt" "$sh"
-    has "[$sh] a symlink to the same directory counts as the same path" "$out" "this session's project directory"
+    has "[$sh] a symlink to the same directory counts as the same path" "$out" "project-dir: the worktree being removed is this session's project directory"
     run_projdir "$tmp/proj/wt" "$tmp/proj/other" "$sh"
     check "[$sh] another directory: the block exits 0" 0 "$rc"
     check "[$sh] another directory: it prints nothing" "" "$out"
