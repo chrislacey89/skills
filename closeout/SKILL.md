@@ -129,7 +129,7 @@ printf '%s\n' "$BODY" | awk -F'|' '$(2) ~ /^ *[0-9]+ *$/ { s = $(5); gsub(/ /, "
 
 When a read fails, say the open items are unknown rather than empty, and ask before going on. When every read succeeded and the list is empty, say so in the confirmation block. When it is not empty, show it and ask one question: **fix first**, **file as follow-ups, then merge**, or **merge as is**. Record a **merge as is** answer in the terminal with the list beside it. On `route: already merged` there is nothing left to hold back, so the list is information and the question is not asked.
 
-**A menu pick starts this skill; it does not answer this step.** Choosing `/closeout` from another skill's menu is not the go-ahead to merge. Ask once, here, after the list, on every route into this skill.
+**A menu pick starts this skill; it does not answer this step.** Choosing `/closeout` from another skill's menu is not the go-ahead to merge. Ask once, here, after the list, however the user came into this skill, except where the paragraph above says the question is not asked. A **merge as is** answer is the confirmation the block below waits for, so the user is not asked a second time.
 
 Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
 
