@@ -2163,23 +2163,23 @@ once per page, a figure per scene, and the script once, after the last figure.
     document.querySelectorAll('figure.vr-scene').forEach(fig => {
       const scene = JSON.parse(fig.querySelector('script[data-scene]').textContent);
       const item = new Map(scene.items.map(i => [i.id, i]));
-      scene.views.forEach(v => wire(fig.querySelector('[data-view="' + v.id + '"]'), v, item));
+      scene.views.forEach(v => wire({ view: fig.querySelector('[data-view="' + v.id + '"]'), spec: v, item }));
     });
 
-    function wire(view, spec, item){
+    function wire({ view, spec, item }){
       const last = spec.steps.length - 1;
       const cap = view.querySelector('.vr-scene-cap');
       const dot = view.querySelector('.vr-scene-dot');
       const ctl = document.createElement('div');
       ctl.setAttribute('class', 'vr-scene-ctl');
-      button('back', 'Back', () => move(-1));
-      const playButton = button('play', 'Play', play);
-      button('next', 'Next', () => move(1));
+      button({ act: 'back', label: 'Back', onPress: () => move(-1) });
+      const playButton = button({ act: 'play', label: 'Play', onPress: play });
+      button({ act: 'next', label: 'Next', onPress: () => move(1) });
       cap.before(ctl);
       let step = 0, timer = null;
       render();
 
-      function button(act, label, onPress){
+      function button({ act, label, onPress }){
         const b = document.createElement('button');
         b.setAttribute('type', 'button');
         b.setAttribute('data-act', act);
