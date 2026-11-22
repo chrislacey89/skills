@@ -71,7 +71,18 @@ The file's shape is locked in the parent PRD, chrislacey89/skills#407, § Implem
 
 `stamp clear` leaves no record of what was reviewed, so after a successful `stamp write` `/pre-merge` also copies the SHA to the work item's `reviewed_sha`, when there is a work item. The copy is the item's history. Review currency is still read from the stamp alone, and `scripts/test-review-currency-marker.sh` fails when a skill names the field for anything but that write.
 
-Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`. A read can commit in the sidecar too: a verb that finds the sidecar, `backend` and `stamp read` among them, adds a key of this checkout that the sidecar does not list yet, such as a new remote, as an alias, and commits that.
+Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`, except `stamp release`'s two flag files, described next. A read can commit in the sidecar too: a verb that finds the sidecar, `backend` and `stamp read` among them, adds a key of this checkout that the sidecar does not list yet, such as a new remote, as an alias, and commits that.
+
+## Releasing the lock
+
+`bash "$SC" stamp release <branch> --reason "<why>"` is the route past the post-review edit lock for an edit that is not a review finding. It works on both backends and never writes a stamp: the branch's stamp keeps naming the commit the last review read, and `/pre-merge` is still the only skill that moves it. It removes `.claude/.review-stamped` and writes `.claude/.post-review-edit`, which the classification hook reads and `/pre-merge`'s stamp blocks remove.
+
+| | `github` backend | `sidecar` backend |
+|---|---|---|
+| The stamp it requires | the marker in the open PR's body, read with `gh`; with no `gh`, a failed read, or no marker it refuses | the branch's `reviews/<branch-slug>.json`; with none it refuses |
+| Where `released_at`, `head` and `reason` are kept | in `.claude/.post-review-edit` alone, local and gone at the re-stamp; nothing is written to the PR | in that file, and committed as `<sidecar>/reviews/released/<branch-slug>.json` until the next `stamp write` or `stamp clear` |
+
+It also refuses a missing or blank reason, and a branch other than the one checked out. A refusal changes nothing. `stamp read <branch> --released` prints the recorded head, or nothing. `/pre-merge` Phase 1 step 4 starts its review there only when that head carries the stamped tree, so a commit made between the stamp and the release is never skipped.
 
 ## Work items
 

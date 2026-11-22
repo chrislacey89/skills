@@ -515,7 +515,7 @@ nothing in this phase moves the freeze or the submit-by time.
 
    ```bash
    ROOT="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
-   rm -f "$ROOT/.claude/.tdd-active" "$ROOT/.claude/.tdd-skipped" "$ROOT/.claude/.lfg-active"
+   rm -f "$ROOT/.claude/.tdd-active" "$ROOT/.claude/.tdd-skipped" "$ROOT/.claude/.lfg-active" "$ROOT/.claude/.post-review-edit"
    ```
 4. Deploy the green commit to the deploy target, or confirm CI's deploy
    shipped it, then give the demo-lane owner the URL. Acceptance below happens

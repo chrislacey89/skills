@@ -31,6 +31,10 @@ set -uo pipefail
 # real repository instead, writing `core.bare=true` into its shared config.
 # Unset before any git call.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+# `stamp release` writes flags under $CLAUDE_PROJECT_DIR and the scope block
+# reads one back; without this a run from a Claude Code session would reach
+# that session's project instead of the fixture.
+unset CLAUDE_PROJECT_DIR
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 premerge_skill="$repo_root/pre-merge/SKILL.md"
@@ -1946,6 +1950,67 @@ git -C "$repo5" branch -q --set-upstream-to=origin/feature
 git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
 assert_eq "shared: yes" "$(run_shared)" "an upstream is set: shared, whatever the remote answers"
 git -C "$repo5" remote set-url origin "$bare5"
+
+# --- 14. A released lock (#807) -----------------------------------------------
+# A release records the head it opened the lock at. Two states decide whether
+# the next review may start there. When a fold replaced the stamped commit and
+# the released head carries the stamped tree, it may, and it is the only start
+# that is not the whole slice. When the head had already moved past the stamp,
+# it may not: starting there would stamp the commits in between with nobody
+# having read them, so the review starts at the stamp.
+section "released lock: the delta starts at the released head, and never skips an unreviewed commit"
+release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
+    local sh="$1" kind="$2" r="$sandbox/release-$1-$2" stamped released out
+    mkdir -p "$r"
+    git init -q -b main "$r"
+    git -C "$r" config user.email t@example.com
+    git -C "$r" config user.name t
+    printf '.claude/\n' > "$r/.git/info/exclude"
+    printf 'base %s\n' "$r" > "$r/base.txt"
+    git -C "$r" add base.txt
+    git -C "$r" commit -q -m "base $r"
+    git -C "$r" switch -q -c feature
+    printf 'one\n' > "$r/one.txt"
+    git -C "$r" add one.txt
+    git -C "$r" commit -q -m 'feature: one'
+    stamped="$(git -C "$r" rev-parse HEAD)"
+    if [[ "$kind" == folded ]]; then
+        git -C "$r" commit -q --amend -m 'feature: one, reworded'
+    else
+        printf 'fix\n' > "$r/fix.txt"
+        git -C "$r" add fix.txt
+        git -C "$r" commit -q -m 'a fix no review has read'
+    fi
+    released="$(git -C "$r" rev-parse HEAD)"
+    out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" CLAUDE_PROJECT_DIR="$r" \
+        bash "$sidecar_sh" stamp release feature --reason 'asked for' 2>&1)"
+    if [[ "$kind" == folded ]]; then
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review $released..HEAD and re-stamp" "$out" \
+            "$sh, folded then released: the verb names the released head"
+    else
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review $stamped..HEAD and re-stamp" "$out" \
+            "$sh, released past the stamp: the verb names the stamp, where the unread commits start"
+    fi
+    printf 'edit\n' > "$r/edit.txt"
+    git -C "$r" add edit.txt
+    git -C "$r" commit -q -m 'the requested edit'
+    out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" CLAUDE_PROJECT_DIR="$r" env -u BASE_REF "$sh" -c "$scope_block" 2>&1)"
+    if [[ "$kind" == folded ]]; then
+        assert_eq "review scope: post-stamp delta, from $released|edit.txt" \
+            "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
+            "$sh, folded then released: the review starts at the released head"
+    else
+        assert_eq "review scope: post-stamp delta, from $stamped|edit.txt fix.txt" \
+            "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
+            "$sh, released past the stamp: the review still reads the commit made before the release"
+    fi
+}
+release_scope_case bash folded
+release_scope_case bash past-stamp
+if [[ "$have_zsh" == yes ]]; then
+    release_scope_case zsh folded
+    release_scope_case zsh past-stamp
+fi
 
 # -----------------------------------------------------------------------------
 

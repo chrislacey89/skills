@@ -253,7 +253,7 @@ install = "pnpm install"
 - [ ] Session is inside the worktree — `pwd` reports the worktree path (not the project root) because this session was started there by the hand-off, or, in the fallback only, entered it with `EnterWorktree { path }`. In an AFK/headless run, this item instead means the `cd <absolute-worktree-path> &&` prefix is being applied to every Bash call
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
-- [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, and `.claude/.lfg-active` do not exist in the worktree (fresh slate; Step 3 creates one)
+- [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, and `.claude/.post-review-edit` do not exist in the worktree (fresh slate; Step 3 creates one)
 - [ ] **Post-review lock flags absent** — `.claude/.review-stamped` and `.claude/.fix-findings-active` do not exist. Both belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete either one you find — you are at the start of a branch that has had no review, so neither can be describing this one
 
 **Record where the slice starts.** On `takeable`, once the branch this slice will be committed on is checked out and before its first commit, record `HEAD` as the work item's `start_sha`. `sidecar.sh range` reads it, so `/pre-merge`'s first review and `/fix-findings`' round count cover this slice's commits rather than every slice on a long-lived branch. A start already recorded is kept: a later iteration on the same slice must not move it forward past commits the slice already made, and a start a fold or rebase rewrote is not re-anchored either (`range` falls back to the base and says so):
@@ -295,7 +295,8 @@ HOOK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/hooks/enfo
 GATE_TERMS=".claude/.review-stamped
 .claude/.tdd-active
 .claude/.tdd-skipped
-.claude/.lfg-active"
+.claude/.lfg-active
+.claude/.post-review-edit"
 # Every `# gate: <name>` sentinel in the hook body, one name per line: a clause
 # that adds no path above, so GATE_TERMS cannot see it. scripts/test-lfg-marker.sh
 # section 10 pins this list against those sentinel lines.
@@ -347,7 +348,7 @@ fi
 
 `guard-sidecar-stale` means tell the user and offer to re-run `/git-guardrails-claude-code` at project scope, which copies the pair afresh; in an AFK iteration, record it in the Step 6 review notes instead. It does not hold Step 1. `guard-absent` and `guard-sidecar-current` proceed. A guard installed at global scope is not inspected here. `scripts/test-git-guardrails.sh` runs this block against all three cases.
 
-**TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` creates `.claude/.tdd-active` with a `!` command the harness runs when the skill loads, without the model, except in auto mode for a command that would need approval, where the skill loads with an instruction for the model to run it instead ([Claude Code skills docs](https://code.claude.com/docs/en/skills)), so count the marker as created once its `TDD marker created` line has printed; visual frontend creates `.claude/.tdd-skipped`; `/lfg` creates `.claude/.lfg-active`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes every one of them after commit.
+**TDD classification gate.** Step 3 requires classifying the work before writing any code. `/tdd` creates `.claude/.tdd-active` with a `!` command the harness runs when the skill loads, without the model, except in auto mode for a command that would need approval, where the skill loads with an instruction for the model to run it instead ([Claude Code skills docs](https://code.claude.com/docs/en/skills)), so count the marker as created once its `TDD marker created` line has printed; visual frontend creates `.claude/.tdd-skipped`; `/lfg` creates `.claude/.lfg-active`; `sidecar.sh stamp release` creates `.claude/.post-review-edit`. A PreToolUse hook blocks all `.ts` file writes unless one of these markers exists. Step 6 removes every one of them after commit.
 
 **Trivial-task exception.** A single-commit cleanup unrelated to active feature work may skip classification by creating `.claude/.tdd-skipped` directly. The four conditions that all have to hold, and what to do when one does not, are stated once in [references/trivial-task-rule.md](references/trivial-task-rule.md).
 
@@ -927,7 +928,7 @@ All commits should already be done by this point. This step handles post-impleme
 Remove the classification markers:
 
 ```bash
-rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" "$CLAUDE_PROJECT_DIR/.claude/.lfg-active"
+rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" "$CLAUDE_PROJECT_DIR/.claude/.post-review-edit"
 ```
 
 **AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 (on a work item, Step 5's `work edit` block) — including both of its guards: check the fetch's exit status and refuse the write if the edited body came out shorter than what was read. AFK is the mode with nobody watching the write, so it is the one that most needs them. AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.

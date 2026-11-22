@@ -109,7 +109,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
    **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`. When `origin/<base>` does not resolve, `base-ref` measures against the local branch and says so on stderr; if the counts look wrong, `git fetch` and re-run.
 
-4. **Decide the scope — the whole slice, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole slice: `sidecar.sh range` gives its left end, which is the slice's recorded start when the work item step 2 named has one still on this branch, and `$BASE_REF` otherwise, so on the `github` backend a slice is the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or a hand fix after a deliberate lock deletion — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
+4. **Decide the scope — the whole slice, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole slice: `sidecar.sh range` gives its left end, which is the slice's recorded start when the work item step 2 named has one still on this branch, and `$BASE_REF` otherwise, so on the `github` backend a slice is the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or an edit made after `stamp release` — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
    case "$(bash "$SC" backend stamp)" in
@@ -132,6 +132,17 @@ If you are running on a branch other than the user's working branch and `--pr` w
      else echo "scope aborted: neither origin/$BASE_BRANCH nor $BASE_BRANCH resolves" >&2; exit 1; fi
      [ "$SLICE_FROM" != "$BASE_REF" ] || SLICE_FROM="$STACKED_REF"
      BASE_REF="$STACKED_REF"
+   fi
+   # `stamp release` records the head it opened the lock at. That head stands in
+   # for a stamp that was folded away only when it carries the stamped tree:
+   # starting anywhere else would skip commits no review has read.
+   if [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null; then
+     RELEASED_HEAD=$(bash "$SC" stamp read "$(git branch --show-current)" --released) || RELEASED_HEAD=
+     if [ -n "$RELEASED_HEAD" ] && [ "$RELEASED_HEAD" != "$(git rev-parse HEAD)" ] \
+       && git merge-base --is-ancestor "$RELEASED_HEAD" HEAD 2>/dev/null \
+       && [ "$(git rev-parse "$RELEASED_HEAD^{tree}")" = "$(git rev-parse -q --verify "$REVIEWED_SHA^{tree}")" ]; then
+       REVIEWED_SHA="$RELEASED_HEAD"
+     fi
    fi
    SCOPE_FROM="$SLICE_FROM"
    if [ -n "$REVIEWED_SHA" ] \
@@ -157,6 +168,8 @@ If you are running on a branch other than the user's working branch and `--pr` w
    git log --oneline "$SCOPE_FROM..HEAD"
    ```
    Four states fall back to the whole slice, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` and whose tree `HEAD` no longer carries (the branch was rewritten and the content changed with it, or the reviewed commit is gone — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge commit after the stamp (the post-stamp diff would carry the base branch's own changes, which nobody on this branch wrote). The whole slice is the whole branch unless `range` found a recorded start, and when it finds one that a fold or rebase rewrote away it says so on stderr and answers `$BASE_REF`, never re-anchoring the start. The decision is printed so the terminal readout and the PR say the same thing about what was read.
+
+   **After a `stamp release`, the delta starts at the released head, and never past a commit no review read.** When the head at release was the stamped commit, the two starts are one. When a fold had replaced the stamped commit, the block starts at the released head if it carries the stamped tree. When commits had landed after the stamp and before the release, it starts at the stamp, so they are read too. Give each reviewer the release's reason, from `.claude/.post-review-edit`, as the claim the edit has to meet.
 
    **A rewrite that kept the reviewed tree is not a divergence.** When the stamped commit is not an ancestor of `HEAD` but still exists locally and carries the same tree as `HEAD`, history changed and content did not: the fold Phase 4's handoff offers (`git rebase -i --autosquash`) produces exactly this. The block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`. Skip Phase 3 and everything in Phase 4 except the stamp, which re-stamps at `HEAD` (run Phase 3's one-line SHA block for the value its `REVIEWED_SHA=` line takes), and the handoff menu. The stamp certifies reviewed content, and a tree hash is that content exactly. If the stamped commit is not available locally, the tree cannot be compared, and the rewrite takes the whole-branch fallback above.
 
@@ -575,7 +588,7 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
 # A stamped branch carries no classification marker. /execute Step 6 removes
 # them, but a session that reached this review some other way may still hold one.
-rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
 ```
 
 Retry a failed write **once**, as on the PR-body path. `stamp write` replaces the branch's one stamp file rather than adding to it, so a retry cannot double-stamp.
@@ -626,7 +639,8 @@ rm -f "$BODY_FILE"
 # The stamp's local twin. `.claude/.review-stamped` is read by
 # .claude/hooks/enforce-classification.sh, which refuses implementation writes
 # while it exists and .claude/.fix-findings-active does not — so a post-review
-# fix has to go through /fix-findings or through a visible hand deletion.
+# fix has to go through /fix-findings, and any other edit through
+# `sidecar.sh stamp release`, which records its reason.
 # /closeout removes it at merge. The guard on the `gh pr edit` above is what
 # makes this line reachable only after the stamp write succeeded; without it the
 # touch would run on an aborted stamp too.
@@ -637,14 +651,14 @@ PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
 mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
 # A stamped branch carries no classification marker. /execute Step 6 removes
 # them, but a session that reached this review some other way may still hold one.
-rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
 ```
 
 - **All three guards refuse rather than repair, and an abort is not a failed review.** Retry the fetch **once**, and a failed write **once** — the write sets the body from a file rather than appending, so a retry cannot double-stamp; if the second attempt also aborts, report it and hand back with the findings you already presented standing. The bound matters — an unbudgeted retry loop against a flaking API was an untimed contributor to the incident this guard came from. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of.
 - **`$SHORT_SHA` is pinned to 7 characters rather than taken from `git rev-parse --short`.** The abbreviation `--short` picks is variable-width and grows as a repo does, so a re-stamp could swap an 8-character short form for a 7-character one and leave the body one byte shorter than what was read — which the write guard would correctly refuse, on a write that was correct. Pinning the width is what makes the guard's "never shorter" premise true rather than nearly true.
 
 - **The HTML comment carries the full 40-character SHA — never the short form.** The two placeholders sit on adjacent lines and are not interchangeable: `<full-sha>` is the untruncated SHA Phase 3 printed, `<short-sha>` is the abbreviated form and belongs *only* in the visible prose line. `/closeout` compares the extracted marker against `headRefOid`, which is always 40 characters, so a short SHA in the comment can never compare equal — the gate would then report divergence on a PR whose head never moved, and a gate that cries wolf is one that gets clicked through. `/closeout`'s parser requires exactly 40 hex characters, so a swapped placeholder does not degrade quietly into a prefix match; it fails to parse. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this contract by round-tripping this template through `/closeout`'s own extraction, so the two skills cannot drift apart silently.
-- **Exactly one stamp per PR, and it names what a review read.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer. Fixes made in response to these findings move the head past the stamp, and stay past it until a re-run's Phase 3 reads them: the re-stamp names that run's printed SHA, never a later head. `/closeout` Step 2 makes that divergence *visible* at merge; the `.claude/.review-stamped` flag written above is what makes it *cost something* at the moment of the edit, by routing the fix to `/fix-findings` — a sub-agent that did not write the code — or forcing a deliberate hand deletion. The flag is local and transient; the stamp remains the durable record, and this skill remains its only writer.
+- **Exactly one stamp per PR, and it names what a review read.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer. Fixes made in response to these findings move the head past the stamp, and stay past it until a re-run's Phase 3 reads them: the re-stamp names that run's printed SHA, never a later head. `/closeout` Step 2 makes that divergence *visible* at merge; the `.claude/.review-stamped` flag written above is what makes it *cost something* at the moment of the edit, by routing the fix to `/fix-findings` — a sub-agent that did not write the code — or, for an edit that is not a finding, requiring a `stamp release` with its reason on record. The flag is local and transient; the stamp remains the durable record, and this skill remains its only writer.
 - **The stamp claims coverage over commits, not one whole-tree read.** Its own visible line says what it means: commits after the SHA have not been through the review dimensions. A re-run in delta scope (Phase 1 step 4) satisfies that claim for every commit up to the new head — the earlier review covered the commits up to the old stamp, this one covered the rest — so it re-stamps at the SHA its own Phase 3 printed, with the same template. Nothing in the block records the scope, deliberately: the block is width-pinned by the never-shorter guard above, and a scope field that shrank on the next whole-branch re-stamp would abort it. The scope is printed to the terminal in Phase 1 instead.
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
 - **Reviewer-mode does not stamp, and does not touch `.claude/.review-stamped`.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify. Locking a local checkout on the strength of comments nobody has posted would refuse edits on a branch the reviewer does not own.
