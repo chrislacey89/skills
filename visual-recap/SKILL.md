@@ -332,7 +332,7 @@ CYCLE="$(printf '%s' "$RESULT" | jq -r '.cycle | join(", ")')" || exit 1
 printf '%s' "$RESULT" | jq -c '.out'
 ```
 
-**The scene's items, edges, and states are written from that JSON, never typed from the issues or from memory.** One view, the build order: one box per slice, one edge per `blocked_by` entry pointing at the slice it blocks, one step per slice in the array's order. **A blocker that is not in the array is an outside box** (a `box` item, dashed, holding its id and no state), never dropped. The structure is grounded by tooling, so no item carries an asserted mark. The captions are the only authored part, and each cites its slice's id or is marked asserted. **An empty `slices` array draws no scene**: say the PRD has no slices yet. A set too large to place at reading size takes a §5 Mermaid graph written from the same JSON.
+**The scene's items, edges, and states are written from that JSON, never typed from the issues or from memory.** One view, the build order: one box per slice, one edge per `blocked_by` entry pointing at the slice it blocks, one step per slice in the array's order. **A blocker that is not in the array is an outside box** (a `box` item, dashed, holding its id and no state), never dropped. Which parts of the scene are graded is stated in `references/visual-rendering-core.md` §1, *Forward-looking blocks*. The captions are the only authored part, and each cites its slice's id or is marked asserted. **An empty `slices` array draws no scene**: say the PRD has no slices yet. A set too large to place at reading size takes a §5 Mermaid graph written from the same JSON.
 
 Beside the scene, read each slice's body (`gh issue view`, or `work view W-<n> --json` on the sidecar backend) for its Boundary Map.
 
