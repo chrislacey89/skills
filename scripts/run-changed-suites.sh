@@ -7,7 +7,8 @@
 #                   pre-push runs this form.
 #   <path>...       those paths. This is the form to declare as this repo's
 #                   verify.test_changed.
-#   --all           every suite but the CI-only two: the full local run.
+#   --all           every suite but scripts/suites-ci-only.txt's: the full
+#                   local run.
 #
 # Each suite runs with the arguments the CI workflow gives it, so that workflow
 # is the one place an invocation is written. The run says how many suites ran,
@@ -23,11 +24,11 @@ cd "$root"
 workflow=".github/workflows/validate-skills.yml"
 jobs=8
 
-# These two re-run the other suites, so they run in CI only. Their headers say why.
-ci_only="scripts/test-fixture-git-isolation.sh
-scripts/test-fixture-root-collision.sh"
-
 die() { printf 'run-changed-suites: %s\n' "$1" >&2; exit 2; }
+
+# The suites that re-run the others, so they run in CI only. Never run here.
+ci_only="$(grep -vE '^[[:space:]]*(#|$)' scripts/suites-ci-only.txt)" \
+    || die "scripts/suites-ci-only.txt lists no suite; nothing ran"
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

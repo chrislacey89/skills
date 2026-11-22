@@ -36,6 +36,7 @@ cd "$repo_root" || exit 2
 SELECT="scripts/suites-for-paths.sh"
 RUNNER="scripts/run-changed-suites.sh"
 ALWAYS="scripts/suites-always.txt"
+CI_ONLY="scripts/suites-ci-only.txt"
 WORKFLOW=".github/workflows/validate-skills.yml"
 HOOKS="lefthook.yml"
 
@@ -52,7 +53,7 @@ fatal() { printf 'FATAL: %s\n' "$1" >&2; exit 2; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi; }
 nonzero() { if [ "$2" -ne 0 ]; then ok "$1"; else bad "$1" "exit 0"; fi; }
 
-for f in "$SELECT" "$RUNNER" "$ALWAYS" "$WORKFLOW" "$HOOKS"; do
+for f in "$SELECT" "$RUNNER" "$ALWAYS" "$CI_ONLY" "$WORKFLOW" "$HOOKS"; do
     [ -f "$f" ] || fatal "$f is missing; this suite has nothing to check"
 done
 
@@ -103,6 +104,7 @@ plant args "nothing else"
 plant fixture-git-isolation "alpha/SKILL.md"
 plant fixture-root-collision "alpha/SKILL.md"
 printf '# a comment\n\nscripts/test-always.sh\nscripts/test-args.sh\n' >"$fx/$ALWAYS"
+cp "$CI_ONLY" "$fx/$CI_ONLY"
 printf '      - name: Run args\n        run: bash scripts/test-args.sh beta/arg.md\n' >"$fx/$WORKFLOW"
 printf 'alpha, one\nalpha, two\nalpha, three\n' >"$fx/alpha/SKILL.md"
 printf 'beta\n' >"$fx/beta/SKILL.md"
@@ -146,7 +148,7 @@ run_fx() {
 
 run_fx alpha/SKILL.md
 check "named paths: exit 0" 0 "$rc"
-check "named paths: the selection runs with CI's arguments, and the CI-only suites do not" \
+check "named paths: the selection runs with CI's arguments, and the $CI_ONLY suites do not" \
     "alpha,always,args beta/arg.md" "$ran"
 case "$out" in
     *"3 suites ran"*) ok "the runner says how many suites ran" ;;
@@ -154,7 +156,7 @@ case "$out" in
 esac
 
 run_fx --all
-check "--all runs every suite but the CI-only two" "alpha,always,args beta/arg.md,beta,spaced" "$ran"
+check "--all runs every suite but the $CI_ONLY ones" "alpha,always,args beta/arg.md,beta,spaced" "$ran"
 run_fx --nonsense
 nonzero "an unknown option is refused" "$rc"
 check "an unknown option runs nothing" "" "$ran"
@@ -216,9 +218,7 @@ GLOB_READ='(^|[^[:alnum:]_])ls-files([^[:alnum:]_]|$)|(^|[^[:alnum:]_])git( -C [
 # repository's files, each with why. An entry that stops matching fails below.
 NOT_THE_TREE="scripts/test-lesson-recall.sh globs inside its fixture projects
 scripts/test-population-covers-untracked.sh runs its ls-files in a fixture
-scripts/test-setup-pre-commit-gates.sh matches a skill's grep line as text
-scripts/test-fixture-git-isolation.sh is CI only
-scripts/test-fixture-root-collision.sh is CI only"
+scripts/test-setup-pre-commit-gates.sh matches a skill's grep line as text"
 
 # globbers <suite>... — those whose code, whole-line comments dropped, matches GLOB_READ.
 globbers() {
@@ -229,11 +229,12 @@ globbers() {
     done
 }
 
-# unlisted <list-file> <suite>... — the globbing suites neither listed nor excused.
+# unlisted <list-file> <suite>... — the globbing suites neither listed nor
+# excused. A suite in $CI_ONLY is excused: pre-push never runs it.
 unlisted() {
     local list="$1" s listed
     shift
-    listed="$(list_entries "$list"; printf '%s\n' "$NOT_THE_TREE" | cut -d' ' -f1)"
+    listed="$(list_entries "$list"; list_entries "$CI_ONLY"; printf '%s\n' "$NOT_THE_TREE" | cut -d' ' -f1)"
     while IFS= read -r s; do
         [ -n "$s" ] || continue
         grep -qxF -- "$s" <<<"$listed" || printf '%s\n' "$s"

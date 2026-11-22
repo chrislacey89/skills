@@ -33,9 +33,9 @@ pre-push:
     # The suites that read what this push changes, plus scripts/suites-always.txt.
     # A new suite is registered in .github/workflows/validate-skills.yml, and in
     # that list when it reaches files through a glob; it needs no line here.
-    # scripts/test-fixture-git-isolation.sh and
-    # scripts/test-fixture-root-collision.sh are deliberately absent: both re-run
-    # other suites, so they run in CI only (#442, #526) and the runner skips them.
+    # The suites in scripts/suites-ci-only.txt are deliberately absent: they
+    # re-run other suites, so they run in CI only (#442, #526) and the runner
+    # skips them.
     # The whole local run by hand: bash scripts/run-changed-suites.sh --all
     changed-suites:
       run: bash scripts/run-changed-suites.sh

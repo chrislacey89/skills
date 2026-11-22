@@ -22,7 +22,7 @@
 # untracked suites are exercised as written), and runs every suite pre-push
 # can run — read from the CI workflow, where each is registered (#806: pre-push
 # selects by changed path), args included, and checked to be exactly
-# scripts/test-*.sh minus this one and the other CI-only suite ($ci_only below), so a suite registered in a shape the
+# scripts/test-*.sh minus scripts/suites-ci-only.txt ($ci_only below), so a suite registered in a shape the
 # extraction cannot read fails here instead of dropping out — from that
 # worktree with GIT_DIR exported at the worktree's git dir, the way a hook run
 # from a Conductor workspace sees it. After each suite the clone's shared
@@ -71,9 +71,10 @@ set -u
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 self="scripts/$(basename "$0")"
-# The other CI-only suite. It re-runs suites too, so pre-push does not carry
-# it, and this one does not re-run it (scripts/run-changed-suites.sh skips both).
-ci_only="scripts/test-fixture-root-collision.sh"
+# The CI-only suites, this one among them. They re-run suites, so pre-push does
+# not carry them (scripts/run-changed-suites.sh skips them) and this does not re-run them.
+ci_only="$(grep -vE '^[[:space:]]*(#|$)' "$repo_root/scripts/suites-ci-only.txt")" || {
+  printf 'FATAL: scripts/suites-ci-only.txt lists no suite\n' >&2; exit 2; }
 workflow=".github/workflows/validate-skills.yml"
 
 tmp="$(mktemp -d)"
@@ -228,7 +229,7 @@ count=$(wc -l <"$suites" | tr -d ' ')
 if [ -z "$mismatch" ] && [ "$count" -gt 0 ]; then
   ok "read $count suite invocations from $workflow, covering every scripts/test-*.sh"
 else
-  bad "the suites read from $workflow are not scripts/test-*.sh minus this one and $ci_only:"
+  bad "the suites read from $workflow are not scripts/test-*.sh minus this one and scripts/suites-ci-only.txt:"
   printf '%s\n' "$mismatch" | sed 's/^/       /'
 fi
 
