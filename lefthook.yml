@@ -173,6 +173,8 @@ pre-push:
       run: bash scripts/test-skill-blocks-zsh-safe.sh
     handoff-mktemp-tests:
       run: bash scripts/test-handoff-mktemp.sh
+    staged-scene-contract-tests:
+      run: bash scripts/test-staged-scene-contract.sh
     # scripts/test-fixture-git-isolation.sh is deliberately absent: it runs in
     # CI only (#442). It still reads its suite list from this file, and fails
     # unless that list is every scripts/test-*.sh but itself and
