@@ -135,7 +135,7 @@ Two things change, and both are load-bearing. **The Grounding Rule inverts** —
 
 #### Named plan subjects
 
-Asking for a subject by name ("the shape") is the selection. There is no flag. For each one, the rows of its mapping are Step 3's coverage inventory: render each row, or say the source had nothing for it. Run secret-redaction over the subject's text before any of it reaches the HTML (`references/visual-rendering-core.md` §2). Write the page's blocks first, each with a stable id, so the scene's steps can cite them.
+Asking for a subject by name ("the shape", "PRD #n") is the selection. There is no flag. For each one, the rows of its mapping are Step 3's coverage inventory: render each row, or say the source had nothing for it. Run secret-redaction over the subject's text before any of it reaches the HTML (`references/visual-rendering-core.md` §2). Write the page's blocks first, each with a stable id, so the scene's steps can cite them.
 
 #### Subject: a `/shape` closing summary
 
@@ -150,6 +150,63 @@ The scene (`references/visual-recap-design.md` §18) has three views, all on the
 | **Assumptions** | `Uncertain` and `Speculative`: an open question (§14) each, carrying the tag and its research question. `Likely` and `Established`: a table with the tag. All of them: the scene's third view |
 | **Impositions** | a table: the constraint and where it comes from |
 | **Structural signals** | a short table, in plain prose per row, with no decision card |
+
+#### Subject: a PRD
+
+Read the PRD by its id with the block below, never from memory. It takes `#<n>` or `W-<n>`, asks `sidecar.sh backend prds` where PRDs live, and prints the body. A nonzero exit prints no body and says why on stderr: relay that and stop. On GitHub the read is [gh issue view](https://cli.github.com/manual/gh_issue_view), and "is a PRD" is `/execute` Step 0's shaped-pitch headings, minus a slice and a feature issue that is still a bet.
+
+```bash
+# visual-recap: read prd
+# Fill in the PRD's id: #<n>, or W-<n> on the sidecar backend.
+PRD="<prd id>"
+SC="<this skill's directory>/references/sidecar.sh"
+BACKEND="$(bash "$SC" backend prds)" || { echo "backend refused: not guessing where the PRD is" >&2; exit 1; }
+case "$BACKEND" in
+  github)
+    N="${PRD#\#}"
+    case "$N" in ''|*[!0-9]*) echo "[$PRD] is not an issue number, and PRDs here are GitHub issues" >&2; exit 1 ;; esac
+    ITEM="$(gh issue view "$N" --json number,url,body)" || { echo "could not read #$N" >&2; exit 1; }
+    ;;
+  sidecar)
+    case "$PRD" in W-*) ;; *) echo "[$PRD] is not a W-<n> id, and PRDs here are work items" >&2; exit 1 ;; esac
+    ITEM="$(bash "$SC" work view "$PRD" --json)" || { echo "could not read $PRD" >&2; exit 1; }
+    ;;
+  *) echo "backend answered [$BACKEND]: not guessing" >&2; exit 1 ;;
+esac
+IS_PRD='
+def unfenced: split("\n") | map(sub("\r$"; ""))
+  | reduce .[] as $l ({code: false, out: []};
+      if ($l | test("^ *(```|~~~)")) then .code |= not elif .code then . else .out += [$l] end)
+  | .out;
+if has("kind") then .kind == "prd" and (.maturity // "prd") == "prd"
+else ((.body // "") | unfenced) as $lines
+  | ((.url // "") | test("/pull/") | not)
+    and any($lines[]; test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\s*$"; "i"))
+    and (any($lines[]; test("^## Parent PRD\\s*$")) | not)
+    and ($lines | join("\n") | test("(^|\n)[#*` -]*Current maturity[:*`\\s]*(roadmap bet|research-ready)"; "i") | not)
+end'
+printf '%s' "$ITEM" | jq -e "$IS_PRD" >/dev/null || { echo "$PRD is not a shaped PRD" >&2; exit 1; }
+BODY="$(printf '%s' "$ITEM" | jq -r '.body // ""')" || { echo "could not read the body of $PRD" >&2; exit 1; }
+[ -n "$BODY" ] || { echo "$PRD has an empty body" >&2; exit 1; }
+printf '%s\n' "$BODY"
+```
+
+The scene has two views, both on the page: **how it works today** and **how it works as specified**. Both are drawn from the mechanism in the Solution, on the same items in the same places, so the difference is what the reader sees. Each step cites the PRD section it comes from or current code at `file:line`, or is marked asserted. **A PRD whose Solution has no ordered steps gets no scene.** Use a §5 diagram, or prose when there is nothing to connect, and say on the page which it is and why.
+
+| Section | Renders as |
+|---|---|
+| **Problem** | plain prose at the top, and the source of the scene's first view |
+| **Appetite** | plain prose: the budget, and that it is a target |
+| **Target / Estimate / Commitment** | plain prose, the three kept apart |
+| **Uncertainty / Confidence** | plain prose for the confidence, an open question (§14) for each driver still unanswered |
+| **Solution** | the staged scene (§18), or the §5 diagram or prose that stands in for it |
+| **Rabbit Holes** | a table: the risk and its resolution. A decision card (§13) only for a resolution that forecloses something |
+| **No-gos** | a table, in the PRD's words |
+| **User Stories** | plain prose: the numbered list, must-haves before nice-to-haves, numbers unchanged |
+| **API Contract Sketch** | plain prose and a table of operations, each cited to the sketch |
+| **Implementation Decisions** | a decision card for each that forecloses something, a table row with an id for every other, and each locked contract shape verbatim as a code block |
+| **Research Reference** | plain prose: the reference, as written |
+| **Lessons from Past Solutions** | plain prose: each lesson's path and what it changes here |
 
 ### 2. Derive the grounded skeleton (tooling, not prose)
 
@@ -257,7 +314,7 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 
 ## Handoff
 
-- **Expected input:** either a finished change to comprehend — a branch range, a PR number, or a working diff, plus the base branch to diff against — or a plan to render forward: a `/shape` closing summary (in the conversation or pasted), a shaped PRD issue, a research artifact, or a proposal whose decisions and architecture a reader has to grasp before slices get cut. No upstream artifact is required for the diff case, though a linked PRD or slice issue helps frame intent.
+- **Expected input:** either a finished change to comprehend — a branch range, a PR number, or a working diff, plus the base branch to diff against — or a plan to render forward: a `/shape` closing summary (in the conversation or pasted), a shaped PRD by its id (`#<n>`, or `W-<n>` on the sidecar backend), a research artifact, or a proposal whose decisions and architecture a reader has to grasp before slices get cut. No upstream artifact is required for the diff case, though a linked PRD or slice issue helps frame intent.
 - **Produces:** a transient, self-contained interactive HTML artifact in the selected mode — a **scrolling recap** (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites, a decision trail of the commitments a finished diff carries out, a sitting plan when the excerpts exceed one reading budget) or a **walkthrough deck** (premise → changes → mechanism → aftermath, one idea per screen, before/after panes inside the screen) — or, for a plan, the **forward-looking blocks**: decision cards for the commitments it makes, an options-comparison for a fork it has not settled, a staged scene for the order it states (`references/visual-recap-design.md` §18), and the architecture it implies, every field cited or visibly asserted. Diagrams render as a CSS spine when trivial and Mermaid-via-CDN when multi-stage or behavioral. Plus the reader's feedback, copied back where the artifact is handed off, with durable items promoted to GitHub PR review comments (diff case) or to the PRD issue body (plan case). A comprehension surface and a decision, not a committed file.
 - **Reconnects at:** the `/pre-merge` → merge boundary for a diff — run it before approving, then continue with `/compound` in-PR if a durable lesson emerged, a `/pre-merge` re-run that re-stamps, then `/closeout`. For a shape's closing summary, the `/shape` → `/research` boundary. For a PRD, the `/write-a-prd` → `/prd-to-issues` boundary: run it when the PRD is shaped and someone who was not in the shaping session has to react before slices get cut.
 - **What comes next:** the user merges, or decomposes the plan (or pauses on unresolved items). `/visual-recap` does not invoke anything.

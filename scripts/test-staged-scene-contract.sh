@@ -31,7 +31,12 @@
 #   3. The script: closed to the network and to storage, no handle on what is
 #      visible, and, under node, parsed and run: nothing plays by itself, Next
 #      moves one view one step, and the last step is the authored frame.
-#   4. SKILL.md Step 1 maps each category of shape/SKILL.md's closing summary.
+#   4. SKILL.md Step 1 maps each category of shape/SKILL.md's closing summary,
+#      and each heading of write-a-prd/SKILL.md's pitch template.
+#   5. The read blocks, RUN as written under bash and zsh against a stub gh and
+#      scratch sidecars. Every refusal exits nonzero with a reason on stderr
+#      and nothing on stdout, so a failed read never looks like an empty plan.
+#      The rule for what counts as a PRD is pinned to the one /execute reads.
 #
 # WHAT IT DOES NOT CHECK: that a caption is true or that a picture is clear.
 # No prose is searched for a rule's wording
@@ -60,6 +65,8 @@ DESIGN=docs/visual-recap-design.md
 CORE=docs/visual-rendering-core.md
 SKILL=visual-recap/SKILL.md
 SHAPE=shape/SKILL.md
+PITCH=write-a-prd/SKILL.md
+EXECUTE=execute/SKILL.md
 
 pass=0; fail=0
 section() { printf '\n=== %s ===\n' "$1"; }
@@ -87,6 +94,13 @@ view_markup() { awk -v v="data-view=\"$1\"" '/<section / && index($0, v) {on = 1
 attr() { sed -nE "s/.* $1=\"([^\"]*)\".*/\1/p"; }
 # inner <marker>: the text of the first element on each line whose tag has the marker.
 inner() { sed -nE "s/.*<[^>]*$1[^>]*>([^<]*)<.*/\1/p"; }
+# marked_block <first line>: the bash fence that opens with that line.
+marked_block() {
+    awk -v m="$1" '
+        /^```bash$/ { inb = 1; first = 1; buf = ""; next }
+        inb && /^```$/ { if (keep) { printf "%s", buf; exit } inb = 0; next }
+        inb { if (first && $0 == m) keep = 1; first = 0; buf = buf $0 "\n" }'
+}
 unescape() { sed -e 's/&lt;/</g; s/&gt;/>/g; s/&quot;/"/g; s/&amp;/\&/g'; }
 
 design_s18="$(span '^## 18[.] Block: staged scene' '^## ' <"$DESIGN")"
@@ -494,6 +508,192 @@ assumption_row="$(grep -F '| **Assumptions** |' <<<"$shape_map")"
 while IFS= read -r tag; do
     if grep -qF "\`$tag\`" <<<"$assumption_row"; then ok "the Assumptions row places $tag"; else bad "the Assumptions row does not place $tag"; fi
 done <<<"$tags"
+
+# -----------------------------------------------------------------------------
+section "SKILL.md Step 1 maps a PRD"
+# -----------------------------------------------------------------------------
+pitch="$(span '^<pitch-template>$' '^</pitch-template>$' <"$PITCH" | tail -n +2)"
+headings="$(sed -nE 's/^## (.+)$/\1/p' <<<"$pitch")"
+[ -n "$headings" ] || fatal "could not read the pitch template's headings from $PITCH"
+prd_map="$(subject 'a PRD' | grep '^|')"
+clean "every pitch-template heading has a row" "$(unmapped "$prd_map" "$headings")"
+flags "a heading with no row" "$(unmapped "$prd_map" "$headings
+A heading with no row")"
+
+# -----------------------------------------------------------------------------
+section "the read blocks are shaped to be run"
+# -----------------------------------------------------------------------------
+read_prd="$(marked_block '# visual-recap: read prd' <"$SKILL")"
+[ -n "$read_prd" ] || fatal "$SKILL has no bash block opening '# visual-recap: read prd'"
+prd_rule() { grep -oE '\^#\+ \*[(][^)]*[)][^"]*"' | sort -u; }
+execute_rule="$(prd_rule <"$EXECUTE")"
+[ -n "$execute_rule" ] || fatal "could not read the PRD heading rule from $EXECUTE"
+check "the PRD heading rule is /execute's" "$execute_rule" "$(prd_rule <<<"$read_prd")"
+
+wf=.github/workflows/validate-skills.yml
+zsh_step="$(grep -n 'name: Install zsh' "$wf" | head -1 | cut -d: -f1)"
+this_step="$(grep -n 'run: bash scripts/test-staged-scene-contract.sh' "$wf" | head -1 | cut -d: -f1)"
+if [ -n "$zsh_step" ] && [ "$zsh_step" -lt "${this_step:-0}" ]; then ok "CI installs zsh before this suite"; else bad "CI does not install zsh before this suite"; fi
+
+# --- fixtures for running them -----------------------------------------------
+
+REAL_SC="$repo_root/visual-recap/references/sidecar.sh"
+[ -f "$REAL_SC" ] || fatal "$REAL_SC is missing; run scripts/sync-skill-references.sh"
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL="$tmp/gitconfig"
+git config --file "$GIT_CONFIG_GLOBAL" user.name "Scene Tester"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "tester@example.com"
+git config --file "$GIT_CONFIG_GLOBAL" init.defaultBranch main
+export SKILL_KIT_SIDECAR_ROOT="$tmp/sidecars"
+export SKILL_KIT_RESEARCH_ARCHIVE="$tmp/archive"
+
+mkdir -p "$tmp/bin"
+export GH_LOG="$tmp/gh.log" GH_FIXTURES="$tmp/gh"
+cat >"$tmp/bin/gh" <<'GH'
+#!/bin/sh
+echo "$*" >>"$GH_LOG"
+case "$1 $2" in
+    "issue view") file="$GH_FIXTURES/issue-$3.json" ;;
+    "issue list") file="$GH_FIXTURES/list.json" ;;
+    *) echo "gh stub: unexpected: $*" >&2; exit 1 ;;
+esac
+[ -f "$file" ] || { echo "gh stub: cannot resolve $*" >&2; exit 1; }
+cat "$file"
+GH
+chmod +x "$tmp/bin/gh"
+printf '#!/usr/bin/env bash\necho "refused" >&2\nexit 1\n' >"$tmp/refusing-sidecar.sh"
+# work create refuses an empty body, so only a hand-edited item has one.
+cat >"$tmp/empty-body-sidecar.sh" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+    backend) echo sidecar ;;
+    *) echo '{"id":"W-1","kind":"prd","body":""}' ;;
+esac
+STUB
+
+projects=0
+# mk_project: a scratch repo with a root commit of its own, in $P.
+mk_project() {
+    projects=$((projects + 1)); P="$tmp/proj$projects"
+    git init -q "$P" || fatal "could not create $P"
+    git -C "$P" commit -q --allow-empty -m "root $P" || fatal "could not commit in $P"
+    git -C "$P" remote add origin "https://github.com/acme/scene$projects.git"
+    : >"$GH_LOG"
+    rm -rf "$GH_FIXTURES"; mkdir -p "$GH_FIXTURES"
+}
+mk_guest() {
+    mk_project
+    (cd "$P" && bash "$REAL_SC" init --name "scene$projects" --mode guest --write sidecar --in-tree-path none --no-migrate-archive) >/dev/null 2>&1 \
+        || fatal "could not init a guest sidecar in $P"
+}
+# gh_issue <number> <body> [issues|pull]
+gh_issue() {
+    jq -n --arg n "$1" --arg b "$2" --arg kind "${3:-issues}" \
+        '{number: ($n | tonumber), url: ("https://github.com/acme/app/" + $kind + "/" + $n), body: $b}' >"$GH_FIXTURES/issue-$1.json"
+}
+# work <body> <work create args...>: prints the new id.
+work() {
+    printf '%s\n' "$1" >"$tmp/body"; shift
+    (cd "$P" && bash "$REAL_SC" work create "$@" --body-file "$tmp/body" 2>/dev/null)
+}
+# run_block <block> <PRD id> [sidecar.sh]: the block as written, placeholders
+# filled, under $run_shell; stdout in $out, stderr in $err, exit in $rc.
+run_block() {
+    local filled
+    filled="$(awk -v id="$2" -v sc="${3:-$REAL_SC}" '
+        /^PRD="/ { print "PRD=\"" id "\""; next }
+        /^SC="/  { print "SC=\"" sc "\""; next }
+        { print }' <<<"$1")"
+    if [ "$run_shell" = zsh ]; then
+        # -f: no startup file, so nothing puts a real gh ahead of the stub.
+        (cd "$P" && PATH="$tmp/bin:$PATH" zsh -f -c "$filled") >"$tmp/out" 2>"$tmp/err"; rc=$?
+    else
+        (cd "$P" && PATH="$tmp/bin:$PATH" bash -c "$filled") >"$tmp/out" 2>"$tmp/err"; rc=$?
+    fi
+    out="$(cat "$tmp/out")"; err="$(cat "$tmp/err")"
+}
+# refused <label>: the last run failed loudly and printed nothing to read.
+refused() {
+    if [ "$rc" -ne 0 ] && [ -z "$out" ] && [ -n "$err" ]; then ok "$run_shell: $1: refused"
+    else bad "$run_shell: $1: not refused" "rc=$rc stdout=[$out] stderr=[$err]"; fi
+}
+
+slice_body='## Parent PRD
+
+#12
+
+## User Stories Addressed
+
+- User story 1
+
+## User Stories'
+bet_body='## Current maturity
+
+research-ready
+
+## Appetite
+
+Two weeks'
+
+read_prd_arms() {
+    local body id
+    body="$pitch
+A literal backslash \\n and a percent %s stay as written."
+
+    mk_project
+    gh_issue 12 "$body"
+    run_block "$read_prd" '#12'
+    check "$run_shell: github: exits 0" 0 "$rc"
+    check "$run_shell: github: prints the issue's body" "$body" "$out"
+    run_block "$read_prd" 12
+    check "$run_shell: github: a bare number reads the same body" "$body" "$out"
+    gh_issue 13 "$slice_body"
+    run_block "$read_prd" '#13'; refused "github: a slice"
+    gh_issue 14 "$bet_body"
+    run_block "$read_prd" '#14'; refused "github: a research-ready bet"
+    gh_issue 15 "$body" pull
+    run_block "$read_prd" '#15'; refused "github: a pull request"
+    gh_issue 16 "An ordinary bug report."
+    run_block "$read_prd" '#16'; refused "github: an ordinary issue"
+    gh_issue 17 ""
+    run_block "$read_prd" '#17'; refused "github: an empty body"
+    run_block "$read_prd" '#99'; refused "github: no such issue"
+    run_block "$read_prd" 'W-1'; refused "github: a work item id"
+    run_block "$read_prd" '<prd id>'; refused "github: the placeholder left in"
+    gh_issue 18 "$body
+
+\`\`\`markdown
+## Parent PRD
+\`\`\`"
+    run_block "$read_prd" '#18'
+    check "$run_shell: github: a PRD quoting the slice template is still a PRD" 0 "$rc"
+    : >"$GH_LOG"
+    run_block "$read_prd" '#12' "$tmp/refusing-sidecar.sh"; refused "a backend that refuses"
+    check "$run_shell: a refusing backend never reaches gh" "" "$(cat "$GH_LOG")"
+
+    mk_guest
+    id="$(work "$body" --kind prd)"
+    run_block "$read_prd" "$id"
+    check "$run_shell: sidecar: exits 0" 0 "$rc"
+    check "$run_shell: sidecar: prints the work item's body" "$body" "$out"
+    run_block "$read_prd" "$(work "$slice_body" --kind slice --parent "$id")"; refused "sidecar: a slice"
+    run_block "$read_prd" "$(work "$bet_body" --kind prd --maturity research-ready)"; refused "sidecar: a research-ready bet"
+    run_block "$read_prd" W-99; refused "sidecar: no such work item"
+    run_block "$read_prd" '#12'; refused "sidecar: an issue number"
+    run_block "$read_prd" W-1 "$tmp/empty-body-sidecar.sh"; refused "sidecar: an empty body"
+    check "$run_shell: sidecar: gh is never called" "" "$(cat "$GH_LOG")"
+}
+
+# each_shell <arms>: the arms under bash, and under zsh.
+each_shell() {
+    run_shell=bash; "$1"
+    if command -v zsh >/dev/null 2>&1; then run_shell=zsh; "$1"
+    elif [ -n "${CI:-}" ]; then bad "zsh arm" "zsh is not on PATH and CI is set, so the blocks were not run under zsh"
+    else printf '  SKIP zsh arm: zsh is not on PATH, so the blocks were not run under zsh\n'; fi
+}
+
+section "read prd, run as written on both backends"
+each_shell read_prd_arms
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
