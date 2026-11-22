@@ -228,7 +228,14 @@ The fixer's instructions, in order:
    supplied text and reverts on any difference. No breaker runs on a `supplied`
    after-state. A fixer never writes replacement wording of its own: with no
    supplied text, the finding still ends `blocked: carries an instruction`.
-5. **Run the test command the profile names** and report the exit status verbatim.
+5. **Run the tests that read what you changed.** When the profile declares
+   `verify.test_changed` (a `test_changed` line under `Verify` that is not
+   `none`), run it with the paths in your commit, each one its own quoted
+   argument, and report the exit status verbatim. The run comes before the
+   commit, so those are the paths item 6 will commit, a new file included.
+   When it does not, run `verify.test`. The controller runs `verify.test` in
+   full once, after the last fixer and before the report, and names any
+   failure against the fix commits.
 6. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does. On the `github` backend its last line is
    `Fix-Findings-Run: <run id>`, the id Step 0 fixed, passed in the brief
@@ -756,6 +763,10 @@ Step 2 gives: the breaker is forbidden to read the original working tree at
 all, so handing it the reconciliation would contradict the restriction that
 makes its read-only isolation mean anything.
 
+**Then make item 5's full run.** Its line heads the report: the command, the
+exit status, and how many tests or suites it ran when the runner says. A fixer's
+targeted exit 0 is not a substitute for it.
+
 Then print one block per finding — number (and, for a teammate review thread,
 its URL, so the author can reply to it), the fixer's verdict and commit SHA,
 its `leftovers:` when it named any, its class and sibling lines, the
@@ -767,6 +778,8 @@ reader)` and the paths where Step 1's breaker rule gives that line, else
 behind each. No conclusions the human cannot re-run.
 
 ```
+Full run, after the last fixer — `pnpm run test` → 0, 412 tests
+
 Finding 3 — fixed at a1b2c3d
   fixer:   `pnpm run test` → 0
   class:   an over-fetch computed at the use site instead of from its constant
@@ -830,7 +843,8 @@ findings**, or **leave them for the next review**. Mark neither recommended;
 which sites join is the human's disposition. Ask it before the removal below,
 while the edit lock is still open for this run. Sites the human adds are fixed
 by a fresh fixer each, under the same cap: Steps 1 and 2 as written, one
-finding per site, under this run's id, then their blocks join this report. The
+finding per site, under this run's id, then their blocks join this report,
+with item 5's full run made again after the last of them. The
 question is asked once in a run, so a sibling an added site's fixer reports is
 listed and left for the next review.
 

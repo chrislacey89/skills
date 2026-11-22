@@ -20,7 +20,8 @@
 # WHAT THIS DOES. Clones this repo into a scratch directory, adds a linked
 # worktree to the clone, overlays the working tree onto it (so uncommitted and
 # untracked suites are exercised as written), and runs every suite pre-push
-# runs — read from lefthook.yml, args included, and checked to be exactly
+# can run — read from the CI workflow, where each is registered (#806: pre-push
+# selects by changed path), args included, and checked to be exactly
 # scripts/test-*.sh minus this one and the other CI-only suite ($ci_only below), so a suite registered in a shape the
 # extraction cannot read fails here instead of dropping out — from that
 # worktree with GIT_DIR exported at the worktree's git dir, the way a hook run
@@ -71,8 +72,9 @@ unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 self="scripts/$(basename "$0")"
 # The other CI-only suite. It re-runs suites too, so pre-push does not carry
-# it, and this one does not re-run it (lefthook.yml says the same).
+# it, and this one does not re-run it (scripts/run-changed-suites.sh skips both).
 ci_only="scripts/test-fixture-root-collision.sh"
+workflow=".github/workflows/validate-skills.yml"
 
 tmp="$(mktemp -d)"
 tmp="$(cd "$tmp" && pwd -P)"
@@ -197,41 +199,41 @@ run_isolated bash "$tmp/guarded.sh"
 if [ -z "$leaked_diff" ]; then ok "apparatus: a planted guarded suite is not flagged"
 else bad "apparatus: a planted guarded suite was flagged — the check is not measuring the suite"; fi
 
-# --- Every suite pre-push runs, as pre-push runs it. -------------------------
-# read_suites <lefthook.yml> <out> — write the suite invocations the
+# --- Every suite pre-push can run, as CI invokes it. --------------------------
+# read_suites <workflow> <out> — write the suite invocations the
 # extraction can read to <out>, and print one line per suite on disk that it
 # did not read, or read but not on disk. A `run: |` block or an env-prefixed
 # entry is invisible to the extraction, so the set is checked against
 # scripts/test-*.sh rather than trusted.
 read_suites() {
   sed -n 's/^[[:space:]]*run: \(bash scripts\/test-[A-Za-z0-9_-]*\.sh.*\)$/\1/p' "$1" \
-    | grep -vF -e "$self" -e "$ci_only" >"$2" || true
+    | grep -vF -e "$self" -e "$ci_only" | awk '!seen[$0]++' >"$2" || true
   awk '{print $2}' "$2" | sort -u >"$tmp/suites.read"
   (cd "$repo_root" && printf '%s\n' scripts/test-*.sh) | grep -vxF -e "$self" -e "$ci_only" | sort >"$tmp/suites.disk"
-  comm -23 "$tmp/suites.disk" "$tmp/suites.read" | sed 's/$/ is on disk but was not read from lefthook.yml/'
-  comm -13 "$tmp/suites.disk" "$tmp/suites.read" | sed 's/$/ was read from lefthook.yml but is not on disk/'
+  comm -23 "$tmp/suites.disk" "$tmp/suites.read" | sed 's/$/ is on disk but was not read from the CI workflow/'
+  comm -13 "$tmp/suites.disk" "$tmp/suites.read" | sed 's/$/ was read from the CI workflow but is not on disk/'
 }
 
 # Apparatus: a suite registered as a `run: |` block must show up as unread.
 sed 's/^\([[:space:]]*\)run: bash scripts\/test-sync-references\.sh$/\1run: |\
-\1  bash scripts\/test-sync-references.sh/' "$repo_root/lefthook.yml" >"$tmp/lefthook.block.yml"
-block_mismatch="$(read_suites "$tmp/lefthook.block.yml" "$tmp/suites.block")"
+\1  bash scripts\/test-sync-references.sh/' "$repo_root/$workflow" >"$tmp/workflow.block.yml"
+block_mismatch="$(read_suites "$tmp/workflow.block.yml" "$tmp/suites.block")"
 if grep -qF "scripts/test-sync-references.sh is on disk" <<<"$block_mismatch"; then
   ok "apparatus: a suite registered as a run: | block is reported as unread"
 else bad "apparatus: a suite registered as a run: | block was NOT reported — the set check is not measuring the extraction"; fi
 
 suites="$tmp/suites"
-mismatch="$(read_suites "$repo_root/lefthook.yml" "$suites")"
+mismatch="$(read_suites "$repo_root/$workflow" "$suites")"
 count=$(wc -l <"$suites" | tr -d ' ')
 if [ -z "$mismatch" ] && [ "$count" -gt 0 ]; then
-  ok "read $count suite invocations from lefthook.yml, one per scripts/test-*.sh"
+  ok "read $count suite invocations from $workflow, covering every scripts/test-*.sh"
 else
-  bad "the suites read from lefthook.yml are not scripts/test-*.sh minus this one and $ci_only:"
+  bad "the suites read from $workflow are not scripts/test-*.sh minus this one and $ci_only:"
   printf '%s\n' "$mismatch" | sed 's/^/       /'
 fi
 
 while IFS= read -r invocation; do
-  # Word-split the lefthook line on purpose: it is `bash <script> [args]`.
+  # Word-split the workflow line on purpose: it is `bash <script> [args]`.
   # shellcheck disable=SC2086
   run_isolated $invocation
   rc=$?

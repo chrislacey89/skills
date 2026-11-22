@@ -1,0 +1,51 @@
+# suites-always.txt — the suites scripts/suites-for-paths.sh prints on every
+# call, one per line, because a changed path cannot find them by name.
+#
+# HOW IT WAS BUILT. From two readings of each scripts/test-*.sh:
+#   1. its code: it walks the tree, or reaches files through a glob
+#      (git ls-files, git grep, find, */SKILL.md, scripts/test-*.sh).
+#      scripts/test-changed-suites.sh § 4 redoes this reading, and fails when
+#      such a suite is not below.
+#   2. a run in a scratch clone with every file's access time set back: it read
+#      a tracked file its own text does not name. That also finds a path built
+#      from variables, which § 4 cannot see (test-differential-check.sh,
+#      test-hackathon-blocks.sh).
+#
+# A new suite that does either goes here as well as in the CI workflow. One in
+# neither this list nor a path match passes locally and fails in CI.
+scripts/test-authored-diff-pathspec.sh
+scripts/test-bare-pack-refs.sh
+scripts/test-block-default-reads.sh
+scripts/test-bundled-pointer-resolution.sh
+scripts/test-canon-coverage.sh
+scripts/test-changed-suites.sh
+scripts/test-compound-clustering-single-source.sh
+scripts/test-decision-card-grounding.sh
+scripts/test-differential-check.sh
+scripts/test-documented-git-commands.sh
+scripts/test-duplicate-guard-programs.sh
+scripts/test-execute-worktree-handoff.sh
+scripts/test-git-guardrails.sh
+scripts/test-guards-can-fire.sh
+scripts/test-guest-footprint.sh
+scripts/test-hackathon-blocks.sh
+scripts/test-lfg-marker.sh
+scripts/test-options-comparison-contract.sh
+scripts/test-oracle-table-coverage.sh
+scripts/test-per-unit-series-contract.sh
+scripts/test-pipefail-safe-matchers.sh
+scripts/test-profile-paste-sites.sh
+scripts/test-prose-fix-disposition.sh
+scripts/test-restated-review-operatives.sh
+scripts/test-review-currency-marker.sh
+scripts/test-review-dimension-partition.sh
+scripts/test-selection-idiom-consistency.sh
+scripts/test-sidecar-resolution.sh
+scripts/test-sidecar-trace.sh
+scripts/test-skill-arg-substitution.sh
+scripts/test-skill-blocks-zsh-safe.sh
+scripts/test-skill-frontmatter-loads.sh
+scripts/test-skill-inventory.sh
+scripts/test-state-backend.sh
+scripts/test-syntax-palette-contract.sh
+scripts/test-widened-domain-tell.sh
