@@ -80,7 +80,7 @@ projdir_block="$(block "$CO" '<worktree-path>" && pwd -P')"
 for pair in "Step 6 prune:$prune_block" "Step 1 open-items:$open_block" "Step 5 project-directory:$projdir_block"; do
     if [ -n "${pair#*:}" ]; then ok "${pair%%:*} block found"; else bad "${pair%%:*} block found" "not found in closeout/SKILL.md"; fi
 done
-[ -n "$prune_block" ] && [ -n "$open_block" ] && [ -n "$projdir_block" ] || finish
+if [ -z "$prune_block" ] || [ -z "$open_block" ] || [ -z "$projdir_block" ]; then finish; fi
 
 # -----------------------------------------------------------------------------
 section "no fenced block in closeout/SKILL.md uses the forced branch delete"
