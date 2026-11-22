@@ -274,10 +274,33 @@ TEMPLATE_CRLF_BODY="$(printf '%s\n' "$TEMPLATE_BODY" | sed 's/$/\r/')"
 run_open() {
     local b="${open_block//<number>/7}"
     : > "$tmp/calls"
-    out="$(cd "$tmp" && GH_BODY="$1" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "$2" -c "$b" 2>&1)"; rc=$?
+    out="$(cd "$tmp" && GH_BODY="$1" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "$2" -c "${3:-}$b" 2>&1)"; rc=$?
 }
+# The ledger heading as a hand edit can leave it: a suffix, an indent, closing hashes. The row read does not depend on the heading.
+ROW='| 2 | Presence helper claimed as a Layer | Boundary Map Contracts | open | confirmed |'
+HEAD_ROWS=$'| Pass | Finding | Dimension | State | Evidence / outcome |\n|---|---|---|---|---|\n'"$ROW"
+SUFFIX_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '## Review Disposition Ledger (loop-mode only)' "$HEAD_ROWS")"
+INDENT_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '  ## Review Disposition Ledger' "$HEAD_ROWS")"
+CLOSING_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '## Review Disposition Ledger ##' "$HEAD_ROWS")"
+# Over the 64 KB pipe buffer, heading first, so an early-exiting reader would take SIGPIPE under pipefail. The padding sits after the open row.
+BIG_BODY="$(printf '%s\n\n%s\n\n%s\n\n' '## Summary' '## Review Disposition Ledger' "$HEAD_ROWS"; i=0; while [ "$i" -lt 1200 ]; do printf '%s\n' 'Padding line to push the body past the 64 KB pipe buffer, with enough text to count.'; i=$((i + 1)); done)"
+BIG_CLEAN_BODY="$(printf '%s\n\n%s\n\n' '## Summary' '## Review Disposition Ledger'; i=0; while [ "$i" -lt 1200 ]; do printf '%s\n' 'Padding line to push the body past the 64 KB pipe buffer, with enough text to count.'; i=$((i + 1)); done)"
 for sh in bash zsh; do
     if [ "$sh" = zsh ] && ! command -v zsh >/dev/null 2>&1; then printf '  SKIP zsh not installed\n'; continue; fi
+    for variant in "$SUFFIX_BODY" "$INDENT_BODY" "$CLOSING_BODY"; do
+        run_open "$variant" "$sh"
+        has "[$sh] an unusual ledger heading: it still lists the open row" "$out" "Presence helper claimed as a Layer"
+        hasnt "[$sh] an unusual ledger heading: it does not say there is no ledger block" "$out" "no ledger block"
+    done
+    for pf in "" "set -o pipefail; "; do
+        run_open "$BIG_BODY" "$sh" "$pf"
+        check "[$sh] a body over 64 KB (${pf:-no pipefail}): the block exits 0" 0 "$rc"
+        has "[$sh] a body over 64 KB (${pf:-no pipefail}): it lists the open row" "$out" "Presence helper claimed as a Layer"
+        hasnt "[$sh] a body over 64 KB (${pf:-no pipefail}): it does not say there is no ledger block" "$out" "no ledger block"
+        run_open "$BIG_CLEAN_BODY" "$sh" "$pf"
+        has "[$sh] a body over 64 KB with no rows (${pf:-no pipefail}): it says there are no open ledger rows" "$out" "open ledger rows: none"
+        hasnt "[$sh] a body over 64 KB with no rows (${pf:-no pipefail}): it does not say there is no ledger block" "$out" "no ledger block"
+    done
     run_open "$BODY" "$sh"
     check "[$sh] the block exits 0" 0 "$rc"
     has "[$sh] it lists an unticked line" "$out" "unticked item one"
