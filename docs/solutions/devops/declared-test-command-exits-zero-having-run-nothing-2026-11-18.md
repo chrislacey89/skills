@@ -75,7 +75,7 @@ The `--all-files` form was run four times on PR #790's branch after the first pu
 
 ## Prevention
 
-**Code-level:** the command that runs this repo's whole local suite is stated in the header of `scripts/run-changed-suites.sh`.
+**Code-level:** this repo's sidecar profile now declares `lefthook run pre-push --all-files` as its test command, set with `sidecar.sh config set verify.test`. That removes the empty-selection case for this repo.
 
 **Process-level:** chrislacey89/skills#793 proposes that `/fix-findings` Step 1 ask for evidence that checks ran (a count of tests or jobs) beside the exit status, the way `/execute` Step 4, Tier 2 already does ("confirm tests actually exist and ran"), and that the controller treat a count of zero as not run. Until that lands, a controller should check a fixer's test claim against the run's duration or its job count before repeating it.
 
