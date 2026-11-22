@@ -114,7 +114,7 @@ esac
 
 On `route: already merged`, the confirmation below names the teardown, not a merge, and Step 2 narrows to its fully-pushed check while Step 3's merge is skipped, as those steps say. Everything after the merge still runs: the post-review lock release, the work-item close, and Steps 4 through 8.
 
-**Before asking, list what is still open.** Three kinds of item count, and each has the one place it is recorded:
+**Before asking, list what is still open.**
 
 - **Every unticked `- [ ]` line in the PR body**, and **every row of the `## Review Disposition Ledger` whose State is `open`**. The ledger is the durable record with a State column, and its rows carry no severity tier, so list every open row and let the human read its tier from the review output. On the `github` backend both are in the PR body, read once:
 
