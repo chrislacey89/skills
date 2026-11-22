@@ -164,7 +164,8 @@ contract, unchanged.** Read it there (`pre-merge/SKILL.md` § *The context
 contract is about provenance, not permission*) rather than from a paraphrase
 here; the same three parts apply:
 
-- **Handed over** — the finding's text verbatim, the branch diff, the `bash
+- **Handed over** — the finding's text and any replacement sentence the human
+  supplied for it, both verbatim, the branch diff, the `bash
   "$SC" profile` output from Step 0 verbatim, whose `test` line is this project's
   test command, and `/execute`'s `## Review Notes` when one exists, read where
   [references/state-backend.md](references/state-backend.md) § Where the
@@ -220,6 +221,13 @@ The fixer's instructions, in order:
    neither deleting it nor pointing it elsewhere keeps the instruction. Report
    **`blocked: carries an instruction`**, naming the code span, and make **no
    commit**. Do not reword it to save the instruction.
+   **The one exception is wording the human supplied.** When the finding, or
+   the human's instruction for this run, contains the exact replacement
+   sentence, apply it character for character and report the after-state as
+   **`supplied`**. The controller checks that the committed sentence equals the
+   supplied text and reverts on any difference. No breaker runs on a `supplied`
+   after-state. A fixer never writes replacement wording of its own: with no
+   supplied text, the finding still ends `blocked: carries an instruction`.
 5. **Run the test command the profile names** and report the exit status verbatim.
 6. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does. On the `github` backend its last line is
@@ -435,6 +443,7 @@ site the finding anchored on. The table's last row is the one that can end any
 |---|---|---|
 | `deleted` | the fixer | nothing where the claim's sentence was |
 | `pointer → <target>` | the fixer | a reference to the canonical statement at `<target>`, which exists |
+| `supplied` | the fixer | the replacement sentence the finding or the human supplied, character for character |
 | `rejected: carries an instruction` | the controller | a deletion or pointer whose removed words include a code span, or a pointer to its own item |
 | `rejected: reworded` | the controller | anything else |
 | `blocked: needs decision` | the controller | whatever it holds, the commit reached outside the finding (the footprint check below) |
@@ -489,7 +498,50 @@ When the fix is outside, revert the commit with `git revert --no-edit HEAD`
 the wider change is wanted. If the block aborts it gave no verdict: relay the
 line, and spawn no breaker until a run of it has given one.
 
-**The controller reads the after-state off the fix, not off the report.** First
+**The controller reads the after-state off the fix, not off the report.** When
+the fixer reported `supplied`, run the block below and neither of the two
+reads after it: supplied wording may carry a code span, and it is a reword by
+design. Copy the new sentence from the finding or from the human's own
+message, never from the fixer's report or its commit. With no such sentence to
+copy, the after-state is `rejected: reworded`.
+
+```bash
+# Is the committed sentence the supplied one, character for character?
+FIX_SHA="<the SHA the fixer reported>"
+FILE="<the finding's file>"
+{ OLD_SENTENCE=$(cat); } <<'OLD_SENTENCE_END'
+<the sentence the finding anchors on, as it stood before the fix>
+OLD_SENTENCE_END
+{ NEW_SENTENCE=$(cat); } <<'NEW_SENTENCE_END'
+<the replacement sentence, copied from the finding or the human's instruction>
+NEW_SENTENCE_END
+sup_abort() { echo "supplied check aborted: ${1}" >&2; exit 1; }
+BEFORE=$(git show "${FIX_SHA}^:${FILE}") || sup_abort "cannot read $FILE before $FIX_SHA"
+AFTER=$(git show "${FIX_SHA}:${FILE}") || sup_abort "cannot read $FILE at $FIX_SHA"
+PATHS=$(git -c core.quotePath=false show --format= --no-renames --name-only "$FIX_SHA") || sup_abort "cannot read the paths $FIX_SHA changed"
+# The fix may be nothing but this: the file before it, with that one sentence replaced.
+EXPECTED=$(printf '%s\n' "$BEFORE" | OLD="$OLD_SENTENCE" NEW="$NEW_SENTENCE" awk '
+  { body = body sep $(0); sep = "\n" }
+  END {
+    old = ENVIRON["OLD"]
+    at = index(body, old)
+    if (old == "" || !at) exit 3
+    rest = substr(body, at + length(old))
+    if (index(rest, old)) exit 4
+    printf "%s%s%s", substr(body, 1, at - 1), ENVIRON["NEW"], rest
+  }') || sup_abort "the old sentence is not in $FILE exactly once before $FIX_SHA"
+if [ "$AFTER" = "$EXPECTED" ] && [ "$PATHS" = "$FILE" ]; then
+  echo "supplied check: supplied"
+else
+  echo "supplied check: rejected: reworded"
+fi
+```
+
+On `supplied check: rejected: reworded`, revert the commit as below and report
+that after-state. If the block aborts, it gives no verdict, so compare the two
+sentences by hand and revert on any difference.
+
+For any other reported after-state, first
 run the instruction check on the anchored file. It looks only at the words the
 fix removed:
 
@@ -531,10 +583,17 @@ instruction` fix the same way, and name it in the menu as an instruction fix:
 the sentence does something, so the finding goes back to the human to restate
 as the behavior that instruction produces.
 
-**No breaker runs on a `deleted` or `pointer` after-state.** A mutation is
-revealed only by a check that reads the mutated text, and no executable check
-reads a sentence, so the breaker's only possible verdict there is
-`not-applicable`. The report says so on the breaker line instead.
+**No breaker runs when nothing executable reads what the fix changed.** A
+mutation is revealed only by a check that reads the mutated text. Before
+spawning a breaker, list the fix's changed paths and search the project's test
+and script directories for a reader of each: the path, its file name, or a
+symbol the fix touched. Test files kept beside the source count, and a changed
+test is its own reader. When there is none, or the after-state is `deleted` or
+`pointer`, write `not-applicable (no executable reader)` on the breaker line
+and name the paths. That line reports a gap in test coverage. It is not a
+passing result, and it goes in the report so the human can ask for a test. A
+`supplied` after-state gets no breaker either (item 4), and its breaker line
+says it was compared with the supplied text.
 
 ### Step 2. Spawn a fresh breaker against the fix
 
@@ -702,7 +761,9 @@ its URL, so the author can reply to it), the fixer's verdict and commit SHA,
 its `leftovers:` when it named any, its class and sibling lines, the
 after-state on a prose-claim finding, the stat output on a `blocked: needs decision`,
 the breaker's verdict **and the SHA it
-archived** (or `none` and why, when no breaker was spawned), and the command
+archived** (or, when no breaker was spawned, `not-applicable (no executable
+reader)` and the paths where Step 1's breaker rule gives that line, else
+`none` and why), and the command
 behind each. No conclusions the human cannot re-run.
 
 ```
@@ -717,11 +778,11 @@ Finding 3 — fixed at a1b2c3d
 
 Finding 4 — fixed at d4e5f6a, deleted
   fixer:   `pnpm run test` → 0
-  breaker: none — prose after-state, no executable reader
+  breaker: not-applicable (no executable reader) — docs/caching.md
 
 Finding 5 — fixed at b7c8d9e, pointer → docs/architecture.md
   fixer:   `pnpm run test` → 0
-  breaker: none — prose after-state, no executable reader
+  breaker: not-applicable (no executable reader) — src/session.ts
 
 Finding 6 — rejected: reworded at 9f8e7d6, reverted at 5c4b3a2
   controller: `git show --word-diff 9f8e7d6 -- src/retry.ts` → the site adds words that are not a reference
@@ -750,6 +811,17 @@ Finding 10 — blocked: needs decision at 6a7b8c9, reverted at 0d1e2f3
                src/queue/retry.ts   |  6 +++---
                2 files changed, 27 insertions(+), 3 deletions(-)
   breaker: none — not spawned for a reverted fix
+
+Finding 11 — fixed at 8e9f0a1, supplied
+  fixer:   `pnpm run test` → 0
+  controller: supplied check on docs/release.md → equals the sentence the human gave
+  breaker: none — supplied after-state, compared with the supplied text
+
+Finding 12 — fixed at 5b6c7d8
+  fixer:   `pnpm run test` → 0
+  class:   an unquoted expansion
+  siblings: none found — searched `rg -n 'cp -R \$' bin`
+  breaker: not-applicable (no executable reader) — bin/release.sh
 ```
 
 **When a fixer reports siblings, show them under the finding and ask one
@@ -876,8 +948,8 @@ eight findings that is not a trade worth making.
 
 **A breaker runs only against a fix already committed, and nothing runs
 concurrently with a fixer editing the working tree.** Per finding: spawn the
-fixer and wait for its verdict; if `fixed` (inside the finding's footprint and
-not a `deleted` or `pointer` after-state, Step 1), spawn the breaker against
+fixer and wait for its verdict; if `fixed` (and Step 1's checks and breaker
+rule call for one), spawn the breaker against
 `$FIX_SHA` and wait for its verdict; only then start the next finding's fixer.
 No two sub-agents are ever in flight together — not two fixers, not a fixer and
 a breaker, not two breakers.

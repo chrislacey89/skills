@@ -31,6 +31,8 @@
 #   4. Step 1's footprint block (#804), run as written under bash and zsh on
 #      planted fixes inside and outside their findings. A block that moves
 #      below Step 1, past the breaker, is not found and fails the suite.
+#   5. Step 1's supplied-text block (#805), run as written under bash and zsh:
+#      a fix passes only as the parent file with that one sentence replaced.
 #
 # NOT PINNED: the number of kinds. A count here would be a second statement of
 # the list.
@@ -471,7 +473,8 @@ fi
 # prose elsewhere in the block (here, "deleted" appears in Finding 3's breaker
 # narration before it appears as Finding 4's token), and a naive
 # ${block/token/removed} would silently mutate the wrong occurrence.
-first_record="$(extract_used_token_records "$real_block_text" | head -n1 || true)"
+first_record="$(extract_used_token_records "$real_block_text")"
+first_record="${first_record%%$'\n'*}"
 [ -n "$first_record" ] || fatal "self-test setup: extract_used_token_records produced no record to mutate."
 first_token_line="${first_record%%$'\t'*}"
 first_token="${first_record#*$'\t'}"
@@ -741,6 +744,92 @@ for sh in "${shells[@]}"; do
     footprint_case "$sh" "$BLOCKED_LINE" "a named migration is outside" "db/migrations/001_init.sql" db/migrations/001_init.sql
     footprint_case "$sh" "$BLOCKED_LINE" "a new migration is outside, even under a test directory" "src/guard.ts" src/guard.ts tests/migrations/002_add.sql
     footprint_case "$sh" abort "a fix that is no longer HEAD gets no verdict" "src/guard.ts" src/guard.ts
+done
+
+# ============================================================================
+section "7. The controller's supplied-text check, as written, under bash and zsh (#805)"
+# ============================================================================
+
+# SUPPLIED_CHECK_HEAD is the first line of the fenced block this section runs.
+SUPPLIED_CHECK_HEAD="# Is the committed sentence the supplied one, character for character?"
+supplied_block="$(extract_step1_block "$fix_findings_skill" "$SUPPLIED_CHECK_HEAD")"
+[ -n "$supplied_block" ] || fatal "no \`\`\`bash block starting '$SUPPLIED_CHECK_HEAD' found in Step 1 of $fix_findings_skill, above the breaker"
+supplied_sha_ph='FIX_SHA="<the SHA the fixer reported>"'
+supplied_file_ph="FILE=\"<the finding's file>\""
+supplied_old_ph='<the sentence the finding anchors on, as it stood before the fix>'
+supplied_new_ph="<the replacement sentence, copied from the finding or the human's instruction>"
+for placeholder in "$supplied_sha_ph" "$supplied_file_ph" "$supplied_old_ph" "$supplied_new_ph"; do
+    grep -qxF -- "$placeholder" <<< "$supplied_block" || fatal "the supplied-text check no longer binds its input as: $placeholder"
+done
+
+# The after-state a passing check reports is one the table and the report know.
+SUPPLIED_LINE="supplied check: supplied"
+DIFFERS_LINE="supplied check: rejected: reworded"
+for line in "$SUPPLIED_LINE" "$DIFFERS_LINE"; do
+    state="${line#supplied check: }"
+    if grep -qxF -- "$state" <<< "$real_tokens"; then
+        ok "the Step 3 report block prints '$state', which the supplied-text check gives"
+    else
+        bad "the Step 3 report block prints no '$state'" "tokens: $(printf '%s' "$real_tokens" | tr '\n' '|')"
+    fi
+done
+
+# supplied_case <shell> <expected line, or "abort"> <label> <before> <after> <old> <new> [other file]
+# [other file] makes the fix commit change a second path as well.
+supplied_case() {
+    local sh="$1" want="$2" label="$3" before="$4" after="$5" old="$6" new="$7" other="${8:-}"
+    local work sha script out rc=0
+    work="$(mktemp -d "$fixture/supplied.XXXXXX")"
+    git init -q "$work"
+    printf '%s\n' "$before" > "$work/doc.md"
+    git -C "$work" add doc.md
+    git -C "$work" commit -q -m before
+    printf '%s\n' "$after" > "$work/doc.md"
+    if [ -n "$other" ]; then printf 'extra\n' > "$work/$other"; git -C "$work" add -- "$other"; fi
+    git -C "$work" commit -q -am fix
+    sha="$(git -C "$work" rev-parse HEAD)"
+    script="${supplied_block/"$supplied_sha_ph"/FIX_SHA=$sha}"
+    script="${script/"$supplied_file_ph"/FILE=doc.md}"
+    script="${script/"$supplied_old_ph"/$old}"
+    script="${script/"$supplied_new_ph"/$new}"
+    if [ "$sh" = zsh ]; then
+        out="$(cd "$work" && zsh -f -c "$script" 2>/dev/null)" || rc=$?
+    else
+        out="$(cd "$work" && "$sh" -c "$script" 2>/dev/null)" || rc=$?
+    fi
+    label="${sh##*/}: $label"
+    if [ "$want" = abort ]; then
+        if [ "$rc" -ne 0 ] && ! grep -q '^supplied check: ' <<< "$out"; then ok "$label"; else bad "$label" "exit=$rc: $out"; fi
+    elif [ "$rc" -eq 0 ] && grep -qxF -- "$want" <<< "$out"; then
+        ok "$label"
+    else
+        bad "$label" "exit=$rc: $out"
+    fi
+}
+
+# The text carries what a shell or awk would rewrite if the block let it: a
+# code span, a dollar sign, a backslash, an apostrophe, a glob, and non-ASCII.
+sup_old="Run ${bt}deploy --now${bt}, it's safe * always."
+sup_new="Run ${bt}deploy --dry-run \$HOME \\n${bt} first — it's [not] safe."
+for sh in "${shells[@]}"; do
+    supplied_case "$sh" "$SUPPLIED_LINE" "the supplied sentence, verbatim, is supplied" \
+        "Lead. $sup_old Tail." "Lead. $sup_new Tail." "$sup_old" "$sup_new"
+    supplied_case "$sh" "$SUPPLIED_LINE" "a sentence wrapped over two lines is supplied" \
+        $'Lead. One\ntwo. Tail.' $'Lead. Three\nfour. Tail.' $'One\ntwo.' $'Three\nfour.'
+    supplied_case "$sh" "$DIFFERS_LINE" "one different character is rejected" \
+        "Lead. $sup_old Tail." "Lead. ${sup_new%.}! Tail." "$sup_old" "$sup_new"
+    supplied_case "$sh" "$DIFFERS_LINE" "a doubled space is rejected" \
+        "Lead. One two. Tail." "Lead. Three  four. Tail." "One two." "Three four."
+    supplied_case "$sh" "$DIFFERS_LINE" "the supplied sentence with words added after it is rejected" \
+        "Lead. One two. Tail." "Lead. Three four. Mostly. Tail." "One two." "Three four."
+    supplied_case "$sh" "$DIFFERS_LINE" "a second edit elsewhere in the file is rejected" \
+        "Lead. One two. Tail." "Head. Three four. Tail." "One two." "Three four."
+    supplied_case "$sh" "$DIFFERS_LINE" "a second file in the commit is rejected" \
+        "Lead. One two. Tail." "Lead. Three four. Tail." "One two." "Three four." other.md
+    supplied_case "$sh" abort "an old sentence the parent does not hold gets no verdict" \
+        "Lead. One two. Tail." "Lead. Three four. Tail." "Never there." "Three four."
+    supplied_case "$sh" abort "an old sentence the parent holds twice gets no verdict" \
+        "One two. One two." "Three four. One two." "One two." "Three four."
 done
 
 # ============================================================================
