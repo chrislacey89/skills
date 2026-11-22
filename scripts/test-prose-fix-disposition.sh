@@ -28,6 +28,10 @@
 #   3. A detector: no scanned line contains two or more of the kinds section's
 #      bullets as case-insensitive fixed strings.
 #
+#   4. Step 1's footprint block (#804), run as written under bash and zsh on
+#      planted fixes inside and outside their findings. A block that moves
+#      below Step 1, past the breaker, is not found and fails the suite.
+#
 # NOT PINNED: the number of kinds. A count here would be a second statement of
 # the list.
 #
@@ -530,10 +534,12 @@ section "5. The controller's instruction check, run against planted fixes"
 # this section runs. Written once; the extractor and its FATAL both read it.
 INSTRUCTION_CHECK_HEAD="# Did the words this fix removed include a code span? Then the sentence carried an instruction."
 
-# extract_instruction_check <file> — the body of the ```bash block whose first
-# line is $INSTRUCTION_CHECK_HEAD, fences excluded.
-extract_instruction_check() {
-    awk -v head="$INSTRUCTION_CHECK_HEAD" '
+# extract_step1_block <file> <head> — the body of the ```bash block in Step 1
+# whose first line is <head>, fences excluded. It stops at Step 2, so a
+# controller check that moved past the breaker's spawn is not found.
+extract_step1_block() {
+    awk -v head="$2" '
+        /^### Step 2\./ { exit }
         /^```bash$/ { infence = 1; first = 1; next }
         infence && first { first = 0; if ($(0) == head) { taking = 1; print; next } }
         infence && /^```$/ { if (taking) exit; infence = 0; next }
@@ -541,7 +547,7 @@ extract_instruction_check() {
     ' "$1"
 }
 
-check_block="$(extract_instruction_check "$fix_findings_skill")"
+check_block="$(extract_step1_block "$fix_findings_skill" "$INSTRUCTION_CHECK_HEAD")"
 [ -n "$check_block" ] || fatal "no \`\`\`bash block starting '$INSTRUCTION_CHECK_HEAD' found in $fix_findings_skill — the controller's instruction check is shaped differently than expected; report this rather than editing the subject file to fit."
 for placeholder in 'FIX_SHA="<the SHA the fixer reported>"' 'FILE="<the finding'"'"'s file>"'; do
     grep -qxF -- "$placeholder" <<< "$check_block" || fatal "the instruction check no longer binds its input as: $placeholder"
@@ -635,6 +641,107 @@ if ! grep -qxF 'exit=0' <<< "$miss_out" && ! grep -q '^instruction check: ' <<< 
 else
     bad "a fix outside the named file produced a verdict or exit 0" "$miss_out"
 fi
+
+# ============================================================================
+section "6. The controller's footprint check, as written, under bash and zsh (#804)"
+# ============================================================================
+
+# FOOTPRINT_CHECK_HEAD is the first line of the fenced block this section runs.
+FOOTPRINT_CHECK_HEAD="# Did this fix stay inside what its finding named?"
+footprint_block="$(extract_step1_block "$fix_findings_skill" "$FOOTPRINT_CHECK_HEAD")"
+[ -n "$footprint_block" ] || fatal "no \`\`\`bash block starting '$FOOTPRINT_CHECK_HEAD' found in Step 1 of $fix_findings_skill, above the breaker"
+footprint_sha_ph='FIX_SHA="<the SHA the fixer reported>"'
+footprint_named_ph='NAMED="<each path the finding names, one per line>"'
+for placeholder in "$footprint_sha_ph" "$footprint_named_ph"; do
+    grep -qxF -- "$placeholder" <<< "$footprint_block" || fatal "the footprint check no longer binds its input as: $placeholder"
+done
+
+BLOCKED_LINE="footprint: blocked: needs decision"
+INSIDE_LINE="footprint: inside"
+# The report reaches the human in the verdict's own words.
+blocked_token="${BLOCKED_LINE#footprint: }"
+if grep -qxF -- "$blocked_token" <<< "$real_tokens"; then
+    ok "the Step 3 report block prints the verdict the footprint check blocks with"
+else
+    bad "the Step 3 report block prints no '$blocked_token'" "tokens: $(printf '%s' "$real_tokens" | tr '\n' '|')"
+fi
+
+shells=("$BASH")
+if command -v zsh >/dev/null 2>&1; then
+    shells+=("zsh")
+elif [ -n "${CI:-}" ]; then
+    bad "zsh arm: zsh is not on PATH and CI is set, so the footprint block was not run under zsh"
+else
+    printf '  SKIP zsh arm: zsh is not on PATH, so the footprint block was not run under zsh\n'
+fi
+
+fp_base="$fixture/footprint-base"
+git init -q "$fp_base"
+mkdir -p "$fp_base/src" "$fp_base/tests" "$fp_base/db/migrations"
+for f in "src/guard.ts" "src/other.ts" "src/two words.ts" "src/café.ts" "tests/guard.test.ts" "package.json" "pnpm-lock.yaml" "schema.sql" "db/migrations/001_init.sql"; do
+    printf 'before\n' > "$fp_base/$f"
+done
+git -C "$fp_base" add -A
+git -C "$fp_base" commit -q -m "footprint base"
+
+# footprint_case <shell> <expected line, or "abort"> <label> <named paths> <path written by the fix>...
+# A leading "-" deletes the path. "abort" makes one more commit after the fix,
+# so the fix is no longer HEAD.
+footprint_case() {
+    local sh="$1" want="$2" label="$3" named="$4" work f sha script out rc=0
+    shift 4
+    work="$(mktemp -d "$fixture/fp.XXXXXX")"
+    git clone -q "$fp_base" "$work/repo"
+    work="$work/repo"
+    for f in "$@"; do
+        if [ "${f#-}" != "$f" ]; then
+            git -C "$work" rm -q -- "${f#-}"
+        else
+            mkdir -p "$(dirname "$work/$f")"
+            printf 'after\n' > "$work/$f"
+            git -C "$work" add -- "$f"
+        fi
+    done
+    git -C "$work" commit -q -m fix
+    sha="$(git -C "$work" rev-parse HEAD)"
+    if [ "$want" = abort ]; then
+        printf 'later\n' > "$work/src/guard.ts"
+        git -C "$work" commit -q -am later
+    fi
+    script="${footprint_block/"$footprint_sha_ph"/FIX_SHA=$sha}"
+    script="${script/"$footprint_named_ph"/NAMED=\"$named\"}"
+    if [ "$sh" = zsh ]; then
+        out="$(cd "$work" && zsh -f -c "$script" 2>/dev/null)" || rc=$?
+    else
+        out="$(cd "$work" && "$sh" -c "$script" 2>/dev/null)" || rc=$?
+    fi
+    label="${sh##*/}: $label"
+    if [ "$want" = abort ]; then
+        if [ "$rc" -ne 0 ] && ! grep -q '^footprint: ' <<< "$out"; then ok "$label"; else bad "$label" "exit=$rc: $out"; fi
+    elif [ "$rc" -eq 0 ] && grep -qxF -- "$want" <<< "$out" && grep -qE 'files? changed' <<< "$out"; then
+        ok "$label"
+    else
+        bad "$label" "exit=$rc: $out"
+    fi
+}
+
+for sh in "${shells[@]}"; do
+    footprint_case "$sh" "$INSIDE_LINE" "a fix to the one named file is inside" "src/guard.ts" src/guard.ts
+    footprint_case "$sh" "$INSIDE_LINE" "a test file added for the fix is inside" "src/guard.ts" src/guard.ts tests/regression.test.ts
+    footprint_case "$sh" "$INSIDE_LINE" "two named paths, one with a space and one not ASCII, are inside" $'src/two words.ts\nsrc/café.ts' "src/two words.ts" "src/café.ts"
+    footprint_case "$sh" "$INSIDE_LINE" "deleting a named path is inside" "src/other.ts" -src/other.ts
+    footprint_case "$sh" "$BLOCKED_LINE" "a second path the finding did not name is outside" "src/guard.ts" src/guard.ts src/other.ts
+    footprint_case "$sh" "$BLOCKED_LINE" "a path that only contains a named one is outside" "src/other.ts.bak" src/other.ts
+    footprint_case "$sh" "$BLOCKED_LINE" "deleting an unnamed test is outside" "src/guard.ts" src/guard.ts -tests/guard.test.ts
+    footprint_case "$sh" "$BLOCKED_LINE" "a new non-test file is outside, even when named" "src/helper.ts" src/helper.ts
+    footprint_case "$sh" "$BLOCKED_LINE" "a new file that only contains the word test is outside" "src/guard.ts" src/guard.ts src/latest-news.ts
+    footprint_case "$sh" "$BLOCKED_LINE" "a named dependency manifest is outside" "package.json" package.json
+    footprint_case "$sh" "$BLOCKED_LINE" "a named lockfile is outside" "pnpm-lock.yaml" pnpm-lock.yaml
+    footprint_case "$sh" "$BLOCKED_LINE" "a named schema is outside" "schema.sql" schema.sql
+    footprint_case "$sh" "$BLOCKED_LINE" "a named migration is outside" "db/migrations/001_init.sql" db/migrations/001_init.sql
+    footprint_case "$sh" "$BLOCKED_LINE" "a new migration is outside, even under a test directory" "src/guard.ts" src/guard.ts tests/migrations/002_add.sql
+    footprint_case "$sh" abort "a fix that is no longer HEAD gets no verdict" "src/guard.ts" src/guard.ts
+done
 
 # ============================================================================
 

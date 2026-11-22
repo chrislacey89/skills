@@ -169,7 +169,7 @@ here; the same three parts apply:
   test command, and `/execute`'s `## Review Notes` when one exists, read where
   [references/state-backend.md](references/state-backend.md) § Where the
   review's records live says it is. Also the backend Step 0's second block
-  printed and the run id Step 0 fixed, both verbatim: item 5 below branches on
+  printed and the run id Step 0 fixed, both verbatim: item 6 below branches on
   the first and writes the second.
 - **Reached for itself** — durable state, read at its source: the merged tree,
   `git log` and `git show`, the slice or PRD issue, `docs/solutions/`, the
@@ -188,7 +188,7 @@ The fixer's instructions, in order:
    The finding's line numbers were read at review time, and an earlier fixer
    in this run may have moved them. Find the anchored text in the file at the
    current `HEAD` before editing, and use the lines it is on now, here and in
-   item 5's block.
+   item 6's block.
 2. **Grep `docs/solutions/` for the class of thing you are about to write** — both
    locations, the sidecar's `solutions/` and the project's in-tree path, resolved
    through the bundled [references/sidecar.sh](references/sidecar.sh) exactly as
@@ -198,7 +198,15 @@ The fixer's instructions, in order:
    already failed here; on this skill's own PR, four fixers wrote grep-based
    assertions over prose eight days after an entry named that exact shape and
    said not to. A fixer that reads the entry first does not write the pin.
-3. **Write the smallest fix that closes the finding**, following the project's
+3. **Name the class, then count its sites, before editing.** Say in one line
+   what kind of defect this is: a claim restated in a second place, an unquoted
+   expansion, a guard missing from one of several callers. Search the tree for
+   other sites of the same class, using the census move in
+   [references/restated-claims.md](references/restated-claims.md) § *The census comes before the remedy*.
+   Fix only the site the finding names. List every other site in your report as
+   `sibling: <path>:<line>`, one per line, or `siblings: none found` with the
+   search you ran.
+4. **Write the smallest fix that closes the finding**, following the project's
    conventions. Do not fix anything the finding does not name; scope creep in a
    post-review commit is invisible to the review that has already run. **When
    the finding is about what a sentence claims rather than what something
@@ -212,8 +220,8 @@ The fixer's instructions, in order:
    neither deleting it nor pointing it elsewhere keeps the instruction. Report
    **`blocked: carries an instruction`**, naming the code span, and make **no
    commit**. Do not reword it to save the instruction.
-4. **Run the test command the profile names** and report the exit status verbatim.
-5. **Commit exactly one commit**, whose message says what the finding was and
+5. **Run the test command the profile names** and report the exit status verbatim.
+6. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does. On the `github` backend its last line is
    `Fix-Findings-Run: <run id>`, the id Step 0 fixed, passed in the brief
    verbatim, and a fix for a teammate review thread
@@ -277,7 +285,7 @@ The fixer's instructions, in order:
    message that does not describe it.
 
    Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
-   message item 5 states for this backend. Then check that the commit just made folds:
+   message item 6 states for this backend. Then check that the commit just made folds:
 
    ```bash
    # After `git commit --fixup`: would the commit just made fold?
@@ -379,7 +387,9 @@ The fixer's instructions, in order:
 The fixer reports back: `fixed` (with the commit SHA, and a `leftovers:` field
 naming each earlier `fixup!` commit the fold trial skipped, when it skipped any),
 or `refuted` (with evidence), or `blocked` (with what it needed and did not
-have, or `blocked: carries an instruction` under item 3). Nothing else.
+have, or `blocked: carries an instruction` under item 4). With any verdict
+reached after item 3 it also gives that item's one-line class and its sibling
+lines. Nothing else.
 
 **On the `sidecar` backend, the controller records each `fixed` commit**
 before it spawns that finding's breaker. Use the SHA the fixer reported after
@@ -417,8 +427,9 @@ as for a failed recommit. An emptying fixup is not a conflict, so the trial
 does not demote it. A fixup-target block that printed `fixup target aborted:`
 is `blocked` too, with no commit: relay that line, and do not fall back to an
 ordinary commit, because the block could not say whether one is right.
-A `fixed` under item 3's prose-claim case also names the after-state of the
-site the finding anchored on:
+A `fixed` under item 4's prose-claim case also names the after-state of the
+site the finding anchored on. The table's last row is the one that can end any
+`fixed`, prose or not:
 
 | After-state | Named by | What the anchored site holds at the fix commit |
 |---|---|---|
@@ -426,6 +437,57 @@ site the finding anchored on:
 | `pointer → <target>` | the fixer | a reference to the canonical statement at `<target>`, which exists |
 | `rejected: carries an instruction` | the controller | a deletion or pointer whose removed words include a code span, or a pointer to its own item |
 | `rejected: reworded` | the controller | anything else |
+| `blocked: needs decision` | the controller | whatever it holds, the commit reached outside the finding (the footprint check below) |
+
+**Compare the fix's footprint with the finding's before any breaker runs.** Do
+it first, on every `fixed`, while the fix commit is still `HEAD`. Give the
+block the paths the finding's own text names, never the paths the fixer
+reported. It reads the fix commit's file list:
+
+```bash
+# Did this fix stay inside what its finding named?
+FIX_SHA="<the SHA the fixer reported>"
+NAMED="<each path the finding names, one per line>"
+fp_abort() { echo "footprint check aborted: ${1}" >&2; exit 1; }
+FULL=$(git rev-parse --verify -q "$FIX_SHA^{commit}") || fp_abort "$FIX_SHA is not a commit"
+[ "$FULL" = "$(git rev-parse HEAD)" ] || fp_abort "$FIX_SHA is not HEAD"
+CHANGES=$(git -c core.quotePath=false show --format= --no-renames --name-status HEAD) && [ -n "$CHANGES" ] \
+  || fp_abort "cannot read the paths $FIX_SHA changed"
+MANIFEST='(^|/)(package\.json|composer\.json|Cargo\.toml|go\.mod|Gemfile|pyproject\.toml|requirements[^/]*\.txt|pom\.xml|build\.gradle(\.kts)?|Package\.swift)$'
+LOCKFILE='\.lock(b|file)?$|(^|/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|go\.sum)$'
+SCHEMA='(^|/)(migrations?|migrate)/|(^|/)(schema|structure)\.[^./]+$|\.(prisma|schema\.json)$'
+TEST_FILE='(^|/)(tests?|specs?|__tests__)/|(^|/)test[-_][^/]*$|[._-](test|spec)\.[^/]+$|[a-z]Test\.[A-Za-z]+$'
+OUTSIDE=$(printf '%s\n' "$CHANGES" | while IFS="$(printf '\t')" read -r KIND CHANGED; do
+  if printf '%s\n' "$CHANGED" | grep -qE "$MANIFEST|$LOCKFILE"; then echo "  dependency manifest or lockfile: $CHANGED"
+  elif printf '%s\n' "$CHANGED" | grep -qE "$SCHEMA"; then echo "  schema or migration: $CHANGED"
+  elif [ "$KIND" = A ]; then
+    printf '%s\n' "$CHANGED" | grep -qE "$TEST_FILE" || echo "  new non-test file: $CHANGED"
+  elif ! printf '%s\n' "$NAMED" | grep -qxF -- "$CHANGED"; then echo "  not named by the finding: $CHANGED"
+  fi
+done)
+git show --stat --format= HEAD
+if [ -n "$OUTSIDE" ]; then
+  echo "footprint: blocked: needs decision"
+  printf '%s\n' "$OUTSIDE"
+else
+  echo "footprint: inside"
+fi
+```
+
+A changed path the finding did not name, a new non-test file, a schema or
+migration file, a dependency manifest or lockfile, or a changed user-visible
+string is outside the finding. A test file added for the fix is inside the
+footprint. The block decides the path checks from file names, and knows only
+the names written in it. **Whether the fix changed a user-visible string is
+your judgment**: read the diff, because no file name says so and the block can
+print `footprint: inside` over one. The same read catches a schema, manifest
+or lockfile under a name the block does not know.
+
+When the fix is outside, revert the commit with `git revert --no-edit HEAD`
+(never a reset), spawn no breaker, report the finding as
+**`blocked: needs decision`** with the stat output, and ask the human whether
+the wider change is wanted. If the block aborts it gave no verdict: relay the
+line, and spawn no breaker until a run of it has given one.
 
 **The controller reads the after-state off the fix, not off the report.** First
 run the instruction check on the anchored file. It looks only at the words the
@@ -637,13 +699,18 @@ makes its read-only isolation mean anything.
 
 Then print one block per finding — number (and, for a teammate review thread,
 its URL, so the author can reply to it), the fixer's verdict and commit SHA,
-its `leftovers:` when it named any, the after-state on a prose-claim finding, the breaker's verdict **and the SHA it
+its `leftovers:` when it named any, its class and sibling lines, the
+after-state on a prose-claim finding, the stat output on a `blocked: needs decision`,
+the breaker's verdict **and the SHA it
 archived** (or `none` and why, when no breaker was spawned), and the command
 behind each. No conclusions the human cannot re-run.
 
 ```
 Finding 3 — fixed at a1b2c3d
   fixer:   `pnpm run test` → 0
+  class:   an over-fetch computed at the use site instead of from its constant
+  sibling: src/search/related.ts:41
+  sibling: src/search/recent.ts:18
   breaker: survived, against a1b2c3d — `pnpm run test -- guards.test.ts` → 0 with
            OVER_FETCH_MULTIPLIER left at 4 and the use site edited to `topK * 137`
            (control went red first: same file, deleted assertion → exit 1)
@@ -671,10 +738,29 @@ Finding 8 — rejected: carries an instruction at 3c4d5e6, reverted at 7a8b9c0
 
 Finding 9 — fixed at 2d3e4f5
   fixer:   `pnpm run test` → 0
+  class:   a total rounded before it is summed
+  siblings: none found — searched `rg -n 'Math\.round' src`
   leftovers: e1f2a3b — skipped by the fold trial; /pre-merge's fold aborts until it is reworded
   breaker: killed, against 2d3e4f5 — `pnpm run test -- report.test.ts` → 1 with the
            total's rounding reverted (control went red first: same file, deleted assertion → exit 1)
+
+Finding 10 — blocked: needs decision at 6a7b8c9, reverted at 0d1e2f3
+  controller: footprint check → new non-test file: src/queue/backoff.ts
+               src/queue/backoff.ts | 24 ++++++++++++++++++++++++
+               src/queue/retry.ts   |  6 +++---
+               2 files changed, 27 insertions(+), 3 deletions(-)
+  breaker: none — not spawned for a reverted fix
 ```
+
+**When a fixer reports siblings, show them under the finding and ask one
+question before the menu:** **add these sites to this round as their own
+findings**, or **leave them for the next review**. Mark neither recommended;
+which sites join is the human's disposition. Ask it before the removal below,
+while the edit lock is still open for this run. Sites the human adds are fixed
+by a fresh fixer each, under the same cap: Steps 1 and 2 as written, one
+finding per site, under this run's id, then their blocks join this report. The
+question is asked once in a run, so a sibling an added site's fixer reports is
+listed and left for the next review.
 
 The archived SHA is on the breaker's line because it is the one thing that says
 what the verdict is *about*. By the time the round's report prints, `HEAD` has
@@ -790,8 +876,8 @@ eight findings that is not a trade worth making.
 
 **A breaker runs only against a fix already committed, and nothing runs
 concurrently with a fixer editing the working tree.** Per finding: spawn the
-fixer and wait for its verdict; if `fixed` (and not a `deleted` or `pointer`
-after-state, Step 1), spawn the breaker against
+fixer and wait for its verdict; if `fixed` (inside the finding's footprint and
+not a `deleted` or `pointer` after-state, Step 1), spawn the breaker against
 `$FIX_SHA` and wait for its verdict; only then start the next finding's fixer.
 No two sub-agents are ever in flight together — not two fixers, not a fixer and
 a breaker, not two breakers.
@@ -833,7 +919,8 @@ stop.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it
   archived, and the command behind it, or the reason none was spawned; `refuted` reports for findings the
-  tree did not confirm; a revert for any prose-claim fix Step 1 rejected; and,
+  tree did not confirm; a revert for any prose-claim fix Step 1 rejected and for any fix its
+  footprint check blocked; and,
   for a `blocked` fix that left a `fixup!` commit (Step 1), that commit's SHA
   with no breaker verdict. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode. It reads
@@ -886,8 +973,10 @@ rounds to five before deleting the rule it was patching). Lead with **→ Hand
 the remaining findings off as issues (recommended — `/qa` or
 `/request-refactor-plan`), then re-run `/pre-merge` on what is here**, then
 **Re-run `/pre-merge` — review the fixes and re-stamp**, then **Stop here**.
-The count changes the order, not the set: nothing is taken off the menu, and
-the human still chooses. Include a run-specific follow-up when the breaker
+The count changes the order, not the set: nothing is taken off the menu. What
+leads once that re-run has reviewed these fixes, and who chooses the numbers,
+is `/pre-merge`'s rule, stated in its § Handoff under *what is still open
+decides the menu* and not repeated here. Include a run-specific follow-up when the breaker
 returned `survived` or `not-run`: **Show the surviving mutation for finding
 N**. Include one when Step 1 rejected a fix as `carries an instruction`:
 **Restate finding N as an instruction fix**, naming the code span the fix
