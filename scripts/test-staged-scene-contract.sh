@@ -385,7 +385,7 @@ else
         # uses, and a clock that records what was scheduled.
         cat >"$tmp/run.js" <<'JS'
 const fs = require('fs');
-const [file, scriptFile] = process.argv.slice(2);
+const [file, scriptFile, mode] = process.argv.slice(2);
 const key = k => 'data-' + k.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
 const decode = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 class El {
@@ -431,6 +431,13 @@ for (const t of fs.readFileSync(file, 'utf8').match(/<!--[\s\S]*?-->|<style>[\s\
   } else at.append(new El('#', {}, decode(t)));
 }
 const fig = root.querySelector('figure.vr-scene');
+if (mode === 'probe') {
+  // The planted page: does its data still parse with the </script> caption in it?
+  let parsed = null;
+  try { parsed = JSON.parse(fig.querySelector('script[data-scene]').textContent); } catch (e) { /* cut short */ }
+  console.log(parsed && parsed.views.some(v => v.steps.some(s => s.c.includes('</script>'))) ? 'whole' : 'cut');
+  process.exit(0);
+}
 const views = fig.querySelectorAll('.vr-scene-view');
 const frame = v => JSON.stringify([
   v.querySelectorAll('[data-item]').map(g => [g.attrs['data-item'], g.attrs['data-state'],
@@ -450,7 +457,6 @@ say(views.every(v => !('data-moving' in v.attrs)), 'loading turns no motion on')
 const press = (v, name) => v.querySelector(`button[data-act="${name}"]`).on.click();
 const data = JSON.parse(fig.querySelector('script[data-scene]').textContent);
 const first = views.map(frame);
-say(data.views.some(v => v.steps.some(s => s.c.includes('</script>'))), 'the data parses with a </script> caption inside it');
 press(views[0], 'next');
 say(frame(views[0]) !== first[0] && views.slice(1).every((v, i) => frame(v) === first[i + 1]), 'Next moves its own view and no other');
 say(views[0].querySelector('.vr-scene-n').textContent === `step 2 of ${data.views[0].steps.length}`, 'Next moves one step');
@@ -473,6 +479,28 @@ JS
         else
             bad "the script runs against the example" "$(cat "$tmp/run.err")"
         fi
+        # The </script> probe. The example has no such caption, so a planted
+        # copy of its data gains one step whose caption says </script>, the
+        # page is emitted from that copy, and the run above parses it.
+        # planted_data <escape: yes|no>: the data with that step, as one line.
+        planted_data() {
+            jq -c '.views[0].steps += [{"c": "A caption that says </script> stays inside the data.", "src": [], "asserted": true}]' <<<"$data" \
+                | if [ "$1" = yes ]; then sed 's/</\\u003c/g'; else cat; fi
+        }
+        # planted_page <data file>: the page, with that file as the scene data.
+        planted_page() {
+            local planted
+            planted="$(awk -v f="$1" '/^<script type="application\/json" data-scene>$/ {print; while ((getline l < f) > 0) print l; skip = 1; next} skip && /^<\/script>$/ {skip = 0} !skip' <<<"$example")"
+            local example="$planted"
+            page
+        }
+        probe() {
+            planted_data "$1" >"$tmp/planted.json"
+            planted_page "$tmp/planted.json" >"$tmp/planted.html"
+            node "$tmp/run.js" "$tmp/planted.html" "$tmp/scene.js" probe 2>&1
+        }
+        check "run: a </script> caption written as §18 says leaves the data whole" whole "$(probe yes)"
+        check "self-test, caught: a </script> caption written with a plain <" cut "$(probe no)"
     else
         bad "the script parses under node --check" "$(cat "$tmp/parse.err")"
     fi

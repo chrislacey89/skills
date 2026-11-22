@@ -2076,7 +2076,7 @@ once per page, a figure per scene, and the script once, after the last figure.
     </section>
 
     <section class="vr-scene-view" data-view="choices" data-tone="ok" data-feedback-id="scene-plan-in-order/choices" data-feedback-kind="scene-view">
-      <div class="vr-scene-head"><b>✓ Choices</b><span class="vr-scene-sub">added up</span><span class="vr-scene-split">3 cited · 2 asserted</span></div>
+      <div class="vr-scene-head"><b>✓ Choices</b><span class="vr-scene-sub">added up</span><span class="vr-scene-split">3 cited · 1 asserted</span></div>
       <svg role="img" viewBox="0 0 340 300" aria-label="With the choices added up, the plan is drawn as a staged scene whose order is numbered beside each frame.">
         <text class="vr-scene-ex" x="8" y="16">example values</text>
         <g data-item="page" data-kind="box" data-state=""><rect class="vr-scene-sh" x="30" y="88" width="280" height="204" rx="12"/><text data-slot="t" x="40" y="105">the page</text><text class="vr-scene-g" x="304" y="105"></text></g>
@@ -2089,12 +2089,11 @@ once per page, a figure per scene, and the script once, after the last figure.
         <g data-item="file" data-kind="chip" data-state="dim"><rect class="vr-scene-sh" x="85" y="250" width="170" height="30" rx="15"/><foreignObject x="85" y="250" width="170" height="30"><div class="vr-scene-tx"><b data-slot="t" data-example>recap.html</b></div></foreignObject><text class="vr-scene-g" x="245" y="269">–</text><text class="vr-scene-new" x="98" y="248">NEW</text></g>
         <circle class="vr-scene-dot" r="6" style="transform:translate(85px,265px)"/>
       </svg>
-      <p class="vr-scene-cap" aria-live="polite" data-asserted="true"><span class="vr-scene-n">step 5 of 5</span><span class="vr-scene-c">The reader opens one file, recap.html in this example.</span><span class="vr-scene-src">asserted</span></p>
+      <p class="vr-scene-cap" aria-live="polite" data-asserted="true"><span class="vr-scene-n">step 4 of 4</span><span class="vr-scene-c">The reader opens one file, recap.html in this example.</span><span class="vr-scene-src">asserted</span></p>
       <ol class="vr-scene-steps">
         <li data-src="chrislacey89/skills#798 Solution"><span class="vr-scene-c">Naming the subject picks a staged scene. There is no flag.</span><span class="vr-scene-src">chrislacey89/skills#798 Solution</span></li>
         <li data-src="chrislacey89/skills#798 Solution"><span class="vr-scene-c">Each view is its own frame, and all are on the page at once.</span><span class="vr-scene-src">chrislacey89/skills#798 Solution</span></li>
         <li data-src="chrislacey89/skills#798 Solution"><span class="vr-scene-c">Beside every frame the same steps are a numbered list.</span><span class="vr-scene-src">chrislacey89/skills#798 Solution</span></li>
-        <li class="asserted"><span class="vr-scene-c">A caption that says &lt;/script&gt; is escaped in the data, so the data stays whole.</span><span class="vr-scene-src">asserted</span></li>
         <li class="asserted"><span class="vr-scene-c">The reader opens one file, recap.html in this example.</span><span class="vr-scene-src">asserted</span></li>
       </ol>
       <textarea class="vr-scene-note" data-feedback-note placeholder="Response to this view…"></textarea>
@@ -2143,7 +2142,6 @@ once per page, a figure per scene, and the script once, after the last figure.
    {"c": "Naming the subject picks a staged scene. There is no flag.", "src": ["chrislacey89/skills#798 Solution"], "asserted": false, "set": {"plan": "focus"}, "text": {"picture.t": "Staged scene", "picture.s": "one frame per view"}, "at": "plan"},
    {"c": "Each view is its own frame, and all are on the page at once.", "src": ["chrislacey89/skills#798 Solution"], "asserted": false, "set": {"plan": "", "picture": "new"}, "at": "picture"},
    {"c": "Beside every frame the same steps are a numbered list.", "src": ["chrislacey89/skills#798 Solution"], "asserted": false, "set": {"order-from": "ok", "order": "ok"}, "text": {"order.s": "numbered beside each frame"}, "at": "order"},
-   {"c": "A caption that says \u003c/script> is escaped in the data, so the data stays whole.", "src": [], "asserted": true, "set": {}, "at": "page"},
    {"c": "The reader opens one file, recap.html in this example.", "src": [], "asserted": true, "set": {"file": "dim"}, "at": "file"}
   ]},
   {"id": "assumptions", "label": "Assumptions", "sub": "where each sits", "tone": "risk", "init": {"set": {}}, "steps": [
