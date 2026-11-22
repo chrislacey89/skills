@@ -208,6 +208,8 @@ Install Lefthook (`brew install lefthook` or see <https://github.com/evilmartian
 
 Both suites also run in CI (`.github/workflows/validate-skills.yml`), so local hooks are an early-warning layer, not a gate. The skills themselves have no JS/TS to tend, and `site/` is a separate Astro app whose tooling is not wired into these hooks, so Biome and other Node-ecosystem linters are out of scope until that changes. `scripts/test-skill-frontmatter-loads.sh` also needs the Claude Code CLI (`claude`) at the version in `.claude-code-version`; without it that suite prints a SKIP line locally, and CI installs the pinned version and runs it.
 
+The pre-push lint, `scripts/shellcheck-pinned.sh`, runs the ShellCheck release in `.shellcheck-version`: natively when it can, otherwise through Docker's [`koalaman/shellcheck`](https://hub.docker.com/r/koalaman/shellcheck) image at that tag when a `docker` daemon answers, and only when neither can run does it lint with your local release and exit 3, so the push stops; set `SHELLCHECK_PINNED_ALLOW_FALLBACK=1` to accept that local run (a finding still fails it).
+
 ### Reading a prose diff
 
 Paragraphs here are single physical lines, routinely past 400 characters — `SYSTEM-OVERVIEW.md:207` is 1,051 and `pre-merge/review-checklist.md` tops out near 2,800. Git's unit is the line, so a paragraph edit renders as the whole paragraph deleted and a near-identical paragraph re-added, with nothing marking where the two diverge, and a large share of what the reviewer re-reads never changed. (#295 quantified that share; the figure is not restated here, because a count over "the last 60 markdown commits" is a sliding window that moves with every commit and nothing checks it. The two line lengths above are fixed and greppable.)

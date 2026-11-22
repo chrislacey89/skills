@@ -450,6 +450,11 @@ jobs:
       - name: Run handoff mktemp contract suite
         run: bash scripts/test-handoff-mktemp.sh
 
+      # scripts/shellcheck-pinned.sh against stubs: a local-release fallback
+      # exits 3 unless overridden, and the Docker tier is the pinned run (#814).
+      - name: Run shellcheck-pinned fallback suite
+        run: bash scripts/test-shellcheck-pinned-fallback.sh
+
       # A git hook exports GIT_DIR, and a suite that runs `git init` or
       # `git config` in a fixture without clearing it writes into the real repo
       # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every
