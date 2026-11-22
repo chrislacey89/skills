@@ -259,7 +259,17 @@ BODY="$(printf '%s\n' \
     '| 1 | Same pattern in lib/export | Deep Modules | filed | #199 — operator |' \
     '| 2 | Presence helper claimed as a Layer | Boundary Map Contracts | open | confirmed — lib/presence.ts:12 |' \
     '| 2 | Stamp block "no-ops" | Adherence | accepted | open question, accepted |')"
-CLEAN_BODY="$(printf '%s\n' '## Summary' '' '- [x] ticked item' '' '| Pass | Finding | Dimension | State | Evidence / outcome |' '|---|---|---|---|---|' '| 1 | A finding | Deep Modules | fixed | abc1234 |')"
+CLEAN_BODY="$(printf '%s\n' '## Summary' '' '- [x] ticked item' '' '## Review Disposition Ledger' '' '| Pass | Finding | Dimension | State | Evidence / outcome |' '|---|---|---|---|---|' '| 1 | A finding | Deep Modules | fixed | abc1234 |')"
+# An author-mode body: no ledger, which only loop-mode writes.
+NO_LEDGER_BODY="$(printf '%s\n' '## Summary' '' 'Does a thing.' '' '## Review Notes' '' '- [x] ticked item' '- [ ] unticked item one')"
+# The ledger as pre-merge/SKILL.md prints it: the first markdown fence that holds it.
+TEMPLATE="$(awk '
+    /^```markdown$/ { buf = ""; on = 1; next }
+    on && /^```$/ { on = 0; if (index(buf, "## Review Disposition Ledger") && index(buf, "loop-pass")) { printf "%s", buf; exit } next }
+    on { buf = buf $0 "\n" }
+' "$repo_root/pre-merge/SKILL.md")"
+TEMPLATE_BODY="$(printf '%s\n\n%s' '## Summary' "$TEMPLATE")"
+TEMPLATE_CRLF_BODY="$(printf '%s\n' "$TEMPLATE_BODY" | sed 's/$/\r/')"
 
 run_open() {
     local b="${open_block//<number>/7}"
@@ -282,6 +292,20 @@ for sh in bash zsh; do
     check "[$sh] a clean body: the block exits 0" 0 "$rc"
     has "[$sh] a clean body: it says there are no unticked lines" "$out" "unticked checklist lines: none"
     has "[$sh] a clean body: it says there are no open ledger rows" "$out" "open ledger rows: none"
+    hasnt "[$sh] a clean body: it does not say there is no ledger block" "$out" "no ledger block"
+    run_open "$NO_LEDGER_BODY" "$sh"
+    check "[$sh] no ledger: the block exits 0" 0 "$rc"
+    has "[$sh] no ledger: it still lists an unticked line" "$out" "unticked item one"
+    has "[$sh] no ledger: it says there is no ledger block" "$out" "no ledger block in the PR body"
+    hasnt "[$sh] no ledger: it does not say a ledger had no open rows" "$out" "open ledger rows: none"
+    for form in "$TEMPLATE_BODY" "$TEMPLATE_CRLF_BODY"; do
+        run_open "$form" "$sh"
+        has "[$sh] the real template: it lists the open Stamp row" "$out" 'Stamp block "no-ops"'
+        has "[$sh] the real template: it lists the open Presence row" "$out" "Presence helper claimed as Effect Layer"
+        hasnt "[$sh] the real template: it does not list a fixed row" "$out" "Duplicate date formatter"
+        hasnt "[$sh] the real template: it does not list a filed row" "$out" "Same pattern in"
+        hasnt "[$sh] the real template: it does not say there is no ledger block" "$out" "no ledger block"
+    done
     GH_FAIL=body run_open "$BODY" "$sh"
     check "[$sh] an unreadable body: the block exits 1" 1 "$rc"
     has "[$sh] an unreadable body: it says the open items are unknown, not empty" "$out" "open items unknown"

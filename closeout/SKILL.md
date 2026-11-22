@@ -121,8 +121,14 @@ On `route: already merged`, the confirmation below names the teardown, not a mer
 ```bash
 BODY="$(gh pr view <number> --json body -q .body)" || { echo "open items unknown: cannot read the PR body" >&2; exit 1; }
 printf '%s\n' "$BODY" | grep -nE '^[[:space:]]*- \[ \]' || echo "unticked checklist lines: none"
-printf '%s\n' "$BODY" | awk -F'|' '$(2) ~ /^ *[0-9]+ *$/ { s = $(5); gsub(/ /, "", s); if (s == "open") print }' | grep . || echo "open ledger rows: none"
+if printf '%s\n' "$BODY" | grep -qE '^## Review Disposition Ledger[[:space:]]*$'; then
+  printf '%s\n' "$BODY" | awk -F'|' '$(2) ~ /^ *[0-9]+ *$/ { s = $(5); gsub(/ /, "", s); if (s == "open") print }' | grep . || echo "open ledger rows: none"
+else
+  echo "no ledger block in the PR body"
+fi
 ```
+
+  A PR body with no `## Review Disposition Ledger` heading prints `no ledger block in the PR body`, which says no ledger was consulted; `open ledger rows: none` means a ledger was read and has no open row.
 
   On the `sidecar` backend the ledger is the newest comment on the work item whose first line is `## Review Disposition Ledger` ([references/state-backend.md](references/state-backend.md) § Where the review's records live), read with `bash "$SC" work view <W-n> --json`; the PR body carries no ledger there, so only its unticked lines come from the block above.
 - **Every Concern the review printed that is not recorded as fixed, and every breaker verdict of `survived` or `not-run`.** Neither has a durable home: the Concerns are `/pre-merge` Phase 4's terminal output, and the verdicts are `/fix-findings`' report. Read them from this session's own record of those two. When the session holds neither, say "no review output in this session", because that is not an empty list.
