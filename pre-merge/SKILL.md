@@ -145,29 +145,72 @@ If you are running on a branch other than the user's working branch and `--pr` w
      fi
    fi
    SCOPE_FROM="$SLICE_FROM"
+   MERGES_READ=""
    if [ -n "$REVIEWED_SHA" ] \
      && git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
-     && [ "$REVIEWED_SHA" != "$(git rev-parse HEAD)" ] \
-     && [ -z "$(git log --merges --format=%H "$REVIEWED_SHA..HEAD")" ]; then
-     SCOPE_FROM="$REVIEWED_SHA"
+     && [ "$REVIEWED_SHA" != "$(git rev-parse HEAD)" ]; then
+     if [ -z "$(git log --merges --format=%H "$REVIEWED_SHA..HEAD")" ]; then
+       SCOPE_FROM="$REVIEWED_SHA"
+     else
+       # Merges after the stamp: read each merge from the base as its resolution.
+       COMMITS=$(git log --reverse --first-parent --format=%H "$REVIEWED_SHA..HEAD")
+       WHY=""; OWN=0
+       [ "$(git rev-parse "$(printf '%s\n' "$COMMITS" | head -n 1)^")" = "$REVIEWED_SHA" ] \
+         || WHY="the stamped commit is not on this branch's first-parent line"
+       while IFS= read -r C; do
+         [ -n "$C" ] && [ -z "$WHY" ] || continue
+         N=$(git rev-list --parents -n 1 "$C" | wc -w | tr -d ' ')
+         if [ "$N" = 2 ]; then OWN=$((OWN + 1)); continue; fi
+         if [ "$N" != 3 ] || ! git merge-base --is-ancestor "$C^2" "$BASE_REF" 2>/dev/null; then
+           WHY="merge $(git rev-parse --short "$C") does not bring in $BASE_REF"; continue
+         fi
+         if ! RESOLUTION=$(git show --remerge-diff --no-ext-diff --format= "$C" 2>/dev/null); then
+           WHY="this git cannot run git show --remerge-diff"; continue
+         fi
+         [ -z "$RESOLUTION" ] || OWN=$((OWN + 1))
+         MERGES_READ=$(printf '%s\n%s' "$MERGES_READ" "$C")
+       done <<<"$COMMITS"
+       if [ -n "$WHY" ]; then
+         MERGES_READ=""
+         echo "whole slice, because $WHY"
+       elif [ "$OWN" -eq 0 ]; then
+         SCOPE_FROM="HEAD"
+       else
+         SCOPE_FROM="$REVIEWED_SHA"
+       fi
+     fi
    elif [ -n "$REVIEWED_SHA" ] \
      && ! git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
      && [ "$(git rev-parse -q --verify "$REVIEWED_SHA^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ]; then
      SCOPE_FROM="HEAD"
    fi
-   if [ "$SCOPE_FROM" = HEAD ]; then
+   if [ "$SCOPE_FROM" = HEAD ] && [ -n "$MERGES_READ" ]; then
+     echo "review scope: none, every commit since $REVIEWED_SHA is a clean merge from $BASE_REF"
+   elif [ "$SCOPE_FROM" = HEAD ]; then
      echo "review scope: none, history-only rewrite — HEAD carries the tree reviewed at $REVIEWED_SHA"
    elif [ "$SCOPE_FROM" = "$BASE_REF" ]; then
      echo "review scope: whole branch, from $BASE_REF"
    elif [ "$SCOPE_FROM" = "$SLICE_FROM" ]; then
      echo "review scope: whole slice, from $SLICE_FROM ($W's recorded start)"
+   elif [ -n "$MERGES_READ" ]; then
+     echo "review scope: post-stamp delta, from $SCOPE_FROM, with each merge from $BASE_REF read as its resolution"
    else
      echo "review scope: post-stamp delta, from $SCOPE_FROM"
    fi
-   git diff "$SCOPE_FROM...HEAD" --stat
-   git log --oneline "$SCOPE_FROM..HEAD"
+   if [ -n "$MERGES_READ" ]; then
+     # What Phase 3 reads: each ordinary commit's diff, then each merge's resolution.
+     git log --first-parent --no-merges --stat --oneline "$SCOPE_FROM..HEAD"
+     while IFS= read -r C; do
+       [ -z "$C" ] || git show --remerge-diff --no-ext-diff --stat --format='%h %s (what was resolved by hand)' "$C"
+     done <<<"$MERGES_READ"
+   else
+     git diff "$SCOPE_FROM...HEAD" --stat
+     git log --oneline "$SCOPE_FROM..HEAD"
+   fi
    ```
-   Four states fall back to the whole slice, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` and whose tree `HEAD` no longer carries (the branch was rewritten and the content changed with it, or the reviewed commit is gone — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge commit after the stamp (the post-stamp diff would carry the base branch's own changes, which nobody on this branch wrote). The whole slice is the whole branch unless `range` found a recorded start, and when it finds one that a fold or rebase rewrote away it says so on stderr and answers `$BASE_REF`, never re-anchoring the start. The decision is printed so the terminal readout and the PR say the same thing about what was read.
+   Four states fall back to the whole slice, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` and whose tree `HEAD` no longer carries (the branch was rewritten and the content changed with it, or the reviewed commit is gone — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge after the stamp that the next paragraph cannot read as a resolution (one that does not bring in the base, or a git that rejects `--remerge-diff`), whose post-stamp diff would carry changes nobody on this branch wrote. The whole slice is the whole branch unless `range` found a recorded start, and when it finds one that a fold or rebase rewrote away it says so on stderr and answers `$BASE_REF`, never re-anchoring the start. The decision is printed so the terminal readout and the PR say the same thing about what was read.
+
+   **A merge from the base after the stamp is reviewed as its resolution.** When every post-stamp commit on this branch's first-parent line is either an ordinary commit or a merge whose second parent is on the base branch, the review scope is two things: the ordinary commits' own diffs, and each merge's `git show --remerge-diff` output, which shows only what the person resolving the merge changed by hand ([git-show](https://git-scm.com/docs/git-show); the option arrived in [git 2.36](https://github.com/git/git/blob/v2.36.0/Documentation/RelNotes/2.36.0.txt)). An empty remerge diff is a clean merge: nobody on this branch wrote anything in it. When every post-stamp commit is a clean merge, the block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`, and the run goes on as for a history-only rewrite, below: no Phase 3, and the stamp moves to `HEAD`. Otherwise the block lists the commits and resolutions it read, and that listing, not `git diff "$SCOPE_FROM...HEAD"`, is the diff Phase 3's reviewers are handed, because the three-dot diff would carry the base's own changes. Any other merge shape, or a git that rejects the option, keeps the whole-slice fallback, and the block prints why.
 
    **After a `stamp release`, the delta starts at the released head, and never past a commit no review read.** When the head at release was the stamped commit, the two starts are one. When a fold had replaced the stamped commit, the block starts at the released head if it carries the stamped tree. When commits had landed after the stamp and before the release, it starts at the stamp, so they are read too. Give each reviewer the release's reason, from `.claude/.post-review-edit`, as the claim the edit has to meet.
 

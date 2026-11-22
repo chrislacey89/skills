@@ -129,20 +129,23 @@ assert_fixture_merged() {
 
 # --- Extract the two blocks from the skills ---------------------------------
 
-# The scope block: from the backend question to the log line, inside Phase 1
-# step 4's fence. Anchored on the first and last command rather than on a marker
-# comment, so a rewrite that drops either line fails here instead of shrinking
-# the test. The block opens by asking `sidecar.sh backend stamp` where the stamp
+# The scope block: from the backend question to the end of Phase 1 step 4's
+# fence. Anchored on the first command and the closing fence, and the log line
+# is required below, so a rewrite that drops either fails here instead of
+# shrinking the test. The block opens by asking `sidecar.sh backend stamp` where the stamp
 # lives (#521), so its bundled-path placeholder is pointed at the canonical
 # script; every arm below then runs the real routing rule, not a stand-in.
 sidecar_sh="$repo_root/init-pipeline/scripts/sidecar.sh"
 scope_block="$(awk '
     /^4\. \*\*Decide the scope/ { step = 1 }
     step && /^   SC=".*references\/sidecar\.sh"$/ { on = 1 }
+    on && /^   ```$/ { exit }
     on { sub(/^   /, ""); print }
-    on && /git log --oneline "\$SCOPE_FROM\.\.HEAD"/ { exit }
 ' "$premerge_skill")"
 [[ -n "$scope_block" ]] || fatal "no scope block found in $premerge_skill"
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+[[ "$scope_block" == *'git log --oneline "$SCOPE_FROM..HEAD"'* ]] \
+    || fatal "scope block extracted from $premerge_skill no longer lists the commits it scoped"
 scope_block="${scope_block//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
 [[ "$scope_block" == *"$sidecar_sh"* ]] \
     || fatal "scope block's sidecar.sh placeholder was not substituted"
@@ -341,6 +344,14 @@ export REAL_GIT="$real_git"
 cat > "$stub_bin/git" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "${GIT_STUB_ARGV_LOG:?}"
+# GIT_STUB_NO_REMERGE plays a git older than --remerge-diff, which rejects it.
+case " $* " in
+    *" --remerge-diff "*)
+        if [ -n "${GIT_STUB_NO_REMERGE:-}" ]; then
+            echo "error: unknown option \`remerge-diff'" >&2
+            exit 129
+        fi ;;
+esac
 exec "${REAL_GIT:?}" "$@"
 STUB
 chmod +x "$stub_bin/git"
@@ -490,8 +501,8 @@ else
     printf '  ok   unresolvable stamp: readout carries no fatal:/error: line\n'; pass=$((pass + 1))
 fi
 
-# --- 5. Merge commit after the stamp → whole branch ------------------------------
-section "a merge commit landed after the stamp: whole branch, so base's own changes are not the delta"
+# --- 5. A merge from the base after the stamp → its resolution (#808) -----------
+section "a merge from the base landed after the stamp: the delta is the branch's own commits, not the base's changes"
 (
     cd "$repo" || exit 1
     git switch -q main
@@ -502,9 +513,9 @@ section "a merge commit landed after the stamp: whole branch, so base's own chan
 )
 assert_fixture_merged "$repo" "fixture merge"
 merge_sha="$(git -C "$repo" rev-parse HEAD)"   # captured for the two-stamp fixture below
-assert_eq "review scope: whole branch, from main" \
-    "$(run_scope "$(stamped_body "$stamp_sha")" | cut -d'|' -f1)" \
-    "a merge after the stamp falls back to the whole branch"
+assert_eq "review scope: post-stamp delta, from $stamp_sha, with each merge from main read as its resolution|four.txt three.txt" \
+    "$(run_scope "$(stamped_body "$stamp_sha")")" \
+    "a clean merge from the base after the stamp: the delta is the two branch commits, and base.txt is not in it"
 
 # --- 6. Round count from the Fix-Findings-Run line -------------------------------
 section "/fix-findings' round count is read from the tree"
@@ -690,9 +701,9 @@ fi
 )
 assert_fixture_merged "$repo2" "sidecar fixture merge"
 sidecar_stamp "$stamp_sha2"
-assert_eq "review scope: whole branch, from main" \
-    "$(run_scope2 | cut -d'|' -f1)" \
-    "sidecar, merge after the stamp: whole branch"
+assert_eq "review scope: post-stamp delta, from $stamp_sha2, with each merge from main read as its resolution|four.txt three.txt" \
+    "$(run_scope2)" \
+    "sidecar, a clean merge from the base after the stamp: the delta is the branch's two commits"
 assert_eq "" "$(git -C "$repo2" status --porcelain)" \
     "sidecar backend: the scope read and every stamp verb left the project tree clean"
 
@@ -2011,6 +2022,106 @@ if [[ "$have_zsh" == yes ]]; then
     release_scope_case zsh folded
     release_scope_case zsh past-stamp
 fi
+
+# --- 15. Merges from the base after the stamp (#808) ---------------------------
+# Each case builds its own branch: a stamp, then the commits the case names. A
+# merge whose second parent is on the base is read as what was resolved by hand
+# (git show --remerge-diff), so base.txt and from-base.txt, which only the base
+# wrote, never reach the review. Any other merge, or a git that rejects the
+# option, keeps the whole-slice fallback and says why.
+section "merges from the base after the stamp are reviewed as their resolutions"
+merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
+    local sh="$1" kind="$2" r="$sandbox/merge-$1-$2" stamped out
+    mkdir -p "$r"
+    git init -q -b main "$r"
+    git -C "$r" config user.email t@example.com
+    git -C "$r" config user.name t
+    printf 'base %s\n' "$r" > "$r/base.txt"
+    printf 'shared\n' > "$r/shared.txt"
+    git -C "$r" add base.txt shared.txt
+    git -C "$r" commit -q -m "base $r"
+    git -C "$r" switch -q -c feature
+    printf 'mine\n' > "$r/mine.txt"
+    git -C "$r" add mine.txt
+    git -C "$r" commit -q -m 'feature: mine'
+    stamped="$(git -C "$r" rev-parse HEAD)"
+    if [[ "$kind" == ordinary || "$kind" == old-git ]]; then
+        printf 'later\n' > "$r/later.txt"
+        git -C "$r" add later.txt
+        git -C "$r" commit -q -m 'feature: later'
+    fi
+    if [[ "$kind" == resolved ]]; then
+        printf 'shared, as the branch has it\n' > "$r/shared.txt"
+        git -C "$r" commit -q -am 'feature: shared'
+        stamped="$(git -C "$r" rev-parse HEAD)"
+    fi
+    if [[ "$kind" == topic ]]; then
+        git -C "$r" switch -q -c topic main
+        printf 'topic\n' > "$r/topic.txt"
+        git -C "$r" add topic.txt
+        git -C "$r" commit -q -m 'topic'
+        git -C "$r" switch -q feature
+        git -C "$r" merge -q --no-edit topic
+    else
+        git -C "$r" switch -q main
+        printf 'from the base\n' > "$r/from-base.txt"
+        git -C "$r" add from-base.txt
+        if [[ "$kind" == resolved ]]; then printf 'shared, as the base has it\n' > "$r/shared.txt"; git -C "$r" add shared.txt; fi
+        git -C "$r" commit -q -m 'base moves on'
+        git -C "$r" switch -q feature
+        if [[ "$kind" == resolved ]]; then
+            git -C "$r" merge -q --no-edit main >/dev/null 2>&1
+            printf 'shared, resolved by hand\n' > "$r/shared.txt"
+            git -C "$r" add shared.txt
+            git -C "$r" commit -q --no-edit
+        else
+            git -C "$r" merge -q --no-edit main
+        fi
+    fi
+    git -C "$r" rev-parse -q --verify HEAD^2 >/dev/null || fatal "merge case $kind: HEAD is not a merge commit"
+    [[ -z "$(git -C "$r" status --porcelain)" ]] || fatal "merge case $kind: the fixture left a dirty tree"
+    if [[ "$kind" == old-git ]]; then
+        out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" GIT_STUB_NO_REMERGE=1 env -u BASE_REF "$sh" -c "$scope_block" 2>&1)"
+    else
+        out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" env -u BASE_REF "$sh" -c "$scope_block" 2>&1)"
+    fi
+    local scope files
+    scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
+    files="$(stat_files "$out")"
+    case "$kind" in
+        clean)
+            assert_eq "review scope: none, every commit since $stamped is a clean merge from main|" "$scope|$files" \
+                "$sh: only a clean merge from the base after the stamp: nothing to review, and the stamp moves to HEAD" ;;
+        ordinary)
+            assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution|later.txt" "$scope|$files" \
+                "$sh: an ordinary commit and a clean merge: only the ordinary commit is read" ;;
+        resolved)
+            assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution|shared.txt" "$scope|$files" \
+                "$sh: a merge resolved by hand: only what the resolution changed is read, not the base's own file"
+            case "$out" in
+                *"(what was resolved by hand)"*) assert_eq ok ok "$sh: the readout lists the merge as a resolution" ;;
+                *) assert_eq "the merge, listed as a resolution" "$out" "$sh: the readout lists the merge as a resolution" ;;
+            esac ;;
+        topic)
+            assert_eq "review scope: whole branch, from main" "$scope" \
+                "$sh: a merge whose second parent is not on the base: the whole slice"
+            case "$out" in
+                *"does not bring in main"*) assert_eq ok ok "$sh: …and the readout says why" ;;
+                *) assert_eq "a line naming the merge" "$out" "$sh: …and the readout says why" ;;
+            esac ;;
+        old-git)
+            assert_eq "review scope: whole branch, from main" "$scope" \
+                "$sh: a git that rejects --remerge-diff: the whole slice"
+            case "$out" in
+                *"git show --remerge-diff"*) assert_eq ok ok "$sh: …and the readout says the option was rejected" ;;
+                *) assert_eq "a line naming the option" "$out" "$sh: …and the readout says the option was rejected" ;;
+            esac ;;
+    esac
+}
+for kind in clean ordinary resolved topic old-git; do
+    merge_case bash "$kind"
+    if [[ "$have_zsh" == yes ]]; then merge_case zsh "$kind"; fi
+done
 
 # -----------------------------------------------------------------------------
 
