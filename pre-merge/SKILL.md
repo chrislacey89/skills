@@ -248,14 +248,15 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 **Skip this phase entirely in reviewer-mode** — the PR already exists, you did not author it, and rewriting someone else's PR body is out of scope. Proceed to Phase 3.
 
-**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared:
+**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared. So does a head commit that any remote branch holds, under any name, which is the case of a branch built on a pushed branch before its own first commit ([git-rev-list](https://git-scm.com/docs/git-rev-list) on `--not --remotes`):
 
 ```bash
 # Is this branch shared? Prints "shared: yes" or "shared: no".
+C=HEAD   # the newest commit a fold would rewrite
 B=$(git branch --show-current)
 R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
 HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ]; then SHARED=yes; else SHARED=no; fi
+if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ]; then SHARED=yes; else SHARED=no; fi
 echo "shared: $SHARED"
 ```
 
@@ -933,10 +934,11 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 
 **While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Once Phase 2 has run, offer the menu above.
 
-**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and Phase 2's shared-branch block prints `shared: no`, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
+**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (the commit rule in Step 1's fixer brief) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and Phase 2's shared-branch block prints `shared: no`, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
+W="<the W-<n> Phase 1 step 2 named, or empty>"
 BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 1 step 3 was given; an earlier block's shell variable does not reach this one
 fold_abort() { echo "fold aborted: ${1}; the branch is as it was" >&2; exit 1; }
 if [ -n "$BASE_BRANCH" ]; then
@@ -946,10 +948,18 @@ if [ -n "$BASE_BRANCH" ]; then
 else
   BASE_REF=$(bash "$SC" base-ref) || fold_abort "sidecar.sh base-ref failed"
 fi
-# Rebase onto the branch's own fork point, not the base's tip: a base that moved
-# since the branch forked would change the tree, and the re-run would then read
-# the fold as new content.
-FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || fold_abort "no merge base with $BASE_REF"
+# Fold only this slice's commits: from the start its work item records, which
+# `range` prints, and otherwise from the branch's own fork point, not the base's
+# tip, since a base that moved since the branch forked would change the tree.
+FOLD_RANGE=$(bash "$SC" range ${W:+"$W"}) || fold_abort "sidecar.sh range failed"
+FOLD_START="${FOLD_RANGE%%..*}"
+[ -z "$BASE_BRANCH" ] || [ "$FOLD_START" != "$(bash "$SC" base-ref 2>/dev/null)" ] || FOLD_START="$BASE_REF"
+FORK_POINT=$(git merge-base "$FOLD_START" HEAD) || fold_abort "no merge base with $FOLD_START"
+# Never rewrite a commit that any remote branch holds, under any name.
+TOTAL=$(git rev-list --count HEAD --not "$FORK_POINT") || fold_abort "git rev-list failed"
+UNPUBLISHED=$(git rev-list --count HEAD --not "$FORK_POINT" --remotes) || fold_abort "git rev-list failed"
+[ "$TOTAL" = "$UNPUBLISHED" ] \
+  || fold_abort "$((TOTAL - UNPUBLISHED)) of the $TOTAL commits from ${FORK_POINT:0:12} are already on a remote branch; folding would rewrite published history"
 TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
 if ! GIT_SEQUENCE_EDITOR=: git rebase -q -i --autosquash "$FORK_POINT"; then
   # Only a stop with unmerged paths is a conflict; a signer or a hook that refused is not.
@@ -965,6 +975,8 @@ elif [ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ]; then
 else
   echo "folded, but the tree changed: the re-run will review the whole branch" >&2
 fi
+LEFT=$(git log --format=%s HEAD --not "$FORK_POINT" | grep -c '^fixup! ' || true)
+[ "$LEFT" = 0 ] || echo "$LEFT fixup! commit(s) name a commit before this slice's start and were left as they are; reword each by hand" >&2
 ```
 
-An abort names its cause: a commit that `conflicted`, by SHA and subject, or a rebase that failed without a conflict (a signer or a hook refused, and git's own message is printed above it). Either way the branch is as it was. Otherwise, re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.
+The fold rebases only this slice's commits: from the start its work item records, and with no work item from the branch's fork point with the base. It refuses before it starts when any commit in that range is already on a remote branch, under any name, and says how many. A `fixup!` commit that names a commit before the slice's start is left in place, and the fold says so. An abort names its cause: a commit that `conflicted`, by SHA and subject, or a rebase that failed without a conflict (a signer or a hook refused, and git's own message is printed above it). Either way the branch is as it was. Otherwise, re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.

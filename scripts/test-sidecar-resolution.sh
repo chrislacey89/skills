@@ -795,6 +795,90 @@ check "with jq missing, base-ref exits 1 and prints no ref" "1 " "$rc $out"
 contains "with jq missing, the refusal says why" "jq is required" "$(cat "$BR/err")"
 check "base-ref commits nothing in the project" "" "$(git -C "$BR/clone" status --porcelain)"
 
+section "base-ref: an open PR's base comes first, where gh may be asked (#810)"
+# gh is asked only where the pack already talks to GitHub: a github.com remote
+# and the github stamp backend. Everywhere else, and whenever gh is missing or
+# fails, base-ref answers exactly what it answered before, with nothing on stderr.
+PRB="$tmp/prb"; mkdir -p "$PRB/bin"
+PRB_ROOT="$PRB/sidecars"
+cat > "$PRB/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${PRB_GH_LOG:?}"
+[ -z "${PRB_GH_FAIL:-}" ] || exit 1
+filter=""; prev=""
+for a in "$@"; do
+    if [ "$prev" = -q ]; then filter="$a"; fi
+    prev="$a"
+done
+printf '%s' "${PRB_PR_JSON:?}" | jq -r "$filter"
+STUB
+chmod +x "$PRB/bin/gh"
+export PRB_GH_LOG="$PRB/gh.log"
+: > "$PRB_GH_LOG"
+mkrepo "$PRB/up"
+git -C "$PRB/up" branch develop
+git -C "$PRB/up" branch integration
+git clone -q "$PRB/up" "$PRB/clone"
+git -C "$PRB/clone" remote set-head origin develop >/dev/null
+git -C "$PRB/clone" remote set-url origin https://github.com/acme/prbase.git
+git -C "$PRB/clone" checkout -q -b feat
+# prb_run <PR json> <args...> — sidecar.sh with the stub gh first on PATH.
+prb_run() {
+    local json="$1"; shift
+    out="$(cd "$PRB/clone" && PATH="$PRB/bin:$PATH" PRB_PR_JSON="$json" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" bash "$SC" "$@" 2>"$PRB/err")"; rc=$?
+    err="$(cat "$PRB/err")"
+}
+calls() { grep -c . "$PRB_GH_LOG" || true; }
+open_pr='{"baseRefName":"integration","state":"OPEN"}'
+
+prb_run "$open_pr" base-ref
+check "an open PR's base: base-ref answers it" "0 origin/integration" "$rc $out"
+check "…with nothing on stderr" "" "$err"
+contains "…having asked gh pr view for the base and the state" "pr view --json baseRefName,state" "$(cat "$PRB_GH_LOG")"
+prb_run "$open_pr" base-ref --name
+check "an open PR's base, --name: the bare branch" "0 integration" "$rc $out"
+prb_run '{"baseRefName":"integration","state":"CLOSED"}' base-ref
+check "a closed PR is ignored: the answer is today's" "0 origin/develop" "$rc $out"
+prb_run '{"baseRefName":"integration","state":"MERGED"}' base-ref
+check "a merged PR is ignored: the answer is today's" "0 origin/develop" "$rc $out"
+out="$(cd "$PRB/clone" && PATH="$PRB/bin:$PATH" PRB_GH_FAIL=1 PRB_PR_JSON="$open_pr" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" bash "$SC" base-ref 2>"$PRB/err")"; rc=$?
+check "gh fails (no PR, no auth, no network): the answer is today's" "0 origin/develop" "$rc $out"
+check "…with nothing on stderr" "" "$(cat "$PRB/err")"
+nogh="$PRB/nogh-bin"; mkdir -p "$nogh"
+for d in /opt/homebrew/bin /usr/local/bin /usr/bin /bin; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+        b="${f##*/}"; [ "$b" = gh ] && continue
+        [ -e "$nogh/$b" ] || ln -s "$f" "$nogh/$b"
+    done
+done
+out="$(cd "$PRB/clone" && PATH="$nogh" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" bash "$SC" base-ref 2>"$PRB/err")"; rc=$?
+check "gh absent: the answer is today's" "0 origin/develop" "$rc $out"
+check "…with nothing on stderr" "" "$(cat "$PRB/err")"
+prb_run '{"baseRefName":"nowhere","state":"OPEN"}' base-ref
+check "an open PR whose base resolves to no ref: base-ref refuses rather than guessing" "1 " "$rc $out"
+contains "…and says to fetch it" "git fetch origin nowhere" "$err"
+
+git -C "$PRB/clone" remote set-url origin https://gitlab.com/acme/prbase.git
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref
+check "a GitLab remote: the answer is today's" "0 origin/develop" "$rc $out"
+check "…and gh is never asked" 0 "$(calls)"
+git -C "$PRB/clone" remote set-url origin https://github.com/acme/prbase.git
+
+prb_run "$open_pr" init --name prbase --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "init an owned sidecar (fixture sanity)" 0 "$rc"
+prb_run "$open_pr" config set base_ref develop
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref
+check "owned on GitHub, with a declared base_ref: the open PR's base comes first" "0 origin/integration" "$rc $out"
+prb_run "$open_pr" config set mode guest
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref
+check "a guest sidecar (the sidecar stamp backend): the declared base_ref, as today" "0 origin/develop" "$rc $out"
+check "…and gh is never asked" 0 "$(calls)"
+check "base-ref's PR read commits nothing in the project" "" "$(git -C "$PRB/clone" status --porcelain)"
+
 # fenced_with <file> <marker> — the first fenced block containing <marker>, dedented.
 fenced_with() {
     awk -v m="$2" '

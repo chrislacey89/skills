@@ -253,7 +253,12 @@
 # or conventions value of the wrong type, blank, or spanning lines) exits 1 and
 # prints no block.
 #
-# base-ref. A declared base_ref wins. A sidecar miss, or a sidecar with no
+# base-ref. An open PR for the current branch states its own target, and that
+# wins: gh pr view is asked for it only on a github.com remote whose stamp
+# backend is github, the places the pack already talks to GitHub, and a missing
+# gh, a failed read, or a PR that is not open falls through, silently, to what
+# follows. A PR base that resolves to no ref exits 1, as a declared one does.
+# Otherwise a declared base_ref wins. A sidecar miss, or a sidecar with no
 # base_ref key, falls back to the derivation every skill used to inline:
 # origin/HEAD's branch, else the first of main master prod develop trunk that
 # resolves. The ref form is origin/<name> when that resolves, else the local
@@ -1216,6 +1221,17 @@ base_ref_of() {
     fi
 }
 
+# pr_base_name: the base of the current branch's open PR, or nothing. The
+# conditions under which gh is asked at all are in the header.
+pr_base_name() {
+    local name
+    command -v gh >/dev/null 2>&1 || return 0
+    [ "$(forge_kind_of "$(current_keys 2>/dev/null)")" = github ] || return 0
+    [ "$(cmd_backend stamp 2>/dev/null)" = github ] || return 0
+    name="$(GH_PROMPT_DISABLED=1 gh pr view --json baseRefName,state -q 'select(.state == "OPEN") | .baseRefName' </dev/null 2>/dev/null)" || return 0
+    printf '%s\n' "$name" | head -n 1
+}
+
 # The base branch; the three outcomes are in the header.
 cmd_base_ref() {
     local want=ref sc errf v name="" candidate ref
@@ -1226,6 +1242,13 @@ cmd_base_ref() {
     esac
     in_repo || refuse "not inside a git repository"
     command -v jq >/dev/null 2>&1 || refuse "base-ref: jq is required to read the sidecar and is not on PATH; refusing rather than answering the origin/HEAD default"
+    name="$(pr_base_name)"
+    if [ -n "$name" ]; then
+        ref="$(base_ref_of "$name")" \
+            || refuse "base-ref: this branch's open PR targets $name, and neither origin/$name nor $name resolves; run git fetch origin $name"
+        if [ "$want" = name ]; then printf '%s\n' "$name"; else printf '%s\n' "$ref"; fi
+        return 0
+    fi
     errf="$(mktemp)" || refuse "base-ref: cannot create a temp file"
     if sc="$(do_resolve 2>"$errf")"; then
         cat "$errf" >&2; rm -f "$errf"

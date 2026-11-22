@@ -73,6 +73,10 @@ The file's shape is locked in the parent PRD, chrislacey89/skills#407, § Implem
 
 Every write commits inside the sidecar and never pushes. No verb writes to the project's tree or its `.git`, except `stamp release`'s two flag files, described next. A read can commit in the sidecar too: a verb that finds the sidecar, `backend` and `stamp read` among them, adds a key of this checkout that the sidecar does not list yet, such as a new remote, as an alias, and commits that.
 
+## The base branch
+
+`bash "$SC" base-ref [--name]` answers the base a review measures against. An open PR for the current branch comes first: its base is read with `gh pr view` ([gh pr view](https://cli.github.com/manual/gh_pr_view)) on a GitHub remote whose `backend stamp` answers `github`, and nowhere else, so a guest repo and a repo on another forge never reach `gh` through it. With no `gh`, a failed read, or no open PR, it answers as before: the declared `base_ref`, then the `origin/HEAD` default.
+
 ## Releasing the lock
 
 `bash "$SC" stamp release <branch> --reason "<why>"` is the route past the post-review edit lock for an edit that is not a review finding. It works on both backends and never writes a stamp: the branch's stamp keeps naming the commit the last review read, and `/pre-merge` is still the only skill that moves it. It removes `.claude/.review-stamped` and writes `.claude/.post-review-edit`, which the classification hook reads and `/pre-merge`'s stamp blocks remove.

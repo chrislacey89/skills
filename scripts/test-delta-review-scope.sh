@@ -235,6 +235,13 @@ rounds_block="$(printf '%s\n' "$rounds_block" | sed 's/^W="<the slice[^"]*>"$/W=
 fold_block_template="$(fenced_with "$premerge_skill" 'git rebase -q -i --autosquash')"
 [[ "$fold_block_template" == *"$sidecar_sh"* ]] || fatal "no fold block found in $premerge_skill, or it does not ask sidecar.sh for its base"
 [[ "$fold_block_template" == *"$bb_placeholder"* ]] || fatal "the fold block has no stacked BASE_BRANCH placeholder (#606)"
+# The fold takes its range from the slice's work item (#810): FOLD_W fills the
+# W= placeholder, and empty is a run with no work item.
+# shellcheck disable=SC2016  # the ${...} is text for the extracted block to expand, not this shell
+fold_block_template="$(printf '%s\n' "$fold_block_template" | sed 's/^W="<[^"]*>"$/W="${FOLD_W:-}"/')"
+# shellcheck disable=SC2016
+[[ "$fold_block_template" == *'W="${FOLD_W:-}"'* ]] || fatal "the fold block has no W= placeholder for the slice's work item (#810)"
+[[ "$fold_block_template" == *' --remotes)'* ]] || fatal "the fold block no longer checks its range against the remote branches (#810)"
 # run_fold <repo> [stacked branch] — the fold, in a shell with no BASE_REF.
 run_fold() { (cd "$1" && env -u BASE_REF bash -c "$(fill_base "$fold_block_template" "${2:-}")" 2>&1); }
 
@@ -243,7 +250,7 @@ shared_block="$(fenced_with "$premerge_skill" 'git ls-remote --heads')"
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
 [[ "$shared_block" == *'echo "shared: $SHARED"'* ]] || fatal "no shared-branch block printing its verdict found in $premerge_skill"
 
-# The fixup-target block from /fix-findings Step 1 item 5 (#566), de-indented
+# The fixup-target block from /fix-findings Step 1, in the fixer brief's commit rule (#566), de-indented
 # out of its list item and whole, from its comment to the line that prints the
 # answer. Section 12 runs it with nothing preset, the way a fresh shell does
 # (#619): the anchor reaches it by substitution, as it reaches an agent.
@@ -1124,6 +1131,17 @@ assert_eq "*${add_d_sha:0:39}" "$(git -C "$repo4" blame -l -s -L 4,4 main..HEAD 
 assert_eq "$add_d_sha" "$(run_target 4 4)" "an unblamable line under the user's ignore-revs file: the target is a bare SHA"
 git -C "$repo4" config --unset blame.ignoreRevsFile
 
+# A commit any remote branch holds, under any name, is published, so a fixup of
+# it would rewrite published history when folded (#810). The target here is on
+# origin under another branch name; the branch itself is not.
+git -C "$repo4" push -q origin "$change_b_sha:refs/heads/elsewhere" 2>/dev/null
+git -C "$repo4" fetch -q origin 2>/dev/null
+assert_eq "" "$(run_target 2 2)" "a target another remote branch holds: no target, so no fixup of a published commit"
+assert_eq "$add_d_sha" "$(run_target 4 4)" "…while a line from a commit no remote holds keeps its target"
+git -C "$repo4" push -q origin --delete elsewhere 2>/dev/null
+git -C "$repo4" fetch -q --prune origin 2>/dev/null
+assert_eq "$change_b_sha" "$(run_target 2 2)" "control: with the other branch gone, the same line has its target again"
+
 # A shared branch never gets a fixup: /pre-merge offers the fold only on an
 # unshared branch, so a `fixup!` subject there would merge as-is (#611). Both
 # ways of sharing count — a push with -u, and a plain push with no upstream.
@@ -1933,10 +1951,17 @@ shared_both() {
 }
 shared_both "shared: no" "unpushed branch, origin reachable: unshared"
 git -C "$repo5" push -q origin feature:alice/feature 2>/dev/null
-assert_eq "shared: no" "$(run_shared)" "origin holds alice/feature, not feature: an exact refs/heads/ match only, so unshared"
+# #810: HEAD itself is now on origin, as alice/feature, so a fold would rewrite it.
+shared_both "shared: yes" "origin holds HEAD as alice/feature: the commit is published under another name, so shared"
+# A commit made after that push is not on any remote: the ls-remote rows below
+# measure the branch name alone.
+printf 'b\n' > "$repo5/g.txt"
+git -C "$repo5" add g.txt
+git -C "$repo5" commit -q -m 'feature: after the push'
+assert_eq "shared: no" "$(run_shared)" "origin holds alice/feature, not feature, and not HEAD: an exact refs/heads/ match only, so unshared"
 # ls-remote matches a pattern against the tail of a ref name, so even the full
 # refs/heads/feature pattern matches a branch named x/refs/heads/feature.
-git -C "$repo5" push -q origin feature:x/refs/heads/feature 2>/dev/null
+git -C "$repo5" push -q origin feature~1:refs/heads/x/refs/heads/feature 2>/dev/null
 assert_eq "refs/heads/x/refs/heads/feature" "$(git -C "$repo5" ls-remote --heads origin refs/heads/feature | cut -f2)" \
     "fixture precondition: ls-remote's own pattern matches refs/heads/x/refs/heads/feature"
 shared_both "shared: no" "origin holds x/refs/heads/feature, which ls-remote's pattern matches: the exact match still says unshared"
@@ -1944,7 +1969,11 @@ git -C "$repo5" remote set-url origin "$sandbox/no-such-remote.git"
 shared_both "shared: yes" "origin cannot be reached: ls-remote fails, so shared"
 git -C "$repo5" remote set-url origin "$bare5"
 git -C "$repo5" push -q fork feature 2>/dev/null
-assert_eq "shared: no" "$(run_shared)" "control: pushed only to fork, and nothing says fork is the push remote: origin is asked, unshared"
+shared_both "shared: yes" "pushed to fork: HEAD is on a remote branch, so shared whichever remote the branch pushes to"
+printf 'c\n' > "$repo5/h.txt"
+git -C "$repo5" add h.txt
+git -C "$repo5" commit -q -m 'feature: after the fork push'
+assert_eq "shared: no" "$(run_shared)" "control: fork holds the branch name, HEAD is newer, and nothing says fork is the push remote: origin is asked, unshared"
 git -C "$repo5" config remote.pushDefault fork
 shared_both "shared: yes" "remote.pushDefault is fork, which holds the branch: shared"
 git -C "$repo5" config branch.feature.pushRemote origin
@@ -2022,6 +2051,65 @@ if [[ "$have_zsh" == yes ]]; then
     release_scope_case zsh folded
     release_scope_case zsh past-stamp
 fi
+
+# --- 16. The fold on a branch built on a pushed branch (#810) ------------------
+# slice-1 is pushed; slice-2 is built on it, locally, with a fixup. From the
+# base's fork point the fold's range holds slice-1's published commit, so it
+# must refuse and say how many. From slice-2's recorded start the range is
+# slice-2's own two commits, both local, so it folds and leaves slice-1 alone.
+section "the fold: only the slice's commits, and never a commit a remote holds"
+fold_publish_case() {  # $1 = shell
+    local sh="$1" r="$sandbox/fold-published-$1" w one head out rc
+    git init -q --bare "$r.git"
+    git init -q -b main "$r"
+    git -C "$r" config user.email t@example.com
+    git -C "$r" config user.name t
+    git -C "$r" remote add origin "$r.git"
+    printf 'base %s\n' "$r" > "$r/base.txt"
+    git -C "$r" add base.txt
+    git -C "$r" commit -q -m "base $r"
+    git -C "$r" push -q origin main 2>/dev/null
+    git -C "$r" switch -q -c slice-1
+    printf 'one\n' > "$r/one.txt"
+    git -C "$r" add one.txt
+    git -C "$r" commit -q -m 'slice 1'
+    git -C "$r" push -q origin slice-1 2>/dev/null
+    one="$(git -C "$r" rev-parse HEAD)"
+    git -C "$r" switch -q -c slice-2
+    (cd "$r" && bash "$sidecar_sh" init --name "fold-$sh" --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+        || fatal "fold case: sidecar init failed"
+    printf 'slice\n' > "$sandbox/fold-slice-body"
+    w="$(cd "$r" && bash "$sidecar_sh" work create --kind slice --body-file "$sandbox/fold-slice-body" 2>/dev/null)"
+    (cd "$r" && bash "$sidecar_sh" work set "$w" start_sha "$one" >/dev/null 2>&1) || fatal "fold case: start_sha failed"
+    printf 'two\n' > "$r/two.txt"
+    git -C "$r" add two.txt
+    git -C "$r" commit -q -m 'slice 2'
+    printf 'two, fixed\n' > "$r/two.txt"
+    git -C "$r" add two.txt
+    git -C "$r" commit -q --fixup=HEAD -m 'fix two'
+    head="$(git -C "$r" rev-parse HEAD)"
+
+    rc=0
+    out="$(cd "$r" && FOLD_W="" env -u BASE_REF "$sh" -c "$(fill_base "$fold_block_template" "")" 2>&1)" || rc=$?
+    assert_eq 1 "$rc" "$sh, no work item: the fold's range reaches slice-1's published commit, and it aborts"
+    case "$out" in
+        *"fold aborted: 1 of the 3 commits"*"already on a remote branch"*) assert_eq ok ok "$sh, no work item: …saying how many commits are published" ;;
+        *) assert_eq "fold aborted: 1 of the 3 commits ... already on a remote branch" "$out" "$sh, no work item: …saying how many commits are published" ;;
+    esac
+    assert_eq "$head" "$(git -C "$r" rev-parse HEAD)" "$sh, no work item: the branch is as it was"
+
+    rc=0
+    out="$(cd "$r" && FOLD_W="$w" env -u BASE_REF "$sh" -c "$(fill_base "$fold_block_template" "")" 2>&1)" || rc=$?
+    assert_eq 0 "$rc" "$sh, the slice's recorded start: the fold runs"
+    case "$out" in
+        *"folded: tree unchanged"*) assert_eq ok ok "$sh, the slice's recorded start: it folds" ;;
+        *) assert_eq "folded: tree unchanged" "$out" "$sh, the slice's recorded start: it folds" ;;
+    esac
+    assert_eq "1 $one" "$(git -C "$r" rev-list --count "$one..HEAD") $(git -C "$r" rev-parse HEAD~1)" \
+        "$sh, the slice's recorded start: slice-2 is one commit, on slice-1's published commit, which is untouched"
+}
+fold_publish_case bash
+if [[ "$have_zsh" == yes ]]; then fold_publish_case zsh; fi
 
 # --- 15. Merges from the base after the stamp (#808) ---------------------------
 # Each case builds its own branch: a stamp, then the commits the case names. A

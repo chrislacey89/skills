@@ -243,16 +243,18 @@ The fixer's instructions, in order:
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $(1) }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
+   C="${FIXUP_TARGET:-HEAD}"   # the commit a fold of this fixup would rewrite
    B=$(git branch --show-current)
    R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
    HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ]; then FIXUP_TARGET=; fi
+   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ]; then FIXUP_TARGET=; fi
    printf 'FIXUP_TARGET=%s\n' "$FIXUP_TARGET"
    ```
 
    A SHA on the printed line means one branch commit wrote every anchored
-   line and the branch is unshared: the four lines above the `printf` are
-   `/pre-merge` Phase 2's shared-branch block, which says what they check. A pushed branch gets no fixups because `/pre-merge`
+   line and the branch is unshared: the lines from `C=` to the `printf` are
+   `/pre-merge` Phase 2's shared-branch block, which says what they check,
+   with the target as the commit no remote branch may hold. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
    **The printed line decides, not your own diff:** a SHA means a `--fixup`
    commit of that SHA, and an empty `FIXUP_TARGET=` means an ordinary commit.
