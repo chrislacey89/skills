@@ -32,7 +32,10 @@
 #      visible, and, under node, parsed and run: nothing plays by itself, Next
 #      moves one view one step, and the last step is the authored frame.
 #   4. SKILL.md Step 1 maps each category of shape/SKILL.md's closing summary,
-#      and each heading of write-a-prd/SKILL.md's pitch template.
+#      each heading of write-a-prd/SKILL.md's pitch template, and, for a
+#      slice set, each field the read block prints and each part of
+#      prd-to-issues/SKILL.md's Boundary Map. Slice fixtures are built from
+#      that skill's issue template, so a renamed section fails here.
 #   5. The read blocks, RUN as written under bash and zsh against a stub gh and
 #      scratch sidecars. Every refusal exits nonzero with a reason on stderr
 #      and nothing on stdout, so a failed read never looks like an empty plan.
@@ -67,6 +70,7 @@ SKILL=visual-recap/SKILL.md
 SHAPE=shape/SKILL.md
 PITCH=write-a-prd/SKILL.md
 EXECUTE=execute/SKILL.md
+SLICER="prd-to-issues/SKILL.md"
 
 pass=0; fail=0
 section() { printf '\n=== %s ===\n' "$1"; }
@@ -530,6 +534,12 @@ execute_rule="$(prd_rule <"$EXECUTE")"
 [ -n "$execute_rule" ] || fatal "could not read the PRD heading rule from $EXECUTE"
 check "the PRD heading rule is /execute's" "$execute_rule" "$(prd_rule <<<"$read_prd")"
 
+read_slices="$(marked_block '# visual-recap: read slices' <"$SKILL")"
+[ -n "$read_slices" ] || fatal "$SKILL has no bash block opening '# visual-recap: read slices'"
+# resolves <block>: the lines that turn an id into a shaped PRD, or refuse.
+resolves() { awk '/^SC="/ {on = 1} on {print} on && /is not a shaped PRD/ {exit}' <<<"$1"; }
+check "read slices resolves the PRD exactly as read prd does" "$(resolves "$read_prd")" "$(resolves "$read_slices")"
+
 wf=.github/workflows/validate-skills.yml
 zsh_step="$(grep -n 'name: Install zsh' "$wf" | head -1 | cut -d: -f1)"
 this_step="$(grep -n 'run: bash scripts/test-staged-scene-contract.sh' "$wf" | head -1 | cut -d: -f1)"
@@ -601,7 +611,7 @@ work() {
 run_block() {
     local filled
     filled="$(awk -v id="$2" -v sc="${3:-$REAL_SC}" '
-        /^PRD="/ { print "PRD=\"" id "\""; next }
+        /^PRD="<prd id>"$/ { print "PRD=\"" id "\""; next }
         /^SC="/  { print "SC=\"" sc "\""; next }
         { print }' <<<"$1")"
     if [ "$run_shell" = zsh ]; then
@@ -694,6 +704,202 @@ each_shell() {
 
 section "read prd, run as written on both backends"
 each_shell read_prd_arms
+
+template="$(span '^<issue-template>$' '^</issue-template>$' <"$SLICER" | tail -n +2)"
+[ -n "$template" ] || fatal "could not read the slice template from $SLICER"
+for needed in '#<prd-issue-number>' '- Blocked by #<issue-number>' 'A concise description of this vertical slice'; do
+    if ! grep -qF -- "$needed" <<<"$template"; then fatal "the slice template no longer has: $needed"; fi
+done
+
+# slice_from_template <parent id> <blocker ids, space separated> <title> <AFK|HITL|"">
+slice_from_template() {
+    awk -v parent="$1" -v blockers="$2" -v title="$3" -v type="$4" '
+        $0 == "#<prd-issue-number>" { print parent; next }
+        /^A concise description of this vertical slice/ {
+            print title
+            if (type != "") { print ""; print "**Type:** " type }
+            next
+        }
+        /^- Blocked by #<issue-number>/ {
+            n = split(blockers, b, " ")
+            for (i = 1; i <= n; i++) print "- Blocked by " b[i]
+            if (n == 0) print "None — can start immediately"
+            next
+        }
+        { print }' <<<"$template"
+}
+# listed <number> <title> <OPEN|CLOSED> <body> [blocker url]...: one gh issue list row.
+listed() {
+    local number="$1" title="$2" state="$3" body="$4"
+    shift 4
+    jq -nc --arg n "$number" --arg t "$title" --arg s "$state" --arg b "$body" '
+        {number: ($n | tonumber), title: $t, state: $s, body: $b,
+         url: ("https://github.com/acme/app/issues/" + $n),
+         blockedBy: {totalCount: ($ARGS.positional | length),
+                     nodes: ($ARGS.positional | map({url: .}))}}' --args "$@"
+}
+# stderr_names <id>: how many stderr lines name that id.
+stderr_names() { grep -cE "(^|[^0-9A-Za-z])$1([^0-9]|\$)" <<<"$err"; }
+
+read_slices_arms() {
+    local app=https://github.com/acme/app/issues prd a b c d one two three
+
+    # --- github
+    mk_project
+    gh_issue 12 "$pitch"
+    {
+        listed 20 "Last" OPEN "$(slice_from_template '#12' '#23 other/lib#21' Last HITL)" "$app/23" https://github.com/other/lib/issues/21
+        listed 23 "Third" OPEN "$(slice_from_template '#12' '#22 #40' Third '')"
+        listed 22 "Second" OPEN "$(slice_from_template '#12' '' Second AFK)" "$app/21"
+        listed 21 "First, \"quoted\" <tag>" CLOSED "$(slice_from_template '#12' '' First AFK)"
+        listed 24 "Mentions it" OPEN "$(slice_from_template '#50' '#12' 'Builds on #12.' AFK)"
+        listed 25 "A longer number" OPEN "$(slice_from_template '#120' '' Longer AFK)"
+        listed 26 "Quotes a slice" OPEN "$(printf 'Like this:\n\n```\n## Parent PRD\n\n#12\n```\n')"
+        listed 27 "Same number, other repo" OPEN "$(slice_from_template 'other/lib#12' '' Elsewhere AFK)"
+        listed 12 "The PRD" OPEN "$pitch"
+        listed 28 "No body" OPEN ""
+        # The PRD's number ahead of the section, and with no section at all.
+        listed 29 "Names it first" OPEN "$(printf 'Follows #12.\n\n'; slice_from_template '#50' '' 'Other work.' AFK)"
+        listed 30 "Names it in prose" OPEN "The Parent PRD for that work is #12."
+    } | jq -s . >"$GH_FIXTURES/list.json"
+    : >"$GH_LOG"
+    run_block "$read_slices" '#12'
+    check "$run_shell: github: exits 0" 0 "$rc"
+    check "$run_shell: github: one object, of the documented shape" "prd,slices|blocked_by,id,state,title,type" \
+        "$(jq -r '(keys | join(",")) + "|" + ([.slices[] | keys | join(",")] | unique | join(";"))' <<<"$out")"
+    check "$run_shell: github: the PRD's id" '#12' "$(jq -r .prd <<<"$out")"
+    check "$run_shell: github: only issues whose Parent PRD names it, in dependency order" '#21,#22,#23,#20' \
+        "$(jq -r '[.slices[].id] | join(",")' <<<"$out")"
+    check "$run_shell: github: states" 'closed,open,open,open' "$(jq -r '[.slices[].state] | join(",")' <<<"$out")"
+    check "$run_shell: github: types" 'AFK,AFK,,HITL' "$(jq -r '[.slices[].type] | join(",")' <<<"$out")"
+    check "$run_shell: github: titles are untouched" 'First, "quoted" <tag>' "$(jq -r '.slices[0].title' <<<"$out")"
+    check "$run_shell: github: edges win, prose fills in where none are wired, outside blockers stay" \
+        '|#21|#22 #40|#23 other/lib#21' "$(jq -r '[.slices[].blocked_by | sort | join(" ")] | join("|")' <<<"$out")"
+    check "$run_shell: github: a slice whose prose differs from its edges is named" 1 "$(stderr_names '#22')"
+    check "$run_shell: github: a slice with only prose is not" 0 "$(stderr_names '#23')"
+    check "$run_shell: github: closed issues are asked for" 1 "$(grep -c '^issue list .*--state all' "$GH_LOG")"
+    run_block "$read_slices" 12
+    check "$run_shell: github: a bare number is the same PRD" '#12' "$(jq -r .prd <<<"$out")"
+
+    printf '[]\n' >"$GH_FIXTURES/list.json"
+    run_block "$read_slices" '#12'
+    check "$run_shell: github: no slices is an empty list" '{"prd":"#12","slices":[]}' "$(jq -c . <<<"$out")"
+
+    {
+        listed 31 A OPEN "$(slice_from_template '#12' '#32' A AFK)"
+        listed 32 B OPEN "$(slice_from_template '#12' '#33' B AFK)"
+        listed 33 C OPEN "$(slice_from_template '#12' '#31' C AFK)"
+        listed 34 D OPEN "$(slice_from_template '#12' '#33' D AFK)"
+    } | jq -s . >"$GH_FIXTURES/list.json"
+    run_block "$read_slices" '#12'; refused "github: a cycle"
+    check "$run_shell: github: the cycle names its slices, not what waits on it" '1 1 1 0' \
+        "$(stderr_names '#31') $(stderr_names '#32') $(stderr_names '#33') $(stderr_names '#34')"
+
+    listed 35 Self OPEN "$(slice_from_template '#12' '#35' Self AFK)" | jq -s . >"$GH_FIXTURES/list.json"
+    run_block "$read_slices" '#12'; refused "github: a slice blocked by itself"
+
+    listed 36 Cut OPEN "$(slice_from_template '#12' '#1' Cut AFK)" "$app/1" | jq -s '.[0].blockedBy.totalCount = 60' >"$GH_FIXTURES/list.json"
+    run_block "$read_slices" '#12'; refused "github: a blocker list cut short"
+
+    jq -nc '[range(0; 10000) | {number: ., body: ""}]' >"$GH_FIXTURES/list.json"
+    run_block "$read_slices" '#12'; refused "github: an issue list cut short"
+
+    rm "$GH_FIXTURES/list.json"
+    run_block "$read_slices" '#12'; refused "github: a failed list"
+    printf '[]\n' >"$GH_FIXTURES/list.json"
+    run_block "$read_slices" '#99'; refused "github: no such PRD is not an empty set"
+    gh_issue 13 "$slice_body"
+    run_block "$read_slices" '#13'; refused "github: a slice is not a PRD"
+    run_block "$read_slices" W-1; refused "github: a work item id"
+    run_block "$read_slices" '#12' "$tmp/refusing-sidecar.sh"; refused "a backend that refuses"
+
+    # --- sidecar
+    mk_guest
+    prd="$(work "$pitch" --kind prd)"
+    a="$(work "$(slice_from_template "$prd" '' 'The store. It holds items.' AFK)" --kind slice --parent "$prd")"
+    b="$(work "$(slice_from_template "$prd" "$a" 'The reader.' HITL)" --kind slice --parent "$prd" --blocked-by "$a")"
+    one="$(work "$pitch" --kind prd)"
+    two="$(work "$(slice_from_template "$one" '' "Another plan, which mentions $prd." AFK)" --kind slice --parent "$one")"
+    c="$(work "$(slice_from_template "$prd" '' 'The page.' '')" --kind slice --parent "$prd" --blocked-by "$two")"
+    d="$(work "$(slice_from_template "$prd" "$c" 'The check.' AFK)" --kind slice --parent "$prd")"
+    (cd "$P" && bash "$REAL_SC" work set "$a" blocked_by "$d" && bash "$REAL_SC" work close "$d") >/dev/null 2>&1 \
+        || fatal "could not set up the sidecar slices"
+    : >"$GH_LOG"
+    run_block "$read_slices" "$prd"
+    check "$run_shell: sidecar: exits 0" 0 "$rc"
+    check "$run_shell: sidecar: the same shape" "prd,slices|blocked_by,id,state,title,type" \
+        "$(jq -r '(keys | join(",")) + "|" + ([.slices[] | keys | join(",")] | unique | join(";"))' <<<"$out")"
+    check "$run_shell: sidecar: this PRD's slices, closed ones too, in dependency order" "$c,$d,$a,$b" \
+        "$(jq -r '[.slices[].id] | join(",")' <<<"$out")"
+    check "$run_shell: sidecar: states" 'open,closed,open,open' "$(jq -r '[.slices[].state] | join(",")' <<<"$out")"
+    check "$run_shell: sidecar: types" ',AFK,AFK,HITL' "$(jq -r '[.slices[].type] | join(",")' <<<"$out")"
+    check "$run_shell: sidecar: a title is the first sentence of What to Build" 'The store' \
+        "$(jq -r '.slices[2].title' <<<"$out")"
+    check "$run_shell: sidecar: the field wins over the prose, outside blockers stay" "$two||$d|$a" \
+        "$(jq -r '[.slices[].blocked_by | join(" ")] | join("|")' <<<"$out")"
+    for three in "$a" "$c" "$d"; do
+        check "$run_shell: sidecar: $three's differing prose is named on one line" 1 "$(grep -c "^$three: " <<<"$err")"
+    done
+    check "$run_shell: sidecar: a matching slice is not named" 0 "$(grep -c "^$b: " <<<"$err")"
+    run_block "$read_slices" "$(work "$pitch" --kind prd)"
+    check "$run_shell: sidecar: no slices is an empty list" '[]' "$(jq -c .slices <<<"$out")"
+    run_block "$read_slices" "$a"; refused "sidecar: a slice is not a PRD"
+    run_block "$read_slices" W-99; refused "sidecar: no such PRD"
+    run_block "$read_slices" W-1 "$tmp/cyclic-sidecar.sh"; refused "sidecar: a cycle"
+    check "$run_shell: sidecar: the cycle names its slices" '1 1' "$(stderr_names W-2) $(stderr_names W-3)"
+    run_block "$read_slices" W-1 "$tmp/half-read-sidecar.sh"; refused "sidecar: a slice that cannot be read"
+    run_block "$read_slices" W-1 "$tmp/unlisted-sidecar.sh"; refused "sidecar: a failed list"
+    check "$run_shell: sidecar: gh is never called" "" "$(cat "$GH_LOG")"
+}
+
+# work set refuses a cycle, so only a hand-edited store has one.
+cat >"$tmp/cyclic-sidecar.sh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+    "backend "*) echo sidecar ;;
+    "work list "*) printf 'W-2\nW-3\n' ;;
+    "work view W-1 "*) echo '{"id":"W-1","kind":"prd","body":"## Appetite"}' ;;
+    "work view W-2 "*) echo '{"id":"W-2","kind":"slice","state":"open","blocked_by":["W-3"],"body":"## Blocked by\n\n- Blocked by W-3"}' ;;
+    "work view W-3 "*) echo '{"id":"W-3","kind":"slice","state":"open","blocked_by":["W-2"],"body":"## Blocked by\n\n- Blocked by W-2"}' ;;
+esac
+STUB
+cat >"$tmp/half-read-sidecar.sh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+    "backend "*) echo sidecar ;;
+    "work list "*) printf 'W-2\nW-3\n' ;;
+    "work view W-1 "*) echo '{"id":"W-1","kind":"prd","body":"## Appetite"}' ;;
+    "work view W-2 "*) echo '{"id":"W-2","kind":"slice","state":"open","blocked_by":[],"body":""}' ;;
+    *) echo "does not parse" >&2; exit 1 ;;
+esac
+STUB
+cat >"$tmp/unlisted-sidecar.sh" <<'STUB'
+#!/usr/bin/env bash
+case "$*" in
+    "backend "*) echo sidecar ;;
+    "work view W-1 "*) echo '{"id":"W-1","kind":"prd","body":"## Appetite"}' ;;
+    *) echo "cannot list" >&2; exit 1 ;;
+esac
+STUB
+
+section "read slices, run as written on both backends"
+each_shell read_slices_arms
+
+section "SKILL.md Step 1 maps a slice set"
+run_shell=bash
+mk_project
+gh_issue 12 "$pitch"
+listed 21 One OPEN "$(slice_from_template '#12' '' One AFK)" | jq -s . >"$GH_FIXTURES/list.json"
+run_block "$read_slices" '#12'
+fields="$(jq -r '.slices[0] | keys[]' <<<"$out")"
+[ -n "$fields" ] || fatal "read slices printed no fields to map"
+parts="$(span '^## Boundary Map' '^## ' <<<"$template" | sed -nE 's/^### (.+)$/\1/p')"
+[ -n "$parts" ] || fatal "could not read the Boundary Map's parts from $SLICER"
+slice_map="$(subject 'the slice set' | grep '^|')"
+clean "every field and Boundary Map part has a row" "$(unmapped "$slice_map" "$fields
+$parts")"
+flags "a field with no row" "$(unmapped "$slice_map" "$fields
+a_field_with_no_row")"
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]
