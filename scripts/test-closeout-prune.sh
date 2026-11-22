@@ -308,7 +308,12 @@ for sh in bash zsh; do
     check "[$sh] another directory: it prints nothing" "" "$out"
     run_projdir "$tmp/proj/wt" "" "$sh"
     check "[$sh] CLAUDE_PROJECT_DIR unset: the block exits 0" 0 "$rc"
-    check "[$sh] CLAUDE_PROJECT_DIR unset: it prints nothing (an empty value must not compare as the current directory)" "" "$out"
+    has "[$sh] CLAUDE_PROJECT_DIR unset: it says it could not tell" "$out" "project-dir-unknown: CLAUDE_PROJECT_DIR is not set in this shell"
+    hasnt "[$sh] CLAUDE_PROJECT_DIR unset: it does not claim the worktree is the project directory (an unset value must not compare as the current directory)" "$out" "project-dir: the worktree"
+    out="$(cd "$tmp" && CLAUDE_PROJECT_DIR="" "$sh" -c "${projdir_block//<worktree-path>/$tmp/proj/wt}" 2>&1)"; rc=$?
+    check "[$sh] CLAUDE_PROJECT_DIR empty: the block exits 0" 0 "$rc"
+    has "[$sh] CLAUDE_PROJECT_DIR empty: it says it could not tell" "$out" "project-dir-unknown: CLAUDE_PROJECT_DIR is not set in this shell"
+    hasnt "[$sh] CLAUDE_PROJECT_DIR empty: it does not claim the worktree is the project directory" "$out" "project-dir: the worktree"
 done
 
 # -----------------------------------------------------------------------------
@@ -326,6 +331,7 @@ has "Step 6 cites git's own documentation for branch -d" "$co" "https://git-scm.
 has "Step 6 names the proof it rests on" "$co" "the PR's state is \`MERGED\` and the local tip equals the PR's head"
 has "Step 5 prints the stop message" "$co" "This session's project hooks no longer run. Start the next piece of work in a new session."
 has "Step 5 cites the hooks reference rather than restating it" "$co" "https://code.claude.com/docs/en/hooks"
+has "Step 5 tells the user when the check could not tell" "$co" "If the check printed the \`project-dir-unknown:\` line, tell the user in your report that it could not tell"
 has "Step 5 offers no next step that continues in this session" "$co" "offer no next step that continues in this session"
 
 # The claims quoted from git's own manual are checked against the installed git,

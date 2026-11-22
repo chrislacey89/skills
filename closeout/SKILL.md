@@ -374,10 +374,14 @@ Either way, confirm the shell is no longer inside the feature worktree before pr
 Before removing it, note whether this session's project directory is that worktree. The path stops existing at the removal, so compare first:
 
 ```bash
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ "$(cd "<worktree-path>" && pwd -P)" = "$(cd "$CLAUDE_PROJECT_DIR" && pwd -P)" ]; then
+if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
+  echo "project-dir-unknown: CLAUDE_PROJECT_DIR is not set in this shell, so the worktree being removed cannot be compared with this session's project directory"
+elif [ "$(cd "<worktree-path>" && pwd -P)" = "$(cd "$CLAUDE_PROJECT_DIR" && pwd -P)" ]; then
   echo "project-dir: the worktree being removed is this session's project directory"
 fi
 ```
+
+The variable is only an inherited environment variable, and a shell can lack it. The shell is already back in the base checkout, so the base checkout's top-level directory says nothing about this session and is not a fallback. If the check printed the `project-dir-unknown:` line, tell the user in your report that it could not tell, and that the project hooks may stop running after the removal.
 
 Now that the shell is anchored to the base checkout, removing the worktree is safe:
 
