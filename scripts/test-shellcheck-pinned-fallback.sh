@@ -53,10 +53,10 @@ assert_ne() {
     if [ "$1" != "$2" ]; then ok "$3"; else bad "$3" "expected anything but '$1'"; fi
 }
 assert_contains() {
-    if printf '%s' "$1" | grep -qF -- "$2"; then ok "$3"; else bad "$3" "no '$2' in: $1"; fi
+    if grep -qF -- "$2" <<<"$1"; then ok "$3"; else bad "$3" "no '$2' in: $1"; fi
 }
 assert_lacks() {
-    if printf '%s' "$1" | grep -qF -- "$2"; then bad "$3" "unexpected '$2' in: $1"; else ok "$3"; fi
+    if grep -qF -- "$2" <<<"$1"; then bad "$3" "unexpected '$2' in: $1"; else ok "$3"; fi
 }
 
 [ -f "$script_src" ] || fatal "missing $script_src"
