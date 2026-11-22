@@ -423,6 +423,13 @@ jobs:
       - name: Run closeout work-close contract suite
         run: bash scripts/test-closeout-work-close.sh
 
+      # /closeout Step 6's prune block, Step 1's open-items read and Step 5's
+      # project-directory check, extracted and run under bash and zsh in a scratch
+      # repo, the prune after the real git guard allowed it: the branch ref goes only
+      # when the PR is merged and the local tip is the PR's head (#809).
+      - name: Run closeout prune contract suite
+        run: bash scripts/test-closeout-prune.sh
+
       # /pre-merge Phase 2's github-backend PR block, extracted and run against a
       # stubbed gh: the declared base must reach --base; a failing base-ref aborts (#604).
       - name: Run github PR base contract suite

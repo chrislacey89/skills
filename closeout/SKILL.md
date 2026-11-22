@@ -114,6 +114,23 @@ esac
 
 On `route: already merged`, the confirmation below names the teardown, not a merge, and Step 2 narrows to its fully-pushed check while Step 3's merge is skipped, as those steps say. Everything after the merge still runs: the post-review lock release, the work-item close, and Steps 4 through 8.
 
+**Before asking, list what is still open.** Three kinds of item count, and each has the one place it is recorded:
+
+- **Every unticked `- [ ]` line in the PR body**, and **every row of the `## Review Disposition Ledger` whose State is `open`**. The ledger is the durable record with a State column, and its rows carry no severity tier, so list every open row and let the human read its tier from the review output. On the `github` backend both are in the PR body, read once:
+
+```bash
+BODY="$(gh pr view <number> --json body -q .body)" || { echo "open items unknown: cannot read the PR body" >&2; exit 1; }
+printf '%s\n' "$BODY" | grep -nE '^[[:space:]]*- \[ \]' || echo "unticked checklist lines: none"
+printf '%s\n' "$BODY" | awk -F'|' '$(2) ~ /^ *[0-9]+ *$/ { s = $(5); gsub(/ /, "", s); if (s == "open") print }' | grep . || echo "open ledger rows: none"
+```
+
+  On the `sidecar` backend the ledger is the newest comment on the work item whose first line is `## Review Disposition Ledger` ([references/state-backend.md](references/state-backend.md) § Where the review's records live), read with `bash "$SC" work view <W-n> --json`; the PR body carries no ledger there, so only its unticked lines come from the block above.
+- **Every Concern the review printed that is not recorded as fixed, and every breaker verdict of `survived` or `not-run`.** Neither has a durable home: the Concerns are `/pre-merge` Phase 4's terminal output, and the verdicts are `/fix-findings`' report. Read them from this session's own record of those two. When the session holds neither, say "no review output in this session", because that is not an empty list.
+
+When a read fails, say the open items are unknown rather than empty, and ask before going on. When every read succeeded and the list is empty, say so in the confirmation block. When it is not empty, show it and ask one question: **fix first**, **file as follow-ups, then merge**, or **merge as is**. Record a **merge as is** answer in the terminal with the list beside it. On `route: already merged` there is nothing left to hold back, so the list is information and the question is not asked.
+
+**A menu pick starts this skill; it does not answer this step.** Choosing `/closeout` from another skill's menu is not the go-ahead to merge. Ask once, here, after the list, on every route into this skill.
+
 Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
 
 ### 2. Verify safety preconditions before any destructive step
@@ -354,6 +371,14 @@ Either way, confirm the shell is no longer inside the feature worktree before pr
 
 ### 5. Remove the worktree (only if one was created — skip when isolation is host-owned, Step 0)
 
+Before removing it, note whether this session's project directory is that worktree. The path stops existing at the removal, so compare first:
+
+```bash
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && [ "$(cd "<worktree-path>" && pwd -P)" = "$(cd "$CLAUDE_PROJECT_DIR" && pwd -P)" ]; then
+  echo "project-dir: the worktree being removed is this session's project directory"
+fi
+```
+
 Now that the shell is anchored to the base checkout, removing the worktree is safe:
 
 ```bash
@@ -366,14 +391,40 @@ When worktrunk made the worktree, remove it with `wt remove`: worktrunk's [hook 
 
 If the worktree has uncommitted or untracked changes you have not accounted for, `git worktree remove` will refuse — investigate rather than forcing `--force`. (Everything reviewed in the PR is already merged; anything left behind is unexpected.)
 
+**When the worktree just removed was this session's project directory, say so and stop after cleanup.** That is the case when the check above printed its `project-dir:` line. Every project hook this session registered now points at a path that does not exist, so nothing project-level gates what this session does next. How the harness treats a hook command it cannot find is in the [hooks reference](https://code.claude.com/docs/en/hooks); do not rely on a project hook here. Finish Steps 6 to 8. Then print "This session's project hooks no longer run. Start the next piece of work in a new session." and offer no next step that continues in this session: Step 9's `/compound` and cleanup hand-offs become instructions for the new session, named and not run here.
+
 ### 6. Prune the merged branch (skip when isolation is host-owned, Step 0)
 
 The local feature branch (and its now-`[gone]` remote-tracking ref) is dead weight after merge. Prune it:
 
 ```bash
-git fetch --prune                       # drop the [gone] remote-tracking ref
-git branch -d <feature-branch>           # safe delete; fails if not merged — investigate if it does
+git fetch --prune                        # drop the [gone] remote-tracking ref
+B="<feature-branch>"; N="<pr-number>"
+if ! git branch -d "$B" 2>/dev/null; then
+  # A squash or rebase merge leaves the branch "not fully merged" in git's eyes.
+  # Delete it only on proof that nothing on it is unmerged: the PR is merged and
+  # the local tip is the exact commit the PR carried.
+  LOCAL="$(git rev-parse --verify -q "refs/heads/$B")" || { echo "no local branch $B: nothing to prune"; exit 0; }
+  if git worktree list --porcelain | grep -qxF "branch refs/heads/$B"; then
+    echo "prune skipped: $B is checked out in a worktree; remove that worktree first" >&2
+  else
+    STATE="$(gh pr view "$N" --json state -q .state)" || { echo "prune skipped: cannot read the PR's state" >&2; exit 1; }
+    PR_HEAD="$(gh pr view "$N" --json headRefOid -q .headRefOid)" || { echo "prune skipped: cannot read the PR's head" >&2; exit 1; }
+    if [ "$STATE" = MERGED ] && [ "$LOCAL" = "$PR_HEAD" ]; then
+      if git update-ref -d "refs/heads/$B" "$LOCAL"; then
+        git config --remove-section "branch.$B" 2>/dev/null
+        echo "pruned $B (merged as PR $N)"
+      else
+        echo "prune failed: update-ref could not delete $B" >&2; exit 1
+      fi
+    else
+      echo "prune skipped: $B is at $LOCAL and the PR's head is $PR_HEAD (state $STATE); commits may exist only locally" >&2
+    fi
+  fi
+fi
 ```
+
+**Why this block and not a forced delete.** `git branch -d` deletes only a branch that is fully merged in its upstream or in `HEAD` ([git-branch](https://git-scm.com/docs/git-branch)), and a squash or rebase merge leaves the branch's own commits out of the base's history, so it refuses after one. The pack's git guard refuses the forced form by design, and it is not changed. `git update-ref -d <ref> <oldvalue>` deletes a ref "after verifying it exists with `<oldvalue>`" ([git-update-ref](https://git-scm.com/docs/git-update-ref)), so the delete fails rather than removing a branch that moved after the tip was read. It is honest only because of the proof in front of it: the PR's state is `MERGED` and the local tip equals the PR's head. A tip that differs is a commit the PR never carried; the block prints both commits and deletes nothing. With no `gh` reach the block cannot prove either, so it deletes nothing and exits nonzero: never delete without the proof. The branch's config section goes with it, as `git branch -d` would have removed it. Step 8's "Branch pruned" item is what catches a skipped prune.
 
 `commit-commands:clean_gone` removes all `[gone]` branches and their worktrees in one pass — prefer it when several stale worktrees have accumulated (the recurring symptom this skill exists to stop). Do not reimplement what it already does.
 
