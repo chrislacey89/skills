@@ -140,7 +140,7 @@ When a read fails, say the open items are unknown rather than empty, and ask bef
 
 **A menu pick starts this skill; it does not answer this step.** Choosing `/closeout` from another skill's menu is not the go-ahead to merge. Ask once, here, after the list, however the user came into this skill, except where the paragraph above says the question is not asked. Show the block below together with the list and the question, so the answer is given with the PR, the teardown and the base in view. A **merge as is** answer, or a **file as follow-ups, then merge** answer once the follow-ups are filed, is the confirmation the block waits for, so the user is not asked a second time; a **fix first** answer is not a go-ahead.
 
-Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation: the answer to the question above is that confirmation in the two cases just named, and where no question is asked it is a plain yes. If there is no PR on this branch, stop and route to `/pre-merge`.
+Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation: where no question is asked it is a plain yes. If there is no PR on this branch, stop and route to `/pre-merge`.
 
 ### 2. Verify safety preconditions before any destructive step
 
