@@ -1097,9 +1097,18 @@ point_origin_at_main() {
 point_origin_at_main "$repo4"
 change_b_sha="$(git -C "$repo4" rev-parse HEAD~1)"
 # Prints the SHA the block's own last line printed, for <repo> <file> <start> <end>.
+# The block runs in zsh too when zsh is on PATH, the shell an agent runs it in on
+# macOS (docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md).
+# This runs inside $(...), where an assert_eq would not count, so a zsh answer
+# that differs is printed beside bash's and fails the caller's assertion. A
+# missing zsh fails in CI in section 12's zsh arms below.
 run_target_in() {
-    local out
+    local out zout
     out="$(cd "$1" && env -u BASE_REF TARGET_FILE="$2" TARGET_START="$3" TARGET_END="$4" bash -c "$fixup_target_block" 2>/dev/null)"
+    if command -v zsh >/dev/null 2>&1; then
+        zout="$(cd "$1" && env -u BASE_REF TARGET_FILE="$2" TARGET_START="$3" TARGET_END="$4" zsh -f -c "$fixup_target_block" 2>/dev/null)"
+        [ "$zout" = "$out" ] || out="bash: $out; zsh: $zout"
+    fi
     printf '%s' "${out#FIXUP_TARGET=}"
 }
 run_target() { run_target_in "$repo4" f.txt "$1" "$2"; }
