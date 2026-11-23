@@ -87,6 +87,13 @@ cat > "$tmp/pr-mode-fails-sc.sh" <<VF
 [ "\$1 \${2:-}" = "work pr-mode" ] && { echo "work pr-mode refused" >&2; exit 1; }
 exec bash "$SC" "\$@"
 VF
+# A sidecar.sh whose `work pr-mode` exits 0 with an answer that is neither
+# "pr" nor "none <W-n>": the blocks' last case arm, which no real store reaches.
+cat > "$tmp/pr-mode-odd-sc.sh" <<VF
+#!/usr/bin/env bash
+[ "\$1 \${2:-}" = "work pr-mode" ] && { echo "maybe"; exit 0; }
+exec bash "$SC" "\$@"
+VF
 URL="https://github.com/acme/stack/pull/7"
 
 # shellcheck disable=SC2016  # the needles are the skills' literal text
@@ -271,6 +278,15 @@ for sh in $shells; do
     check "$sh: work pr-mode fails: the menu read exits non-zero" 1 "$rc"
     check "$sh: …answers neither pr nor none" "" "$out"
     check "$sh: …and says pr_mode is unread" 1 "$(grep -c 'pr_mode unread: sidecar.sh work pr-mode failed' <<<"$err")"
+    SC="$tmp/pr-mode-odd-sc.sh"
+    run "$sh" "$pm_block" "$S2"
+    check "$sh: work pr-mode answers neither pr nor none: Phase 2 exits non-zero" 1 "$rc"
+    check "$sh: …opens no PR and calls no gh" "" "$(cat "$tmp/calls")"
+    check "$sh: …and names the answer it could not read" 1 "$(grep -c "PR aborted: sidecar.sh work pr-mode answered 'maybe'" <<<"$err")"
+    run "$sh" "$mode_block" "$S2"
+    check "$sh: work pr-mode answers neither pr nor none: the menu read exits non-zero" 1 "$rc"
+    check "$sh: …answers neither pr nor none" "" "$out"
+    check "$sh: …and says pr_mode is unread" 1 "$(grep -c "pr_mode unread: sidecar.sh work pr-mode answered 'maybe'" <<<"$err")"
     SC="$VSC"
     check "$sh: …and Phase 2 recorded no pr" "" "$(field "$S2" pr)"
 
