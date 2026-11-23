@@ -951,6 +951,112 @@ check "refused records write no line" "$lines_before" "$(wc -l < "$FR" | tr -d '
 check "refused records make no commit" "$head_before" "$(git -C "$S" rev-parse HEAD)"
 
 # -----------------------------------------------------------------------------
+section "work: built and pr_mode, for several slices on one branch (#812)"
+
+# A slice whose commits are on the branch but whose PR has not merged is
+# `built`: not open (nothing offers it again), not closed (no merge closed it).
+# A built blocker is met only where its commits are: its recorded branch is the
+# one checked out, or that branch's tip is an ancestor of HEAD. Resolved as
+# refs/heads/<branch>, then refs/remotes/origin/<branch>.
+mkproj https://github.com/acme/stack.git
+SP="$P"
+runo "$SP" init --name stack --mode guest --write sidecar --in-tree-path none --no-migrate-archive
+SS="$out"
+printf '## Problem\n\nx\n' > "$tmp/sbody.md"
+runo "$SP" work create --kind slice --body-file "$tmp/sbody.md"; a1="$out"
+runo "$SP" work create --kind slice --blocked-by "$a1" --body-file "$tmp/sbody.md"; a2="$out"
+
+runo "$SP" work set "$a1" state built
+check "set state built exits 0" 0 "$rc"
+runo "$SP" work view "$a1" --json
+check "set state built records it" built "$(printf '%s' "$out" | jq -r .state)"
+before="$(cat "$SS/work/$a1.md")"
+runo "$SP" work set "$a1" state finished
+check "set refuses a state other than open, built, closed" 2 "$rc"
+case "$err" in *"open, built, or closed"*) named=1 ;; *) named=0 ;; esac
+check "the state refusal names the three states" 1 "$named"
+check "a refused state set leaves the file byte-identical" "$before" "$(cat "$SS/work/$a1.md")"
+
+runo "$SP" work set "$a1" pr_mode none
+check "set pr_mode none exits 0" 0 "$rc"
+runo "$SP" work view "$a1" --json
+check "set pr_mode none records it" none "$(printf '%s' "$out" | jq -r .pr_mode)"
+check "pr_mode leaves pr unset" null "$(printf '%s' "$out" | jq -r .pr)"
+runo "$SP" work set "$a1" pr_mode pr
+check "set pr_mode pr exits 0" 0 "$rc"
+runo "$SP" work set "$a1" pr_mode stacked
+check "set refuses a pr_mode other than pr or none" 2 "$rc"
+case "$err" in *"pr_mode must be pr or none"*) named=1 ;; *) named=0 ;; esac
+check "the pr_mode refusal names the values" 1 "$named"
+runo "$SP" work set "$a1" pr_mode none
+
+runo "$SP" work list --state built
+check "list --state built lists the built item" "$a1" "$out"
+runo "$SP" work list
+check "list (open by default) lists every item not closed, built among them" "$a1
+$a2" "$out"
+runo "$SP" work list --state open
+check "list --state open lists a built item too" "$a1
+$a2" "$out"
+runo "$SP" work list --state finished
+check "list refuses an unknown --state" 2 "$rc"
+
+# The branches: main -> stack-a (one commit) -> stack-b (one more); other is
+# off main and does not contain stack-a.
+git -C "$SP" checkout -q -b stack-a
+git -C "$SP" commit -q --allow-empty -m "slice a"
+git -C "$SP" checkout -q -b stack-b
+git -C "$SP" commit -q --allow-empty -m "slice b"
+git -C "$SP" checkout -q -b other main
+
+ub() { runo "$1" work list --unblocked --kind slice; }
+ub "$SP"
+check "a built blocker with no recorded branch still blocks" "" "$out"
+runo "$SP" work set "$a1" branch stack-a
+git -C "$SP" checkout -q stack-a
+ub "$SP"
+check "a built blocker on the current branch is met" "$a2" "$out"
+git -C "$SP" checkout -q stack-b
+ub "$SP"
+check "a built blocker on a branch HEAD contains is met" "$a2" "$out"
+git -C "$SP" checkout -q other
+ub "$SP"
+check "a built blocker on a branch HEAD does not contain still blocks" "" "$out"
+git -C "$SP" checkout -q main
+ub "$SP"
+check "a built blocker ahead of HEAD still blocks" "" "$out"
+git -C "$SP" checkout -q --detach stack-b
+ub "$SP"
+check "a detached HEAD that contains the branch meets it" "$a2" "$out"
+git -C "$SP" checkout -q stack-b
+# The local branch is gone after a push and a worktree removal: its
+# remote-tracking ref stands in for it.
+git -C "$SP" update-ref refs/remotes/origin/stack-a "$(git -C "$SP" rev-parse stack-a)"
+git -C "$SP" update-ref -d refs/heads/stack-a
+ub "$SP"
+check "with no local branch, the remote-tracking ref is read" "$a2" "$out"
+git -C "$SP" update-ref -d refs/remotes/origin/stack-a
+ub "$SP"
+check "a recorded branch that resolves to no ref still blocks" "" "$out"
+runo "$SP" work set "$a1" branch stack-b
+ub "$SP"
+check "the built item itself is never offered as unblocked" "$a2" "$out"
+runo "$SP" work close "$a1"
+ub "$SP"
+check "a closed blocker is met on any branch" "$a2" "$out"
+git -C "$SP" checkout -q main
+ub "$SP"
+check "a closed blocker is met even where its branch is not" "$a2" "$out"
+
+runo "$SP" trace "$a1"
+case "$out" in "$a1  slice  closed"*) ok "trace prints the item after the built state" ;; *) bad "trace prints the item after the built state" "$out" ;; esac
+case "$out" in *"  pr mode  none"*) ok "trace prints pr_mode" ;; *) bad "trace prints pr_mode" "$out" ;; esac
+runo "$SP" work view "$a1"
+check "work view of an item with pr_mode exits 0" 0 "$rc"
+check "built and pr_mode leave the sidecar clean" "" "$(git -C "$SS" status --porcelain)"
+clean "built and pr_mode leave the project clean" "$SP"
+
+# -----------------------------------------------------------------------------
 section "work: concurrent creates claim distinct ids"
 
 mkproj none
@@ -1222,6 +1328,35 @@ git -C "$xs" commit -q -m "test: hand-written dangling blockers" || bad "commit 
 gate "a blocker id that does not exist is blocked as unreadable" W-6 'blocked [{"id":"W-99","state":"unreadable"}]'
 gate "a blocked item with a recorded pr is blocked, not in-flight" W-7 'blocked [{"id":"W-99","state":"unreadable"}]'
 clean "the gate leaves the project clean" "$P"
+
+# A built blocker (#812) is met where `work list --unblocked` meets it: its
+# recorded branch is checked out, or that branch's tip is an ancestor of HEAD.
+# Anywhere else the verdict names it as built.
+gate_p="$P"
+mkproj https://github.com/acme/exec-stack.git
+(cd "$P" && bash "$SC" init --name exec-stack --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1) \
+    || bad "init the built-blocker gate fixture" "init failed"
+(cd "$P" && bash "$SC" work create --kind slice --body-file "$tmp/xslice.md" >/dev/null)                    # W-1
+(cd "$P" && bash "$SC" work create --kind slice --blocked-by W-1 --body-file "$tmp/xslice.md" >/dev/null)   # W-2
+git -C "$P" checkout -q -b slice-1
+git -C "$P" commit -q --allow-empty -m "slice 1"
+git -C "$P" checkout -q -b slice-2
+git -C "$P" checkout -q -b elsewhere main
+(cd "$P" && bash "$SC" work set W-1 state built >/dev/null && bash "$SC" work set W-1 branch slice-1 >/dev/null)
+gate "a built blocker on a branch HEAD does not contain is blocked, naming it built" W-2 'blocked [{"id":"W-1","state":"built"}]'
+git -C "$P" checkout -q slice-1
+gate "a built blocker on the current branch is met" W-2 "takeable ever_wired=1 comments=0"
+git -C "$P" checkout -q slice-2
+gate "a built blocker on a branch this one contains is met" W-2 "takeable ever_wired=1 comments=0"
+check "the gate and work list --unblocked agree here" W-2 "$(cd "$P" && bash "$SC" work list --unblocked)"
+git -C "$P" update-ref refs/remotes/origin/slice-1 "$(git -C "$P" rev-parse slice-1)"
+git -C "$P" update-ref -d refs/heads/slice-1
+gate "with no local branch, the gate reads the remote-tracking ref" W-2 "takeable ever_wired=1 comments=0"
+git -C "$P" update-ref -d refs/remotes/origin/slice-1
+gate "a built blocker whose branch resolves to no ref is blocked" W-2 'blocked [{"id":"W-1","state":"built"}]'
+check "the gate and work list --unblocked agree there" "" "$(cd "$P" && bash "$SC" work list --unblocked)"
+clean "the built-blocker gate leaves the project clean" "$P"
+P="$gate_p"
 
 # -----------------------------------------------------------------------------
 section "/execute on a work item: acceptance-criteria writeback (#525)"

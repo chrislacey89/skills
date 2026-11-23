@@ -452,10 +452,23 @@ jobs:
       - name: Run skill-blocks zsh-safe scan
         run: bash scripts/test-skill-blocks-zsh-safe.sh
 
-      # /handoff Step 3's path block, extracted and run: the path ends in .md
-      # and carries no literal XXXXXX on this runner's mktemp (#581).
-      - name: Run handoff mktemp contract suite
-        run: bash scripts/test-handoff-mktemp.sh
+      # /handoff Step 3's path block, extracted and run: the path is in the
+      # sidecar's handoffs/ or, with no sidecar, the temp folder, ends in .md,
+      # and is never in the project tree (#581, #813).
+      - name: Run handoff path contract suite
+        run: bash scripts/test-handoff-path.sh
+
+      # Several slices built on one branch (#812): /execute Step 6's built
+      # write, /pre-merge's PR record on every built slice and its Stamp only
+      # choice, and /execute Step 0's review-lock keep, run in bash and zsh.
+      - name: Run slices-share-a-branch contract suite
+        run: bash scripts/test-slices-share-a-branch.sh
+
+      # /execute Step 0's session marker (#813): another session's fresh marker
+      # stops the run, an old one or this session's own is rewritten, and
+      # Step 6 removes only this session's, run in bash and zsh.
+      - name: Run execute session-marker contract suite
+        run: bash scripts/test-execute-session-marker.sh
 
       # #806: pre-push runs only the suites that read what changed. This runs
       # the selection scripts on a fixture, and fails when a globbing suite is

@@ -339,6 +339,7 @@ Append these lines if not already present:
 .claude/.ralph-checked
 .claude/.review-stamped
 .claude/.fix-findings-active
+.claude/.session
 ```
 
 `.claude/.lfg-active` is the third classification marker the hook's first clause accepts, created by `/lfg` and removed by `/execute` Step 6 alongside the two `.tdd-*` markers. It is reserved here rather than created: `/init-pipeline` scaffolds the gate, never a classification.
@@ -346,6 +347,8 @@ Append these lines if not already present:
 `.claude/.ralph-checked` is reserved here but created by `/setup-ralph-loop`, which is auto-invoked by `/execute` when a multi-slice task needs AFK bounds or may be run manually. `/init-pipeline` does not create the marker itself.
 
 `.claude/.review-stamped` and `.claude/.fix-findings-active` are the post-review edit lock's two flags, also reserved here rather than created: `/pre-merge` Phase 4 writes the first beside the review-currency stamp and `/closeout` removes it at merge; `/fix-findings` writes the second when it loads and removes it when it reports. Both are transient, and a committed one would hold the lock open or shut across every future branch.
+
+`.claude/.session` is `/execute` Step 0's session marker, reserved here rather than created: it records which session is running `/execute` in this checkout, and Step 6 removes it. It is not a classification marker, and the hook never reads it.
 
 ### 7. Worktree provisioning mode (optional)
 

@@ -38,7 +38,7 @@ Do not use `/closeout` when:
 
 - the PR is not yet created or still under review — run `/pre-merge` first
 - you want to capture a durable lesson — that is `/compound`, which by default has already ridden the PR before `/closeout` merges (post-merge `/compound` is the fallback); `/closeout` does not capture lessons
-- you want to close the PRD and slice issues or reconcile the research artifact's frontmatter — that is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9; `/closeout` performs the *git-hygiene* half and defers the *issue-closing and research-artifact-supersession* half to Step 9 rather than duplicating it. The one close it makes is the merged slice's work item on the `sidecar` backend (Step 3), because there no `Closes #N` line does it at merge
+- you want to close the PRD and slice issues or reconcile the research artifact's frontmatter — that is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9; `/closeout` performs the *git-hygiene* half and defers the *issue-closing and research-artifact-supersession* half to Step 9 rather than duplicating it. The one close it makes is the merged slices' work items on the `sidecar` backend (Step 3), because there no `Closes #N` line does it at merge
 - the change is not on a feature branch at all (you are on the base branch with nothing to merge) — there is nothing to close out
 
 It is HITL-confirmed and non-blocking: it operationalizes an already-optional tail. It never auto-merges — merge is outward-facing and hard to reverse, so it always confirms first.
@@ -300,7 +300,7 @@ esac
 
 On the sidecar backend the stamp is spent with the review, so it is cleared here too, under the merged PR's local branch name, the one it was stamped under. That name is filled in, as `<number>` is, because no earlier block's shell variable reaches this one, and it is not read again here: `--delete-branch` removes the local branch ([`gh pr merge`](https://cli.github.com/manual/gh_pr_merge) says what it does and when), so `git branch --show-current` may by now name the base. The PR's head name is not a substitute, since a branch pushed under another name (`git push origin local:other`) was stamped under its local one. It is the fallback only when `/closeout` started on an already-merged PR whose local branch was already gone then, since the merge deletes the branch on the full route: fill `BRANCH` empty in that case, never with whatever branch the shell happens to be on (the base, or another feature branch's worktree), because `stamp clear` of another branch's name exits 0, leaves the merged branch's stamp, and can delete that other branch's live one. A stamp left behind would be read by a later branch reusing the name. On the `github` backend the stamp stays in the merged PR's body as its record.
 
-**Then close the merged slice's work item.** On the `github` backend the `Closes #N` line `/pre-merge` wrote into the PR body closed the issue the PR body names at merge. On the `sidecar` backend nothing does, and an item left `open` is offered again by `work list --unblocked` and keeps gating every slice that lists it in `blocked_by` ([references/state-backend.md](references/state-backend.md)). The item to close is the open slice whose `pr` field holds the merged PR's URL. `/pre-merge` Phase 2 records that URL on whichever item Phase 1 was given, the slice or its PRD, so the block matches slices only and leaves a PRD that holds it untouched:
+**Then close the merged slices' work items.** On the `github` backend the `Closes #N` line `/pre-merge` wrote into the PR body closed the issue the PR body names at merge. On the `sidecar` backend nothing does, and an item left `open` is offered again by `work list --unblocked` and keeps gating every slice that lists it in `blocked_by` ([references/state-backend.md](references/state-backend.md)). The items to close are every slice not yet closed, `open` or `built`, whose `pr` field holds the merged PR's URL: several slices built on one branch share one PR, and `/pre-merge` Phase 2 records it on every `built` slice of the branch. Phase 2 also records the URL on whichever item Phase 1 was given, the slice or its PRD, so the block matches slices only and leaves a PRD that holds it untouched:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -311,44 +311,51 @@ case "$(bash "$SC" backend slices)" in
       || { echo "work item NOT closed: cannot read the merged PR's URL" >&2; exit 1; }
     IDS="$(bash "$SC" work list --state open)" \
       || { echo "work item NOT closed: work list failed" >&2; exit 1; }
-    MATCH="" COUNT=0 PRDS=""
+    MATCH="" PRDS=""
     while IFS= read -r id; do
       [ -n "$id" ] || continue
       ROW="$(bash "$SC" work view "$id" --json | jq -er '"\(.kind) \(.pr // "")"')" \
         || { echo "work item NOT closed: cannot read $id" >&2; exit 1; }
       [ "${ROW#* }" = "$PR_URL" ] || continue
       case "${ROW%% *}" in
-        slice) MATCH="$MATCH $id"; COUNT=$((COUNT + 1)); W="$id" ;;
+        slice) MATCH="$MATCH$id"$'\n' ;;
         *) PRDS="$PRDS $id" ;;
       esac
     done <<<"$IDS"
-    if [ "$COUNT" -eq 0 ] && [ -n "$PRDS" ]; then
+    if [ -z "$MATCH" ] && [ -n "$PRDS" ]; then
       echo "work item NOT closed: $PR_URL is recorded on PRD${PRDS}, not a slice; close the merged slice by hand" >&2
       exit 1
     fi
-    if [ "$COUNT" -ne 1 ]; then
-      [ -n "$MATCH" ] || MATCH=" none"
-      echo "work item NOT closed: $COUNT open slices record $PR_URL as their pr:$MATCH" >&2
+    if [ -z "$MATCH" ]; then
+      echo "work item NOT closed: 0 open slices record $PR_URL as their pr: none" >&2
       exit 1
     fi
-    bash "$SC" work close "$W" || { echo "work item NOT closed: work close $W failed" >&2; exit 1; }
-    echo "work item: closed $W"
-    PRD="$(bash "$SC" work view "$W" --json | jq -r '.parent // empty')"
-    [ -n "$PRD" ] || exit 0
-    SLICES="$(bash "$SC" work view "$PRD" --json | jq -r '(.decomposed_into // [])[]')" \
-      || { echo "parent $PRD: cannot read it; check its slices by hand" >&2; exit 1; }
-    [ -n "$SLICES" ] || { echo "parent $PRD: records no decomposition; check its slices by hand"; exit 0; }
-    OPEN=""
-    while IFS= read -r s; do
-      [ "$(bash "$SC" work view "$s" --json | jq -r '.state // empty')" = closed ] || OPEN="$OPEN $s"
-    done <<<"$SLICES"
-    if [ -z "$OPEN" ]; then echo "parent $PRD: every slice is closed"; else echo "parent $PRD: still open:$OPEN"; fi
+    # Several slices built on one branch share its PR: close every one.
+    PARENTS=""
+    while IFS= read -r W; do
+      [ -n "$W" ] || continue
+      bash "$SC" work close "$W" || { echo "work item NOT closed: work close $W failed" >&2; exit 1; }
+      echo "work item: closed $W"
+      PAR="$(bash "$SC" work view "$W" --json | jq -r '.parent // empty')"
+      case $'\n'"$PARENTS" in *$'\n'"$PAR"$'\n'*) ;; *) [ -z "$PAR" ] || PARENTS="$PARENTS$PAR"$'\n' ;; esac
+    done <<<"$MATCH"
+    while IFS= read -r PRD; do
+      [ -n "$PRD" ] || continue
+      SLICES="$(bash "$SC" work view "$PRD" --json | jq -r '(.decomposed_into // [])[]')" \
+        || { echo "parent $PRD: cannot read it; check its slices by hand" >&2; exit 1; }
+      [ -n "$SLICES" ] || { echo "parent $PRD: records no decomposition; check its slices by hand"; continue; }
+      OPEN=""
+      while IFS= read -r s; do
+        [ "$(bash "$SC" work view "$s" --json | jq -r '.state // empty')" = closed ] || OPEN="$OPEN $s"
+      done <<<"$SLICES"
+      if [ -z "$OPEN" ]; then echo "parent $PRD: every slice is closed"; else echo "parent $PRD: still open:$OPEN"; fi
+    done <<<"$PARENTS"
     ;;
   *) echo "work item NOT closed: sidecar.sh backend slices failed" >&2; exit 1 ;;
 esac
 ```
 
-A refusal closes nothing, and none of them blocks the rest of the closeout. Relay the line and let the user close the right item with `work close W-<n>`: zero matches usually means the PR was never recorded on an item, a match on a PRD means `/pre-merge` was given the PRD rather than the slice, and more than one means two slices claim the same PR. `parent <PRD>: every slice is closed` is not a close. Offer `work close <PRD>` as a confirm, after `SYSTEM-OVERVIEW.md` Step 9's research-artifact check, which stays the human's; never run it from this block.
+A refusal closes nothing, and none of them blocks the rest of the closeout. Relay the line and let the user close the right item with `work close W-<n>`: zero matches usually means the PR was never recorded on an item, and a match on a PRD means `/pre-merge` was given the PRD rather than the slice. More than one matching slice is not a refusal: they were built on one branch and merged in one PR, and each is closed and named. `parent <PRD>: every slice is closed` is not a close. Offer `work close <PRD>` as a confirm, after `SYSTEM-OVERVIEW.md` Step 9's research-artifact check, which stays the human's; never run it from this block.
 
 `.claude/.fix-findings-active` is not removed here — `/fix-findings` removes its
 own flag on every exit path, and a copy still present at merge means that run
@@ -496,7 +503,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 - A Stop hook or feedback loop suddenly reporting `MODULE_NOT_FOUND` / "cannot find module" for `biome`, `tsc`, or `vitest` right after a teardown — almost always a stranded cwd, not a real failure.
 - Reporting "cleanup done" without the Step 8 outcome checks actually passing.
 - `git worktree list` showing several stale feature worktrees — evidence the outflow loop is being skipped; this is the symptom closeout removes.
-- Closeout closing the PRD, or any item other than the merged slice's work item on the `sidecar` backend, or performing research-artifact supersession, instead of deferring to `SYSTEM-OVERVIEW.md` Step 9.
+- Closeout closing the PRD, or any item other than the merged slices' work items on the `sidecar` backend, or performing research-artifact supersession, instead of deferring to `SYSTEM-OVERVIEW.md` Step 9.
 
 ## Verification
 
@@ -508,13 +515,13 @@ A run of `/closeout` is not complete until:
 - the shell was re-anchored to the base checkout *before* the worktree was removed
 - the feature worktree (if one existed) is gone from `git worktree list` and the merged branch is pruned — or, when isolation is host-owned (Step 0), teardown and pruning were correctly ceded to the host while the merge still ran
 - the base branch was pulled and the working tree is clean on the base branch
-- on the `sidecar` backend, the merged slice's work item reads `closed`, or Step 3's refusal was relayed to the user; the parent PRD was not closed without the user's confirm
+- on the `sidecar` backend, every merged slice's work item reads `closed`, or Step 3's refusal was relayed to the user; the parent PRD was not closed without the user's confirm
 - the end state was reported, and remaining tail work (`/compound` if a lesson is uncaptured, `SYSTEM-OVERVIEW.md` Step 9 issue-closing) was named in the handoff
 
 ## Handoff
 
 - **Expected input:** a reviewed, mergeable PR created by `/pre-merge`, on a feature branch (in a worktree or a plain checkout)
-- **Produces:** the PR merged, the worktree torn down, the merged branch pruned, the base branch pulled, and a verified clean end state — no filesystem state introduced; on the `sidecar` backend, also the merged slice's work item closed (Step 3)
+- **Produces:** the PR merged, the worktree torn down, the merged branch pruned, the base branch pulled, and a verified clean end state — no filesystem state introduced; on the `sidecar` backend, also every merged slice's work item closed (Step 3)
 - **May invoke:** `/compound` when a durable lesson emerged and was not already captured on the PR
 - **Comes next by default:** `/compound` (only when an uncaptured lesson is worth recording) and the `SYSTEM-OVERVIEW.md` Step 9 cleanup prose (close the PRD and any slices still open, confirm research-artifact frontmatter). After that, the loop is closed — `/help` when you return to the repo. When Step 5's check printed its `project-dir:` line, these are named for the new session and not run here (Step 5).
 

@@ -154,7 +154,7 @@ These support or re-enter the main flow:
 - `/walk-commits` — interactive commit-by-commit comprehension walkthrough before merge (optional; recommended by `/pre-merge`, distinct from its defect review)
 - `/help` — orientation skill that reads repo state and recommends the next pipeline skill
 - `/correct-course` — invocable backtracking skill for when an upstream artifact has gone stale
-- `/handoff` — invocable session-compaction skill for when no inter-skill compression artifact fits (mid-skill, exploratory, or cross-agent handoff); writes a transient doc at a `mktemp` path rather than inside the repo
+- `/handoff` — invocable session-compaction skill for when no inter-skill compression artifact fits (mid-skill, exploratory, or cross-agent handoff); writes a doc in the project's sidecar (the temp folder when there is none) rather than inside the repo
 
 ### Infrastructure skills
 

@@ -10,9 +10,10 @@
 #
 # So /closeout Step 3's work-close block is extracted and RUN against a real
 # sidecar and a stubbed `gh` that answers the merged PR's URL. After it runs,
-# the item whose `pr` field holds that URL reads `state: closed`, and nothing
-# else changed. The refusals are run too: zero matches and two matches close
-# nothing, a github backend touches nothing, and a pr recorded on a
+# every slice whose `pr` field holds that URL reads `state: closed` (several
+# slices built on one branch share one PR, #812), and nothing else changed.
+# The refusals are run too: zero matches close nothing, a github backend
+# touches nothing, and a pr recorded on a
 # PRD closes nothing: the parent PRD is reported, never closed, and its close
 # stays the user's confirm.
 #
@@ -137,7 +138,7 @@ check "the PRD is still open: its close is the user's confirm" open "$(state "$P
 URL="https://github.com/acme/guest/pull/7"
 
 # -----------------------------------------------------------------------------
-section "zero or two matches close nothing"
+section "zero matches close nothing"
 
 mkproj guest
 A="$(mk --kind slice)"
@@ -146,18 +147,41 @@ check "no recorded pr: the block exits 1" 1 "$rc"
 check "no recorded pr: it says no item matched" 1 "$(grep -c "0 open slices record $URL" "$tmp/stderr")"
 check "no recorded pr: the open item stays open" open "$(state "$A")"
 
+# A closed item holding the URL is not a match: the block reads items not yet closed.
 B="$(mk --kind slice)"
-(cd "$P" && bash "$SC" work set "$A" pr "$URL" && bash "$SC" work set "$B" pr "$URL") >/dev/null 2>&1
-run_block
-check "two claimants: the block exits 1" 1 "$rc"
-check "two claimants: it names both" 1 "$(grep -c "2 open slices record $URL as their pr: $A $B" "$tmp/stderr")"
-check "two claimants: $A stays open" open "$(state "$A")"
-check "two claimants: $B stays open" open "$(state "$B")"
-
-# A closed item holding the URL is not a match: the block reads open items only.
-(cd "$P" && bash "$SC" work close "$B") >/dev/null 2>&1
+(cd "$P" && bash "$SC" work set "$A" pr "$URL" && bash "$SC" work set "$B" pr "$URL" && bash "$SC" work close "$B") >/dev/null 2>&1
 run_block
 check "a closed claimant is ignored: the open one closes" closed "$(state "$A")"
+check "a closed claimant is ignored: only the open one is named" 1 "$(grep -cx "work item: closed $A" <<<"$out")"
+check "a closed claimant is ignored: it is not closed again" 0 "$(grep -c "work item: closed $B" <<<"$out")"
+
+# -----------------------------------------------------------------------------
+section "two slices on one PR: both close, built and open alike (#812)"
+
+# Several slices built on one branch share one PR: /pre-merge records its URL
+# on every built slice of the branch, and the merge closes all of them.
+mkproj guest
+PRD="$(mk --kind prd)"
+S1="$(mk --kind slice --parent "$PRD")"
+S2="$(mk --kind slice --parent "$PRD" --blocked-by "$S1")"
+S3="$(mk --kind slice --parent "$PRD")"
+(cd "$P" && bash "$SC" work set "$PRD" decomposed_into "$S1,$S2,$S3" && bash "$SC" work set "$S1" state built \
+    && bash "$SC" work set "$S1" pr "$URL" && bash "$SC" work set "$S2" pr "$URL" \
+    && bash "$SC" work set "$S3" pr "https://github.com/acme/guest/pull/8") >/dev/null 2>&1 \
+    || bad "fixture: two slices on one PR" "work set failed"
+run_block
+check "two on one PR: the block exits 0" 0 "$rc"
+check "two on one PR: the built slice reads closed" closed "$(state "$S1")"
+check "two on one PR: the open slice reads closed" closed "$(state "$S2")"
+check "two on one PR: a slice on another PR stays open" open "$(state "$S3")"
+check "two on one PR: the PRD stays open" open "$(state "$PRD")"
+check "two on one PR: each closed slice is named" 2 "$(grep -cE "^work item: closed ($S1|$S2)\$" <<<"$out")"
+check "two on one PR: the PRD's open slices are reported once" 1 "$(grep -cx "parent $PRD: still open: $S3" <<<"$out")"
+URL="https://github.com/acme/guest/pull/8"
+run_block
+check "the last slice closes: every slice of the PRD is closed" 1 "$(grep -cx "parent $PRD: every slice is closed" <<<"$out")"
+check "the last slice closes: the PRD is still open" open "$(state "$PRD")"
+URL="https://github.com/acme/guest/pull/7"
 
 # -----------------------------------------------------------------------------
 section "a pr recorded on the PRD closes nothing"
@@ -268,6 +292,18 @@ if command -v zsh >/dev/null 2>&1; then
     check "zsh: the matching item, not the first listed, reads closed" closed "$(state "$S2")"
     check "zsh: the other slice stays open" open "$(state "$S1")"
     check "zsh: the PRD's open slices are listed one by one" 1 "$(grep -cx "parent $PRD: still open: $S1" <<<"$out")"
+    # Two slices on one PR, under zsh: both ids reach `work close` one at a time.
+    mkproj guest
+    PRD="$(mk --kind prd)"
+    S1="$(mk --kind slice --parent "$PRD")"
+    S2="$(mk --kind slice --parent "$PRD")"
+    (cd "$P" && bash "$SC" work set "$PRD" decomposed_into "$S1,$S2" && bash "$SC" work set "$S1" state built \
+        && bash "$SC" work set "$S1" pr "$URL" && bash "$SC" work set "$S2" pr "$URL") >/dev/null 2>&1
+    RUN_SHELL=zsh run_block
+    check "zsh, two on one PR: the block exits 0" 0 "$rc"
+    check "zsh, two on one PR: the built slice reads closed" closed "$(state "$S1")"
+    check "zsh, two on one PR: the open slice reads closed" closed "$(state "$S2")"
+    check "zsh, two on one PR: every slice of the PRD is closed" 1 "$(grep -cx "parent $PRD: every slice is closed" <<<"$out")"
 else
     printf '  SKIP zsh not installed\n'
 fi

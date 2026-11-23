@@ -111,7 +111,7 @@ SIDECAR_VERDICT_JQ='
   else
     ((($i.decomposed_into // []) | length) > 0) as $decomposed
     | ($i.kind == "prd") as $prd
-    | [$i.blocked_by[] | select($st[.] != "closed") | {id: ., state: $st[.]}] as $open_blockers
+    | [$i.blocked_by[] | select($st[.] != "closed" and $st[.] != "built-in-head") | {id: ., state: $st[.]}] as $open_blockers
     | if $i.state == "closed" then "closed \([$i.pr // empty | select(. != "") | {pr: .}] | tojson)"
       elif $prd and ($decomposed | not) then "undecomposed-prd"
       elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
@@ -123,7 +123,17 @@ J="$(bash "$SC" work view "$W" --json)" || J=null
 ST='{}'
 while IFS= read -r b; do
   [ -n "$b" ] || continue
-  s="$(bash "$SC" work view "$b" --json | jq -r '.state // empty')"
+  BJ="$(bash "$SC" work view "$b" --json)" || BJ=null
+  s="$(jq -r '.state // empty' <<<"$BJ")"
+  if [ "$s" = built ]; then
+    # Met where its commits are: its branch is checked out, or that branch's tip
+    # (refs/heads/<branch>, then refs/remotes/origin/<branch>) is an ancestor of HEAD.
+    bb="$(jq -r '.branch // empty' <<<"$BJ")"
+    tip="$(git rev-parse -q --verify "refs/heads/$bb^{commit}" || git rev-parse -q --verify "refs/remotes/origin/$bb^{commit}")"
+    if [ -n "$bb" ] && { [ "$bb" = "$(git branch --show-current)" ] || { [ -n "$tip" ] && git merge-base --is-ancestor "$tip" HEAD; }; }; then
+      s=built-in-head
+    fi
+  fi
   ST="$(jq -c --arg b "$b" --arg s "${s:-unreadable}" '. + {($b): $s}' <<<"$ST")"
 done <<<"$(jq -r '(.blocked_by // [])[]?' <<<"$J")"
 jq -rn --arg w "$W" --argjson st "$ST" "$SIDECAR_VERDICT_JQ" <<<"$J" || echo unknown
@@ -134,7 +144,7 @@ Each verdict takes the action listed above, with these differences:
 - **`unknown`** — `work view` failed, or the item's `id`, `state`, `body`, `comments`, or `blocked_by` did not come back. Same rule: re-run once, never proceed on it.
 - **`closed [...]`** — the item's `state` is `closed`. The list names its `pr` field when one is recorded. Same rule: stop and name it.
 - **`undecomposed-prd`** — the item's `kind` is `prd` and `decomposed_into` is empty. The kind field decides, not the body's headings: a PRD whose body lacks the shaped-pitch headings is still undecomposed, and a slice never is (`work set` refuses `decomposed_into` on one). `/prd-to-issues` §8 writes that field, and `work set` replaces it on every write, so there is no "most recent comment" to pick.
-- **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist.
+- **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist. A blocker that is `built` on this branch, or on a branch this one contains, is met, as `work list --unblocked` meets it: its commits are already under this slice. A `built` blocker anywhere else is named as `built` and gates, because its commits are not here to build on.
 - **`in-flight [...]`** — the item's `pr` field is set. A sidecar has no `closedByPullRequestsReferences`, so the field is the only signal, and it carries no branch to compare with the current one. When the PR it names is the one this branch opened, continue; otherwise the GraphQL rule applies.
 - **`takeable ever_wired=<k> comments=<m>`** — `ever_wired` counts every `blocked_by` id. Unlike on GitHub, `0` is a real empty list: `/prd-to-issues` writes `blocked_by` with the slice, so there is no pre-wiring repo for it to be confused with.
 
@@ -254,7 +264,52 @@ install = "pnpm install"
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, and `.claude/.post-review-edit` do not exist in the worktree (fresh slate; Step 3 creates one)
-- [ ] **Post-review lock flags absent** — `.claude/.review-stamped` and `.claude/.fix-findings-active` do not exist. Both belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete either one you find — you are at the start of a branch that has had no review, so neither can be describing this one
+- [ ] **Post-review lock flags absent, or the lock is this branch's own** — `.claude/.fix-findings-active` does not exist, and `.claude/.review-stamped` does not exist unless the block below kept it. Both normally belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete a `.fix-findings-active` you find, and run the block below for `.review-stamped`. One case is not a leak: a branch reviewed with **Stamp only** (`/pre-merge`'s handoff menu) is stamped in the sidecar and gets no PR, so the next slice built on it starts under that branch's own lock. The block keeps the lock when the sidecar's stamp names the checked-out branch, and removes it otherwise. A kept lock refuses this slice's edits until the human releases it with the `stamp release` command the block prints, which puts the reason on record and tells the next `/pre-merge` where its review starts. The block reads the lock from `$CLAUDE_PROJECT_DIR` as given, with no containment check, because the hook, `/pre-merge`'s writer and `stamp release` all name that folder, and a lock judged anywhere else is not the one the hook enforces. When `CLAUDE_PROJECT_DIR` does not contain this checkout, the lock this block keeps or removes is that other folder's, and the session-marker block below does not read the variable at all, since only `/execute` reads its marker
+
+```bash
+# Is the review lock the hook reads this branch's own? Prints nothing when there is none.
+SC="<this skill's directory>/references/sidecar.sh"
+# The folder the classification hook reads, /pre-merge writes, and stamp release clears.
+FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
+B="$(git branch --show-current)"
+STAMP=""
+[ -z "$B" ] || STAMP="$(bash "$SC" stamp read "$B" 2>/dev/null)"
+if [ -f "$FLAG" ]; then
+  if [ -n "$STAMP" ]; then
+    echo "review lock kept: the sidecar's stamp names $B. To edit past it, the human runs: bash \"$SC\" stamp release $B --reason \"<why>\""
+  else
+    rm -f "$FLAG" && echo "review lock removed: no sidecar stamp names this branch ($B), so it was left over from another branch"
+  fi
+fi
+```
+
+**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` at that checkout's top level, never under `$CLAUDE_PROJECT_DIR`: only `/execute` reads the marker, so no other reader has to name the same folder, and an inherited `CLAUDE_PROJECT_DIR` can name another checkout. The marker holds this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that is missing, not in the `YYYY-MM-DDTHH:MM:SSZ` form the block writes, or does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it, and so does the exit a run takes when it cannot finish the slice. A project set up before `/init-pipeline` § 6 listed the marker does not ignore it, and the hook check below never re-runs § 6 for it, since the hook reads no such path; a marker a crashed run leaves is then an untracked file, and `git worktree remove` refuses a worktree with untracked files ([git-worktree](https://git-scm.com/docs/git-worktree)). So when [`git check-ignore`](https://git-scm.com/docs/git-check-ignore) says the marker is not ignored, the block adds the line to the repository's own `info/exclude`, which is never committed, rather than to `.gitignore`, whose edit would be one more uncommitted change.
+
+```bash
+# Is another session running /execute in this checkout? Writes this session's marker, or stops.
+MARK="$(git rev-parse --show-toplevel)/.claude/.session"
+SLICE="<the W-<n> or issue number this run builds, or a short name for a one-off task>"
+TAKE_OVER=""   # "yes" only after the human chose take over
+if [ -f "$MARK" ] && [ "$TAKE_OVER" != yes ]; then
+  BY=$(sed -n 's/^by=//p' "$MARK"); AT=$(sed -n 's/^at=//p' "$MARK"); FOR=$(sed -n 's/^slice=//p' "$MARK")
+  if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
+    THEN=""   # GNU date -d reads free text ("yesterday", "" as midnight), so only the written shape is parsed
+    if printf '%s\n' "$AT" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'; then
+      THEN=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$AT" +%s 2>/dev/null || date -u -d "$AT" +%s 2>/dev/null)
+    fi
+    if [ -z "$THEN" ] || [ $(( $(date +%s) - THEN )) -lt 43200 ]; then
+      echo "session marker: held by session ${BY:-unknown} since ${AT:-unknown} for ${FOR:-unnamed}. Ask: take over, or pick another slice." >&2
+      exit 1
+    fi
+  fi
+fi
+mkdir -p "$(dirname "$MARK")" && printf 'by=%s\nat=%s\nslice=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLICE" > "$MARK"
+git check-ignore -q -- "$MARK"; IGN=$?   # 0 ignored, 1 not ignored, 128 not in this repository
+if [ "$IGN" -eq 1 ]; then
+  EXCL="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
+  mkdir -p "$(dirname "$EXCL")" && printf '%s\n' '.claude/.session' >> "$EXCL" && echo "session marker: ignored in $EXCL"
+fi
+```
 
 **Record where the slice starts.** On `takeable`, once the branch this slice will be committed on is checked out and before its first commit, record `HEAD` as the work item's `start_sha`. `sidecar.sh range` reads it, so `/pre-merge`'s first review and `/fix-findings`' round count cover this slice's commits rather than every slice on a long-lived branch. A start already recorded is kept: a later iteration on the same slice must not move it forward past commits the slice already made, and a start a fold or rebase rewrote is not re-anchored either (`range` falls back to the base and says so):
 
@@ -931,6 +986,36 @@ Remove the classification markers:
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" "$CLAUDE_PROJECT_DIR/.claude/.post-review-edit"
 ```
 
+Remove Step 0's session marker when it is this session's. One another session wrote is left: that session took the slice over.
+
+```bash
+MARK="$(git rev-parse --show-toplevel)/.claude/.session"
+if [ -f "$MARK" ]; then
+  if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
+  else echo "session marker left: another session holds it"; fi
+fi
+```
+
+**Mark the slice built.** On the `sidecar` backend, once the slice's commit is made, its work item moves from `open` to `built`: its commits are on this branch, and its PR has not merged. `work list --unblocked`, and Step 0's gate on the next slice, read a `built` blocker as met where its commits are, on this branch or on a branch built on top of it. `/pre-merge` records the branch's PR on every `built` slice of the branch, and `/closeout` closes each of them at merge ([references/state-backend.md](references/state-backend.md)). On the `github` backend the issue stays open until its PR merges, and nothing is written:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+case "$(bash "$SC" backend slices)" in
+  github) echo "work item: none on the github backend; the issue closes when its PR merges" ;;
+  sidecar)
+    ST="$(bash "$SC" work view "$W" --json | jq -r '.state // empty')"
+    case "$ST" in
+      open)
+        bash "$SC" work set "$W" state built || { echo "not marked built: work set failed on $W" >&2; exit 1; }
+        echo "work item: $W built on $(git branch --show-current)" ;;
+      built) echo "work item: $W is already built" ;;
+      *) echo "work item: $W is ${ST:-unreadable}, left as it is" ;;
+    esac ;;
+  *) echo "not marked built: sidecar.sh backend slices failed" >&2; exit 1 ;;
+esac
+```
+
 **AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 (on a work item, Step 5's `work edit` block) — including both of its guards: check the fetch's exit status and refuse the write if the edited body came out shorter than what was read. AFK is the mode with nobody watching the write, so it is the one that most needs them. AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.
 
 **Hand review notes to the reviewer.** `/execute` finishes holding things no artifact records: which verification tiers ran versus were skipped and why, which scope was absorbed under Step 0's Consumes gate, which assumptions shifted, where the implementation is thinnest. Author preparation is the strongest empirical correlate with low defect density (Cohen) and a structured reading plan measurably raises detection (Dunsmore) — but only if the reviewer receives it. Left in the Step 5 checklist alone, that knowledge reaches a user and stops there — and on an AFK run no checklist is ever presented, so it reaches nobody.
@@ -999,6 +1084,16 @@ If the error suggests the approach from the research artifact or the PRD is wron
 
 On a sidecar work item, this comment and the plateau comment below are written with `work comment W-<n> --body-file <file>` ([references/state-backend.md](references/state-backend.md)), never `gh issue comment`. `work comment` adds the `## Comment <ISO-8601>` heading itself and refuses a body that already carries one, so the file holds the note alone. Step 1's `work view --json` read is how the next iteration sees it.
 
+After the comment, and before this run exits, remove Step 0's session marker when it is this session's. This exit skips the removal above, and each Ralph iteration is a new session with its own `CLAUDE_CODE_SESSION_ID`, so a marker left here would stop the next iteration on the slice until it is 12 hours old. The plateau stop below runs it too. An iteration that dies before it reaches either exit leaves its marker, and the next AFK iteration stops on it and reports it.
+
+```bash
+MARK="$(git rev-parse --show-toplevel)/.claude/.session"
+if [ -f "$MARK" ]; then
+  if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
+  else echo "session marker left: another session holds it"; fi
+fi
+```
+
 **AFK progress and plateau detection.** When running under Ralph, progress is *epistemic state advancement*, not activity. An iteration counts as progress only if at least one of these transitions from unresolved to resolved:
 
 - an unmet acceptance criterion on the active slice
@@ -1007,7 +1102,7 @@ On a sidecar work item, this comment and the plateau comment below are written w
 
 Code churn without such a transition is a stationary dot. Red flags: the same slice staying active across multiple iterations, tests still failing but "in different ways," recurring error classes with superficial code rewrites, no acceptance checkbox or gate advancing.
 
-**Plateau stop rule.** If two consecutive iterations on the same slice produce stationary dots, stop and leave an issue comment (same shape as the repeated-failure comment above) naming what did *not* advance. Do not start a third iteration. Hysteresis: a single recovering iteration — at least one of the transitions above — resets the stationary counter. This rule complements the existing repeated-failure rule; it is *not* a replacement.
+**Plateau stop rule.** If two consecutive iterations on the same slice produce stationary dots, stop and leave an issue comment (same shape as the repeated-failure comment above) naming what did *not* advance, then remove the session marker with the block above. Do not start a third iteration. Hysteresis: a single recovering iteration — at least one of the transitions above — resets the stationary counter. This rule complements the existing repeated-failure rule; it is *not* a replacement.
 
 This applies to AFK Ralph iterations only. HITL `/execute` runs are paced by user judgment and do not need the heuristic.
 

@@ -24,6 +24,10 @@ plans/
 .claude/.review-stamped
 .claude/.fix-findings-active
 
+# /execute Step 0's session marker (by=, at=, slice=), which stops a second
+# session in the same checkout. Step 6 removes it; it is local to the checkout.
+.claude/.session
+
 # Reserved for /setup-ralph-loop.
 .claude/.ralph-checked
 

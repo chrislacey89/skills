@@ -55,6 +55,8 @@ On the `sidecar` backend with no work item (the operator answered "none"), the l
 
 `/respond-to-review`'s record is not in the table, because `backend stamp` does not decide it. It goes to `<sidecar>/review-responses/pr-<n>.md` on either backend, found through `sidecar.sh path review-responses` and committed with `sidecar.sh commit`. It is the author's private account of a teammate's review, never written to the PR, and its directory is separate from `reviews/` so it cannot collide with a stamp. With no sidecar it is printed to the terminal and named as not persisted.
 
+`/handoff`'s doc is not in the table either. It goes to `<sidecar>/handoffs/` on either backend, found through `sidecar.sh path handoffs`, so it survives a restart and stays outside the project tree; it is not committed. With no sidecar it goes to the temp folder.
+
 `sidecar.sh init` derives `forge.write` from `mode` and the forge: owned on a known forge gets `["issues","labels","milestones","prs"]`, and everything else gets `[]`. `sidecar.sh config set mode` re-derives it. `tracker.write` is not read by `backend`.
 
 ## The review stamp
@@ -107,10 +109,11 @@ An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest re
 | Replace the body | `gh issue edit <n> --body-file f` | `work edit W-n --body-file f` |
 | Comment | `gh issue comment <n> --body-file f` | `work comment W-n --body-file f` |
 | Record a decomposition | a `Decomposed into: #…` comment | `work set W-n decomposed_into W-2,W-3` |
-| Maturity, state, PR, branch, reviewed SHA | labels, `gh issue close`, the PR body and its head branch | `work set W-n <maturity\|state\|pr\|branch\|reviewed_sha> <value>` |
+| Maturity, state, PR, PR mode, branch, reviewed SHA | labels, `gh issue close`, the PR body and its head branch | `work set W-n <maturity\|state\|pr\|pr_mode\|branch\|reviewed_sha> <value>` |
 | Record a lesson | nothing; `/compound` skips it | `work lesson W-n <lesson-path>` (adds the path once; works on a closed item) |
 | Close | `gh issue close <n>` | `work close W-n [--superseded-by W-m]` |
-| List | `gh issue list …` | `work list [--kind] [--parent W-n] [--branch <name>] [--unblocked] [--state open\|closed\|all]` (ids, one per line; open by default) |
+| List | `gh issue list …` | `work list [--kind] [--parent W-n] [--branch <name>] [--unblocked] [--state open\|built\|closed\|all]` (ids, one per line; open by default, and `open` lists every item not closed, `built` among them) |
+| Read a branch's PR mode | nothing; Stamp only exists only on the `sidecar` stamp backend | `work pr-mode [W-n] [--branch <name>]` (prints `none W-n` or `pr`; an empty `<name>` reads no branch; read-only) |
 
 Three rules differ from the GitHub side:
 
@@ -118,7 +121,11 @@ Three rules differ from the GitHub side:
 - `decomposed_into` and `blocked_by` are replaced on every `set`, never appended to, so a reader always sees the latest list. A `blocked_by` set takes only ids that exist, as `create --blocked-by` does, and is refused when it would make an item wait on itself. That check reads every work item, so a set that names at least one blocker is refused when any work item cannot be read. A set with an empty list (`""`) can make no cycle and is not checked.
 - `work comment` is the only writer of a `## Comment <ISO-8601>` section. A body that contains such a line is refused.
 
-`work list --unblocked` prints items that are open and whose `blocked_by` ids are all closed. An id that does not exist counts as open.
+A work item's `state` is `open`, `built`, or `closed`, and `work set` refuses anything else. `built` means the slice's commits are on its recorded `branch` and its PR has not merged: `/execute` Step 6 writes it after the slice's commit, and `/closeout` Step 3 moves it to `closed` at merge. Several slices can be built in order on one branch with one PR at the end, so `/pre-merge` Phase 2 records the branch's PR on every `built` slice of the branch, and `/closeout` closes every slice whose `pr` holds the merged PR.
+
+`work list --unblocked` prints items that are open and whose `blocked_by` ids are each closed, or built where their commits are. A `built` blocker is met when its recorded branch is the one checked out, or when that branch's tip is an ancestor of `HEAD` ([git merge-base --is-ancestor](https://git-scm.com/docs/git-merge-base)), as on a branch stacked on it. The tip is read from `refs/heads/<branch>`, then from `refs/remotes/origin/<branch>`, which stands in once the local branch is gone; no other remote is read. A `built` blocker with no recorded branch, or whose branch resolves to neither ref, still blocks. An id that does not exist counts as open.
+
+A work item's `pr_mode` says whether its branch gets a PR of its own: `pr`, the default when the field is absent, or `none` for a branch that is stacked under another or stays local. `/pre-merge`'s **Stamp only** choice writes `none`, and Phase 2 then opens no PR for a branch with such an item. `work pr-mode [W-n] --branch <name>` is the one read of it, which Phase 2 and the menu after it both make: it prints `none W-n` when that item, or an item not closed on the branch, records `none`, and `pr` otherwise. It is a separate field because `pr` holds a PR or nothing. Stamp only exists only on the `sidecar` stamp backend: on `github` the stamp is in the PR body, so a branch with no PR has nowhere to keep one.
 
 A work item's `branch` is the branch it is being built on. `/execute` writes it when the slice starts and `/pre-merge` Phase 2 writes it again before the PR. `work list --branch <name>` prints the items on a branch, and it can print more than one: slices can share a long-lived branch, and a branch name is reused after a merge. A caller that needs one item checks that it got exactly one.
 

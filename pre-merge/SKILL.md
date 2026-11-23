@@ -310,7 +310,7 @@ The fold gate below points here, and `/fix-findings` runs the same lines before 
 
 **Ask where the pack's text goes first.** `bash "$SC" backend stamp` answers it, per [references/state-backend.md](references/state-backend.md), and the sidecar block below asks before it does anything else. `github` uses the two templates below. `sidecar` means the repo's `forge.write` lacks `prs`: the PR still opens, but it is an ordinary PR, and everything the templates carry for the pack lives on the work item instead. Anything else is a refusal: stop and relay what `backend` printed on stderr, because the templates on a failed answer write pack text into a client's PR.
 
-**On the `sidecar` backend**, the title and description are plain human text: what changed and why, written to `references/writing-for-humans.md` as the Summary walkthrough is. They carry no heading from the templates below, no `Closes #`, no `#N` or `W-<n>` reference, and no `## Review Notes`. An existing PR's body is left as it is — the client may have edited it — and only the URL is recorded:
+**On the `sidecar` backend**, the title and description are plain human text: what changed and why, written to `references/writing-for-humans.md` as the Summary walkthrough is. They carry no heading from the templates below, no `Closes #`, no `#N` or `W-<n>` reference, and no `## Review Notes`. An existing PR's body is left as it is — the client may have edited it — and only the URL is recorded, on the work item and on every `built` slice of this branch, since several slices built on one branch share its PR. When this branch's work item records `pr_mode none` (the **Stamp only** choice in § Handoff), draft no title or description: the block stops before it reads either, and opens nothing:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
@@ -321,6 +321,19 @@ case "$(bash "$SC" backend stamp)" in
   sidecar) ;;
   github) echo "backend is github: write the PR from the templates below, not this block"; exit 0 ;;
   *) echo "PR aborted: sidecar.sh backend stamp failed; not guessing the github templates" >&2; exit 1 ;;
+esac
+# Stamp only: a work item of this branch records pr_mode none, so no PR is opened.
+# A W that names no work item records nothing, so it does not stop this block.
+BRANCH=$(git branch --show-current)
+MODE=$(bash "$SC" work pr-mode "$W" --branch "$BRANCH") \
+  || { echo "PR aborted: sidecar.sh work pr-mode failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+case "$MODE" in
+  pr) ;;
+  "none "*)
+    I="${MODE#none }"
+    echo "no PR: $I records pr_mode none (Stamp only), so this branch ($BRANCH) gets no PR of its own; to give it one, run sidecar.sh work set $I pr_mode pr and run this block again"
+    exit 0 ;;
+  *) echo "PR aborted: sidecar.sh work pr-mode answered '$MODE', so whether this branch records Stamp only is unknown" >&2; exit 1 ;;
 esac
 FP_RANGE=$(bash "$SC" range) || { echo "PR aborted: sidecar.sh range failed" >&2; exit 1; }
 FP_ACCEPT=""   # short SHAs the operator confirmed are false matches (a client route like /help, a form like W-9); else empty
@@ -366,6 +379,15 @@ if [ -n "$W" ]; then
 else
   echo "no work item: $PR_URL is recorded nowhere in the sidecar" >&2
 fi
+# Several slices built on this branch share its PR: record it on each built one.
+BUILT=""
+[ -z "$BRANCH" ] || BUILT=$(bash "$SC" work list --kind slice --branch "$BRANCH" --state built) \
+  || { echo "$PR_URL is not recorded on the built slices of $BRANCH: work list failed" >&2; exit 1; }
+while IFS= read -r S; do
+  [ -n "$S" ] && [ "$S" != "$W" ] || continue
+  bash "$SC" work set "$S" pr "$PR_URL" || { echo "$PR_URL is not recorded on $S" >&2; exit 1; }
+  echo "$PR_URL recorded on built slice $S" >&2
+done <<<"$BUILT"
 echo "$PR_URL"
 ```
 
@@ -384,6 +406,16 @@ if [ -n "$W" ]; then
 else
   echo "no work item: $PR_URL is recorded nowhere in the sidecar" >&2
 fi
+BRANCH=$(git branch --show-current)
+# Several slices built on this branch share its PR: record it on each built one.
+BUILT=""
+[ -z "$BRANCH" ] || BUILT=$(bash "$SC" work list --kind slice --branch "$BRANCH" --state built) \
+  || { echo "$PR_URL is not recorded on the built slices of $BRANCH: work list failed" >&2; exit 1; }
+while IFS= read -r S; do
+  [ -n "$S" ] && [ "$S" != "$W" ] || continue
+  bash "$SC" work set "$S" pr "$PR_URL" || { echo "$PR_URL is not recorded on $S" >&2; exit 1; }
+  echo "$PR_URL recorded on built slice $S" >&2
+done <<<"$BUILT"
 echo "$PR_URL"
 ```
 
@@ -865,7 +897,7 @@ Write the block with the same `mktemp` → **check the fetch's exit status** →
 - **Forward: the states and the evidence** — what was fixed, filed, accepted, or dropped, and the greps behind each. These are facts about the code's *current* state. Without them the next pass re-reports resolved findings.
 - **Withheld: the previous pass's severity judgments.** That is the anchoring surface. A fresh reviewer independently re-raising something an earlier pass rated trivial is *signal*, and forwarding the earlier rating would suppress it.
 
-This is deliberately **not** `/handoff`. That skill summarizes into a transient `mktemp` doc, and both properties are wrong here: the fix Leveson's rule demands is "hand over checkable claims," not "summarize better," and every summarization hop is a lossy transformation authored by the upstream controller. `/handoff`'s own Red Flags already forbid producing a doc at a pipeline-skill boundary; that fence stays where it is.
+This is deliberately **not** `/handoff`. That skill summarizes into a doc kept outside the project and its PR, and both properties are wrong here: the fix Leveson's rule demands is "hand over checkable claims," not "summarize better," and every summarization hop is a lossy transformation authored by the upstream controller. `/handoff`'s own Red Flags already forbid producing a doc at a pipeline-skill boundary; that fence stays where it is.
 
 #### Pin the judge, or cross-pass comparison is meaningless
 
@@ -977,7 +1009,42 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 
 **Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). It does not apply on AFK loop-mode runs — there is no user to ask, so print the exit readout and the handoff line instead. Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended — capture the lesson)**, **`/closeout` (merge and clean up — no lesson worth capturing)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then capture the lesson**. When no lesson emerged, lead with **→ `/closeout` (recommended — merge and clean up)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then merge**. Route those findings to `/qa` or `/request-refactor-plan` after the choice, rather than naming two skills in one label. When the human picks **Fix a finding on this branch first**, ask one follow-up question — which findings to fix — as a `multiSelect` `AskUserQuestion` with one option per open finding, labeled with its number and a one-line statement of its claim. A `survived` breaker verdict carried from an earlier `/fix-findings` round is its own option, beside the finding it is about. Pre-select nothing, mark no option recommended, and propose no set in the question text or anywhere before it ("S1 to S3?"): a suggested set that the human confirms is the model's choice with the human's signature on it, which is the boundary chrislacey89/skills#190 protects. The tool caps a question's options (`references/next-step-menu.md`), so with more than four open findings ask in number order (Concerns first when one is open), four per question and one question per turn, and take every selection together. Invoke `/fix-findings` with exactly the numbers they select, in number order, or in the order they typed them if they answered through "Other"; never fill the numbers in yourself, because choosing them is the human's disposition, not this skill's. On the sidecar backend, hand it the slice's `W-<n>` from Phase 1 step 2 as well, which `/fix-findings`' round count reads. For a stacked PR, hand it the sibling slice's branch too, the one in this skill's `BASE_BRANCH=` placeholders. The menu's own option labels name no finding numbers, so the menu choice never carries a set into the follow-up. Both menus carry the finding-disposition pair because it is a separate axis from the lesson: whether a finding can wait does not depend on whether a lesson emerged, and a reviewer holding both has to be able to say so. **On a re-run after a fix round, what is still open decides the menu.** When this run reviewed a post-stamp delta and no Concern is open, do not offer **Fix a finding on this branch first** as a peer of the merge. Lead with **→ `/closeout` (recommended — merge; the remaining Suggestions and Observations stay listed in the Review Notes)**, then **Hand the remaining findings off as issues, then merge**, then **Fix one anyway (`/fix-findings <numbers>` — this starts another fixer, breaker and re-review)**, which is that same fix option, with the same follow-up question, under a label that states its cost. When a lesson emerged that is not captured yet, `/compound` stays on that menu, after `/closeout`. When a Concern is open, on this run or any other, whether this run raised it or an earlier one left it unfixed, `/closeout` does not lead and is not marked recommended: lead with **Fix a finding on this branch first**, and list Concerns before Suggestions in the follow-up question. This rule sets the order over both menus above, and while Phase 2 is deferred **Open the PR** takes `/closeout`'s place in it. The human still chooses every number. What changes is which option leads, and what its label says the choice costs. **On the re-run `/compound` handed back, take the no-lesson menu even though a lesson plainly emerged from the branch: it is already captured, in the commit this run just reviewed, so `/compound` is not an option to re-offer and `/closeout` leads unless a Concern is open.** Phase 4's delta test says so only when the post-stamp delta holds nothing but the captured lesson. When that commit also carries the mechanism `/compound` stages with the entry, the test is silent, and Phase 4's *"if — and only if — a durable lesson emerged"* condition is what decides it; the test's silence is not a reason to re-offer `/compound`. Within the finding-disposition pair the discriminator is *now vs. later*, not severity (an open Concern changes which option leads, as above, and not what either one means) — so each label leads with the act that distinguishes it (*fix* vs. *hand off*) and closes with the step it returns to, rather than leading with the step both options share. In reviewer-mode the options differ — **Post the draft comments**, **Talk it through offline first (MMG Exchange)**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
 
-**While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Once Phase 2 has run, offer the menu above.
+**While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Beside it, offer **Stamp only — this branch will not get its own PR (it is stacked under another branch, or stays local)**. Stamp only exists only where the stamp does not need a PR: Phase 2 defers only on the `sidecar` stamp backend, and on the `github` backend the stamp lives in the PR body, so a branch with no PR would have nowhere to keep it. On a pick, record the answer on the work item with the second block below. `/execute` Step 0 then keeps the review lock whose stamp names this branch instead of treating it as left over. With no work item there is nowhere to record the answer, so the block refuses and the next run offers the PR again. Once Phase 2 has run, offer the menu above, unless the branch records Stamp only.
+
+**A branch that records Stamp only gets neither menu.** Before building either menu, on every author-mode run whether or not Phase 2 was deferred, run the first block below. When it prints `pr_mode: none`, there is no PR to open, to commit a lesson onto, or to merge, so leave out **Open the PR**, **`/compound` in this PR**, and **`/closeout`**, and do not offer Stamp only again. Lead with **→ Stop here (recommended — the branch is stamped and gets no PR of its own; it lands with the branch it is stacked under)**, and keep the finding-disposition pair. When it prints `pr_mode: pr`, build the menu the rest of this section describes. When it exits non-zero with `pr_mode unread` on stderr, a read failed: relay that line and offer no menu until the read succeeds.
+
+```bash
+# Does this branch record Stamp only? Prints "pr_mode: none (W-<n>)" or "pr_mode: pr".
+SC="<this skill's directory>/references/sidecar.sh"
+W="<the W-<n> Phase 1 step 2 named, or empty>"
+case "$(bash "$SC" backend stamp)" in
+  sidecar) ;;
+  github) echo "pr_mode: pr"; exit 0 ;;
+  *) echo "pr_mode unread: sidecar.sh backend stamp failed" >&2; exit 1 ;;
+esac
+# A W that names no work item records nothing, so it does not stop this block.
+BRANCH=$(git branch --show-current)
+MODE=$(bash "$SC" work pr-mode "$W" --branch "$BRANCH") \
+  || { echo "pr_mode unread: sidecar.sh work pr-mode failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+case "$MODE" in
+  pr) echo "pr_mode: pr" ;;
+  "none "*) echo "pr_mode: none (${MODE#none })" ;;
+  *) echo "pr_mode unread: sidecar.sh work pr-mode answered '$MODE'" >&2; exit 1 ;;
+esac
+```
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="<the W-<n> Phase 1 step 2 named, or empty>"
+case "$(bash "$SC" backend stamp)" in
+  sidecar) ;;
+  github) echo "Stamp only not recorded: on the github backend the stamp lives in the PR body, so this branch needs its PR" >&2; exit 1 ;;
+  *) echo "Stamp only not recorded: sidecar.sh backend stamp failed" >&2; exit 1 ;;
+esac
+[ -n "$W" ] || { echo "Stamp only not recorded: no work item to hold it; the next run offers the PR again" >&2; exit 1; }
+bash "$SC" work set "$W" pr_mode none || { echo "Stamp only not recorded on $W" >&2; exit 1; }
+echo "stamp only: $W records pr_mode none; later runs on $(git branch --show-current) open no PR until sidecar.sh work set $W pr_mode pr takes it back"
+```
 
 **Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (the commit rule in Step 1's fixer brief) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and Phase 2's shared-branch block prints `shared: no`, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
 
