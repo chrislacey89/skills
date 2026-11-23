@@ -2041,14 +2041,14 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp | rewritten
     out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" CLAUDE_PROJECT_DIR="$r" \
         bash "$sidecar_sh" stamp release feature --reason 'asked for' 2>&1)"
     if [[ "$kind" == folded ]]; then
-        assert_eq "lock released: make the edit, then re-run /pre-merge to review $released..HEAD and re-stamp" "$out" \
-            "$sh, folded then released: the verb names the released head"
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$out" \
+            "$sh, folded then released: the verb names no range; the scope block decides it"
     elif [[ "$kind" == rewritten ]]; then
-        assert_eq "lock released: " "${out:0:15}" \
-            "$sh, folded with a content change, then released: the release succeeds"
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$out" \
+            "$sh, folded with a content change, then released: the verb names no range, so none disagrees with the whole-slice read"
     else
-        assert_eq "lock released: make the edit, then re-run /pre-merge to review $stamped..HEAD and re-stamp" "$out" \
-            "$sh, released past the stamp: the verb names the stamp, where the unread commits start"
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$out" \
+            "$sh, released past the stamp: the verb names no range; the scope block decides it"
     fi
     printf 'edit\n' > "$r/edit.txt"
     git -C "$r" add edit.txt

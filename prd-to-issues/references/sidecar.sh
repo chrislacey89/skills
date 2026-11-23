@@ -81,10 +81,7 @@
 # else the top level, as the hook reads them. On the sidecar backend it first
 # commits the same record as reviews/released/<slug>.json, a directory of its
 # own because <branch>.released is itself a branch name; stamp write and stamp
-# clear remove it. On the github backend the marker is the only record. The
-# printed range starts at the released head when that head carries the stamped
-# tree, and at the stamp otherwise, since commits made between the stamp and the
-# release have had no review.
+# clear remove it. On the github backend the marker is the only record.
 #
 # fixrun. <sidecar>/fix-runs/<slug>.jsonl holds one line per /fix-findings fix
 # commit on the sidecar backend, {branch, run, sha, thread?, work?}, where the
@@ -1706,7 +1703,7 @@ stamp_released() {
 # stamp_release <branch> <reason>: the rules are in the header. Nothing is
 # written until every refusal has had its turn.
 stamp_release() {
-    local branch="$1" reason backend sc="" body stamped="" head at from tree proj flags tmp rec
+    local branch="$1" reason backend sc="" body stamped="" head at proj flags tmp rec
     # One line, so a reason cannot write a key=value line of its own.
     reason="$(printf '%s' "$2" | tr '\n\r' '  ')"
     in_repo || refuse "not inside a git repository"
@@ -1728,9 +1725,6 @@ stamp_release() {
     head="$(pgit rev-parse --verify -q 'HEAD^{commit}')" || refuse "stamp release: HEAD names no commit"
     proj="$(lock_project)" || refuse "stamp release: cannot find the project directory"
     flags="$proj/.claude"
-    from="$stamped"
-    tree="$(pgit rev-parse --verify -q "$stamped^{tree}")" || tree=""
-    if [ "$tree" = "$(pgit rev-parse "$head^{tree}")" ]; then from="$head"; fi
     at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     mkdir -p "$flags" || refuse "stamp release: cannot create $flags"
     tmp="$(mktemp "$flags/.post-review-edit.XXXXXX")" || refuse "stamp release: cannot write in $flags"
@@ -1748,7 +1742,8 @@ stamp_release() {
     fi
     mv "$tmp" "$flags/.post-review-edit" || { rm -f "$tmp"; refuse "stamp release: cannot write $flags/.post-review-edit; the lock stays on"; }
     rm -f "$flags/.review-stamped" || refuse "stamp release: cannot remove $flags/.review-stamped; the lock stays on"
-    printf 'lock released: make the edit, then re-run /pre-merge to review %s..HEAD and re-stamp\n' "$from"
+    # No range: where the next review starts is /pre-merge Phase 1 step 4's to decide.
+    printf 'lock released: make the edit, then re-run /pre-merge to review it and re-stamp\n'
 }
 
 cmd_stamp() {

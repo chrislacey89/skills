@@ -1657,7 +1657,7 @@ release_round_trip() {  # $1 = shell, $2 = backend
     rc=0
     rel_out="$(r_run bash "$sidecar_sh" stamp release feature --reason 'the user asked for a "copy" change' 2>/dev/null)" || rc=$?
     assert_eq 0 "$rc" "$at release exits 0"
-    assert_eq "lock released: make the edit, then re-run /pre-merge to review $stamped..HEAD and re-stamp" "$rel_out" \
+    assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$rel_out" \
         "$at release prints the next step"
     if [ -e "$r/$stamp_rel" ]; then left=present; else left=gone; fi
     assert_eq gone "$left" "$at release removes the stamp flag"
