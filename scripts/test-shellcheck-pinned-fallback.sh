@@ -11,10 +11,7 @@
 #
 # What this suite pins, each arm against stubs so it never touches the network
 # or a Docker daemon and never pulls an image:
-#   - a local-release fallback run exits 3, at both fallback sites, unless
-#     SHELLCHECK_PINNED_ALLOW_FALLBACK=1 is set; both with the variable unset
-#     (how the pre-push hook and CI run it) and with it set to 0; it still
-#     lints first, and the exit-3 message names the override
+#   - a local-release fallback run without the override: see section 1 below
 #   - with the override it exits 0 on a clean lint
 #   - a fallback run with findings exits nonzero with or without the override
 #   - when the native pinned binary is unavailable and Docker answers, the
@@ -208,11 +205,10 @@ STUB
 }
 
 # run_case <docker-mode> <cached-mode> <local-version> <allow|strict|unset> <finding|clean>
-# allow sets SHELLCHECK_PINNED_ALLOW_FALLBACK=1; strict sets it to 0; unset
-# leaves it out of the environment, which is how the pre-push hook and CI run
-# the script. Section 1 runs both exit-3 sites under strict and under unset, so
-# a default that turns unset into accept, and a check that accepts any
-# non-empty value, each go red. finding plants a script with a lint finding.
+# The case statement below says what each override word sets. Section 1 runs
+# both exit-3 sites under strict and under unset, so a default that turns
+# unset into accept, and a check that accepts any non-empty value, each go red.
+# finding plants a script with a lint finding.
 # Sets: rc, err (stderr), log (instruments that linted, space-joined), elapsed,
 # seen (present or absent: whether the override reached the local stub),
 # runs (the docker stub's run.refs, space-joined; empty when no image ran).
@@ -277,7 +273,7 @@ assert_eq 3 "$rc" "exit 3"
 assert_eq local "$log" "the local release still linted"
 assert_contains "$err" "SHELLCHECK_PINNED_ALLOW_FALLBACK=1" "the exit-3 message names the override"
 
-section "the override left unset (how the pre-push hook and CI run it): exit 3, at both sites"
+section "the override left unset: exit 3, at both sites"
 run_case none none 0.11.0 unset clean
 assert_eq 3 "$rc" "download site, unset: exit 3"
 assert_eq local "$log" "download site, unset: the local release still linted"
