@@ -1786,5 +1786,51 @@ else
     printf '  SKIP zsh is not on PATH, so the release round trip ran under bash only\n'
 fi
 
+# An inherited $CLAUDE_PROJECT_DIR that names another checkout is not this
+# tree's project: release unlocks this worktree and leaves the other alone.
+# One that contains the top level is still used.
+release_elsewhere() {
+    local r="$scratch/release-elsewhere" other="$scratch/release-other" body="$scratch/release-elsewhere.body" sha out rc
+    mkdir -p "$r" "$other/.claude"
+    : > "$other/.claude/.review-stamped"
+    git init -q -b main "$r"
+    printf '.claude/\n' > "$r/.git/info/exclude"
+    printf 'x\n' > "$r/a.txt"
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" add a.txt
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" commit -q --no-verify -m base
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" switch -q -c feature
+    sha="$(git -C "$r" rev-parse HEAD)"
+    printf '<!-- reviewed-at: %s -->\n' "$sha" > "$body"
+    mkdir -p "$r/.claude"
+    : > "$r/.claude/.review-stamped"
+    rc=0
+    out="$( cd "$r" && PATH="$release_bin:$PATH" GH_BODY="$body" GIT_CONFIG_GLOBAL="$sc_gitconfig" \
+        SKILL_KIT_SIDECAR_ROOT="$r.sidecars" SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" \
+        CLAUDE_PROJECT_DIR="$other" bash "$sidecar_sh" stamp release feature --reason "copy" 2>&1 )" || rc=$?
+    assert_eq 0 "$rc" "another checkout's project dir: release exits 0 ($out)"
+    assert_eq "gone|present" \
+        "$([ -e "$r/.claude/.review-stamped" ] && echo present || echo gone)|$([ -e "$r/.claude/.post-review-edit" ] && echo present || echo gone)" \
+        "another checkout's project dir: release unlocks this worktree"
+    assert_eq "present|gone" \
+        "$([ -e "$other/.claude/.review-stamped" ] && echo present || echo gone)|$([ -e "$other/.claude/.post-review-edit" ] && echo present || echo gone)" \
+        "another checkout's project dir: …and leaves that checkout's lock alone"
+    assert_eq "$sha" \
+        "$( cd "$r" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
+            CLAUDE_PROJECT_DIR="$other" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
+        "another checkout's project dir: stamp read --released reads this worktree's marker"
+    mkdir -p "$r/sub" "$scratch/release-parent"
+    mv "$r" "$scratch/release-parent/tree"
+    r="$scratch/release-parent/tree"
+    assert_eq "$sha" \
+        "$( cd "$r" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
+            CLAUDE_PROJECT_DIR="$r/sub" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
+        "a project dir below the top level does not contain the tree: the top level's marker is read"
+    assert_eq "" \
+        "$( cd "$r" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
+            CLAUDE_PROJECT_DIR="$scratch/release-parent" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
+        "a project dir that contains the top level is used: its .claude/ holds no marker"
+}
+release_elsewhere
+
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1
