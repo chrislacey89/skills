@@ -85,12 +85,14 @@ URL="https://github.com/acme/stack/pull/7"
 pm_block="$(block "$PM" 'echo "PR opened, but $PR_URL is not recorded on $W"')"
 url_block="$(block "$PM" 'PR_URL="<the URL the human gave>"')"
 so_block="$(block "$PM" 'work set "$W" pr_mode none')"
+mode_block="$(block "$PM" 'Does this branch record Stamp only?')"
 lock_block="$(block "$EX" 'review lock kept')"
 built_block="$(block "$EX" 'work set "$W" state built')"
 }
 section "the blocks"
 for pair in "pre-merge Phase 2's sidecar PR block:$pm_block" "pre-merge Phase 2's URL block:$url_block" \
-            "pre-merge's Stamp only block:$so_block" "execute Step 0's review-lock block:$lock_block" \
+            "pre-merge's Stamp only block:$so_block" "pre-merge's pr_mode read before the menu:$mode_block" \
+            "execute Step 0's review-lock block:$lock_block" \
             "execute Step 6's built block:$built_block"; do
     if [ -n "${pair#*:}" ]; then ok "${pair%%:*} is found"; else bad "${pair%%:*} is found" "not found"; fi
 done
@@ -185,6 +187,8 @@ for sh in $shells; do
     mkproj guest
     S1="$(mk --kind slice)"; S2="$(mk --kind slice)"
     (cd "$P" && bash "$SC" work set "$S1" branch stack && bash "$SC" work set "$S2" branch stack) >/dev/null 2>&1
+    run "$sh" "$mode_block" "$S1"
+    check "$sh: before Stamp only, the menu read says pr" "pr_mode: pr" "$out"
     run "$sh" "$so_block" "$S1"
     check "$sh: the Stamp only block exits 0" 0 "$rc"
     check "$sh: it records pr_mode none" none "$(field "$S1" pr_mode)"
@@ -196,6 +200,16 @@ for sh in $shells; do
     check "$sh: Phase 2 on that item records no pr" "" "$(field "$S1" pr)"
     run "$sh" "$pm_block" "$S2"
     check "$sh: Phase 2 on the branch's next slice opens no PR either" "" "$(cat "$tmp/calls")"
+    run "$sh" "$mode_block" "$S1"
+    check "$sh: the menu read on that item says none" "pr_mode: none ($S1)" "$out"
+    run "$sh" "$mode_block" "$S2"
+    check "$sh: the menu read on the branch's next slice says none" "pr_mode: none ($S1)" "$out"
+    run "$sh" "$mode_block" ""
+    check "$sh: the menu read with no work item finds the branch's" "pr_mode: none ($S1)" "$out"
+    git -C "$P" checkout -q -b other
+    run "$sh" "$mode_block" ""
+    check "$sh: the menu read on another branch says pr" "pr_mode: pr" "$out"
+    git -C "$P" checkout -q stack
     run "$sh" "$so_block" ""
     check "$sh: Stamp only with no work item records nothing and says so" 1 "$rc"
     check "$sh: …naming the missing work item" 1 "$(grep -c 'no work item' <<<"$err")"
@@ -203,6 +217,8 @@ for sh in $shells; do
     run "$sh" "$so_block" "W-1"
     check "$sh: Stamp only on the github stamp backend is refused" 1 "$rc"
     check "$sh: …saying the stamp lives in the PR body there" 1 "$(grep -c 'PR body' <<<"$err")"
+    run "$sh" "$mode_block" "W-1"
+    check "$sh: the menu read on the github stamp backend says pr" "pr_mode: pr" "$out"
 
     # -------------------------------------------------------------------------
     section "$sh: /execute Step 0 keeps a review lock whose stamp names this branch"
@@ -231,6 +247,7 @@ section "the prose says where Stamp only can exist"
 # shellcheck disable=SC2016  # the needles are the skill's literal text
 {
 check "the deferred-PR paragraph offers Stamp only" 1 "$(grep -c '^\*\*While Phase 2 is deferred, lead with the PR\.\*\*.*\*\*Stamp only' "$PM")"
+check "the Stamp only menu leads with something other than the PR, /compound, or /closeout" 1 "$(grep -c '^\*\*A branch that records Stamp only gets neither menu\.\*\*.*leave out \*\*Open the PR\*\*, \*\*`/compound` in this PR\*\*, and \*\*`/closeout`\*\*.*Lead with \*\*→ Stop here' "$PM")"
 check "it says the option needs the sidecar stamp backend" 1 "$(grep -c '^\*\*While Phase 2 is deferred.*on the `github` backend the stamp lives in the PR body' "$PM")"
 }
 
