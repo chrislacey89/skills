@@ -332,7 +332,7 @@ while IFS= read -r I; do
   MODE=$(jq -r '.pr_mode // empty' <<<"$VIEW") \
     || { echo "PR aborted: the pr_mode of $I does not parse" >&2; exit 1; }
   if [ "$MODE" = none ]; then
-    echo "no PR: $I records pr_mode none (Stamp only), so this branch ($BRANCH) gets no PR of its own"
+    echo "no PR: $I records pr_mode none (Stamp only), so this branch ($BRANCH) gets no PR of its own; to give it one, run sidecar.sh work set $I pr_mode pr and run this block again"
     exit 0
   fi
 done <<<"$ITEMS"
@@ -1035,7 +1035,7 @@ case "$(bash "$SC" backend stamp)" in
 esac
 [ -n "$W" ] || { echo "Stamp only not recorded: no work item to hold it; the next run offers the PR again" >&2; exit 1; }
 bash "$SC" work set "$W" pr_mode none || { echo "Stamp only not recorded on $W" >&2; exit 1; }
-echo "stamp only: $W records pr_mode none; later runs on $(git branch --show-current) open no PR"
+echo "stamp only: $W records pr_mode none; later runs on $(git branch --show-current) open no PR until sidecar.sh work set $W pr_mode pr takes it back"
 ```
 
 **Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (the commit rule in Step 1's fixer brief) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and Phase 2's shared-branch block prints `shared: no`, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
