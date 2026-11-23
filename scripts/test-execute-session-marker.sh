@@ -224,6 +224,15 @@ for sh in $shells; do
     run "$sh" "$rm_block" s-me
     check "$sh: Step 6's removal takes this checkout's marker" no "$([ -e "$M" ] && echo yes || echo no)"
     check "$sh: …and leaves the other folder's, even one naming this session" "$(cat "$tmp/held")" "$(cat "$O/.claude/.session")"
+    # A CLAUDE_PROJECT_DIR that contains this checkout still does not move the
+    # marker: it lives at the checkout's top level, the one place all three blocks name.
+    rm -f "$M" "$tmp/.claude/.session"
+    CPD="$tmp"
+    run "$sh" "$mark_block" s-me
+    check "$sh: a containing CLAUDE_PROJECT_DIR: the marker is written in this checkout" s-me "$(field by)"
+    check "$sh: …and not in the folder the variable names" no "$([ -e "$tmp/.claude/.session" ] && echo yes || echo no)"
+    run "$sh" "$exit_block" s-me
+    check "$sh: …and the cannot-finish exit removes it from there" no "$([ -e "$M" ] && echo yes || echo no)"
     CPD="$P"
 
     section "$sh: a project whose ignore list predates the marker"

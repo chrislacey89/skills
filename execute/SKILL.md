@@ -264,7 +264,7 @@ install = "pnpm install"
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, and `.claude/.post-review-edit` do not exist in the worktree (fresh slate; Step 3 creates one)
-- [ ] **Post-review lock flags absent, or the lock is this branch's own** — `.claude/.fix-findings-active` does not exist, and `.claude/.review-stamped` does not exist unless the block below kept it. Both normally belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete a `.fix-findings-active` you find, and run the block below for `.review-stamped`. One case is not a leak: a branch reviewed with **Stamp only** (`/pre-merge`'s handoff menu) is stamped in the sidecar and gets no PR, so the next slice built on it starts under that branch's own lock. The block keeps the lock when the sidecar's stamp names the checked-out branch, and removes it otherwise. A kept lock refuses this slice's edits until the human releases it with the `stamp release` command the block prints, which puts the reason on record and tells the next `/pre-merge` where its review starts. The block reads the lock from `$CLAUDE_PROJECT_DIR` as given, with no containment check, because the hook, `/pre-merge`'s writer and `stamp release` all name that folder, and a lock judged anywhere else is not the one the hook enforces. When `CLAUDE_PROJECT_DIR` does not contain this checkout, the lock this block keeps or removes is that other folder's, and the session-marker block below is the only one here that checks containment, since only `/execute` reads its marker
+- [ ] **Post-review lock flags absent, or the lock is this branch's own** — `.claude/.fix-findings-active` does not exist, and `.claude/.review-stamped` does not exist unless the block below kept it. Both normally belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete a `.fix-findings-active` you find, and run the block below for `.review-stamped`. One case is not a leak: a branch reviewed with **Stamp only** (`/pre-merge`'s handoff menu) is stamped in the sidecar and gets no PR, so the next slice built on it starts under that branch's own lock. The block keeps the lock when the sidecar's stamp names the checked-out branch, and removes it otherwise. A kept lock refuses this slice's edits until the human releases it with the `stamp release` command the block prints, which puts the reason on record and tells the next `/pre-merge` where its review starts. The block reads the lock from `$CLAUDE_PROJECT_DIR` as given, with no containment check, because the hook, `/pre-merge`'s writer and `stamp release` all name that folder, and a lock judged anywhere else is not the one the hook enforces. When `CLAUDE_PROJECT_DIR` does not contain this checkout, the lock this block keeps or removes is that other folder's, and the session-marker block below does not read the variable at all, since only `/execute` reads its marker
 
 ```bash
 # Is the review lock the hook reads this branch's own? Prints nothing when there is none.
@@ -283,19 +283,11 @@ if [ -f "$FLAG" ]; then
 fi
 ```
 
-**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` with this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that is missing, not in the `YYYY-MM-DDTHH:MM:SSZ` form the block writes, or does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it, and so does the exit a run takes when it cannot finish the slice. A project set up before `/init-pipeline` § 6 listed the marker does not ignore it, and the hook check below never re-runs § 6 for it, since the hook reads no such path; a marker a crashed run leaves is then an untracked file, and `git worktree remove` refuses a worktree with untracked files ([git-worktree](https://git-scm.com/docs/git-worktree)). So when [`git check-ignore`](https://git-scm.com/docs/git-check-ignore) says the marker is not ignored, the block adds the line to the repository's own `info/exclude`, which is never committed, rather than to `.gitignore`, whose edit would be one more uncommitted change.
+**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` at that checkout's top level, never under `$CLAUDE_PROJECT_DIR`: only `/execute` reads the marker, so no other reader has to name the same folder, and an inherited `CLAUDE_PROJECT_DIR` can name another checkout. Step 6 and the cannot-finish exit remove it from the same place. The marker holds this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that is missing, not in the `YYYY-MM-DDTHH:MM:SSZ` form the block writes, or does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it, and so does the exit a run takes when it cannot finish the slice. A project set up before `/init-pipeline` § 6 listed the marker does not ignore it, and the hook check below never re-runs § 6 for it, since the hook reads no such path; a marker a crashed run leaves is then an untracked file, and `git worktree remove` refuses a worktree with untracked files ([git-worktree](https://git-scm.com/docs/git-worktree)). So when [`git check-ignore`](https://git-scm.com/docs/git-check-ignore) says the marker is not ignored, the block adds the line to the repository's own `info/exclude`, which is never committed, rather than to `.gitignore`, whose edit would be one more uncommitted change.
 
 ```bash
 # Is another session running /execute in this checkout? Writes this session's marker, or stops.
-top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
-dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
-  if [ -n "$ws" ]; then
-    case "$top/" in "$ws"/*) dir="$ws" ;; esac
-  fi
-fi
-MARK="$dir/.claude/.session"
+MARK="$(git rev-parse --show-toplevel)/.claude/.session"
 SLICE="<the W-<n> or issue number this run builds, or a short name for a one-off task>"
 TAKE_OVER=""   # "yes" only after the human chose take over
 if [ -f "$MARK" ] && [ "$TAKE_OVER" != yes ]; then
@@ -997,15 +989,7 @@ rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.td
 Remove Step 0's session marker when it is this session's. One another session wrote is left: that session took the slice over.
 
 ```bash
-top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
-dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
-  if [ -n "$ws" ]; then
-    case "$top/" in "$ws"/*) dir="$ws" ;; esac
-  fi
-fi
-MARK="$dir/.claude/.session"
+MARK="$(git rev-parse --show-toplevel)/.claude/.session"
 if [ -f "$MARK" ]; then
   if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
   else echo "session marker left: another session holds it"; fi
@@ -1103,15 +1087,7 @@ On a sidecar work item, this comment and the plateau comment below are written w
 After the comment, and before this run exits, remove Step 0's session marker when it is this session's. This exit skips the removal above, and each Ralph iteration is a new session with its own `CLAUDE_CODE_SESSION_ID`, so a marker left here would stop the next iteration on the slice until it is 12 hours old. The plateau stop below runs it too. An iteration that dies before it reaches either exit leaves its marker, and the next AFK iteration stops on it and reports it.
 
 ```bash
-top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
-dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
-  if [ -n "$ws" ]; then
-    case "$top/" in "$ws"/*) dir="$ws" ;; esac
-  fi
-fi
-MARK="$dir/.claude/.session"
+MARK="$(git rev-parse --show-toplevel)/.claude/.session"
 if [ -f "$MARK" ]; then
   if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
   else echo "session marker left: another session holds it"; fi
