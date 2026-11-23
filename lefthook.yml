@@ -3,9 +3,9 @@
 # `lefthook install` once per clone. Hooks run from CI regardless, so local
 # lefthook is an early-warning layer, not a gate.
 #
-# Pre-commit is kept to the cheap checks (<1s). The full test suites run on
-# pre-push so a bad commit can still be fixed up locally without rewriting
-# against CI.
+# Pre-commit is kept to the cheap checks (<1s). Pre-push runs the suites that
+# read what the push changes, so a bad commit can still be fixed up locally
+# without rewriting against CI, which runs every suite.
 
 pre-commit:
   parallel: true
@@ -22,164 +22,25 @@ pre-commit:
     # not regenerated. The full canon suite runs on pre-push and in CI.
     canon-freshness:
       run: bash scripts/generate-canon.sh --check
+    # The one suite cheap enough for pre-commit. test-bare-pack-refs.sh is over
+    # the line, so it waits for pre-push.
+    pipefail-safe-matchers:
+      run: bash scripts/test-pipefail-safe-matchers.sh
 
 pre-push:
   parallel: true
   commands:
-    sync-script-tests:
-      run: bash scripts/test-sync-references.sh
-
-    bundled-pointer-resolution:
-      run: bash scripts/test-bundled-pointer-resolution.sh
-
-    verify-install-script-tests:
-      run: bash scripts/test-verify-install.sh
-    review-currency-marker-tests:
-      run: bash scripts/test-review-currency-marker.sh
-    review-dimension-partition-tests:
-      run: bash scripts/test-review-dimension-partition.sh
-    restated-review-operative-tests:
-      run: bash scripts/test-restated-review-operatives.sh
-    loop-ledger-marker-tests:
-      run: bash scripts/test-loop-ledger-markers.sh
-    bare-pack-ref-tests:
-      run: bash scripts/test-bare-pack-refs.sh
-    context-block-contract-tests:
-      run: bash scripts/test-context-block-contract.sh
-    flow-row-read-contract-tests:
-      run: bash scripts/test-flow-row-read-contract.sh
-
-    selection-idiom-consistency-tests:
-      run: bash scripts/test-selection-idiom-consistency.sh
-    options-comparison-contract-tests:
-      run: bash scripts/test-options-comparison-contract.sh
-    per-unit-series-contract-tests:
-      run: bash scripts/test-per-unit-series-contract.sh
-    recap-pair-contract-tests:
-      run: bash scripts/test-recap-pair-contract.sh
+    # The suites that read what this push changes, plus scripts/suites-always.txt.
+    # A new suite is registered in .github/workflows/validate-skills.yml, and in
+    # that list when it reaches files through a glob; it needs no line here.
+    # The suites in scripts/suites-ci-only.txt are deliberately absent: they
+    # re-run other suites, so they run in CI only (#442, #526) and the runner
+    # skips them.
+    # The whole local run by hand: bash scripts/run-changed-suites.sh --all
+    changed-suites:
+      run: bash scripts/run-changed-suites.sh
     skill-inventory-check:
       run: bash scripts/check-skill-inventory.sh
-    skill-inventory-tests:
-      run: bash scripts/test-skill-inventory.sh
-    documented-git-command-tests:
-      run: bash scripts/test-documented-git-commands.sh
-    git-guardrail-tests:
-      run: bash scripts/test-git-guardrails.sh
-    compound-clustering-single-source-tests:
-      run: bash scripts/test-compound-clustering-single-source.sh
-    q4-mechanism-name-tests:
-      run: bash scripts/test-q4-mechanism-names.sh
-    compound-citation-anchor-tests:
-      run: bash scripts/test-compound-citation-anchors.sh
-    oracle-table-coverage-tests:
-      run: bash scripts/test-oracle-table-coverage.sh
-    duplicate-guard-program-tests:
-      run: bash scripts/test-duplicate-guard-programs.sh
-    widened-domain-tell-tests:
-      run: bash scripts/test-widened-domain-tell.sh
-    canon-coverage-tests:
-      run: bash scripts/test-canon-coverage.sh
-    absent-local-gate-tell-tests:
-      run: bash scripts/test-absent-local-gate-tells.sh
-    shellcheck-version-parity-tests:
-      run: bash scripts/test-shellcheck-version-parity.sh
-    markdown-diff-attribute-tests:
-      run: bash scripts/test-markdown-diff-attribute.sh
-    authored-diff-pathspec-tests:
-      run: bash scripts/test-authored-diff-pathspec.sh
-    block-default-reads-tests:
-      run: bash scripts/test-block-default-reads.sh
-    skill-arg-substitution-tests:
-      run: bash scripts/test-skill-arg-substitution.sh
-    setup-pre-commit-gates-tests:
-      run: bash scripts/test-setup-pre-commit-gates.sh
-    guards-can-fire-tests:
-      run: bash scripts/test-guards-can-fire.sh
-    syntax-palette-contract-tests:
-      run: bash scripts/test-syntax-palette-contract.sh
-    theme-token-shape-tests:
-      run: bash scripts/test-theme-token-shape.sh
-    pipefail-safe-matcher-tests:
-      run: bash scripts/test-pipefail-safe-matchers.sh
-    recap-mode-contract-tests:
-      run: bash scripts/test-recap-mode-contract.sh
-    decision-card-grounding-tests:
-      run: bash scripts/test-decision-card-grounding.sh
-    recall-callout-contract-tests:
-      run: bash scripts/test-recall-callout-contract.sh
-    multi-repo-seam-contract-tests:
-      run: bash scripts/test-multi-repo-seam-contract.sh
-    decision-trail-contract-tests:
-      run: bash scripts/test-decision-trail-contract.sh
-    recap-generator-checklist-tests:
-      run: bash scripts/test-recap-generator-checklist.sh
-    reader-palette-contract-tests:
-      run: bash scripts/test-reader-palette-contract.sh
-    sitting-plan-contract-tests:
-      run: bash scripts/test-sitting-plan-contract.sh
-    post-review-edit-lock-tests:
-      run: bash scripts/test-post-review-edit-lock.sh
-    skill-frontmatter-loads-tests:
-      run: bash scripts/test-skill-frontmatter-loads.sh
-    lfg-marker-tests:
-      run: bash scripts/test-lfg-marker.sh lfg/SKILL.md
-    host-signal-containment-tests:
-      run: bash scripts/test-host-signal-containment.sh
-    execute-worktree-handoff-tests:
-      run: bash scripts/test-execute-worktree-handoff.sh
-    differential-check-tests:
-      run: bash scripts/test-differential-check.sh
-    walk-commits-range-tests:
-      run: bash scripts/test-walk-commits-range.sh
-    runtime-check-gate-tests:
-      run: bash scripts/test-runtime-check-gate.sh
-    delta-review-scope-tests:
-      run: bash scripts/test-delta-review-scope.sh
-    prd-amendment-gate-tests:
-      run: bash scripts/test-prd-amendment-gate.sh
-    profile-paste-sites-tests:
-      run: bash scripts/test-profile-paste-sites.sh
-    population-covers-untracked-tests:
-      run: bash scripts/test-population-covers-untracked.sh
-    compound-restamp-handoff-tests:
-      run: bash scripts/test-compound-restamp-handoff.sh
-    prose-fix-disposition-tests:
-      run: bash scripts/test-prose-fix-disposition.sh
-    respond-to-review-contract-tests:
-      run: bash scripts/test-respond-to-review-contract.sh
-    excavate-entry-contract-tests:
-      run: bash scripts/test-excavate-entry-contract.sh
-    hackathon-blocks-tests:
-      run: bash scripts/test-hackathon-blocks.sh
-    sidecar-resolution-tests:
-      run: bash scripts/test-sidecar-resolution.sh
-    state-backend-tests:
-      run: bash scripts/test-state-backend.sh
-    sidecar-trace-tests:
-      run: bash scripts/test-sidecar-trace.sh
-    lesson-recall-tests:
-      run: bash scripts/test-lesson-recall.sh
-    guest-footprint-tests:
-      run: bash scripts/test-guest-footprint.sh
-    closeout-work-close-tests:
-      run: bash scripts/test-closeout-work-close.sh
-    closeout-prune-tests:
-      run: bash scripts/test-closeout-prune.sh
-    github-pr-base-tests:
-      run: bash scripts/test-github-pr-base.sh
-    write-a-prd-sidecar-branch-tests:
-      run: bash scripts/test-write-a-prd-sidecar-branch.sh
-    prd-to-issues-sidecar-branch-tests:
-      run: bash scripts/test-prd-to-issues-sidecar-branch.sh
-    skill-blocks-zsh-safe-tests:
-      run: bash scripts/test-skill-blocks-zsh-safe.sh
-    handoff-mktemp-tests:
-      run: bash scripts/test-handoff-mktemp.sh
-    # scripts/test-fixture-git-isolation.sh is deliberately absent: it runs in
-    # CI only (#442). It still reads its suite list from this file, and fails
-    # unless that list is every scripts/test-*.sh but itself and
-    # scripts/test-fixture-root-collision.sh, which is CI-only for the same
-    # reason: it re-runs every suite that builds sidecars (#526).
     shellcheck-all:
       # Runs the *pinned* shellcheck (cached download on first use), because a
       # PATH shellcheck of a different version is a different instrument — the

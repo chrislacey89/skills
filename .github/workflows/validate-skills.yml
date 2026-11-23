@@ -457,12 +457,18 @@ jobs:
       - name: Run handoff mktemp contract suite
         run: bash scripts/test-handoff-mktemp.sh
 
+      # #806: pre-push runs only the suites that read what changed. This runs
+      # the selection scripts on a fixture, and fails when a globbing suite is
+      # not in scripts/suites-always.txt or any suite is not in this workflow.
+      - name: Run changed-suites selection suite
+        run: bash scripts/test-changed-suites.sh
+
       # A git hook exports GIT_DIR, and a suite that runs `git init` or
       # `git config` in a fixture without clearing it writes into the real repo
-      # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every
-      # pre-push suite, read from lefthook.yml, from a scratch linked worktree
-      # with GIT_DIR exported and fails on any change to its shared config,
-      # refs, or HEAD. CI is the only place it runs; the suite header says why.
+      # (#429: core.bare, core.hooksPath, a fixture [user]). What this suite
+      # re-runs, where it reads that list, and what it fails on is stated in
+      # its header, scripts/test-fixture-git-isolation.sh.
+      # CI is the only place it runs; the suite header says why.
       - name: Run fixture git-isolation suite
         run: bash scripts/test-fixture-git-isolation.sh
 

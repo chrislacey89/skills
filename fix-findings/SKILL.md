@@ -13,7 +13,9 @@ sources:
 
 # Fix Findings
 
-!`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" && mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.fix-findings-active" && echo "fix-findings marker created at $PROJECT_DIR/.claude/.fix-findings-active — post-review edit lock open for this run"`
+!`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" && mkdir -p "$PROJECT_DIR/.claude" && { [ -e "$PROJECT_DIR/.claude/.fix-findings-active" ] || printf 'by=%s\nat=%s\nhead=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse HEAD 2>/dev/null)" > "$PROJECT_DIR/.claude/.fix-findings-active"; } && echo "fix-findings marker at $PROJECT_DIR/.claude/.fix-findings-active — post-review edit lock open for this run; $(tr '\n' ' ' < "$PROJECT_DIR/.claude/.fix-findings-active")"`
+
+**Whose run is this?** The line above prints the fix-run flag's `by=`, `at=` and `head=` lines, and leaves a flag that is already there as it was. `by=` is the session id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands ([environment variables](https://code.claude.com/docs/en/env-vars)). When it is not this session's, or is empty, another session may be running this skill on the branch: tell the human who opened it and when, and ask before going on. If they say stop, stop without Step 3's removal, because the flag is that session's.
 
 Take the review findings a human has already chosen, have a **fresh** sub-agent
 write each fix, have a **second** fresh sub-agent try to break it, and report
@@ -164,12 +166,13 @@ contract, unchanged.** Read it there (`pre-merge/SKILL.md` § *The context
 contract is about provenance, not permission*) rather than from a paraphrase
 here; the same three parts apply:
 
-- **Handed over** — the finding's text verbatim, the branch diff, the `bash
+- **Handed over** — the finding's text and any replacement sentence the human
+  supplied for it, both verbatim, the branch diff, the `bash
   "$SC" profile` output from Step 0 verbatim, whose `test` line is this project's
   test command, and `/execute`'s `## Review Notes` when one exists, read where
   [references/state-backend.md](references/state-backend.md) § Where the
   review's records live says it is. Also the backend Step 0's second block
-  printed and the run id Step 0 fixed, both verbatim: item 5 below branches on
+  printed and the run id Step 0 fixed, both verbatim: item 6 below branches on
   the first and writes the second.
 - **Reached for itself** — durable state, read at its source: the merged tree,
   `git log` and `git show`, the slice or PRD issue, `docs/solutions/`, the
@@ -188,7 +191,7 @@ The fixer's instructions, in order:
    The finding's line numbers were read at review time, and an earlier fixer
    in this run may have moved them. Find the anchored text in the file at the
    current `HEAD` before editing, and use the lines it is on now, here and in
-   item 5's block.
+   item 6's block.
 2. **Grep `docs/solutions/` for the class of thing you are about to write** — both
    locations, the sidecar's `solutions/` and the project's in-tree path, resolved
    through the bundled [references/sidecar.sh](references/sidecar.sh) exactly as
@@ -198,7 +201,15 @@ The fixer's instructions, in order:
    already failed here; on this skill's own PR, four fixers wrote grep-based
    assertions over prose eight days after an entry named that exact shape and
    said not to. A fixer that reads the entry first does not write the pin.
-3. **Write the smallest fix that closes the finding**, following the project's
+3. **Name the class, then count its sites, before editing.** Say in one line
+   what kind of defect this is: a claim restated in a second place, an unquoted
+   expansion, a guard missing from one of several callers. Search the tree for
+   other sites of the same class, using the census move in
+   [references/restated-claims.md](references/restated-claims.md) § *The census comes before the remedy*.
+   Fix only the site the finding names. List every other site in your report as
+   `sibling: <path>:<line>`, one per line, or `siblings: none found` with the
+   search you ran.
+4. **Write the smallest fix that closes the finding**, following the project's
    conventions. Do not fix anything the finding does not name; scope creep in a
    post-review commit is invisible to the review that has already run. **When
    the finding is about what a sentence claims rather than what something
@@ -212,8 +223,22 @@ The fixer's instructions, in order:
    neither deleting it nor pointing it elsewhere keeps the instruction. Report
    **`blocked: carries an instruction`**, naming the code span, and make **no
    commit**. Do not reword it to save the instruction.
-4. **Run the test command the profile names** and report the exit status verbatim.
-5. **Commit exactly one commit**, whose message says what the finding was and
+   **The one exception is wording the human supplied.** When the finding, or
+   the human's instruction for this run, contains the exact replacement
+   sentence, apply it character for character and report the after-state as
+   **`supplied`**. The controller checks that the committed sentence equals the
+   supplied text and reverts on any difference. No breaker runs on a `supplied`
+   after-state. A fixer never writes replacement wording of its own: with no
+   supplied text, the finding still ends `blocked: carries an instruction`.
+5. **Run the tests that read what you changed.** When the profile declares
+   `verify.test_changed` (a `test_changed` line under `Verify` that is not
+   `none`), run it with the paths in your commit, each one its own quoted
+   argument, and report the exit status verbatim. The run comes before the
+   commit, so those are the paths item 6 will commit, a new file included.
+   When it does not, run `verify.test`. The controller runs `verify.test` in
+   full once, after the last fixer and before the report, and names any
+   failure against the fix commits.
+6. **Commit exactly one commit**, whose message says what the finding was and
    what the fix does. On the `github` backend its last line is
    `Fix-Findings-Run: <run id>`, the id Step 0 fixed, passed in the brief
    verbatim, and a fix for a teammate review thread
@@ -243,16 +268,19 @@ The fixer's instructions, in order:
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $(1) }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
+   C="${FIXUP_TARGET:-HEAD}"   # the commit a fold of this fixup would rewrite
+   F=$(git merge-base "$BASE_REF" HEAD 2>/dev/null) || F=   # the widest start the fold takes, the one it uses with no work item; none found counts as shared
    B=$(git branch --show-current)
    R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
    HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ]; then FIXUP_TARGET=; fi
+   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ] || [ -z "$F" ] || [ "$(git rev-list --count "$C" --not "$F" --remotes)" != "$(git rev-list --count "$C" --not "$F")" ]; then FIXUP_TARGET=; fi
    printf 'FIXUP_TARGET=%s\n' "$FIXUP_TARGET"
    ```
 
    A SHA on the printed line means one branch commit wrote every anchored
-   line and the branch is unshared: the four lines above the `printf` are
-   `/pre-merge` Phase 2's shared-branch block, which says what they check. A pushed branch gets no fixups because `/pre-merge`
+   line and the branch is unshared: the lines from `C=` to the `printf` are
+   `/pre-merge` Phase 2's shared-branch block, which says what they check,
+   with the target as the commit no remote branch may hold. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
    **The printed line decides, not your own diff:** a SHA means a `--fixup`
    commit of that SHA, and an empty `FIXUP_TARGET=` means an ordinary commit.
@@ -277,7 +305,7 @@ The fixer's instructions, in order:
    message that does not describe it.
 
    Commit with `git commit --fixup=<that SHA>`, and give `-m` the commit
-   message item 5 states for this backend. Then check that the commit just made folds:
+   message item 6 states for this backend. Then check that the commit just made folds:
 
    ```bash
    # After `git commit --fixup`: would the commit just made fold?
@@ -379,7 +407,9 @@ The fixer's instructions, in order:
 The fixer reports back: `fixed` (with the commit SHA, and a `leftovers:` field
 naming each earlier `fixup!` commit the fold trial skipped, when it skipped any),
 or `refuted` (with evidence), or `blocked` (with what it needed and did not
-have, or `blocked: carries an instruction` under item 3). Nothing else.
+have, or `blocked: carries an instruction` under item 4). With any verdict
+reached after item 3 it also gives that item's one-line class and its sibling
+lines. Nothing else.
 
 **On the `sidecar` backend, the controller records each `fixed` commit**
 before it spawns that finding's breaker. Use the SHA the fixer reported after
@@ -417,17 +447,113 @@ as for a failed recommit. An emptying fixup is not a conflict, so the trial
 does not demote it. A fixup-target block that printed `fixup target aborted:`
 is `blocked` too, with no commit: relay that line, and do not fall back to an
 ordinary commit, because the block could not say whether one is right.
-A `fixed` under item 3's prose-claim case also names the after-state of the
-site the finding anchored on:
+A `fixed` under item 4's prose-claim case also names the after-state of the
+site the finding anchored on. The table's last row is the one that can end any
+`fixed`, prose or not:
 
 | After-state | Named by | What the anchored site holds at the fix commit |
 |---|---|---|
 | `deleted` | the fixer | nothing where the claim's sentence was |
 | `pointer → <target>` | the fixer | a reference to the canonical statement at `<target>`, which exists |
+| `supplied` | the fixer | the replacement sentence the finding or the human supplied, character for character |
 | `rejected: carries an instruction` | the controller | a deletion or pointer whose removed words include a code span, or a pointer to its own item |
 | `rejected: reworded` | the controller | anything else |
+| `blocked: needs decision` | the controller | whatever it holds, the commit reached outside the finding (the footprint check below) |
 
-**The controller reads the after-state off the fix, not off the report.** First
+**Compare the fix's footprint with the finding's before any breaker runs.** Do
+it first, on every `fixed`, while the fix commit is still `HEAD`. Give the
+block the paths the finding's own text names, never the paths the fixer
+reported. It reads the fix commit's file list:
+
+```bash
+# Did this fix stay inside what its finding named?
+FIX_SHA="<the SHA the fixer reported>"
+NAMED="<each path the finding names, one per line>"
+fp_abort() { echo "footprint check aborted: ${1}" >&2; exit 1; }
+FULL=$(git rev-parse --verify -q "$FIX_SHA^{commit}") || fp_abort "$FIX_SHA is not a commit"
+[ "$FULL" = "$(git rev-parse HEAD)" ] || fp_abort "$FIX_SHA is not HEAD"
+CHANGES=$(git -c core.quotePath=false show --format= --no-renames --name-status HEAD) && [ -n "$CHANGES" ] \
+  || fp_abort "cannot read the paths $FIX_SHA changed"
+MANIFEST='(^|/)(package\.json|composer\.json|Cargo\.toml|go\.mod|Gemfile|pyproject\.toml|requirements[^/]*\.txt|pom\.xml|build\.gradle(\.kts)?|Package\.swift)$'
+LOCKFILE='\.lock(b|file)?$|(^|/)(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|go\.sum)$'
+SCHEMA='(^|/)(migrations?|migrate)/|(^|/)(schema|structure)\.[^./]+$|\.(prisma|schema\.json)$'
+TEST_FILE='(^|/)(tests?|specs?|__tests__)/|(^|/)test[-_][^/]*$|[._-](test|spec)\.[^/]+$|[a-z]Test\.[A-Za-z]+$'
+OUTSIDE=$(printf '%s\n' "$CHANGES" | while IFS="$(printf '\t')" read -r KIND CHANGED; do
+  if printf '%s\n' "$CHANGED" | grep -qE "$MANIFEST|$LOCKFILE"; then echo "  dependency manifest or lockfile: $CHANGED"
+  elif printf '%s\n' "$CHANGED" | grep -qE "$SCHEMA"; then echo "  schema or migration: $CHANGED"
+  elif [ "$KIND" = A ]; then
+    printf '%s\n' "$CHANGED" | grep -qE "$TEST_FILE" || echo "  new non-test file: $CHANGED"
+  elif ! printf '%s\n' "$NAMED" | grep -qxF -- "$CHANGED"; then echo "  not named by the finding: $CHANGED"
+  fi
+done)
+git show --stat --format= HEAD
+if [ -n "$OUTSIDE" ]; then
+  echo "footprint: blocked: needs decision"
+  printf '%s\n' "$OUTSIDE"
+else
+  echo "footprint: inside"
+fi
+```
+
+A changed path the finding did not name, a new non-test file, a schema or
+migration file, a dependency manifest or lockfile, or a changed user-visible
+string is outside the finding. A test file added for the fix is inside the
+footprint. The block decides the path checks from file names, and knows only
+the names written in it. **Whether the fix changed a user-visible string is
+your judgment**: read the diff, because no file name says so and the block can
+print `footprint: inside` over one. The same read catches a schema, manifest
+or lockfile under a name the block does not know.
+
+When the fix is outside, revert the commit with `git revert --no-edit HEAD`
+(never a reset), spawn no breaker, report the finding as
+**`blocked: needs decision`** with the stat output, and ask the human whether
+the wider change is wanted. If the block aborts it gave no verdict: relay the
+line, and spawn no breaker until a run of it has given one.
+
+**The controller reads the after-state off the fix, not off the report.** When
+the fixer reported `supplied`, run the block below and neither of the two
+reads after it: supplied wording may carry a code span, and it is a reword by
+design. Copy the new sentence from the finding or from the human's own
+message, never from the fixer's report or its commit. With no such sentence to
+copy, the after-state is `rejected: reworded`.
+
+```bash
+# Is the committed sentence the supplied one, character for character?
+FIX_SHA="<the SHA the fixer reported>"
+FILE="<the finding's file>"
+{ OLD_SENTENCE=$(cat); } <<'OLD_SENTENCE_END'
+<the sentence the finding anchors on, as it stood before the fix>
+OLD_SENTENCE_END
+{ NEW_SENTENCE=$(cat); } <<'NEW_SENTENCE_END'
+<the replacement sentence, copied from the finding or the human's instruction>
+NEW_SENTENCE_END
+sup_abort() { echo "supplied check aborted: ${1}" >&2; exit 1; }
+BEFORE=$(git show "${FIX_SHA}^:${FILE}") || sup_abort "cannot read $FILE before $FIX_SHA"
+AFTER=$(git show "${FIX_SHA}:${FILE}") || sup_abort "cannot read $FILE at $FIX_SHA"
+PATHS=$(git -c core.quotePath=false show --format= --no-renames --name-only "$FIX_SHA") || sup_abort "cannot read the paths $FIX_SHA changed"
+# The fix may be nothing but this: the file before it, with that one sentence replaced.
+EXPECTED=$(printf '%s\n' "$BEFORE" | OLD="$OLD_SENTENCE" NEW="$NEW_SENTENCE" awk '
+  { body = body sep $(0); sep = "\n" }
+  END {
+    old = ENVIRON["OLD"]
+    at = index(body, old)
+    if (old == "" || !at) exit 3
+    rest = substr(body, at + length(old))
+    if (index(rest, old)) exit 4
+    printf "%s%s%s", substr(body, 1, at - 1), ENVIRON["NEW"], rest
+  }') || sup_abort "the old sentence is not in $FILE exactly once before $FIX_SHA"
+if [ "$AFTER" = "$EXPECTED" ] && [ "$PATHS" = "$FILE" ]; then
+  echo "supplied check: supplied"
+else
+  echo "supplied check: rejected: reworded"
+fi
+```
+
+On `supplied check: rejected: reworded`, revert the commit as below and report
+that after-state. If the block aborts, it gives no verdict, so compare the two
+sentences by hand and revert on any difference.
+
+For any other reported after-state, first
 run the instruction check on the anchored file. It looks only at the words the
 fix removed:
 
@@ -469,10 +595,17 @@ instruction` fix the same way, and name it in the menu as an instruction fix:
 the sentence does something, so the finding goes back to the human to restate
 as the behavior that instruction produces.
 
-**No breaker runs on a `deleted` or `pointer` after-state.** A mutation is
-revealed only by a check that reads the mutated text, and no executable check
-reads a sentence, so the breaker's only possible verdict there is
-`not-applicable`. The report says so on the breaker line instead.
+**No breaker runs when nothing executable reads what the fix changed.** A
+mutation is revealed only by a check that reads the mutated text. Before
+spawning a breaker, list the fix's changed paths and search the project's test
+and script directories for a reader of each: the path, its file name, or a
+symbol the fix touched. Test files kept beside the source count, and a changed
+test is its own reader. When there is none, or the after-state is `deleted` or
+`pointer`, write `not-applicable (no executable reader)` on the breaker line
+and name the paths. That line reports a gap in test coverage. It is not a
+passing result, and it goes in the report so the human can ask for a test. A
+`supplied` after-state gets no breaker either (item 4), and its breaker line
+says it was compared with the supplied text.
 
 ### Step 2. Spawn a fresh breaker against the fix
 
@@ -635,26 +768,39 @@ Step 2 gives: the breaker is forbidden to read the original working tree at
 all, so handing it the reconciliation would contradict the restriction that
 makes its read-only isolation mean anything.
 
+**Then make item 5's full run.** Its line heads the report: the command, the
+exit status, and how many tests or suites it ran when the runner says. A fixer's
+targeted exit 0 is not a substitute for it.
+
 Then print one block per finding — number (and, for a teammate review thread,
 its URL, so the author can reply to it), the fixer's verdict and commit SHA,
-its `leftovers:` when it named any, the after-state on a prose-claim finding, the breaker's verdict **and the SHA it
-archived** (or `none` and why, when no breaker was spawned), and the command
+its `leftovers:` when it named any, its class and sibling lines, the
+after-state on a prose-claim finding, the stat output on a `blocked: needs decision`,
+the breaker's verdict **and the SHA it
+archived** (or, when no breaker was spawned, `not-applicable (no executable
+reader)` and the paths where Step 1's breaker rule gives that line, else
+`none` and why), and the command
 behind each. No conclusions the human cannot re-run.
 
 ```
+Full run, after the last fixer — `pnpm run test` → 0, 412 tests
+
 Finding 3 — fixed at a1b2c3d
   fixer:   `pnpm run test` → 0
+  class:   an over-fetch computed at the use site instead of from its constant
+  sibling: src/search/related.ts:41
+  sibling: src/search/recent.ts:18
   breaker: survived, against a1b2c3d — `pnpm run test -- guards.test.ts` → 0 with
            OVER_FETCH_MULTIPLIER left at 4 and the use site edited to `topK * 137`
            (control went red first: same file, deleted assertion → exit 1)
 
 Finding 4 — fixed at d4e5f6a, deleted
   fixer:   `pnpm run test` → 0
-  breaker: none — prose after-state, no executable reader
+  breaker: not-applicable (no executable reader) — docs/caching.md
 
 Finding 5 — fixed at b7c8d9e, pointer → docs/architecture.md
   fixer:   `pnpm run test` → 0
-  breaker: none — prose after-state, no executable reader
+  breaker: not-applicable (no executable reader) — src/session.ts
 
 Finding 6 — rejected: reworded at 9f8e7d6, reverted at 5c4b3a2
   controller: `git show --word-diff 9f8e7d6 -- src/retry.ts` → the site adds words that are not a reference
@@ -671,10 +817,41 @@ Finding 8 — rejected: carries an instruction at 3c4d5e6, reverted at 7a8b9c0
 
 Finding 9 — fixed at 2d3e4f5
   fixer:   `pnpm run test` → 0
+  class:   a total rounded before it is summed
+  siblings: none found — searched `rg -n 'Math\.round' src`
   leftovers: e1f2a3b — skipped by the fold trial; /pre-merge's fold aborts until it is reworded
   breaker: killed, against 2d3e4f5 — `pnpm run test -- report.test.ts` → 1 with the
            total's rounding reverted (control went red first: same file, deleted assertion → exit 1)
+
+Finding 10 — blocked: needs decision at 6a7b8c9, reverted at 0d1e2f3
+  controller: footprint check → new non-test file: src/queue/backoff.ts
+               src/queue/backoff.ts | 24 ++++++++++++++++++++++++
+               src/queue/retry.ts   |  6 +++---
+               2 files changed, 27 insertions(+), 3 deletions(-)
+  breaker: none — not spawned for a reverted fix
+
+Finding 11 — fixed at 8e9f0a1, supplied
+  fixer:   `pnpm run test` → 0
+  controller: supplied check on docs/release.md → equals the sentence the human gave
+  breaker: none — supplied after-state, compared with the supplied text
+
+Finding 12 — fixed at 5b6c7d8
+  fixer:   `pnpm run test` → 0
+  class:   an unquoted expansion
+  siblings: none found — searched `rg -n 'cp -R \$' bin`
+  breaker: not-applicable (no executable reader) — bin/release.sh
 ```
+
+**When a fixer reports siblings, show them under the finding and ask one
+question before the menu:** **add these sites to this round as their own
+findings**, or **leave them for the next review**. Mark neither recommended;
+which sites join is the human's disposition. Ask it before the removal below,
+while the edit lock is still open for this run. Sites the human adds are fixed
+by a fresh fixer each, under the same cap: Steps 1 and 2 as written, one
+finding per site, under this run's id, then their blocks join this report,
+with item 5's full run made again after the last of them. The
+question is asked once in a run, so a sibling an added site's fixer reports is
+listed and left for the next review.
 
 The archived SHA is on the breaker's line because it is the one thing that says
 what the verdict is *about*. By the time the round's report prints, `HEAD` has
@@ -717,7 +894,7 @@ Then clear the classification markers. A fixer that loaded `/tdd` left one, and 
 
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
-rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
 ```
 
 ## The two flags
@@ -733,7 +910,7 @@ is not load-bearing (chrislacey89/skills#326).
 | `.claude/.review-stamped` | `/pre-merge` Phase 4, beside the review-currency stamp, under the same fallback | `.claude/hooks/enforce-classification.sh` — refuses Write/Edit on implementation files while it exists and `.fix-findings-active` does not | `/closeout` Step 3 at merge; `/execute` Step 0's fresh-slate checklist |
 | `.claude/.fix-findings-active` | this skill, by the harness line at the top of this file, when it loads, under `${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}` | the same hook clause, at `$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active` — its presence is what re-opens the lock | Step 3 above, on every exit path, resolving the same fallback and reporting a miss rather than swallowing one; `/execute` Step 0's fresh-slate checklist |
 
-**`.review-stamped` also stands the classification clause down, which is what lets this skill's fixer write at all.** The same hook carries an earlier clause refusing implementation writes unless `.claude/.tdd-active`, `.claude/.tdd-skipped`, or `.claude/.lfg-active` exists — and `/execute` Step 6 removes every one of those *before* `/pre-merge` stamps, so no fixer ever arrives holding one. Were the two clauses genuinely independent in that order, the flag the harness line writes above would be read too late to matter: every fixer would be refused by the classification clause, under a message naming `/tdd`. So on a stamped branch the classification clause does not fire and this lock is the sole decider. Do not remove that coupling on the grounds that it looks like a leak between two unrelated gates — `scripts/test-post-review-edit-lock.sh` § 5 drives the real lifecycle, Step 6's removal included, and fails if it goes.
+**`.review-stamped` also stands the classification clause down, which is what lets this skill's fixer write at all.** The same hook carries an earlier clause refusing implementation writes unless `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, or `.claude/.post-review-edit` exists — and `/execute` Step 6 removes every one of those *before* `/pre-merge` stamps, so no fixer ever arrives holding one. Were the two clauses genuinely independent in that order, the flag the harness line writes above would be read too late to matter: every fixer would be refused by the classification clause, under a message naming `/tdd`. So on a stamped branch the classification clause does not fire and this lock is the sole decider. Do not remove that coupling on the grounds that it looks like a leak between two unrelated gates — `scripts/test-post-review-edit-lock.sh` § 5 drives the real lifecycle, Step 6's removal included, and fails if it goes.
 
 **Two routes the refusal names — which is not the same as two ways out.** The
 refusal message names invoking this skill, and deleting `.claude/.review-stamped`
@@ -790,8 +967,8 @@ eight findings that is not a trade worth making.
 
 **A breaker runs only against a fix already committed, and nothing runs
 concurrently with a fixer editing the working tree.** Per finding: spawn the
-fixer and wait for its verdict; if `fixed` (and not a `deleted` or `pointer`
-after-state, Step 1), spawn the breaker against
+fixer and wait for its verdict; if `fixed` (and Step 1's checks and breaker
+rule call for one), spawn the breaker against
 `$FIX_SHA` and wait for its verdict; only then start the next finding's fixer.
 No two sub-agents are ever in flight together — not two fixers, not a fixer and
 a breaker, not two breakers.
@@ -833,7 +1010,8 @@ stop.
 - **Produces:** one commit per accepted finding, each authored by a context that
   did not write the code under repair; a per-finding breaker verdict, the SHA it
   archived, and the command behind it, or the reason none was spawned; `refuted` reports for findings the
-  tree did not confirm; a revert for any prose-claim fix Step 1 rejected; and,
+  tree did not confirm; a revert for any prose-claim fix Step 1 rejected and for any fix its
+  footprint check blocked; and,
   for a `blocked` fix that left a `fixup!` commit (Step 1), that commit's SHA
   with no breaker verdict. It produces no stamp, no PR edit, and no merge.
 - **Comes next by default:** a re-run of `/pre-merge` in author-mode. It reads
@@ -886,8 +1064,10 @@ rounds to five before deleting the rule it was patching). Lead with **→ Hand
 the remaining findings off as issues (recommended — `/qa` or
 `/request-refactor-plan`), then re-run `/pre-merge` on what is here**, then
 **Re-run `/pre-merge` — review the fixes and re-stamp**, then **Stop here**.
-The count changes the order, not the set: nothing is taken off the menu, and
-the human still chooses. Include a run-specific follow-up when the breaker
+The count changes the order, not the set: nothing is taken off the menu. What
+leads once that re-run has reviewed these fixes, and who chooses the numbers,
+is `/pre-merge`'s rule, stated in its § Handoff under *what is still open
+decides the menu* and not repeated here. Include a run-specific follow-up when the breaker
 returned `survived` or `not-run`: **Show the surviving mutation for finding
 N**. Include one when Step 1 rejected a fix as `carries an instruction`:
 **Restate finding N as an instruction fix**, naming the code span the fix
