@@ -482,10 +482,13 @@ JS
         # The </script> probe. The example has no such caption, so a planted
         # copy of its data gains one step whose caption says </script>, the
         # page is emitted from that copy, and the run above parses it.
-        # planted_data <escape: yes|no>: the data with that step, as one line.
+        # planted_data: the data with that step, as one line.
         planted_data() {
-            jq -c '.views[0].steps += [{"c": "A caption that says </script> stays inside the data.", "src": [], "asserted": true}]' <<<"$data" \
-                | if [ "$1" = yes ]; then sed 's/</\\u003c/g'; else cat; fi
+            jq -c '.views[0].steps += [{"c": "A caption that says </script> stays inside the data.", "src": [], "asserted": true}]' <<<"$data"
+        }
+        # escape_lt: every < on stdin written as <, the way §18 says.
+        escape_lt() {
+            sed 's/</\\u003c/g'
         }
         # planted_page <data file>: the page, with that file as the scene data.
         planted_page() {
@@ -494,13 +497,15 @@ JS
             local example="$planted"
             page
         }
+        # probe <data file>: run the page emitted with that file as its data.
         probe() {
-            planted_data "$1" >"$tmp/planted.json"
-            planted_page "$tmp/planted.json" >"$tmp/planted.html"
+            planted_page "$1" >"$tmp/planted.html"
             node "$tmp/run.js" "$tmp/planted.html" "$tmp/scene.js" probe 2>&1
         }
-        check "run: a </script> caption with every < written as \\u003c leaves the data whole" whole "$(probe yes)"
-        check "self-test, caught: a </script> caption written with a plain <" cut "$(probe no)"
+        planted_data | escape_lt >"$tmp/planted-escaped.json"
+        planted_data >"$tmp/planted-plain.json"
+        check "run: a </script> caption with every < written as \\u003c leaves the data whole" whole "$(probe "$tmp/planted-escaped.json")"
+        check "self-test, caught: a </script> caption written with a plain <" cut "$(probe "$tmp/planted-plain.json")"
     else
         bad "the script parses under node --check" "$(cat "$tmp/parse.err")"
     fi
