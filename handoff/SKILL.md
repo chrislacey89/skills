@@ -69,13 +69,17 @@ SC="<this skill's directory>/references/sidecar.sh"
 if dir="$(bash "$SC" path handoffs 2>/dev/null)"; then :; else dir="${TMPDIR:-/tmp}"; fi
 HANDOFF="${dir%/}/handoff-$(date +%Y%m%d-%H%M%S).md"
 i=1
-while [ -e "$HANDOFF" ]; do i=$((i + 1)); HANDOFF="${dir%/}/handoff-$(date +%Y%m%d-%H%M%S)-$i.md"; done
+until ( set -C; : > "$HANDOFF" ) 2>/dev/null; do
+  i=$((i + 1))
+  [ "$i" -le 100 ] || { echo "cannot create a handoff doc in $dir" >&2; exit 1; }
+  HANDOFF="${dir%/}/handoff-$(date +%Y%m%d-%H%M%S)-$i.md"
+done
 echo "$HANDOFF"
 ```
 
-`sidecar.sh path handoffs` prints the sidecar's `handoffs/` directory and creates it; on a miss it exits nonzero and the block takes the temp folder. The block computes a path and creates no file, so the first write makes the doc. A second doc in the same second gets a numbered name rather than the first one's path. `scripts/test-handoff-path.sh` runs this block and pins the result.
+`sidecar.sh path handoffs` prints the sidecar's `handoffs/` directory and creates it; on a miss it exits nonzero and the block takes the temp folder. The block creates the doc as an empty file with noclobber on (`set -C`), so creating it fails when the name is already taken, even by another `/handoff` run in the same second; it then tries the next numbered name. A second doc in the same second gets a numbered name rather than the first one's path. `scripts/test-handoff-path.sh` runs this block and pins the result.
 
-Write the body to the printed path. Print the path to the user at the end so they can paste it into the next session.
+The block created the doc as an empty file, so read the printed path once before writing to it, then write the body into that file. Print the path to the user at the end so they can paste it into the next session.
 
 ### 4. Shape the doc body
 

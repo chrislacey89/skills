@@ -5,7 +5,8 @@
 # THE DRIFT CLASS. A documented command whose result depends on the machine.
 # Step 3 once used `mktemp -t handoff-XXXXXX.md`, which BSD and GNU read
 # differently: on macOS every doc came out as `handoff-XXXXXX.md.<random>`
-# (#581). The block now computes a path instead of creating a file, in the
+# (#581). The block now names the file itself and creates it with noclobber
+# (`set -C`), so two runs in the same second cannot share it, in the
 # project's sidecar (`sidecar.sh path handoffs`) so the doc survives a restart,
 # and in the temp folder when no sidecar answers. Either way the doc must never
 # land in the project tree, and two docs must never share a path.
@@ -13,10 +14,11 @@
 # WHAT THIS PINS. The block, extracted from handoff/SKILL.md and run under bash
 # (and zsh when installed): with a sidecar it prints a path in the sidecar's
 # handoffs/ directory; with none it prints one in $TMPDIR; the path ends in
-# `.md`, carries a timestamped name, is outside the project tree, does not
-# exist yet (nothing is created until the first write), and leaves the
-# project's `git status` empty. The step's prose drops the read-the-empty-file
-# step and the stance that a doc should not survive.
+# `.md`, carries a timestamped name, is outside the project tree, exists as an
+# empty file the block created, and leaves the project's `git status` empty; a
+# name already taken is never reused or overwritten. The step's prose says to
+# read the empty file before writing it, and drops the stance that a doc should
+# not survive.
 #
 # Fixtures are built after unsetting the inherited git environment, with a
 # private global config (scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md).
@@ -55,7 +57,8 @@ if [ -n "$block" ]; then ok "Step 3 has a fenced bash block"; else bad "Step 3 h
 check "the block asks sidecar.sh for the handoffs directory" 1 "$(grep -c 'path handoffs' <<<"$block")"
 check "the block does not use mktemp" 0 "$(grep -c 'mktemp' <<<"$block")"
 check "no prose in handoff/SKILL.md still names mktemp -t" 0 "$(grep -c 'mktemp -t' "$HO")"
-check "Step 3 no longer says to read the empty file" 0 "$(grep -ci 'read the path before writing\|the file exists, empty' <<<"$step3")"
+check "Step 3 says to read the empty file before writing it" 1 "$(grep -c 'read the printed path once before writing to it' <<<"$step3")"
+check "the block creates the file with noclobber" 1 "$(grep -cF '( set -C; : > "' <<<"$block")"
 check "the skill no longer says surviving the session is not the goal" 0 "$(grep -c 'Surviving the session is not the goal' "$HO")"
 check "the commit-the-doc row answers: do not commit it; it survives in the sidecar" 1 \
     "$(grep -c '^| "I.ll commit the handoff doc to the repo so it survives\." | Do not commit it; it already survives, in the sidecar, outside the project tree' "$HO")"
@@ -77,6 +80,9 @@ run_block() { # <shell> — the path the block echoed (last line)
     (cd "$P" && TMPDIR="$tmp/t/" "$1" -c "$block" 2>/dev/null) | tail -n 1
 }
 mkdir -p "$tmp/t"
+mkdir -p "$tmp/fakebin"
+printf '#!/bin/sh\necho 20260101-000000\n' > "$tmp/fakebin/date"
+chmod +x "$tmp/fakebin/date"
 
 check_shell() {
     local sh="$1" a b
@@ -85,7 +91,7 @@ check_shell() {
     a="$(run_block "$sh")"
     case "$a" in "$SKILL_KIT_SIDECAR_ROOT/handoff$n/handoffs/"*) ok "$sh: the path is in the sidecar's handoffs/" ;; *) bad "$sh: the path is in the sidecar's handoffs/" "got: $a" ;; esac
     case "$(basename "$a")" in handoff-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].md) ok "$sh: the name is handoff-<date>-<time>.md" ;; *) bad "$sh: the name is handoff-<date>-<time>.md" "got: $a" ;; esac
-    if [ -e "$a" ]; then bad "$sh: nothing is created before the first write" "found: $a"; else ok "$sh: nothing is created before the first write"; fi
+    if [ -f "$a" ] && [ ! -s "$a" ]; then ok "$sh: the block creates the doc, empty"; else bad "$sh: the block creates the doc, empty" "path: $a"; fi
     if [ -d "$(dirname "$a")" ]; then ok "$sh: the directory exists, so the first write succeeds"; else bad "$sh: the directory exists, so the first write succeeds" "$(dirname "$a")"; fi
     case "$a" in "$P"/*) bad "$sh: the path is outside the project tree" "got: $a" ;; *) ok "$sh: the path is outside the project tree" ;; esac
     check "$sh: the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
@@ -95,12 +101,19 @@ check_shell() {
     case "$a" in "$tmp/t/handoff-"*.md) ok "$sh: the path falls back to \$TMPDIR" ;; *) bad "$sh: the path falls back to \$TMPDIR" "got: $a" ;; esac
     case "$a" in *//*) bad "$sh: no doubled slash from a trailing-slash TMPDIR" "got: $a" ;; *) ok "$sh: no doubled slash from a trailing-slash TMPDIR" ;; esac
     case "$a" in *XXXXXX*) bad "$sh: no literal XXXXXX" "got: $a" ;; *) ok "$sh: no literal XXXXXX" ;; esac
-    if [ -e "$a" ]; then bad "$sh: nothing is created in the fallback either" "found: $a"; else ok "$sh: nothing is created in the fallback either"; fi
+    if [ -f "$a" ] && [ ! -s "$a" ]; then ok "$sh: the fallback creates the doc, empty, too"; else bad "$sh: the fallback creates the doc, empty, too" "path: $a"; fi
     check "$sh: the project tree is untouched" "" "$(git -C "$P" status --porcelain)"
-    # A doc written in the same second as an earlier one gets its own path.
-    : > "$a"
-    b="$(run_block "$sh")"
-    if [ -n "$b" ] && [ "$b" != "$a" ]; then ok "$sh: a second doc in the same second gets its own path"; else bad "$sh: a second doc in the same second gets its own path" "a=$a b=$b"; fi
+    # A run that lands on a name already taken never reuses or overwrites it.
+    # A `date` shim pins the clock, so every run lands in the same second; the
+    # first two names are planted as written docs, and the run must create -3.
+    local fixed="20260101-000000"
+    printf 'first doc\n' > "$tmp/t/handoff-$fixed.md"
+    printf 'first doc\n' > "$tmp/t/handoff-$fixed-2.md"
+    b="$( (cd "$P" && PATH="$tmp/fakebin:$PATH" TMPDIR="$tmp/t/" "$sh" -c "$block" 2>/dev/null) | tail -n 1)"
+    check "$sh: a taken name sends the run to the next numbered one" "$tmp/t/handoff-$fixed-3.md" "$b"
+    if [ -f "$b" ] && [ ! -s "$b" ]; then ok "$sh: that numbered doc is created, empty"; else bad "$sh: that numbered doc is created, empty" "path: $b"; fi
+    check "$sh: the taken docs are not overwritten" "first doc" "$(cat "$tmp/t/handoff-$fixed.md" "$tmp/t/handoff-$fixed-2.md" | sort -u)"
+    rm -f "$tmp/t/handoff-$fixed"*.md
 }
 
 check_shell bash
