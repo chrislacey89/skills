@@ -225,6 +225,39 @@ for sh in $shells; do
     check "$sh: Step 6's removal takes this checkout's marker" no "$([ -e "$M" ] && echo yes || echo no)"
     check "$sh: …and leaves the other folder's, even one naming this session" "$(cat "$tmp/held")" "$(cat "$O/.claude/.session")"
     CPD="$P"
+
+    section "$sh: a project whose ignore list predates the marker"
+
+    # A linked worktree of a repo that ignores nothing: the marker a run leaves
+    # must not stop `git worktree remove`, and the block must not touch .gitignore.
+    Q="$tmp/q-$sh"
+    git init -q "$Q"
+    git -C "$Q" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+    git -C "$Q" worktree add -q "$tmp/qw-$sh" -b "s-$sh" 2>/dev/null
+    W="$tmp/qw-$sh"
+    QX="$Q/.git/info/exclude"
+    rm -f "$QX"
+    qrun() { out="$(cd "$W" && CLAUDE_PROJECT_DIR="$W" CLAUDE_CODE_SESSION_ID=s-me "$sh" -c "$1" 2>&1)"; rc=$?; }
+    mb="${mark_block//SLICE=\"<the W-<n> or issue number this run builds, or a short name for a one-off task>\"/SLICE=\"W-7\"}"
+    qrun "$mb"
+    check "$sh: the block exits 0" 0 "$rc"
+    check "$sh: the marker is written in the worktree" s-me "$(sed -n 's/^by=//p' "$W/.claude/.session")"
+    check "$sh: the repository's exclude file ignores it" 1 "$(grep -cx '.claude/.session' "$QX" 2>/dev/null)"
+    check "$sh: git status in the worktree is clean" "" "$(git -C "$W" status --porcelain)"
+    check "$sh: no .gitignore was written" no "$([ -e "$W/.gitignore" ] && echo yes || echo no)"
+    qrun "$mb"
+    check "$sh: a second run does not add the line again" 1 "$(grep -cx '.claude/.session' "$QX")"
+    git -C "$Q" worktree remove "$W" >/dev/null 2>&1; qrc=$?
+    check "$sh: git worktree remove accepts the worktree its marker is left in" 0 "$qrc"
+
+    # A project that already ignores the marker: the exclude file is left alone.
+    R="$tmp/r-$sh"
+    git init -q "$R"
+    printf '.claude/\n' > "$R/.gitignore"
+    rm -f "$R/.git/info/exclude"
+    out="$(cd "$R" && CLAUDE_PROJECT_DIR="$R" CLAUDE_CODE_SESSION_ID=s-me "$sh" -c "$mb" 2>&1)"; rc=$?
+    check "$sh: already ignored: the block exits 0" 0 "$rc"
+    check "$sh: already ignored: the exclude file is not written" no "$([ -e "$R/.git/info/exclude" ] && echo yes || echo no)"
 done
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
