@@ -2188,7 +2188,7 @@ if [[ "$have_zsh" == yes ]]; then fold_publish_case zsh; fi
 section "merges from the base after the stamp are reviewed as their resolutions"
 # diff_files <output> — the files a diff's text names, sorted, space-joined.
 diff_files() { printf '%s\n' "$1" | sed -n 's|^diff --git a/\([^ ]*\) b/.*|\1|p' | sort -u | tr '\n' ' ' | sed 's/ $//'; }
-merge_case() {  # $1 = shell, $2 = clean | ordinary | compound | resolved | topic | old-git
+merge_case() {  # $1 = shell, $2 = clean | ordinary | compound | resolved | topic | octopus | old-git
     local sh="$1" kind="$2" r="$sandbox/merge-$1-$2" stamped out
     mkdir -p "$r"
     git init -q -b main "$r"
@@ -2238,6 +2238,17 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | compound | resolved | topi
             printf 'shared, resolved by hand\n' > "$r/shared.txt"
             git -C "$r" add shared.txt
             git -C "$r" commit -q --no-edit
+        elif [[ "$kind" == octopus ]]; then
+            # Its second parent is on the base, so only the parent count tells it apart.
+            # topic starts before 'base moves on', so git keeps all three parents.
+            git -C "$r" switch -q -c topic main~1
+            printf 'topic\n' > "$r/topic.txt"
+            git -C "$r" add topic.txt
+            git -C "$r" commit -q -m 'topic'
+            git -C "$r" switch -q feature
+            git -C "$r" merge -q --no-edit main topic >/dev/null
+            [[ "$(git -C "$r" rev-list --parents -n 1 HEAD | wc -w | tr -d ' ')" == 4 ]] \
+                || fatal "merge case octopus: HEAD is not a three-parent merge"
         else
             git -C "$r" merge -q --no-edit main
         fi
@@ -2307,6 +2318,13 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | compound | resolved | topi
                 *"does not bring in main"*) assert_eq ok ok "$sh: …and the readout says why" ;;
                 *) assert_eq "a line naming the merge" "$out" "$sh: …and the readout says why" ;;
             esac ;;
+        octopus)
+            assert_eq "review scope: whole branch, from main" "$scope" \
+                "$sh: an octopus merge whose second parent is on the base: the whole slice"
+            case "$out" in
+                *"does not bring in main"*) assert_eq ok ok "$sh: …and the readout says why" ;;
+                *) assert_eq "a line naming the merge" "$out" "$sh: …and the readout says why" ;;
+            esac ;;
         old-git)
             assert_eq "review scope: whole branch, from main" "$scope" \
                 "$sh: a git that rejects --remerge-diff: the whole slice"
@@ -2316,7 +2334,7 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | compound | resolved | topi
             esac ;;
     esac
 }
-for kind in clean ordinary compound resolved topic old-git; do
+for kind in clean ordinary compound resolved topic octopus old-git; do
     merge_case bash "$kind"
     if [[ "$have_zsh" == yes ]]; then merge_case zsh "$kind"; fi
 done
