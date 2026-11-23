@@ -286,15 +286,29 @@ for sh in $shells; do
     check "$sh: on another branch the same lock is removed" "" "$(ls -A "$P/.claude")"
     run "$sh" "$lock_block" ""
     check "$sh: with no lock the block prints nothing" "" "$out"
-    # An inherited CLAUDE_PROJECT_DIR naming another folder (#812): its lock is not this checkout's.
-    mkdir -p "$tmp/other$n/.claude"
-    printf 'by=x\n' > "$tmp/other$n/.claude/.review-stamped"
+    # A CLAUDE_PROJECT_DIR naming another folder (#812): the block judges the lock in
+    # the folder the hook reads and /pre-merge writes, and the stamp release it prints
+    # clears that same file. This checkout's own .claude is not the hook's, so it is left.
+    O="$tmp/other$n"
+    mkdir -p "$O/.claude"
+    printf 'by=x\n' > "$O/.claude/.review-stamped"
+    git -C "$P" checkout -q stack
+    CPD="$O"
+    run "$sh" "$lock_block" ""
+    check "$sh: CLAUDE_PROJECT_DIR elsewhere: the stamped branch keeps the lock in that folder" yes "$([ -f "$O/.claude/.review-stamped" ] && echo yes)"
+    check "$sh: …and prints the stamp release for it" 1 "$(grep -c 'stamp release stack' <<<"$out")"
+    rel="$(sed -n 's/.*the human runs: //p' <<<"$out")"
+    rel="${rel//<why>/fixture}"
+    (cd "$P" && CLAUDE_PROJECT_DIR="$O" bash -c "$rel") >/dev/null 2>"$tmp/rel.err" || bad "$sh: the printed stamp release runs" "$(cat "$tmp/rel.err")"
+    check "$sh: …the printed stamp release clears the lock the block kept" "" "$([ -f "$O/.claude/.review-stamped" ] && echo left)"
+    check "$sh: …and records the release beside it" yes "$([ -f "$O/.claude/.post-review-edit" ] && echo yes)"
+    git -C "$P" checkout -q next
+    printf 'by=x\n' > "$O/.claude/.review-stamped"
     printf 'by=x\n' > "$P/.claude/.review-stamped"
-    CPD="$tmp/other$n"
     run "$sh" "$lock_block" ""
     CPD=""
-    check "$sh: a leaked CLAUDE_PROJECT_DIR: the other folder's lock is untouched" ".review-stamped" "$(ls -A "$tmp/other$n/.claude")"
-    check "$sh: …and this checkout's leftover lock is removed" "" "$(ls -A "$P/.claude")"
+    check "$sh: …on an unstamped branch the leftover lock in that folder is removed" "" "$([ -f "$O/.claude/.review-stamped" ] && echo left)"
+    check "$sh: …and this checkout's .claude is not judged" yes "$([ -f "$P/.claude/.review-stamped" ] && echo yes)"
 done
 
 # -----------------------------------------------------------------------------

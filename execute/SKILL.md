@@ -264,20 +264,13 @@ install = "pnpm install"
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, and `.claude/.post-review-edit` do not exist in the worktree (fresh slate; Step 3 creates one)
-- [ ] **Post-review lock flags absent, or the lock is this branch's own** — `.claude/.fix-findings-active` does not exist, and `.claude/.review-stamped` does not exist unless the block below kept it. Both normally belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete a `.fix-findings-active` you find, and run the block below for `.review-stamped`. One case is not a leak: a branch reviewed with **Stamp only** (`/pre-merge`'s handoff menu) is stamped in the sidecar and gets no PR, so the next slice built on it starts under that branch's own lock. The block keeps the lock when the sidecar's stamp names the checked-out branch, and removes it otherwise. A kept lock refuses this slice's edits until the human releases it with the `stamp release` command the block prints, which puts the reason on record and tells the next `/pre-merge` where its review starts
+- [ ] **Post-review lock flags absent, or the lock is this branch's own** — `.claude/.fix-findings-active` does not exist, and `.claude/.review-stamped` does not exist unless the block below kept it. Both normally belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete a `.fix-findings-active` you find, and run the block below for `.review-stamped`. One case is not a leak: a branch reviewed with **Stamp only** (`/pre-merge`'s handoff menu) is stamped in the sidecar and gets no PR, so the next slice built on it starts under that branch's own lock. The block keeps the lock when the sidecar's stamp names the checked-out branch, and removes it otherwise. A kept lock refuses this slice's edits until the human releases it with the `stamp release` command the block prints, which puts the reason on record and tells the next `/pre-merge` where its review starts. The block reads the lock from `$CLAUDE_PROJECT_DIR` as given, with no containment check, because the hook, `/pre-merge`'s writer and `stamp release` all name that folder, and a lock judged anywhere else is not the one the hook enforces. When `CLAUDE_PROJECT_DIR` does not contain this checkout, the lock this block keeps or removes is that other folder's, and the session-marker block below is the only one here that checks containment, since only `/execute` reads its marker
 
 ```bash
-# Is the review lock in this checkout this branch's own? Prints nothing when there is none.
+# Is the review lock the hook reads this branch's own? Prints nothing when there is none.
 SC="<this skill's directory>/references/sidecar.sh"
-top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
-dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
-  if [ -n "$ws" ]; then
-    case "$top/" in "$ws"/*) dir="$ws" ;; esac
-  fi
-fi
-FLAG="$dir/.claude/.review-stamped"
+# The folder the classification hook reads, /pre-merge writes, and stamp release clears.
+FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
 B="$(git branch --show-current)"
 STAMP=""
 [ -z "$B" ] || STAMP="$(bash "$SC" stamp read "$B" 2>/dev/null)"
