@@ -9,7 +9,8 @@
 # by comparing a session id and an age, and a block that compares the wrong
 # way passes every run that has one session. So the decision is RUN here
 # against each kind of marker: another session's fresh one (stop, unchanged),
-# a 13-hour-old one (rewritten), this session's own (rewritten), one with no
+# a 13-hour-old one (rewritten), one a second under 12 hours and one exactly
+# 12 hours old on a held clock (stop, rewritten), this session's own (rewritten), one with no
 # by= line (the maker is unknown: stop), and a take-over (rewritten). Step 6's
 # removal is run too: it removes this session's marker and leaves another's.
 # The exit a run takes when it cannot finish the slice skips Step 6, so it
@@ -92,11 +93,23 @@ M="$P/.claude/.session"
 O="$tmp/other"
 mkdir -p "$O/.claude"
 CPD="$P"   # the CLAUDE_PROJECT_DIR run() hands the block
+# A `date` shim holds the clock the block reads for "now" (`date +%s`), so the
+# probes on either side of the 12-hour limit land on the second they name; every
+# other call (parsing at=, writing at=) goes to the date found on PATH here.
+NOW=1798761600   # 2027-01-01T00:00:00Z
+real_date="$(command -v date)"
+mkdir -p "$tmp/clock"
+printf '#!/bin/sh
+if [ "$*" = "+%%s" ]; then echo %s; else exec "%s" "$@"; fi\n' "$NOW" "$real_date" > "$tmp/clock/date"
+chmod +x "$tmp/clock/date"
+RUNPATH="$PATH"   # the PATH run() hands the block
+# at <seconds-before-NOW> — an at= value that long before the held clock.
+at() { date -u -r $(( NOW - $1 )) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$(( NOW - $1 ))" +%Y-%m-%dT%H:%M:%SZ; }
 # run <shell> <block> <this session's id> [take over] — stdout in $out, exit in $rc.
 run() {
     local b="${2//SLICE=\"<the W-<n> or issue number this run builds, or a short name for a one-off task>\"/SLICE=\"W-7\"}"
     [ "${4:-}" != yes ] || b="${b//TAKE_OVER=\"\"/TAKE_OVER=\"yes\"}"
-    out="$(cd "$P" && CLAUDE_PROJECT_DIR="$CPD" CLAUDE_CODE_SESSION_ID="$3" "$1" -c "$b" 2>&1)"; rc=$?
+    out="$(cd "$P" && PATH="$RUNPATH" CLAUDE_PROJECT_DIR="$CPD" CLAUDE_CODE_SESSION_ID="$3" "$1" -c "$b" 2>&1)"; rc=$?
 }
 field() { sed -n "s/^$1=//p" "$M"; }
 
@@ -128,6 +141,22 @@ for sh in $shells; do
     run "$sh" "$mark_block" s-me
     check "$sh: a 13-hour-old marker: the block exits 0" 0 "$rc"
     check "$sh: a 13-hour-old marker: it is rewritten as this session's" s-me "$(field by)"
+
+    # The limit itself, on a held clock: one second under 12 hours stops, and
+    # exactly 12 hours is old enough. These two pin both the value and the
+    # strict comparison (a limit of -le 43200, or any other number, fails one).
+    RUNPATH="$tmp/clock:$PATH"
+    check "$sh: the shim holds the block's clock" "$NOW" "$(PATH="$RUNPATH" "$sh" -c 'date +%s')"
+    printf 'by=s-other\nat=%s\nslice=W-3\n' "$(at 43199)" > "$M"
+    cp "$M" "$tmp/before"
+    run "$sh" "$mark_block" s-me
+    check "$sh: a marker 1 second under 12 hours old: the block stops" 1 "$rc"
+    check "$sh: …and leaves the marker as it was" "$(cat "$tmp/before")" "$(cat "$M")"
+    printf 'by=s-other\nat=%s\nslice=W-3\n' "$(at 43200)" > "$M"
+    run "$sh" "$mark_block" s-me
+    check "$sh: a marker exactly 12 hours old: the block exits 0" 0 "$rc"
+    check "$sh: a marker exactly 12 hours old: it is rewritten as this session's" s-me "$(field by)"
+    RUNPATH="$PATH"
 
     printf 'by=s-me\nat=%s\nslice=W-3\n' "$(utc 60)" > "$M"
     run "$sh" "$mark_block" s-me
