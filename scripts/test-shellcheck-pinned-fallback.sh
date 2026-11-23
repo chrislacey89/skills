@@ -151,7 +151,10 @@ case "\$1" in
     echo 27.0.0; exit 0 ;;
   image) [ -f "$present" ] && exit 0; exit 1 ;;
   pull)
-    echo pull >> "$lint_log"
+    # Log the image reference pulled (the last argument), so an arm catches a
+    # pull of any tag but the pinned one.
+    for a in "\$@"; do ref="\$a"; done
+    echo "pull \$ref" >> "$lint_log"
     [ "$pull_ok" = 1 ] && { : > "$present"; exit 0; }
     echo "stub docker: pull failed (this suite never contacts a registry)" >&2; exit 1 ;;
   run)
@@ -300,19 +303,19 @@ assert_eq local "$log" "the local release linted"
 section "first use, image absent, pull succeeds: the pulled pinned image lints"
 run_case absent-pull-ok none 0.11.0 strict clean
 assert_eq 0 "$rc" "exit 0"
-assert_eq "pull docker" "$log" "the image was pulled, then it linted; the local release did not"
+assert_eq "pull koalaman/shellcheck:v$pinned docker" "$log" "the pinned image was pulled, then it linted; the local release did not"
 assert_contains "$err" "pulling koalaman/shellcheck:v$pinned (first use)" "stderr names the first-use pull"
 
 section "first use, image absent, pull succeeds but the image is not the pinned release: the local fallback exits 3"
 run_case absent-pull-wrong-version none 0.11.0 strict clean
 assert_eq 3 "$rc" "exit 3"
-assert_eq "pull local" "$log" "the image was pulled, its version was checked, and the local release linted"
+assert_eq "pull koalaman/shellcheck:v$pinned local" "$log" "the pinned image was pulled, its version was checked, and the local release linted"
 assert_contains "$err" "reports version '0.0.1', not $pinned" "stderr names the pulled image's wrong version"
 
 section "first use, image absent, pull fails: skip the Docker tier, then the local fallback exits 3"
 run_case absent-pull-fails none 0.11.0 strict clean
 assert_eq 3 "$rc" "exit 3"
-assert_eq "pull local" "$log" "the pull was tried, the image never ran, and the local release linted"
+assert_eq "pull koalaman/shellcheck:v$pinned local" "$log" "the pull of the pinned image was tried, the image never ran, and the local release linted"
 assert_contains "$err" "could not pull koalaman/shellcheck:v$pinned" "stderr names the failed pull"
 
 # --- 5. Docker installed, daemon not answering -----------------------------------
