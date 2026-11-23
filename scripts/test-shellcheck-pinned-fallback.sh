@@ -12,8 +12,9 @@
 # What this suite pins, each arm against stubs so it never touches the network
 # or a Docker daemon and never pulls an image:
 #   - a local-release fallback run exits 3, at both fallback sites, unless
-#     SHELLCHECK_PINNED_ALLOW_FALLBACK=1 is set; it still lints first, and the
-#     exit-3 message names the override
+#     SHELLCHECK_PINNED_ALLOW_FALLBACK=1 is set; both with the variable unset
+#     (how the pre-push hook and CI run it) and with it set to 0; it still
+#     lints first, and the exit-3 message names the override
 #   - with the override it exits 0 on a clean lint
 #   - a fallback run with findings exits nonzero with or without the override
 #   - when the native pinned binary is unavailable and Docker answers, the
@@ -180,15 +181,24 @@ STUB
     return 0
 }
 
-# run_case <docker-mode> <cached-mode> <local-version> <allow|strict> <finding|clean>
-# allow sets SHELLCHECK_PINNED_ALLOW_FALLBACK=1; strict sets it to 0, which the
-# script treats as unset. finding plants a script with a lint finding.
+# run_case <docker-mode> <cached-mode> <local-version> <allow|strict|unset> <finding|clean>
+# allow sets SHELLCHECK_PINNED_ALLOW_FALLBACK=1; strict sets it to 0; unset
+# leaves it out of the environment, which is how the pre-push hook and CI run
+# the script. Section 1 runs both exit-3 sites under strict and under unset, so
+# a default that turns unset into accept, and a check that accepts any
+# non-empty value, each go red. finding plants a script with a lint finding.
 # Sets: rc, err (stderr), log (instruments that linted, space-joined), elapsed.
 run_case() {
-    local dir="$sandbox/case" allow=0
+    local dir="$sandbox/case"
+    local override=()
     make_stubs "$dir" "$1" "$2" "$3"
     : > "$lint_log"
-    [ "$4" = allow ] && allow=1
+    case "$4" in
+        allow) override=(SHELLCHECK_PINNED_ALLOW_FALLBACK=1) ;;
+        strict) override=(SHELLCHECK_PINNED_ALLOW_FALLBACK=0) ;;
+        unset) ;;
+        *) bad "run_case" "unknown override word: $4"; return 1 ;;
+    esac
     if [ "$5" = finding ]; then
         printf '#!/usr/bin/env bash\n# FINDING\n' > "$repo/scripts/finding.sh"
     else
@@ -197,7 +207,7 @@ run_case() {
     local start end
     start="$(date +%s)"
     err="$(cd "$repo" && env -i HOME="$dir/home" XDG_CACHE_HOME="$dir/cache" PATH="$dir/bin" \
-        SHELLCHECK_PINNED_ALLOW_FALLBACK="$allow" "$bash_bin" scripts/shellcheck-pinned.sh 2>&1 >/dev/null)"
+        ${override[@]+"${override[@]}"} "$bash_bin" scripts/shellcheck-pinned.sh 2>&1 >/dev/null)"
     rc=$?
     end="$(date +%s)"
     elapsed=$((end - start))
@@ -231,6 +241,14 @@ run_case none unrunnable 0.11.0 strict clean
 assert_eq 3 "$rc" "exit 3"
 assert_eq local "$log" "the local release still linted"
 assert_contains "$err" "SHELLCHECK_PINNED_ALLOW_FALLBACK=1" "the exit-3 message names the override"
+
+section "the override left unset (how the pre-push hook and CI run it): exit 3, at both sites"
+run_case none none 0.11.0 unset clean
+assert_eq 3 "$rc" "download site, unset: exit 3"
+assert_eq local "$log" "download site, unset: the local release still linted"
+run_case none unrunnable 0.11.0 unset clean
+assert_eq 3 "$rc" "unrunnable site, unset: exit 3"
+assert_eq local "$log" "unrunnable site, unset: the local release still linted"
 
 # --- 2. With the override a clean fallback exits 0 ------------------------------
 section "SHELLCHECK_PINNED_ALLOW_FALLBACK=1: a clean fallback exits 0, at both sites"
