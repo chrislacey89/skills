@@ -26,6 +26,9 @@
 
 set -u
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
+# The lock block and the stamp verbs act on $CLAUDE_PROJECT_DIR/.claude, so an
+# inherited value would point them at a real checkout. run() sets it per fixture.
+unset CLAUDE_PROJECT_DIR
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 SC="$repo_root/init-pipeline/scripts/sidecar.sh"
 PM="$repo_root/pre-merge/SKILL.md"
@@ -129,7 +132,7 @@ fill() { # <block> <W value> — the placeholders an agent fills, filled
 # run <shell> <block> <W value> — stdout in $out, stderr in $err, exit in $rc.
 run() {
     : > "$tmp/calls"
-    out="$(cd "$P" && GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "$1" -c "$(fill "$2" "$3")" 2>"$tmp/stderr")"; rc=$?
+    out="$(cd "$P" && CLAUDE_PROJECT_DIR="$P" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "$1" -c "$(fill "$2" "$3")" 2>"$tmp/stderr")"; rc=$?
     err="$(cat "$tmp/stderr")"
 }
 
