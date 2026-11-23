@@ -29,6 +29,10 @@
 #     reference each run was handed, for the version check and for the lint,
 #     so a script that checks the pinned image and then lints with another tag
 #     (or checks another tag) goes red
+#   - the lint's `docker run` isolates the container: the stub records every
+#     option before the image name, and the Docker-tier arms assert the exact
+#     list (--rm, --network none, the repository mounted at /mnt, and /mnt as
+#     the working directory), so a refactor that drops or changes one goes red
 #
 # The script is copied into a fixture repository with its own .shellcheck-version,
 # and PATH is a directory of symlinks to the few real tools the script needs plus
@@ -104,7 +108,9 @@ done
 # in its environment at all, so an unset arm can prove it ran unset. The docker
 # stub records, in the case directory's run.refs, the image reference each
 # `docker run` was handed (`version <ref>` or `lint <ref>`), so a Docker-tier
-# arm can assert both runs used the pinned tag.
+# arm can assert both runs used the pinned tag. It also records, in lint.opts,
+# the options the lint's `docker run` passed before the image name, so a
+# Docker-tier arm can assert the container's isolation flags.
 lint_log="$sandbox/lint.log"
 
 # make_stubs <dir> <docker-mode> <cached-mode> <local-version>
@@ -168,12 +174,14 @@ case "\$1" in
     if [ ! -f "$present" ]; then echo run-without-image >> "$lint_log"; echo "stub docker: Unable to find image" >&2; exit 125; fi
     # Everything after the image name is shellcheck's own argv. The image
     # reference itself is logged to run.refs, so an arm catches a run of any
-    # tag but the pinned one.
+    # tag but the pinned one; the options before it are logged to lint.opts
+    # for the lint run, so an arm catches a dropped isolation flag.
     shift
-    ref=none
-    while [ \$# -gt 0 ]; do case "\$1" in koalaman/shellcheck:*) ref="\$1"; shift; break ;; *) shift ;; esac; done
+    ref=none opts=""
+    while [ \$# -gt 0 ]; do case "\$1" in koalaman/shellcheck:*) ref="\$1"; shift; break ;; *) opts="\${opts:+\$opts }\$1"; shift ;; esac; done
     if [ "\${1:-}" = --version ]; then echo "version \$ref" >> "$dir/run.refs"; printf 'ShellCheck - stub\nversion: %s\n' "$image_v"; exit 0; fi
     echo "lint \$ref" >> "$dir/run.refs"
+    echo "\$opts" >> "$dir/lint.opts"
     echo docker >> "$lint_log"
     for f in "\$@"; do if grep -q FINDING "\$f"; then echo "\$f: finding"; exit $lint_exit_on_finding; fi; done
     exit 0 ;;
@@ -211,7 +219,8 @@ STUB
 # finding plants a script with a lint finding.
 # Sets: rc, err (stderr), log (instruments that linted, space-joined), elapsed,
 # seen (present or absent: whether the override reached the local stub),
-# runs (the docker stub's run.refs, space-joined; empty when no image ran).
+# runs (the docker stub's run.refs, space-joined; empty when no image ran),
+# opts (the docker stub's lint.opts; empty when no lint ran through Docker).
 run_case() {
     local dir="$sandbox/case"
     local override=()
@@ -239,10 +248,17 @@ run_case() {
     seen="$(cat "$dir/override.seen" 2>/dev/null)"
     runs=""
     [ -f "$dir/run.refs" ] && runs="$(tr '\n' ' ' < "$dir/run.refs" | sed 's/ $//')"
+    opts="$(cat "$dir/lint.opts" 2>/dev/null)"
 }
 
 # Both Docker runs, the version check and then the lint, on the pinned image.
 pinned_runs="version koalaman/shellcheck:v$pinned lint koalaman/shellcheck:v$pinned"
+
+# The lint's docker options: no network, the fixture repository mounted at
+# /mnt, and /mnt as the working directory. The script resolves its root with cd
+# and pwd under `env -i`, where no inherited PWD keeps a symlinked temp path
+# (macOS's /var) logical, so the expected root is the physical path.
+lint_opts="--rm --network none -v $(cd "$repo" && pwd -P):/mnt -w /mnt"
 
 # --- 0. The pinned paths are unchanged -------------------------------------------
 section "the PATH shellcheck at the pinned release lints and exits 0"
@@ -308,16 +324,19 @@ assert_eq docker "$log" "the image linted; the local release did not"
 assert_contains "$err" "Docker" "stderr names Docker as the instrument"
 assert_contains "$err" "koalaman/shellcheck:v$pinned" "stderr names the pinned image"
 assert_eq "$pinned_runs" "$runs" "the version check and the lint each ran the pinned image"
+assert_eq "$lint_opts" "$opts" "the lint ran with no network, the repository mounted at /mnt, and /mnt as its working directory"
 run_case ok unrunnable 0.11.0 strict clean
 assert_eq 0 "$rc" "unrunnable site, clean: exit 0"
 assert_eq docker "$log" "unrunnable site: the image linted"
 assert_eq "$pinned_runs" "$runs" "unrunnable site: the version check and the lint each ran the pinned image"
+assert_eq "$lint_opts" "$opts" "unrunnable site: the lint ran with no network, the repository mounted at /mnt, and /mnt as its working directory"
 run_case ok none 0.11.0 strict finding
 assert_ne 0 "$rc" "finding: exit nonzero"
 assert_ne 3 "$rc" "finding: the lint's result, not the fallback's 3"
 assert_lacks "$log" local "finding: the local release did not lint"
 assert_lacks "$log" pull "no image pull was attempted (the stub reports the image present)"
 assert_eq "$pinned_runs" "$runs" "finding: the version check and the lint each ran the pinned image"
+assert_eq "$lint_opts" "$opts" "finding: the lint ran with no network, the repository mounted at /mnt, and /mnt as its working directory"
 
 section "Docker answers but the image is not the pinned release: fall through to the local fallback"
 run_case wrong-version none 0.11.0 strict clean
@@ -331,6 +350,7 @@ assert_eq 0 "$rc" "exit 0"
 assert_eq "pull koalaman/shellcheck:v$pinned docker" "$log" "the pinned image was pulled, then it linted; the local release did not"
 assert_contains "$err" "pulling koalaman/shellcheck:v$pinned (first use)" "stderr names the first-use pull"
 assert_eq "$pinned_runs" "$runs" "the version check and the lint each ran the pulled pinned image"
+assert_eq "$lint_opts" "$opts" "the pulled image's lint ran with no network, the repository mounted at /mnt, and /mnt as its working directory"
 
 section "first use, image absent, pull succeeds but the image is not the pinned release: the local fallback exits 3"
 run_case absent-pull-wrong-version none 0.11.0 strict clean
