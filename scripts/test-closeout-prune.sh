@@ -263,6 +263,8 @@ BODY="$(printf '%s\n' \
 CLEAN_BODY="$(printf '%s\n' '## Summary' '' '- [x] ticked item' '' '## Review Disposition Ledger' '' '| Pass | Finding | Dimension | State | Evidence / outcome |' '|---|---|---|---|---|' '| 1 | A finding | Deep Modules | fixed | abc1234 |')"
 # An author-mode body: no ledger, which only loop-mode writes.
 NO_LEDGER_BODY="$(printf '%s\n' '## Summary' '' 'Does a thing.' '' '## Review Notes' '' '- [x] ticked item' '- [ ] unticked item one')"
+# A body that names the ledger in prose but has no heading for it: still no ledger block.
+PROSE_LEDGER_BODY="$(printf '%s\n' '## Summary' '' 'The Review Disposition Ledger is only written in loop mode.' '' '- [ ] unticked item one')"
 # The ledger as pre-merge/SKILL.md prints it: the first markdown fence that holds it.
 TEMPLATE="$(awk '
     /^```markdown$/ { buf = ""; on = 1; next }
@@ -283,6 +285,12 @@ HEAD_ROWS=$'| Pass | Finding | Dimension | State | Evidence / outcome |\n|---|--
 SUFFIX_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '## Review Disposition Ledger (loop-mode only)' "$HEAD_ROWS")"
 INDENT_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '  ## Review Disposition Ledger' "$HEAD_ROWS")"
 CLOSING_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '## Review Disposition Ledger ##' "$HEAD_ROWS")"
+# The same three headings over a ledger whose only row is fixed: the heading check, not the row read, decides between "none" and "no ledger block".
+FIXED_ROW='| 2 | Presence helper claimed as a Layer | Boundary Map Contracts | fixed | abc1234 |'
+HEAD_FIXED=$'| Pass | Finding | Dimension | State | Evidence / outcome |\n|---|---|---|---|---|\n'"$FIXED_ROW"
+SUFFIX_FIXED_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '## Review Disposition Ledger (loop-mode only)' "$HEAD_FIXED")"
+INDENT_FIXED_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '  ## Review Disposition Ledger' "$HEAD_FIXED")"
+CLOSING_FIXED_BODY="$(printf '%s\n\n%s\n\n%s\n' '## Summary' '## Review Disposition Ledger ##' "$HEAD_FIXED")"
 # Over the 64 KB pipe buffer, heading first, so an early-exiting reader would take SIGPIPE under pipefail. The padding sits after the open row.
 BIG_BODY="$(printf '%s\n\n%s\n\n%s\n\n' '## Summary' '## Review Disposition Ledger' "$HEAD_ROWS"; i=0; while [ "$i" -lt 1200 ]; do printf '%s\n' 'Padding line to push the body past the 64 KB pipe buffer, with enough text to count.'; i=$((i + 1)); done)"
 BIG_CLEAN_BODY="$(printf '%s\n\n%s\n\n' '## Summary' '## Review Disposition Ledger'; i=0; while [ "$i" -lt 1200 ]; do printf '%s\n' 'Padding line to push the body past the 64 KB pipe buffer, with enough text to count.'; i=$((i + 1)); done)"
@@ -292,6 +300,12 @@ for sh in bash zsh; do
         run_open "$variant" "$sh"
         has "[$sh] an unusual ledger heading: it still lists the open row" "$out" "Presence helper claimed as a Layer"
         hasnt "[$sh] an unusual ledger heading: it does not say there is no ledger block" "$out" "no ledger block"
+    done
+    for variant in "$SUFFIX_FIXED_BODY" "$INDENT_FIXED_BODY" "$CLOSING_FIXED_BODY"; do
+        run_open "$variant" "$sh"
+        has "[$sh] an unusual ledger heading with no open row: it says there are no open ledger rows" "$out" "open ledger rows: none"
+        hasnt "[$sh] an unusual ledger heading with no open row: it does not say there is no ledger block" "$out" "no ledger block"
+        hasnt "[$sh] an unusual ledger heading with no open row: it does not list the fixed row" "$out" "Presence helper claimed as a Layer"
     done
     for pf in "" "set -o pipefail; "; do
         run_open "$BIG_BODY" "$sh" "$pf"
@@ -322,6 +336,9 @@ for sh in bash zsh; do
     has "[$sh] no ledger: it still lists an unticked line" "$out" "unticked item one"
     has "[$sh] no ledger: it says there is no ledger block" "$out" "no ledger block in the PR body"
     hasnt "[$sh] no ledger: it does not say a ledger had no open rows" "$out" "open ledger rows: none"
+    run_open "$PROSE_LEDGER_BODY" "$sh"
+    has "[$sh] the ledger named in prose, no heading: it says there is no ledger block" "$out" "no ledger block in the PR body"
+    hasnt "[$sh] the ledger named in prose, no heading: it does not say a ledger had no open rows" "$out" "open ledger rows: none"
     for form in "$TEMPLATE_BODY" "$TEMPLATE_CRLF_BODY"; do
         run_open "$form" "$sh"
         has "[$sh] the real template: it lists the open Stamp row" "$out" 'Stamp block "no-ops"'
