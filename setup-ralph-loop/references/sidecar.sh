@@ -5,7 +5,8 @@
 # ${SKILL_KIT_SIDECAR_ROOT:-$HOME/.claude/sidecars}/<name>/, holding the pack's
 # per-project configuration (sidecar.json), the research archive (research/),
 # solutions entries (solutions/<category>/), /fix-findings' run records
-# (fix-runs/), and /respond-to-review's records (review-responses/). This
+# (fix-runs/), /respond-to-review's records (review-responses/), and
+# /handoff's docs (handoffs/). This
 # script is the only thing
 # that computes a sidecar path or runs git against one; skills call it from
 # their bundled references/sidecar.sh and never inline either.
@@ -25,7 +26,7 @@
 #   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards, conventions)
 #   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
-#   sidecar.sh path <research|solutions|review-responses>
+#   sidecar.sh path <research|solutions|review-responses|handoffs>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
 #   sidecar.sh relate <path-to-other-checkout>   (links one project outside the group for related-solutions-dirs; prints the key stored)
 #   sidecar.sh related-solutions-dirs   (prints, one per line, the group's and the linked projects' solutions dirs; no sidecar needed)
@@ -1477,8 +1478,8 @@ cmd_relate() {
 
 cmd_path() {
     local sc
-    [ $# -eq 1 ] || die_usage "usage: sidecar.sh path <research|solutions|review-responses>"
-    case "$1" in research|solutions|review-responses) ;; *) die_usage "path: expected research, solutions, or review-responses, got: $1" ;; esac
+    [ $# -eq 1 ] || die_usage "usage: sidecar.sh path <research|solutions|review-responses|handoffs>"
+    case "$1" in research|solutions|review-responses|handoffs) ;; *) die_usage "path: expected research, solutions, review-responses, or handoffs, got: $1" ;; esac
     sc="$(do_resolve)" || exit 1
     mkdir -p "$sc/$1" || refuse "path: cannot create $sc/$1"
     printf '%s\n' "$sc/$1"

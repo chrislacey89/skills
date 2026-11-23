@@ -282,6 +282,26 @@ if [ -f "$FLAG" ]; then
 fi
 ```
 
+**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` with this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it.
+
+```bash
+# Is another session running /execute in this checkout? Writes this session's marker, or stops.
+MARK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.session"
+SLICE="<the W-<n> or issue number this run builds, or a short name for a one-off task>"
+TAKE_OVER=""   # "yes" only after the human chose take over
+if [ -f "$MARK" ] && [ "$TAKE_OVER" != yes ]; then
+  BY=$(sed -n 's/^by=//p' "$MARK"); AT=$(sed -n 's/^at=//p' "$MARK"); FOR=$(sed -n 's/^slice=//p' "$MARK")
+  if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
+    THEN=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$AT" +%s 2>/dev/null || date -u -d "$AT" +%s 2>/dev/null)
+    if [ -z "$THEN" ] || [ $(( $(date +%s) - THEN )) -lt 43200 ]; then
+      echo "session marker: held by session ${BY:-unknown} since ${AT:-unknown} for ${FOR:-unnamed}. Ask: take over, or pick another slice." >&2
+      exit 1
+    fi
+  fi
+fi
+mkdir -p "$(dirname "$MARK")" && printf 'by=%s\nat=%s\nslice=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SLICE" > "$MARK"
+```
+
 **Record where the slice starts.** On `takeable`, once the branch this slice will be committed on is checked out and before its first commit, record `HEAD` as the work item's `start_sha`. `sidecar.sh range` reads it, so `/pre-merge`'s first review and `/fix-findings`' round count cover this slice's commits rather than every slice on a long-lived branch. A start already recorded is kept: a later iteration on the same slice must not move it forward past commits the slice already made, and a start a fold or rebase rewrote is not re-anchored either (`range` falls back to the base and says so):
 
 ```bash
@@ -955,6 +975,16 @@ Remove the classification markers:
 
 ```bash
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" "$CLAUDE_PROJECT_DIR/.claude/.post-review-edit"
+```
+
+Remove Step 0's session marker when it is this session's. One another session wrote is left: that session took the slice over.
+
+```bash
+MARK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.session"
+if [ -f "$MARK" ]; then
+  if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
+  else echo "session marker left: another session holds it"; fi
+fi
 ```
 
 **Mark the slice built.** On the `sidecar` backend, once the slice's commit is made, its work item moves from `open` to `built`: its commits are on this branch, and its PR has not merged. `work list --unblocked`, and Step 0's gate on the next slice, read a `built` blocker as met where its commits are, on this branch or on a branch built on top of it. `/pre-merge` records the branch's PR on every `built` slice of the branch, and `/closeout` closes each of them at merge ([references/state-backend.md](references/state-backend.md)). On the `github` backend the issue stays open until its PR merges, and nothing is written:

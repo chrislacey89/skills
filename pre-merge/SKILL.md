@@ -863,7 +863,7 @@ Write the block with the same `mktemp` → **check the fetch's exit status** →
 - **Forward: the states and the evidence** — what was fixed, filed, accepted, or dropped, and the greps behind each. These are facts about the code's *current* state. Without them the next pass re-reports resolved findings.
 - **Withheld: the previous pass's severity judgments.** That is the anchoring surface. A fresh reviewer independently re-raising something an earlier pass rated trivial is *signal*, and forwarding the earlier rating would suppress it.
 
-This is deliberately **not** `/handoff`. That skill summarizes into a transient `mktemp` doc, and both properties are wrong here: the fix Leveson's rule demands is "hand over checkable claims," not "summarize better," and every summarization hop is a lossy transformation authored by the upstream controller. `/handoff`'s own Red Flags already forbid producing a doc at a pipeline-skill boundary; that fence stays where it is.
+This is deliberately **not** `/handoff`. That skill summarizes into a doc kept outside the project and its PR, and both properties are wrong here: the fix Leveson's rule demands is "hand over checkable claims," not "summarize better," and every summarization hop is a lossy transformation authored by the upstream controller. `/handoff`'s own Red Flags already forbid producing a doc at a pipeline-skill boundary; that fence stays where it is.
 
 #### Pin the judge, or cross-pass comparison is meaningless
 

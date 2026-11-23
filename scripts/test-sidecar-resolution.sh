@@ -334,6 +334,13 @@ check "path solutions is the sidecar's solutions/ directory" "$SIDECAR/solutions
 RR="$(cd "$PROJ" && bash "$SC" path review-responses)"
 check "path review-responses is the sidecar's review-responses/ directory" "$SIDECAR/review-responses" "$RR"
 check "path review-responses creates the directory" "yes" "$([ -d "$SIDECAR/review-responses" ] && echo yes || echo no)"
+HO="$(cd "$PROJ" && bash "$SC" path handoffs)"
+check "path handoffs is the sidecar's handoffs/ directory" "$SIDECAR/handoffs" "$HO"
+check "path handoffs creates the directory" "yes" "$([ -d "$SIDECAR/handoffs" ] && echo yes || echo no)"
+run "$OTHER" path handoffs
+check "path handoffs on a miss exits 1, as the other names do" 1 "$rc"
+run "$PROJ" path handoffs extra
+check "path handoffs with a second argument is a usage error" 2 "$rc"
 run "$PROJ" path reviews
 check "path refuses a directory it does not name (reviews/ belongs to the stamp)" 2 "$rc"
 mkdir -p "$SOL/concurrency"

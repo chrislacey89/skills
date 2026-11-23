@@ -55,6 +55,8 @@ On the `sidecar` backend with no work item (the operator answered "none"), the l
 
 `/respond-to-review`'s record is not in the table, because `backend stamp` does not decide it. It goes to `<sidecar>/review-responses/pr-<n>.md` on either backend, found through `sidecar.sh path review-responses` and committed with `sidecar.sh commit`. It is the author's private account of a teammate's review, never written to the PR, and its directory is separate from `reviews/` so it cannot collide with a stamp. With no sidecar it is printed to the terminal and named as not persisted.
 
+`/handoff`'s doc is not in the table either. It goes to `<sidecar>/handoffs/` on either backend, found through `sidecar.sh path handoffs`, so it survives a restart and stays outside the project tree; it is not committed. With no sidecar it goes to the temp folder.
+
 `sidecar.sh init` derives `forge.write` from `mode` and the forge: owned on a known forge gets `["issues","labels","milestones","prs"]`, and everything else gets `[]`. `sidecar.sh config set mode` re-derives it. `tracker.write` is not read by `backend`.
 
 ## The review stamp

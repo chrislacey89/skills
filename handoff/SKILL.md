@@ -60,18 +60,22 @@ If the work belongs to a pipeline feature, locate the research artifact rather t
 
 If a PRD or slice issue is in scope, record its number. Reference each of these by path, URL, or issue number — never copy bodies into the handoff doc. Future-you can run `gh issue view` from the fresh session.
 
-### 3. Write the doc to a `mktemp` path
+### 3. Write the doc to a path in the sidecar
 
-Generate the path with this block, run as one shell. The doc never lives inside the repo working tree.
+Compute the path with this block, run as one shell. The doc's home is the project's sidecar, outside the project tree, so it survives a restart; when no sidecar answers, the temp folder is the fallback. The doc never lives inside the repo working tree.
 
 ```bash
-dir="${TMPDIR:-/tmp}"
-HANDOFF="$(mktemp "${dir%/}/handoff-XXXXXX")" && mv "$HANDOFF" "$HANDOFF.md" && HANDOFF="$HANDOFF.md" && echo "$HANDOFF"
+SC="<this skill's directory>/references/sidecar.sh"
+if dir="$(bash "$SC" path handoffs 2>/dev/null)"; then :; else dir="${TMPDIR:-/tmp}"; fi
+HANDOFF="${dir%/}/handoff-$(date +%Y%m%d-%H%M%S).md"
+i=1
+while [ -e "$HANDOFF" ]; do i=$((i + 1)); HANDOFF="${dir%/}/handoff-$(date +%Y%m%d-%H%M%S)-$i.md"; done
+echo "$HANDOFF"
 ```
 
-The X's sit at the end of the template, with no suffix after them, because that is the one shape BSD and GNU `mktemp` both fill in; the `.md` is added by the rename. `scripts/test-handoff-mktemp.sh` runs this block and pins the result.
+`sidecar.sh path handoffs` prints the sidecar's `handoffs/` directory and creates it; on a miss it exits nonzero and the block takes the temp folder. The block computes a path and creates no file, so the first write makes the doc. A second doc in the same second gets a numbered name rather than the first one's path. `scripts/test-handoff-path.sh` runs this block and pins the result.
 
-Read the path before writing to it (the file exists, empty, after the block). Write the body. Print the path to the user at the end so they can paste it into the next session.
+Write the body to the printed path. Print the path to the user at the end so they can paste it into the next session.
 
 ### 4. Shape the doc body
 
@@ -125,7 +129,7 @@ Skip the cold read only with a one-line reason written into the doc, for example
 
 ### 6. Print the path and exit
 
-Print the `mktemp` path, a one-line preview of the lede, and any stale pointers from Step 5. The user picks the path up and pastes it into a fresh session.
+Print the path, a one-line preview of the lede, and any stale pointers from Step 5. The user picks the path up and pastes it into a fresh session.
 
 After printing the path, say in one line that this session no longer makes decisions about the handed-off work. If the human keeps working here and something changes, write a new doc at a new path. Never edit a doc that has been printed, because another session may already have read it. `/handoff` does nothing else — it does not auto-invoke another skill, it does not modify any other artifact (stale ones are listed, not edited), it does not commit anything.
 
@@ -134,16 +138,16 @@ After printing the path, say in one line that this session no longer makes decis
 | Rationalization | Reality |
 |---|---|
 | "The session is long, so I should `/handoff` between two primary pipeline skills." | Primary pipeline skills already print `**Next session:**` from their `## Handoff` section. That is the inter-skill compression artifact. `/handoff` is for situations where that artifact does not fit — not a second copy of it. |
-| "I'll write the handoff doc inside the repo so I can refer back to it later." | A handoff doc is a transient context-transfer artifact, not durable state. State that belongs durably belongs in GitHub — update the PRD issue, leave a slice issue comment, write a `docs/solutions/` entry. The handoff doc lives at a `mktemp` path on purpose. |
+| "I'll write the handoff doc inside the repo so I can refer back to it later." | A handoff doc is a transient context-transfer artifact, not durable state. State that belongs durably belongs in GitHub — update the PRD issue, leave a slice issue comment, write a `docs/solutions/` entry. The handoff doc lives outside the project tree on purpose: in the project's sidecar, or the temp folder when there is none. |
 | "The handoff doc should include the full PRD text so the next session has everything." | No. The next session can run `gh issue view <n>` from the doc's reference. Duplicating the PRD makes the doc go stale the moment the issue is edited and bloats context for no benefit. |
 | "I'm mid-`/execute` and the work is unfinished — I'll write a handoff doc instead of leaving an issue comment." | `/execute` already prescribes leaving an issue comment with what was done, what remains, and the exact error output. That comment is the durable record. A handoff doc can carry session-level pointers on top of it, but it does not replace the comment. |
 | "The argument the user passed is vague, so I'll skip the focus question." | Ask one question. A vague handoff doc earns less reader trust than a short one with a clear focus. |
 | "I already verified it myself, so the cold read adds nothing." | A writer can re-check git state and every live fact, judge the doc ready, and still leave gaps a cold reader finds in one pass. You checked what you knew to check. The cold reader finds what you didn't know was missing. |
-| "I'll commit the handoff doc to the repo so it survives." | Don't. Surviving the session is not the goal — compacting it is. If the content needs to survive, the right vessel is an issue comment, a PRD body update, or a `docs/solutions/` entry. |
+| "I'll commit the handoff doc to the repo so it survives." | Do not commit it; it already survives, in the sidecar, outside the project tree. The doc compacts the session and outlasts a restart so the next session can pick it up; content that must outlast the work belongs in an issue comment, a PRD body update, or a `docs/solutions/` entry. |
 
 ## Red Flags
 
-- The doc is being written inside the repo working tree (not at a `mktemp` path).
+- The doc is being written inside the repo working tree (not at the path Step 3's block printed).
 - The agent is about to `git add` the handoff doc.
 - The doc body restates the PRD, the research artifact, or the PR body instead of linking them.
 - The doc is being produced at the natural close of a primary pipeline skill, parallel to that skill's existing `**Next session:**` line.
@@ -170,6 +174,6 @@ A run of `/handoff` is not complete until:
 ## Handoff
 
 - **Expected input:** a long-running or exploratory session that does not sit on a primary pipeline boundary, plus (optionally) an argument describing the next session's focus
-- **Produces:** a transient handoff doc at a `mktemp` path, referencing durable state rather than copying it, checked by one cold read before the path is printed
+- **Produces:** a handoff doc in the project's sidecar (or the temp folder when no sidecar answers), outside the project tree, referencing durable state rather than copying it, checked by one cold read before the path is printed
 - **Comes next by default:** a fresh session opened by the user, using the doc as its entry point — the fresh session may invoke any skill (often `/execute`, `/qa`, or `/help`) or continue ad-hoc, depending on the captured focus
 - **Does not invoke:** any other skill — `/handoff` is a pure side-route producing a transient artifact. Its one sub-agent, the Step 5 cold reader, is part of its own procedure
