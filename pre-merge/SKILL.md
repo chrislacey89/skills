@@ -218,19 +218,6 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
    **On a delta re-run, the delta is the subject and the tree is still readable.** Brief each Phase 3 reviewer with the findings the post-stamp commits claim to close — the earlier readout in this session, the ledger if loop-mode wrote one (where [references/state-backend.md](references/state-backend.md) § Where the review's records live says), or the commit messages themselves — with the `/fix-findings` breaker verdicts when there are any, and with the `bash "$SC" profile` output, verbatim, that Phase 3's contract hands every reviewer. The first question per commit is whether the fix closes its finding at every site the finding named, which is the Fix Completeness dimension; the second is what the new text contradicts nearby, which is the census in `references/restated-claims.md`. Both need the surrounding tree, and the checklist's context contract already grants it; the scope narrows what the review is *about*, never what the reviewer may open.
 
-   **Check whose lock this is.** A stamp flag another session wrote means two sessions may be acting on this branch. The block below prints a line only when the flag exists and its `by=` is not this session's id; when it does, tell the human who wrote it and when, and ask before going on. With nobody to ask, as on an AFK loop-mode run, stop and report the line.
-   ```bash
-   # Who left the review lock on this checkout? Prints nothing when this session did, or nobody did.
-   FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
-   if [ -f "$FLAG" ]; then
-     BY=$(sed -n 's/^by=//p' "$FLAG")
-     AT=$(sed -n 's/^at=//p' "$FLAG")
-     if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
-       echo "review lock: made by session ${BY:-unknown} at ${AT:-unknown}, not by this session"
-     fi
-   fi
-   ```
-
 5. **Read whether this branch has a lesson lookup on record.** `/execute` looks up the lessons that point at a slice's files, and the lookup command records each run in the sidecar itself; [references/state-backend.md](references/state-backend.md) § Lesson recall lists the cases where a run that happened goes unrecorded. This reads that record and writes nothing:
    <!-- sidecar-read: pre-merge-lessons -->
    ```bash
@@ -243,6 +230,19 @@ If you are running on a branch other than the user's working branch and `--pr` w
    fi
    ```
    Keep the line it prints for Phase 4. It names no lesson, and [references/state-backend.md](references/state-backend.md) § Lesson recall says what each line means.
+
+6. **Check whose lock this is.** This step runs in author-mode and loop-mode. A stamp flag another session wrote means two sessions may be acting on this branch. The block below prints a line only when the flag exists and its `by=` is not this session's id; when it does, tell the human who wrote it and when, and ask before going on. With nobody to ask, as on an AFK loop-mode run, stop and report the line.
+   ```bash
+   # Who left the review lock on this checkout? Prints nothing when this session did, or nobody did.
+   FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
+   if [ -f "$FLAG" ]; then
+     BY=$(sed -n 's/^by=//p' "$FLAG")
+     AT=$(sed -n 's/^at=//p' "$FLAG")
+     if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
+       echo "review lock: made by session ${BY:-unknown} at ${AT:-unknown}, not by this session"
+     fi
+   fi
+   ```
 
 **Reviewer-mode (`--pr <number>`):**
 

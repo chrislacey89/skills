@@ -1732,7 +1732,7 @@ owner_block="$(awk '
     on && /^   ```$/                                    { exit }
     on                                                  { print substr($0, 4) }
 ' pre-merge/SKILL.md)"
-[ -n "$owner_block" ] || fatal "no owner block found in pre-merge/SKILL.md Phase 1 step 4"
+[ -n "$owner_block" ] || fatal "no owner block found in pre-merge/SKILL.md Phase 1 step 6"
 
 owner_case() {  # $1 = shell
     local sh="$1" o="$scratch/owner-$1" out first
