@@ -124,19 +124,25 @@ image="koalaman/shellcheck:v$pinned"
 # run_bounded <seconds> <command...> — run a command, and kill it if it has not
 # finished in time. macOS ships no timeout(1), and a docker CLI whose daemon is
 # not running can wait on its socket instead of failing.
+#
+# The bound is wall-clock time read from bash's SECONDS, not a count of polling
+# rounds: each round also pays for starting a `sleep`, which is slow on a loaded
+# machine, so counting rounds stretched the bound. SECONDS moves in whole
+# seconds and the loop can start partway through one, so the kill waits until
+# SECONDS is past the deadline: at least <seconds>, at most one more.
 run_bounded() {
-    local secs="$1" pid ticks=0
+    local secs="$1" pid deadline
     shift
     "$@" >/dev/null 2>&1 &
     pid=$!
+    deadline=$((SECONDS + secs))
     while kill -0 "$pid" 2>/dev/null; do
-        if [ "$ticks" -ge $((secs * 10)) ]; then
+        if [ "$SECONDS" -gt "$deadline" ]; then
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
             return 124
         fi
         sleep 0.1
-        ticks=$((ticks + 1))
     done
     wait "$pid"
 }
