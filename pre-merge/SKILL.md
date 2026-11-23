@@ -137,7 +137,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
    # for a stamp that was folded away only when it carries the stamped tree:
    # starting anywhere else would skip commits no review has read.
    if [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null; then
-     RELEASED_HEAD=$(bash "$SC" stamp read "$(git branch --show-current)" --released) || RELEASED_HEAD=
+     RELEASED_HEAD=$(bash "$SC" stamp released "$(git branch --show-current)") || RELEASED_HEAD=
      if [ -n "$RELEASED_HEAD" ] && [ "$RELEASED_HEAD" != "$(git rev-parse HEAD)" ] \
        && git merge-base --is-ancestor "$RELEASED_HEAD" HEAD 2>/dev/null \
        && [ "$(git rev-parse "$RELEASED_HEAD^{tree}")" = "$(git rev-parse -q --verify "$REVIEWED_SHA^{tree}")" ]; then
@@ -210,26 +210,13 @@ If you are running on a branch other than the user's working branch and `--pr` w
    ```
    Four states fall back to the whole slice, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` and whose tree `HEAD` no longer carries (the branch was rewritten and the content changed with it, or the reviewed commit is gone — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge after the stamp that the next paragraph cannot read as a resolution (one that does not bring in the base, or a git that rejects `--remerge-diff`), whose post-stamp diff would carry changes nobody on this branch wrote. The whole slice is the whole branch unless `range` found a recorded start, and when it finds one that a fold or rebase rewrote away it says so on stderr and answers `$BASE_REF`, never re-anchoring the start. The decision is printed so the terminal readout and the PR say the same thing about what was read.
 
-   **A merge from the base after the stamp is reviewed as its resolution.** When every post-stamp commit on this branch's first-parent line is either an ordinary commit or a merge whose second parent is on the base branch, the review scope is two things: the ordinary commits' own diffs, and each merge's `git show --remerge-diff` output, which shows only what the person resolving the merge changed by hand ([git-show](https://git-scm.com/docs/git-show); the option arrived in [git 2.36](https://github.com/git/git/blob/v2.36.0/Documentation/RelNotes/2.36.0.txt)). An empty remerge diff is a clean merge: nobody on this branch wrote anything in it. When every post-stamp commit is a clean merge, the block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`, and the run goes on as for a history-only rewrite, below: no Phase 3, and the stamp moves to `HEAD`. Otherwise the block lists the commits and resolutions it read, and that listing, not `git diff "$SCOPE_FROM...HEAD"`, is the diff Phase 3's reviewers are handed, because the three-dot diff would carry the base's own changes. Any other merge shape, or a git that rejects the option, keeps the whole-slice fallback, and the block prints why.
+   **A merge from the base after the stamp is reviewed as its resolution.** When every post-stamp commit on this branch's first-parent line is either an ordinary commit or a merge whose second parent is on the base branch, the review scope is two things: the ordinary commits' own diffs, and each merge's `git show --remerge-diff` output, which shows only what the person resolving the merge changed by hand ([git-show](https://git-scm.com/docs/git-show); the option arrived in [git 2.36](https://github.com/git/git/blob/v2.36.0/Documentation/RelNotes/2.36.0.txt)). An empty remerge diff is a clean merge: nobody on this branch wrote anything in it. When every post-stamp commit is a clean merge, the block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`, and the run goes on as for a history-only rewrite, below: no Phase 3, and the stamp moves to `HEAD`. Otherwise the block lists the commits and resolutions it read, and their full text, from Phase 3's author-mode block, not `git diff "$SCOPE_FROM...HEAD"`, is the diff Phase 3's reviewers are handed, because the three-dot diff would carry the base's own changes. Any other merge shape, or a git that rejects the option, keeps the whole-slice fallback, and the block prints why.
 
-   **After a `stamp release`, the delta starts at the released head, and never past a commit no review read.** When the head at release was the stamped commit, the two starts are one. When a fold had replaced the stamped commit, the block starts at the released head if it carries the stamped tree. When commits had landed after the stamp and before the release, it starts at the stamp, so they are read too. Give each reviewer the release's reason, from `.claude/.post-review-edit`, as the claim the edit has to meet.
+   **After a `stamp release`, the delta starts at the released head, and never past a commit no review read.** When the head at release was the stamped commit, the two starts are one. When a fold had replaced the stamped commit, the block starts at the released head if it carries the stamped tree. When commits had landed after the stamp and before the release, it starts at the stamp, so they are read too. Give each reviewer the release's reason, from `bash "$SC" stamp released "$(git branch --show-current)" --reason`, as the claim the edit has to meet. When it prints nothing, tell the reviewers no reason is on record: on the github backend the reason lives only in `.claude/.post-review-edit`, which `/execute` Step 6 removes.
 
    **A rewrite that kept the reviewed tree is not a divergence.** When the stamped commit is not an ancestor of `HEAD` but still exists locally and carries the same tree as `HEAD`, history changed and content did not: the fold Phase 4's handoff offers (`git rebase -i --autosquash`) produces exactly this. The block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`. Skip Phase 3 and everything in Phase 4 except the stamp, which re-stamps at `HEAD` (run Phase 3's one-line SHA block for the value its `REVIEWED_SHA=` line takes), and the handoff menu. The stamp certifies reviewed content, and a tree hash is that content exactly. If the stamped commit is not available locally, the tree cannot be compared, and the rewrite takes the whole-branch fallback above.
 
    **On a delta re-run, the delta is the subject and the tree is still readable.** Brief each Phase 3 reviewer with the findings the post-stamp commits claim to close — the earlier readout in this session, the ledger if loop-mode wrote one (where [references/state-backend.md](references/state-backend.md) § Where the review's records live says), or the commit messages themselves — with the `/fix-findings` breaker verdicts when there are any, and with the `bash "$SC" profile` output, verbatim, that Phase 3's contract hands every reviewer. The first question per commit is whether the fix closes its finding at every site the finding named, which is the Fix Completeness dimension; the second is what the new text contradicts nearby, which is the census in `references/restated-claims.md`. Both need the surrounding tree, and the checklist's context contract already grants it; the scope narrows what the review is *about*, never what the reviewer may open.
-
-   **Check whose lock this is.** A stamp flag another session wrote means two sessions may be acting on this branch. The block below prints a line only when the flag exists and its `by=` is not this session's id; when it does, tell the human who wrote it and when, and ask before going on. With nobody to ask, as on an AFK loop-mode run, stop and report the line.
-   ```bash
-   # Who left the review lock on this checkout? Prints nothing when this session did, or nobody did.
-   FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
-   if [ -f "$FLAG" ]; then
-     BY=$(sed -n 's/^by=//p' "$FLAG")
-     AT=$(sed -n 's/^at=//p' "$FLAG")
-     if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
-       echo "review lock: made by session ${BY:-unknown} at ${AT:-unknown}, not by this session"
-     fi
-   fi
-   ```
 
 5. **Read whether this branch has a lesson lookup on record.** `/execute` looks up the lessons that point at a slice's files, and the lookup command records each run in the sidecar itself; [references/state-backend.md](references/state-backend.md) § Lesson recall lists the cases where a run that happened goes unrecorded. This reads that record and writes nothing:
    <!-- sidecar-read: pre-merge-lessons -->
@@ -243,6 +230,19 @@ If you are running on a branch other than the user's working branch and `--pr` w
    fi
    ```
    Keep the line it prints for Phase 4. It names no lesson, and [references/state-backend.md](references/state-backend.md) § Lesson recall says what each line means.
+
+6. **Check whose lock this is.** This step runs in author-mode and loop-mode. A stamp flag another session wrote means two sessions may be acting on this branch. The block below prints a line only when the flag exists and its `by=` is not this session's id; when it does, tell the human who wrote it and when, and ask before going on. With nobody to ask, as on an AFK loop-mode run, stop and report the line.
+   ```bash
+   # Who left the review lock on this checkout? Prints nothing when this session did, or nobody did.
+   FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
+   if [ -f "$FLAG" ]; then
+     BY=$(sed -n 's/^by=//p' "$FLAG")
+     AT=$(sed -n 's/^at=//p' "$FLAG")
+     if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
+       echo "review lock: made by session ${BY:-unknown} at ${AT:-unknown}, not by this session"
+     fi
+   fi
+   ```
 
 **Reviewer-mode (`--pr <number>`):**
 
@@ -261,15 +261,24 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 **Skip this phase entirely in reviewer-mode** — the PR already exists, you did not author it, and rewriting someone else's PR body is out of scope. Proceed to Phase 3.
 
-**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared. So does a head commit that any remote branch holds, under any name, which is the case of a branch built on a pushed branch before its own first commit ([git-rev-list](https://git-scm.com/docs/git-rev-list) on `--not --remotes`):
+**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared. So does a head commit that any remote branch holds, under any name, which is the case of a branch built on a pushed branch before its own first commit ([git-rev-list](https://git-scm.com/docs/git-rev-list) on `--not --remotes`). So does any commit in the range the fold in Phase 4's handoff would rewrite, which starts at the start the slice's work item records, or with none at the branch's fork point with the base (with the sibling slice's branch, for a stacked PR). The fold refuses on that range, so a branch built on a pushed branch with no recorded start reads as shared, and the fold is not offered there:
 
 ```bash
 # Is this branch shared? Prints "shared: yes" or "shared: no".
+SC="<this skill's directory>/references/sidecar.sh"
+W="<the W-<n> Phase 1 step 2 named, or empty>"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 1 step 3 was given; an earlier block's shell variable does not reach this one
+# Where the fold in Phase 4's handoff starts, found the way that block finds it.
+FOLD_RANGE=$(bash "$SC" range ${W:+"$W"}) && FOLD_START="${FOLD_RANGE%%..*}" || FOLD_START=
+if [ -n "$BASE_BRANCH" ] && [ "$FOLD_START" = "$(bash "$SC" base-ref 2>/dev/null)" ]; then
+  FOLD_START=$(git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" || git rev-parse --verify -q "$BASE_BRANCH^{commit}")
+fi
 C=HEAD   # the newest commit a fold would rewrite
+F=$(git merge-base "$FOLD_START" HEAD 2>/dev/null) || F=   # the fold rewrites every commit after this one; none found counts as shared
 B=$(git branch --show-current)
 R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
 HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ]; then SHARED=yes; else SHARED=no; fi
+if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ] || [ -z "$F" ] || [ "$(git rev-list --count "$C" --not "$F" --remotes)" != "$(git rev-list --count "$C" --not "$F")" ]; then SHARED=yes; else SHARED=no; fi
 echo "shared: $SHARED"
 ```
 
@@ -457,7 +466,16 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 Consult `review-checklist.md` for the review dimensions and their violation patterns. That file is the roster — its `## N.` headings are the only place the set of dimensions is defined, and nothing here restates it. The dimensions run identically in all three modes; only the `diff` they read differs:
 
-- **Author-mode** — the local `git diff "$SCOPE_FROM...HEAD"`, where Phase 1 step 4 set `$SCOPE_FROM` to the left end of `sidecar.sh range` (a first review: the whole slice, which is `$BASE_REF` unless the work item records a start) or to the stamped SHA (a re-run whose head moved: the post-stamp delta). On a delta re-run each reviewer is also briefed with the findings the post-stamp commits claim to close and any breaker verdicts, and reads the tree around the delta as the checklist's context contract allows — the delta is the subject, not the reading limit.
+- **Author-mode** — the local `git diff "$SCOPE_FROM...HEAD"`, where Phase 1 step 4 set `$SCOPE_FROM` to the left end of `sidecar.sh range` (a first review: the whole slice, which is `$BASE_REF` unless the work item records a start) or to the stamped SHA (a re-run whose head moved: the post-stamp delta). When the scope line ends `read as its resolution`, the three-dot diff would carry the base's own changes, so the reviewers are handed this block's output instead: each ordinary commit's diff, then each merge's hand resolution.
+  ```bash
+  # Author-mode, scope line ending "read as its resolution": the diff Phase 3's reviewers are handed.
+  : "${SCOPE_FROM:?resolve it with the Phase 1 step 4 scope-decision block before running this}"
+  git log -p --oneline --first-parent --no-merges --no-ext-diff "$SCOPE_FROM..HEAD"
+  git log --reverse --first-parent --merges --format=%H "$SCOPE_FROM..HEAD" | while IFS= read -r C; do
+    git show --remerge-diff --no-ext-diff --format='%h %s (what was resolved by hand)' "$C"
+  done
+  ```
+  On a delta re-run each reviewer is also briefed with the findings the post-stamp commits claim to close and any breaker verdicts, and reads the tree around the delta as the checklist's context contract allows — the delta is the subject, not the reading limit.
 - **Reviewer-mode** — the `gh pr diff <pr-number>` output.
 - **Loop-mode** — the local `git diff "$BASE_REF...HEAD"` — the whole branch on every invocation; loop-mode does not take the delta scope. Loop-mode makes no commits, so on a later invocation the diff has moved only if the *operator* pushed fixes; the ledger, not a narrowed diff, is what stops the pass re-reporting settled findings.
 
@@ -760,7 +778,7 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 **Input:** PR #<pr-number>  (capture the lesson onto this PR branch, before /closeout merges)
 ```
 
-**Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta holds only what the block below counts as the captured lesson, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed:
+**Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta holds only what the block below counts as the captured lesson, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed, and fill the block's `READ_AS_RESOLUTION` line from its scope line: a merge from the base after the stamp is read as its resolution here too, as in Phase 3's author-mode block, so the base's own files do not count as code in the delta:
 
 ```bash
 # This block runs in its own shell — $SCOPE_FROM was assigned in Phase 1 step
@@ -778,7 +796,21 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 # the exact inversion of the verdict, in the direction that suppresses the
 # recommendation on a delta carrying code. `grep -v` without `-q` is correct
 # under both.
-outside=$(git diff --name-only "$SCOPE_FROM...HEAD" | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
+READ_AS_RESOLUTION="<yes when Phase 1 step 4's scope line ended with 'read as its resolution', else empty>"
+if [ "$READ_AS_RESOLUTION" = yes ]; then
+  # The three-dot diff would carry the base's own changes: name what Phase 3's
+  # author-mode block hands over instead, each ordinary commit's files and each
+  # merge's hand resolution.
+  names=$(
+    git log --first-parent --no-merges --name-only --format=%n "$SCOPE_FROM..HEAD"
+    git log --first-parent --merges --format=%H "$SCOPE_FROM..HEAD" | while IFS= read -r C; do
+      git show --remerge-diff --no-ext-diff --name-only --format= "$C"
+    done
+  )
+else
+  names=$(git diff --name-only "$SCOPE_FROM...HEAD")
+fi
+outside=$(printf '%s\n' "$names" | sed '/^$/d' | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
 if [ -z "$outside" ]; then
   echo "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout"
 fi

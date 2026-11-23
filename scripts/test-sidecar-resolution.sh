@@ -844,6 +844,16 @@ check "…with nothing on stderr" "" "$err"
 contains "…having asked gh pr view for the base and the state" "pr view --json baseRefName,state" "$(cat "$PRB_GH_LOG")"
 prb_run "$open_pr" base-ref --name
 check "an open PR's base, --name: the bare branch" "0 integration" "$rc $out"
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref --name --no-pr
+check "an open PR's base, --no-pr: the repo's base instead" "0 develop" "$rc $out"
+check "…and gh is never asked" 0 "$(calls)"
+prb_run "$open_pr" base-ref --no-pr --name
+check "--no-pr and --name in either order" "0 develop" "$rc $out"
+prb_run "$open_pr" base-ref --no-pr
+check "--no-pr without --name: the ref form" "0 origin/develop" "$rc $out"
+prb_run "$open_pr" base-ref --bogus
+check "an unknown flag is a usage error" 2 "$rc"
 prb_run '{"baseRefName":"integration","state":"CLOSED"}' base-ref
 check "a closed PR is ignored: the answer is today's" "0 origin/develop" "$rc $out"
 prb_run '{"baseRefName":"integration","state":"MERGED"}' base-ref
@@ -909,6 +919,20 @@ bset '.base_ref = "develop"'
 q4out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$q4" 2>&1)"
 check "Q4 on an answered key does not ask" "base_ref=develop (answered; not asking)" "$q4out"
 contains "/init-pipeline writes the answer through config set base_ref" 'config set base_ref <branch>' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# Q4 run from a branch with an open PR, on an owned GitHub sidecar with base_ref
+# unasked: it offers the repo's base, never that one PR's target, in both shells.
+prb_run "$open_pr" config set mode owned
+prb_run "$open_pr" resolve
+PRB_SJ="$out/sidecar.json"
+jq 'del(.base_ref)' "$PRB_SJ" > "$PRB/sj" && mv "$PRB/sj" "$PRB_SJ"
+for sh in bash zsh; do
+    if ! command -v "$sh" >/dev/null 2>&1; then echo "SKIP: Q4 under $sh: $sh not installed"; continue; fi
+    : > "$PRB_GH_LOG"
+    q4out="$(cd "$PRB/clone" && PATH="$PRB/bin:$PATH" PRB_PR_JSON="$open_pr" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" "$sh" -c "$q4" 2>&1)"
+    check "Q4 ($sh) with an open PR targeting integration offers the repo's base" "detected=develop" "$q4out"
+    check "Q4 ($sh) never asks gh for the PR's base" 0 "$(calls)"
+done
 
 # /pre-merge Phase 1 step 3 takes both forms from the verb and derives nothing itself.
 # shellcheck disable=SC2016 # the dollars are the skill's literal text

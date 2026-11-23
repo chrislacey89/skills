@@ -443,7 +443,7 @@ bash "$SC" init --name <suggested> --mode <Q1> --write <Q3> --in-tree-path <Q2>
 SC="<this skill's directory>/scripts/sidecar.sh"
 CUR="$(bash "$SC" config get base_ref)" || { echo "base_ref: config get failed; stop and relay it" >&2; exit 1; }
 if [ -n "$CUR" ]; then echo "base_ref=$CUR (answered; not asking)"; exit 0; fi
-DETECTED="$(bash "$SC" base-ref --name 2>/dev/null)" || DETECTED=
+DETECTED="$(bash "$SC" base-ref --name --no-pr 2>/dev/null)" || DETECTED=
 echo "detected=${DETECTED:-none}"
 ```
 

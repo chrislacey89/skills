@@ -245,10 +245,38 @@ fold_block_template="$(printf '%s\n' "$fold_block_template" | sed 's/^W="<[^"]*>
 # run_fold <repo> [stacked branch] — the fold, in a shell with no BASE_REF.
 run_fold() { (cd "$1" && env -u BASE_REF bash -c "$(fill_base "$fold_block_template" "${2:-}")" 2>&1); }
 
+# Phase 3's author-mode hand-off for a scope read as resolutions (#808), whole.
+# Section 15 runs it in a fresh shell given only SCOPE_FROM, and checks the
+# diff text it prints, not a --stat listing.
+handoff_block="$(fenced_with "$premerge_skill" 'scope line ending "read as its resolution"')"
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+[[ "$handoff_block" == *'--remerge-diff'* && "$handoff_block" == *'"$SCOPE_FROM..HEAD"'* ]] \
+    || fatal "no Phase 3 author-mode hand-off block for merges read as resolutions found in $premerge_skill"
+
+# Phase 4's /compound check, whole. Section 15 fills its READ_AS_RESOLUTION
+# placeholder the way an agent does, from the scope line, and runs it in a
+# fresh shell given only SCOPE_FROM.
+compound_template="$(fenced_with "$premerge_skill" 'do not re-recommend /compound')"
+[[ "$compound_template" == *'READ_AS_RESOLUTION="<'* ]] \
+    || fatal "Phase 4's /compound check in $premerge_skill has no READ_AS_RESOLUTION placeholder"
+# fill_resolution <block> <yes|empty> — the placeholder line, filled.
+fill_resolution() { printf '%s\n' "$1" | sed "s/^READ_AS_RESOLUTION=\"<[^\"]*>\".*\$/READ_AS_RESOLUTION=\"$2\"/"; }
+[[ "$(fill_resolution "$compound_template" yes)" == *'READ_AS_RESOLUTION="yes"'* ]] \
+    || fatal "could not fill the /compound check's READ_AS_RESOLUTION placeholder"
+
 # /pre-merge Phase 2's shared-branch block (#572), whole: it prints its verdict.
 shared_block="$(fenced_with "$premerge_skill" 'git ls-remote --heads')"
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
 [[ "$shared_block" == *'echo "shared: $SHARED"'* ]] || fatal "no shared-branch block printing its verdict found in $premerge_skill"
+# It asks where the fold would start, the way the fold does: SHARED_W fills its
+# W= placeholder (empty: no work item), and its stacked placeholder is left
+# empty, as on an unstacked branch. Section 16 runs it against the fold itself.
+[[ "$shared_block" == *"$sidecar_sh"* ]] || fatal "the shared-branch block does not ask sidecar.sh where the fold starts"
+# shellcheck disable=SC2016  # the ${...} is text for the extracted block to expand, not this shell
+shared_block="$(printf '%s\n' "$shared_block" | sed 's/^W="<[^"]*>"$/W="${SHARED_W:-}"/')"
+# shellcheck disable=SC2016
+[[ "$shared_block" == *'W="${SHARED_W:-}"'* ]] || fatal "the shared-branch block has no W= placeholder for the slice's work item"
+shared_block="$(fill_base "$shared_block" "")" || fatal "could not fill the shared-branch block's BASE_BRANCH placeholder"
 
 # The fixup-target block from /fix-findings Step 1, in the fixer brief's commit rule (#566), de-indented
 # out of its list item and whole, from its comment to the line that prints the
@@ -1089,9 +1117,18 @@ point_origin_at_main() {
 point_origin_at_main "$repo4"
 change_b_sha="$(git -C "$repo4" rev-parse HEAD~1)"
 # Prints the SHA the block's own last line printed, for <repo> <file> <start> <end>.
+# The block runs in zsh too when zsh is on PATH, the shell an agent runs it in on
+# macOS (docs/solutions/patterns/skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md).
+# This runs inside $(...), where an assert_eq would not count, so a zsh answer
+# that differs is printed beside bash's and fails the caller's assertion. A
+# missing zsh fails in CI in section 12's zsh arms below.
 run_target_in() {
-    local out
+    local out zout
     out="$(cd "$1" && env -u BASE_REF TARGET_FILE="$2" TARGET_START="$3" TARGET_END="$4" bash -c "$fixup_target_block" 2>/dev/null)"
+    if command -v zsh >/dev/null 2>&1; then
+        zout="$(cd "$1" && env -u BASE_REF TARGET_FILE="$2" TARGET_START="$3" TARGET_END="$4" zsh -f -c "$fixup_target_block" 2>/dev/null)"
+        [ "$zout" = "$out" ] || out="bash: $out; zsh: $zout"
+    fi
     printf '%s' "${out#FIXUP_TARGET=}"
 }
 run_target() { run_target_in "$repo4" f.txt "$1" "$2"; }
@@ -1137,10 +1174,11 @@ git -C "$repo4" config --unset blame.ignoreRevsFile
 git -C "$repo4" push -q origin "$change_b_sha:refs/heads/elsewhere" 2>/dev/null
 git -C "$repo4" fetch -q origin 2>/dev/null
 assert_eq "" "$(run_target 2 2)" "a target another remote branch holds: no target, so no fixup of a published commit"
-assert_eq "$add_d_sha" "$(run_target 4 4)" "…while a line from a commit no remote holds keeps its target"
+assert_eq "" "$(run_target 4 4)" "…and a line from a later commit no remote holds: the fold's range from the base holds the published one, so the fold would refuse and there is no target"
 git -C "$repo4" push -q origin --delete elsewhere 2>/dev/null
 git -C "$repo4" fetch -q --prune origin 2>/dev/null
 assert_eq "$change_b_sha" "$(run_target 2 2)" "control: with the other branch gone, the same line has its target again"
+assert_eq "$add_d_sha" "$(run_target 4 4)" "control: …and so does the later commit's line"
 
 # A shared branch never gets a fixup: /pre-merge offers the fold only on an
 # unshared branch, so a `fixup!` subject there would merge as-is (#611). Both
@@ -1970,6 +2008,10 @@ shared_both "shared: yes" "origin cannot be reached: ls-remote fails, so shared"
 git -C "$repo5" remote set-url origin "$bare5"
 git -C "$repo5" push -q fork feature 2>/dev/null
 shared_both "shared: yes" "pushed to fork: HEAD is on a remote branch, so shared whichever remote the branch pushes to"
+# The rows below measure the push-remote lookup alone, so fork keeps the
+# branch's name but at the base's commit: no commit the fold would rewrite is
+# on a remote, and only the name on the asked remote can make it shared.
+git -C "$repo5" push -q -f fork main:refs/heads/feature 2>/dev/null
 printf 'c\n' > "$repo5/h.txt"
 git -C "$repo5" add h.txt
 git -C "$repo5" commit -q -m 'feature: after the fork push'
@@ -1997,9 +2039,13 @@ git -C "$repo5" remote set-url origin "$bare5"
 # the released head carries the stamped tree, it may, and it is the only start
 # that is not the whole slice. When the head had already moved past the stamp,
 # it may not: starting there would stamp the commits in between with nobody
-# having read them, so the review starts at the stamp.
+# having read them, so the review starts at the stamp. When a fold replaced the
+# stamped commit and changed its content too (an unreviewed fix folded into it),
+# the released head does not carry the stamped tree, so it may not stand in for
+# the stamp: the review falls back to the whole slice. That case is the one
+# that fails if the tree comparison is dropped from the block.
 section "released lock: the delta starts at the released head, and never skips an unreviewed commit"
-release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
+release_scope_case() {  # $1 = shell, $2 = folded | past-stamp | rewritten
     local sh="$1" kind="$2" r="$sandbox/release-$1-$2" stamped released out
     mkdir -p "$r"
     git init -q -b main "$r"
@@ -2016,6 +2062,10 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
     stamped="$(git -C "$r" rev-parse HEAD)"
     if [[ "$kind" == folded ]]; then
         git -C "$r" commit -q --amend -m 'feature: one, reworded'
+    elif [[ "$kind" == rewritten ]]; then
+        printf 'one, with a fix no review has read\n' > "$r/one.txt"
+        git -C "$r" add one.txt
+        git -C "$r" commit -q --amend -m 'feature: one, with an unreviewed fix folded in'
     else
         printf 'fix\n' > "$r/fix.txt"
         git -C "$r" add fix.txt
@@ -2025,11 +2075,14 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
     out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" CLAUDE_PROJECT_DIR="$r" \
         bash "$sidecar_sh" stamp release feature --reason 'asked for' 2>&1)"
     if [[ "$kind" == folded ]]; then
-        assert_eq "lock released: make the edit, then re-run /pre-merge to review $released..HEAD and re-stamp" "$out" \
-            "$sh, folded then released: the verb names the released head"
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$out" \
+            "$sh, folded then released: the verb names no range; the scope block decides it"
+    elif [[ "$kind" == rewritten ]]; then
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$out" \
+            "$sh, folded with a content change, then released: the verb names no range, so none disagrees with the whole-slice read"
     else
-        assert_eq "lock released: make the edit, then re-run /pre-merge to review $stamped..HEAD and re-stamp" "$out" \
-            "$sh, released past the stamp: the verb names the stamp, where the unread commits start"
+        assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$out" \
+            "$sh, released past the stamp: the verb names no range; the scope block decides it"
     fi
     printf 'edit\n' > "$r/edit.txt"
     git -C "$r" add edit.txt
@@ -2039,6 +2092,10 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
         assert_eq "review scope: post-stamp delta, from $released|edit.txt" \
             "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
             "$sh, folded then released: the review starts at the released head"
+    elif [[ "$kind" == rewritten ]]; then
+        assert_eq "review scope: whole branch, from main|edit.txt one.txt" \
+            "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
+            "$sh, folded with a content change, then released: the released head does not carry the stamped tree, so the whole slice is read"
     else
         assert_eq "review scope: post-stamp delta, from $stamped|edit.txt fix.txt" \
             "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
@@ -2047,9 +2104,11 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
 }
 release_scope_case bash folded
 release_scope_case bash past-stamp
+release_scope_case bash rewritten
 if [[ "$have_zsh" == yes ]]; then
     release_scope_case zsh folded
     release_scope_case zsh past-stamp
+    release_scope_case zsh rewritten
 fi
 
 # --- 16. The fold on a branch built on a pushed branch (#810) ------------------
@@ -2089,6 +2148,15 @@ fold_publish_case() {  # $1 = shell
     git -C "$r" commit -q --fixup=HEAD -m 'fix two'
     head="$(git -C "$r" rev-parse HEAD)"
 
+    # The offer and the fixup decision ask the fold's own question, so neither
+    # says yes to a fold that will refuse.
+    out="$(cd "$r" && SHARED_W="" "$sh" -c "$shared_block" 2>/dev/null)"
+    assert_eq "shared: yes" "$out" "$sh, no work item: Phase 2's block reads the branch as shared, so the fold is not offered"
+    out="$(cd "$r" && SHARED_W="$w" "$sh" -c "$shared_block" 2>/dev/null)"
+    assert_eq "shared: no" "$out" "$sh, the slice's recorded start: Phase 2's block reads the branch as unshared, so the fold is offered"
+    out="$(run_target_in "$r" two.txt 1 1)"
+    assert_eq "" "$out" "$sh, no work item: /fix-findings writes no fixup! of a commit the fold would refuse to fold"
+
     rc=0
     out="$(cd "$r" && FOLD_W="" env -u BASE_REF "$sh" -c "$(fill_base "$fold_block_template" "")" 2>&1)" || rc=$?
     assert_eq 1 "$rc" "$sh, no work item: the fold's range reaches slice-1's published commit, and it aborts"
@@ -2118,7 +2186,9 @@ if [[ "$have_zsh" == yes ]]; then fold_publish_case zsh; fi
 # wrote, never reach the review. Any other merge, or a git that rejects the
 # option, keeps the whole-slice fallback and says why.
 section "merges from the base after the stamp are reviewed as their resolutions"
-merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
+# diff_files <output> — the files a diff's text names, sorted, space-joined.
+diff_files() { printf '%s\n' "$1" | sed -n 's|^diff --git a/\([^ ]*\) b/.*|\1|p' | sort -u | tr '\n' ' ' | sed 's/ $//'; }
+merge_case() {  # $1 = shell, $2 = clean | ordinary | compound | resolved | topic | octopus | old-git
     local sh="$1" kind="$2" r="$sandbox/merge-$1-$2" stamped out
     mkdir -p "$r"
     git init -q -b main "$r"
@@ -2137,6 +2207,12 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
         printf 'later\n' > "$r/later.txt"
         git -C "$r" add later.txt
         git -C "$r" commit -q -m 'feature: later'
+    fi
+    if [[ "$kind" == compound ]]; then
+        mkdir -p "$r/docs/solutions"
+        printf 'lesson\n' > "$r/docs/solutions/lesson.md"
+        git -C "$r" add docs/solutions/lesson.md
+        git -C "$r" commit -q -m 'docs: compound'
     fi
     if [[ "$kind" == resolved ]]; then
         printf 'shared, as the branch has it\n' > "$r/shared.txt"
@@ -2162,6 +2238,17 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
             printf 'shared, resolved by hand\n' > "$r/shared.txt"
             git -C "$r" add shared.txt
             git -C "$r" commit -q --no-edit
+        elif [[ "$kind" == octopus ]]; then
+            # Its second parent is on the base, so only the parent count tells it apart.
+            # topic starts before 'base moves on', so git keeps all three parents.
+            git -C "$r" switch -q -c topic main~1
+            printf 'topic\n' > "$r/topic.txt"
+            git -C "$r" add topic.txt
+            git -C "$r" commit -q -m 'topic'
+            git -C "$r" switch -q feature
+            git -C "$r" merge -q --no-edit main topic >/dev/null
+            [[ "$(git -C "$r" rev-list --parents -n 1 HEAD | wc -w | tr -d ' ')" == 4 ]] \
+                || fatal "merge case octopus: HEAD is not a three-parent merge"
         else
             git -C "$r" merge -q --no-edit main
         fi
@@ -2173,9 +2260,40 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
     else
         out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" env -u BASE_REF "$sh" -c "$scope_block" 2>&1)"
     fi
-    local scope files
+    local scope files handed verdict
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(stat_files "$out")"
+    # What Phase 3 hands the reviewers, from its own block in a fresh shell.
+    handed="$(cd "$r" && env -u BASE_REF SCOPE_FROM="$stamped" "$sh" -c "$handoff_block" 2>&1)"
+    case "$kind" in
+        ordinary)
+            assert_eq "later.txt" "$(diff_files "$handed")" \
+                "$sh: Phase 3's hand-off: the ordinary commit's diff text, and nothing the base wrote" ;;
+        resolved)
+            assert_eq "shared.txt" "$(diff_files "$handed")" \
+                "$sh: Phase 3's hand-off: only the hand resolution, not the base's own file"
+            case "$handed" in
+                *"+shared, resolved by hand"*) assert_eq ok ok "$sh: Phase 3's hand-off carries the resolution's diff text" ;;
+                *) assert_eq "the resolved line, as diff text" "$handed" "$sh: Phase 3's hand-off carries the resolution's diff text" ;;
+            esac ;;
+    esac
+    # Phase 4's /compound check, from its own block in a fresh shell, with its
+    # placeholder filled from the scope line as an agent fills it.
+    case "$kind" in
+        compound | ordinary | resolved)
+            verdict="$(cd "$r" && env -u BASE_REF SCOPE_FROM="$stamped" "$sh" -c "$(fill_resolution "$compound_template" yes)" 2>&1)" ;;
+    esac
+    case "$kind" in
+        compound)
+            assert_eq "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout" "$verdict" \
+                "$sh: Phase 4's /compound check: a lesson and a clean merge from the base is a /compound entry, not code"
+            # Control: the three-dot diff, which the empty placeholder reads, names the base's file.
+            assert_eq "" "$(cd "$r" && env -u BASE_REF SCOPE_FROM="$stamped" "$sh" -c "$(fill_resolution "$compound_template" "")" 2>&1)" \
+                "$sh: control: read as a three-dot diff, the same delta carries the base's file" ;;
+        ordinary | resolved)
+            assert_eq "" "$verdict" \
+                "$sh: Phase 4's /compound check: the $kind case, beside a merge from the base, still counts as code" ;;
+    esac
     case "$kind" in
         clean)
             assert_eq "review scope: none, every commit since $stamped is a clean merge from main|" "$scope|$files" \
@@ -2183,6 +2301,9 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
         ordinary)
             assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution|later.txt" "$scope|$files" \
                 "$sh: an ordinary commit and a clean merge: only the ordinary commit is read" ;;
+        compound)
+            assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution" "$scope" \
+                "$sh: a /compound commit and a clean merge: the scope reads the merge as its resolution" ;;
         resolved)
             assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution|shared.txt" "$scope|$files" \
                 "$sh: a merge resolved by hand: only what the resolution changed is read, not the base's own file"
@@ -2197,6 +2318,13 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
                 *"does not bring in main"*) assert_eq ok ok "$sh: …and the readout says why" ;;
                 *) assert_eq "a line naming the merge" "$out" "$sh: …and the readout says why" ;;
             esac ;;
+        octopus)
+            assert_eq "review scope: whole branch, from main" "$scope" \
+                "$sh: an octopus merge whose second parent is on the base: the whole slice"
+            case "$out" in
+                *"does not bring in main"*) assert_eq ok ok "$sh: …and the readout says why" ;;
+                *) assert_eq "a line naming the merge" "$out" "$sh: …and the readout says why" ;;
+            esac ;;
         old-git)
             assert_eq "review scope: whole branch, from main" "$scope" \
                 "$sh: a git that rejects --remerge-diff: the whole slice"
@@ -2206,7 +2334,7 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
             esac ;;
     esac
 }
-for kind in clean ordinary resolved topic old-git; do
+for kind in clean ordinary compound resolved topic octopus old-git; do
     merge_case bash "$kind"
     if [[ "$have_zsh" == yes ]]; then merge_case zsh "$kind"; fi
 done
