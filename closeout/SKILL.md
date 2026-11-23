@@ -246,7 +246,7 @@ esac
 
 ### 3. Merge the PR
 
-If the PR already reports `MERGED`, skip the merge and its confirmation (the client merged it), and start at "Then release the post-review edit lock" below. On the `sidecar` backend this route matters: nothing else closes the slice's work item.
+If the PR already reports `MERGED`, skip the merge (the client merged it), and start at "Then release the post-review edit lock" below. On the `sidecar` backend this route matters: nothing else closes the slice's work item.
 
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it, and **give the squash commit the PR body as its message**. Without `--body-file`, `gh` builds the squash message from the per-unit commit messages, so a reader who runs `git blame` months later lands on every fix-round message concatenated (bodies of 200–400 lines were measured across four repos on 2026-09-10) and never on the walkthrough `/pre-merge` Phase 2 wrote. That is also why authors put history in code comments: it was the only per-line record that survived the merge. `/execute` and `/compound` route incident history to the PR body on the promise that it lasts; this flag is what keeps the promise.
 

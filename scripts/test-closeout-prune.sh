@@ -389,7 +389,7 @@ has "Step 1 says a menu pick is not the go-ahead" "$co" "A menu pick starts this
 has "Step 1 asks however the user came in, so it cannot collide with the route: value" "$co" "however the user came into this skill, except where the paragraph above says the question is not asked."
 has "Step 1 shows the confirmation block with the list and the question" "$co" "Show the block below together with the list and the question, so the answer is given with the PR, the teardown and the base in view."
 has "Step 1 names the answers that are the confirmation, and that fix first is not" "$co" "A **merge as is** answer, or a **file as follow-ups, then merge** answer once the follow-ups are filed, is the confirmation the block waits for, so the user is not asked a second time; a **fix first** answer is not a go-ahead."
-hasnt "Step 2 does not point at a Step 3 confirmation that Step 3 does not hold" "$co" "Step 3 merge confirmation"
+hasnt "the text 'Step 3 merge confirmation' is gone from the skill" "$co" "Step 3 merge confirmation"
 has "Step 1 reads the unticked checklist lines" "$co" "Every unticked \`- [ ]\` line in the PR body"
 has "Step 1 reads the breaker verdicts" "$co" "\`survived\` or \`not-run\`"
 has "Step 6 cites git's own documentation for update-ref" "$co" "https://git-scm.com/docs/git-update-ref"
