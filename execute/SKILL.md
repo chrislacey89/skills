@@ -282,7 +282,7 @@ if [ -f "$FLAG" ]; then
 fi
 ```
 
-**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` with this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it.
+**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` with this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that is missing, not in the `YYYY-MM-DDTHH:MM:SSZ` form the block writes, or does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it.
 
 ```bash
 # Is another session running /execute in this checkout? Writes this session's marker, or stops.
@@ -292,7 +292,10 @@ TAKE_OVER=""   # "yes" only after the human chose take over
 if [ -f "$MARK" ] && [ "$TAKE_OVER" != yes ]; then
   BY=$(sed -n 's/^by=//p' "$MARK"); AT=$(sed -n 's/^at=//p' "$MARK"); FOR=$(sed -n 's/^slice=//p' "$MARK")
   if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
-    THEN=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$AT" +%s 2>/dev/null || date -u -d "$AT" +%s 2>/dev/null)
+    THEN=""   # GNU date -d reads free text ("yesterday", "" as midnight), so only the written shape is parsed
+    if printf '%s\n' "$AT" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'; then
+      THEN=$(date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$AT" +%s 2>/dev/null || date -u -d "$AT" +%s 2>/dev/null)
+    fi
     if [ -z "$THEN" ] || [ $(( $(date +%s) - THEN )) -lt 43200 ]; then
       echo "session marker: held by session ${BY:-unknown} since ${AT:-unknown} for ${FOR:-unnamed}. Ask: take over, or pick another slice." >&2
       exit 1

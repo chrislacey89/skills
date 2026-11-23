@@ -131,6 +131,15 @@ for sh in $shells; do
     run "$sh" "$mark_block" s-me
     check "$sh: an at= that does not parse counts as fresh: the block stops" 1 "$rc"
 
+    # GNU date -d reads "" as midnight today, so these read as expired after 12:00 UTC without the shape check.
+    printf 'by=s-other\nat=\nslice=W-3\n' > "$M"
+    run "$sh" "$mark_block" s-me
+    check "$sh: an empty at= counts as fresh: the block stops" 1 "$rc"
+
+    printf 'by=s-other\nslice=W-3\n' > "$M"
+    run "$sh" "$mark_block" s-me
+    check "$sh: a marker with no at= counts as fresh: the block stops" 1 "$rc"
+
     section "$sh: Step 6's removal"
 
     printf 'by=s-me\nat=%s\nslice=W-7\n' "$(utc 60)" > "$M"
