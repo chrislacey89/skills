@@ -24,9 +24,6 @@
 # And it pins the prose that has no command to run: the single question, the
 # sentence that a menu pick is not the go-ahead, the git documentation the
 # prune block rests on, and the stop message.
-# What the confirmation sentences in Step 1 mean (which answers count as the
-# go-ahead, and that a plain yes does where no question is asked) is held by
-# review, not by a pin: the pins above hold wording, not that meaning.
 #
 # Fixtures are built after unsetting the inherited git environment, with a
 # private global config (scratch-git-repos-inherit-the-hook-git-dir-2026-09-17.md,
