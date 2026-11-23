@@ -24,7 +24,7 @@ if [[ "$FILE_PATH" == *.config.* ]]; then
 fi
 # Check for classification markers — on a file inside this project only. A
 # Write to /tmp/scratch.ts or a sibling checkout is no business of either clause
-# below, and refusing it sends the agent to /tdd, or to deleting .review-stamped,
+# below, and refusing it sends the agent to /tdd, or to releasing the review lock,
 # for a file the pipeline does not own. Both sides are resolved through `cd -P`
 # first, the file through its nearest existing directory, so neither `..` nor a
 # symlink carries a path across the boundary in either direction. A relative
@@ -46,7 +46,7 @@ fi
 # write: the /fix-findings fixer is refused outright, and the authoring session is
 # refused by the wrong clause, under a message that names /tdd and never names the
 # route the lock was built to offer.
-if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" ]; then
+if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.post-review-edit" ]; then
   echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy), create .claude/.tdd-skipped (visual frontend), or invoke /lfg (proof-of-concept mode)."}' >&2
   exit 2
 fi
@@ -54,8 +54,10 @@ fi
 # review-currency stamp; /fix-findings touches .fix-findings-active when it
 # loads and removes it when it reports. Between those two, an implementation
 # edit is a post-review fix authored by the session the review just went around.
+# `sidecar.sh stamp release` is the route for an edit that is not a finding: it
+# swaps .review-stamped for .post-review-edit, which the clause above reads.
 if [ -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active" ]; then
-  echo '{"decision":"block","reason":"BLOCKED: this branch has been reviewed and stamped. A post-review fix needs an independent author. Ask the human which findings to fix and run /fix-findings with exactly the numbers they name (never numbers you chose), or delete .claude/.review-stamped to take the edit yourself."}' >&2
+  echo '{"decision":"block","reason":"BLOCKED: this branch has been reviewed and stamped. For a review finding, ask the human which findings to fix and run /fix-findings with exactly the numbers they name (never numbers you chose). For any other edit the human asked for (a copy change, a merge resolution, new scope), run: sidecar.sh stamp release <branch> --reason \"<why>\" (sidecar.sh is in the references directory of the /pre-merge skill), make the edit, then re-run /pre-merge so the change is reviewed and the branch is stamped again."}' >&2
   exit 2
 fi
 exit 0
