@@ -23,7 +23,7 @@
 #   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
 #   sidecar.sh config set design <json {ref, note?}>   (one pointer the pack names and never fetches; "" declares none)
 #   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards, conventions)
-#   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
+#   sidecar.sh base-ref [--name] [--no-pr]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name; --no-pr skips the open PR's base)
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
 #   sidecar.sh path <research|solutions|review-responses>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
@@ -255,6 +255,8 @@
 # backend is github, the places the pack already talks to GitHub, and a missing
 # gh, a failed read, or a PR that is not open falls through, silently, to what
 # follows. A PR base that resolves to no ref exits 1, as a declared one does.
+# --no-pr skips that read, for a caller asking for the repo's base rather than
+# this branch's PR target (/init-pipeline's base_ref question).
 # Otherwise a declared base_ref wins. A sidecar miss, or a sidecar with no
 # base_ref key, falls back to the derivation every skill used to inline:
 # origin/HEAD's branch, else the first of main master prod develop trunk that
@@ -1231,15 +1233,18 @@ pr_base_name() {
 
 # The base branch; the three outcomes are in the header.
 cmd_base_ref() {
-    local want=ref sc errf v name="" candidate ref
-    case "$#:${1:-}" in
-        0:) ;;
-        1:--name) want=name ;;
-        *) die_usage "usage: sidecar.sh base-ref [--name]" ;;
-    esac
+    local want=ref pr=yes sc errf v name="" candidate ref
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) want=name ;;
+            --no-pr) pr=no ;;
+            *) die_usage "usage: sidecar.sh base-ref [--name] [--no-pr]" ;;
+        esac
+        shift
+    done
     in_repo || refuse "not inside a git repository"
     command -v jq >/dev/null 2>&1 || refuse "base-ref: jq is required to read the sidecar and is not on PATH; refusing rather than answering the origin/HEAD default"
-    name="$(pr_base_name)"
+    [ "$pr" = no ] || name="$(pr_base_name)"
     if [ -n "$name" ]; then
         ref="$(base_ref_of "$name")" \
             || refuse "base-ref: this branch's open PR targets $name, and neither origin/$name nor $name resolves; run git fetch origin $name"
