@@ -12,6 +12,10 @@
 # a 13-hour-old one (rewritten), this session's own (rewritten), one with no
 # by= line (the maker is unknown: stop), and a take-over (rewritten). Step 6's
 # removal is run too: it removes this session's marker and leaves another's.
+# The exit a run takes when it cannot finish the slice skips Step 6, so it
+# carries the same removal (#813): without it, each Ralph iteration (a new
+# session) stopped on the marker the previous one left. A run that dies before
+# any exit still leaves its marker; nothing here covers that.
 #
 # Agents run these blocks in zsh as well as bash
 # (skill-blocks-run-in-zsh-not-the-suites-bash-2026-10-25.md).
@@ -50,6 +54,15 @@ rm_block="$(block "$EX" 'session marker removed')"
 }
 if [ -n "$mark_block" ]; then ok "execute Step 0 carries the session-marker block"; else bad "execute Step 0 carries the session-marker block" "not found"; fi
 if [ -n "$rm_block" ]; then ok "execute Step 6 carries the session-marker removal"; else bad "execute Step 6 carries the session-marker removal" "not found"; fi
+# The exit a run takes when it cannot finish skips Step 6's removal, so it carries its own.
+exit_span="$(awk '/^If you cannot complete the task in this context window/{on=1} /^\*\*AFK progress and plateau detection\.\*\*/{on=0} on' "$EX")"
+exit_block="$(printf '%s\n' "$exit_span" | awk '
+    /^ *```bash$/ { buf = ""; on = 1; next }
+    on && /^ *```$/ { on = 0; if (index(buf, "session marker removed")) { printf "%s", buf; exit } next }
+    on { buf = buf $0 "\n" }
+')"
+if [ -n "$exit_block" ]; then ok "the cannot-finish exit carries a session-marker removal"; else bad "the cannot-finish exit carries a session-marker removal" "not found"; fi
+check "the cannot-finish exit's removal is Step 6's, byte for byte" "$rm_block" "$exit_block"
 step0="$(awk '/^### 0\. /{on=1} /^### 1\. /{on=0} on' "$EX")"
 step6="$(awk '/^### 6\. /{on=1} /^## Review Notes/{on=0} on' "$EX")"
 check "the marker block sits in Step 0" 1 "$(grep -cF 'slice=%s' <<<"$step0")"
@@ -151,6 +164,16 @@ for sh in $shells; do
     rm -f "$M"
     run "$sh" "$rm_block" s-me
     check "$sh: with no marker the removal exits 0" 0 "$rc"
+
+    section "$sh: an AFK iteration that cannot finish, then the next one"
+
+    rm -f "$M"
+    run "$sh" "$mark_block" s-iter1
+    run "$sh" "$exit_block" s-iter1
+    check "$sh: the cannot-finish exit removes its own marker" no "$([ -e "$M" ] && echo yes || echo no)"
+    run "$sh" "$mark_block" s-iter2
+    check "$sh: the next iteration, a new session, is not stopped" 0 "$rc"
+    check "$sh: …and the marker is now the next iteration's" s-iter2 "$(field by)"
 done
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

@@ -282,7 +282,7 @@ if [ -f "$FLAG" ]; then
 fi
 ```
 
-**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` with this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that is missing, not in the `YYYY-MM-DDTHH:MM:SSZ` form the block writes, or does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it.
+**One session per checkout.** A second `/execute` in the same worktree is not otherwise detected: both sessions write to one tree, and one's commits land on the other's slice. So once the session is in the checkout this slice is built in, write `.claude/.session` with this session's id (`by=`, the id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), the time in UTC (`at=`) and the slice (`slice=`). When the file is another session's and under 12 hours old, the block stops and prints who holds it, since when, and for which slice. Ask the human one question: take over, or pick another slice. **Take over** runs the block again with `TAKE_OVER="yes"`, which rewrites the marker to this session and continues; the other session is not told. A marker 12 hours old or older, or this session's own, is rewritten and the run continues. An empty or missing `by=` means the maker is unknown, so it is never this session's and the age rule decides; an `at=` that is missing, not in the `YYYY-MM-DDTHH:MM:SSZ` form the block writes, or does not parse counts as under 12 hours. An AFK run has nobody to ask, so on a stop it stops and reports the line. The marker is not a classification marker: the hook never reads it. Step 6 removes it, and so does the exit a run takes when it cannot finish the slice.
 
 ```bash
 # Is another session running /execute in this checkout? Writes this session's marker, or stops.
@@ -1078,6 +1078,16 @@ If the error suggests the approach from the research artifact or the PRD is wron
 
 On a sidecar work item, this comment and the plateau comment below are written with `work comment W-<n> --body-file <file>` ([references/state-backend.md](references/state-backend.md)), never `gh issue comment`. `work comment` adds the `## Comment <ISO-8601>` heading itself and refuses a body that already carries one, so the file holds the note alone. Step 1's `work view --json` read is how the next iteration sees it.
 
+After the comment, and before this run exits, remove Step 0's session marker when it is this session's. This exit skips the removal above, and each Ralph iteration is a new session with its own `CLAUDE_CODE_SESSION_ID`, so a marker left here would stop the next iteration on the slice until it is 12 hours old. The plateau stop below runs it too. An iteration that dies before it reaches either exit leaves its marker, and the next AFK iteration stops on it and reports it.
+
+```bash
+MARK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.session"
+if [ -f "$MARK" ]; then
+  if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
+  else echo "session marker left: another session holds it"; fi
+fi
+```
+
 **AFK progress and plateau detection.** When running under Ralph, progress is *epistemic state advancement*, not activity. An iteration counts as progress only if at least one of these transitions from unresolved to resolved:
 
 - an unmet acceptance criterion on the active slice
@@ -1086,7 +1096,7 @@ On a sidecar work item, this comment and the plateau comment below are written w
 
 Code churn without such a transition is a stationary dot. Red flags: the same slice staying active across multiple iterations, tests still failing but "in different ways," recurring error classes with superficial code rewrites, no acceptance checkbox or gate advancing.
 
-**Plateau stop rule.** If two consecutive iterations on the same slice produce stationary dots, stop and leave an issue comment (same shape as the repeated-failure comment above) naming what did *not* advance. Do not start a third iteration. Hysteresis: a single recovering iteration — at least one of the transitions above — resets the stationary counter. This rule complements the existing repeated-failure rule; it is *not* a replacement.
+**Plateau stop rule.** If two consecutive iterations on the same slice produce stationary dots, stop and leave an issue comment (same shape as the repeated-failure comment above) naming what did *not* advance, then remove the session marker with the block above. Do not start a third iteration. Hysteresis: a single recovering iteration — at least one of the transitions above — resets the stationary counter. This rule complements the existing repeated-failure rule; it is *not* a replacement.
 
 This applies to AFK Ralph iterations only. HITL `/execute` runs are paced by user judgment and do not need the heuristic.
 
