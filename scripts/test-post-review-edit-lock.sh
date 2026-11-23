@@ -140,6 +140,10 @@ set -euo pipefail
 # real repository instead, writing `core.bare=true` into its shared config.
 # Unset before any git call.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+# `stamp release` writes and removes flags under $CLAUDE_PROJECT_DIR. A run
+# started from a Claude Code session inherits that session's project, so every
+# case here names its own fixture and none may inherit one.
+unset CLAUDE_PROJECT_DIR
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
@@ -280,17 +284,19 @@ tdd_marker_remove="$(fenced_bash_block execute/SKILL.md 'rm -f.*tdd-active' || t
 
 # --- The flag paths, read out of the writers rather than typed here ----------
 
-stamp_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$stamp_write")"
+# Each flag is written with a redirect (#811), so its path is the target of the
+# last `> "…"` on the writing line.
+stamp_arg="$(sed -n 's|.*> "\([^"]*\)".*|\1|p' <<<"$stamp_write")"
 stamp_rel="${stamp_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
 # `if [ -z … ] || [ -z … ]` rather than `[ -n … ] && [ … ] || fatal`: the second
 # form is SC2015, which local shellcheck 0.11.0 accepts and the pinned CI 0.9.0
 # rejects. test-markdown-diff-attribute.sh:132 states the same house idiom for
 # the same reason.
 if [ -z "$stamp_rel" ] || [ "$stamp_rel" = "$stamp_arg" ]; then
-    fatal "could not read a project-relative stamp-flag path out of /pre-merge's touch"
+    fatal "could not read a project-relative stamp-flag path out of /pre-merge's flag write"
 fi
 
-fixer_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$fixer_write")"
+fixer_arg="$(sed -n 's|.*> "\([^"]*\)".*|\1|p' <<<"$fixer_write")"
 fixer_rel="${fixer_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
 if [ -z "$fixer_rel" ] || [ "$fixer_rel" = "$fixer_arg" ]; then
     fatal "could not read a project-relative fixer-flag path out of /fix-findings' harness line"
@@ -392,8 +398,8 @@ status=0
 bash -n "$hook_file" || status=$?
 assert_eq 0 "$status" "the hook body /init-pipeline documents parses as bash"
 
-assert_eq 3 "$(grep -c '' <<<"$tdd_flags")" \
-    "the hook tests exactly three classification markers besides the lock's two flags"
+assert_eq 4 "$(grep -c '' <<<"$tdd_flags")" \
+    "the hook tests exactly four classification markers besides the lock's two flags"
 
 if grep -qxF "$stamp_rel" <<<"$hook_paths"; then
     assert_eq "$stamp_rel" "$stamp_rel" "the hook reads the same stamp-flag path /pre-merge writes"
@@ -466,8 +472,11 @@ section "3. the lock's truth table (clause 2), in both classification contexts"
 # through exactly that edit. So the route is derived from /fix-findings' own
 # frontmatter name, which is not the text under test and which a rename of the
 # skill moves in lockstep with every other inventory surface.
-class_msg="$(grep -o '"reason":"BLOCKED:[^"]*"' <<<"$hook_body" | sed -n 1p)"
-lock_msg="$(grep -o '"reason":"BLOCKED:[^"]*"' <<<"$hook_body" | sed -n 2p)"
+# A reason is a JSON string and may hold an escaped quote, so it ends at the
+# first quote that is not escaped.
+reasons="$(grep -oE '"reason":"BLOCKED:([^"\\]|\\.)*"' <<<"$hook_body" || true)"
+class_msg="$(sed -n 1p <<<"$reasons")"
+lock_msg="$(sed -n 2p <<<"$reasons")"
 if [ -z "$class_msg" ] || [ -z "$lock_msg" ]; then
     fatal "could not read two BLOCKED reasons out of the hook body"
 fi
@@ -482,6 +491,16 @@ set_context() {  # $1 = classification marker, or "" for none; rest = extra flag
     local marker="$1"; shift
     if [ -n "$marker" ]; then set_flags "$marker" "$@"; else set_flags "$@"; fi
 }
+
+# The lock's second route (#807). The refusal is what a blocked session reads,
+# so it is checked as the string it prints: it names the verb, it is still the
+# JSON the harness parses, and it no longer offers deleting the flag, which
+# left the branch markerless and refused by clause 1.
+assert_eq 1 "$(grep -cF 'stamp release' <<<"$lock_msg" || true)" "the lock's refusal names stamp release"
+assert_eq 0 "$(grep -ciF 'delete' <<<"$lock_msg" || true)" "the lock's refusal does not tell the reader to delete the stamp flag"
+set_flags "$stamp_rel"
+run_hook "src/service.ts"
+assert_eq block "$(jq -r .decision <<<"$hook_err" 2>/dev/null || echo unparsable)" "the lock's refusal parses as JSON"
 
 for context in "${markers[@]}" ""; do
     if [ -n "$context" ]; then
@@ -1500,6 +1519,322 @@ while read -r verdict; do
         assert_eq "documented" "unmentioned" "Step 0's prose says what to do with $verdict, which its gate emits"
     fi
 done <<<"$gate_verdicts"
+
+# -----------------------------------------------------------------------------
+
+section "12. release, edit, re-review, re-stamp (#807)"
+
+# The whole route past the lock, on both stamp backends and in both shells an
+# agent uses: /pre-merge's stamp block, the hook, `stamp release`, the edit,
+# /pre-merge's scope block, the stamp block again. The marker's path is read out
+# of what the verb wrote, not typed, so a verb and a hook that disagree about it
+# fail here.
+
+scope_step="$(awk '
+    /^4\. \*\*Decide the scope/ { step = 1 }
+    step && /^   SC=/           { on = 1 }
+    on && /^   ```$/            { exit }
+    on                          { print substr($0, 4) }
+' pre-merge/SKILL.md)"
+[ -n "$scope_step" ] || fatal "no scope block found in pre-merge/SKILL.md Phase 1 step 4"
+
+# fill_block <block> — a documented block with the placeholders an agent fills
+# on an unstacked branch with no work item, and the bundled script's path.
+fill_block() {
+    local b="$1"
+    b="${b//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+    b="${b//W=\"W-<n>\"/W=\"\"}"
+    b="${b//W=\"<the W-<n> step 2 named, or empty on the github backend>\"/W=\"\"}"
+    b="${b//BASE_BRANCH=\"<sibling slice branch for a stacked PR, else empty>\"/BASE_BRANCH=\"\"}"
+    printf '%s' "${b//<pr-number>/1}"
+}
+
+release_bin="$scratch/release-bin"
+mkdir -p "$release_bin"
+# A gh that serves one PR body out of a file, and takes an edit of it.
+cat > "$release_bin/gh" <<'STUB'
+#!/usr/bin/env bash
+[ -z "${GH_FAIL:-}" ] || exit 1
+case "$1 $2" in
+    "pr list"|"pr view") cat "${GH_BODY:?}" ;;
+    "pr edit")
+        prev=""
+        for a in "$@"; do
+            if [ "$prev" = --body-file ]; then cat "$a" > "${GH_BODY:?}"; fi
+            prev="$a"
+        done ;;
+    *) exit 9 ;;
+esac
+STUB
+chmod +x "$release_bin/gh"
+
+release_round_trip() {  # $1 = shell, $2 = backend
+    local sh="$1" backend="$2" at="[$1, $2]" r root body stamped rel_out before rc released_rel edited m left
+    r="$scratch/release-$sh-$backend"
+    root="$r.sidecars"
+    body="$r.body"
+    mkdir -p "$r/src"
+    : > "$body"
+    # shellcheck disable=SC2329,SC2317  # both are called by name below
+    r_git() { GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" "$@"; }
+    r_run() {
+        ( cd "$r" && PATH="$release_bin:$PATH" GH_BODY="$body" GIT_CONFIG_GLOBAL="$sc_gitconfig" \
+            SKILL_KIT_SIDECAR_ROOT="$root" SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" \
+            CLAUDE_PROJECT_DIR="$r" CLAUDE_CODE_SESSION_ID="session-$sh-$backend" "$@" )
+    }
+    # Everything a refused release must leave as it was.
+    r_state() {
+        find "$r/.claude" -type f 2>/dev/null | LC_ALL=C sort
+        cat "$body"
+        if [ -d "$root/release" ]; then git -C "$root/release" rev-parse HEAD; fi
+    }
+    # r_stamp <sha> — /pre-merge's stamp block for this backend, with the body
+    # edit its comment asks the agent for already made.
+    r_stamp() {
+        local blk="$sidecar_stamp_block"
+        if [ "$backend" = github ]; then
+            blk="$stamp_block"
+            printf '## Summary\n\nbody\n\n<!-- reviewed-at: %s -->\n' "$1" > "$body"
+        fi
+        r_run "$sh" -c "$(fill_block "$(fill_reviewed "$blk" "$1")")" >/dev/null 2>&1
+    }
+    r_hook() {
+        local home="$proj"
+        proj="$r"
+        run_hook "src/service.ts"
+        proj="$home"
+    }
+
+    r_git init -q -b main
+    printf '.claude/\n' > "$r/.git/info/exclude"
+    printf 'base %s\n' "$r" > "$r/base.txt"
+    r_git add base.txt
+    r_git commit -q --no-verify -m "base $r"
+    r_git switch -q -c feature
+    printf 'export const x = 1\n' > "$r/src/service.ts"
+    r_git add src/service.ts
+    r_git commit -q --no-verify -m "feature"
+    stamped="$(r_git rev-parse HEAD)"
+    if [ "$backend" = sidecar ]; then
+        r_run bash "$sidecar_sh" init --name release --mode guest --write sidecar --in-tree-path none --no-migrate-archive >/dev/null 2>&1 \
+            || fatal "could not init the release fixture's sidecar"
+    fi
+    assert_eq "$backend" "$(r_run bash "$sidecar_sh" backend stamp 2>/dev/null || true)" "$at fixture: backend stamp answers $backend"
+
+    before="$(r_state)"
+    rc=0; r_run bash "$sidecar_sh" stamp release feature --reason "copy" >/dev/null 2>&1 || rc=$?
+    assert_eq 1 "$rc" "$at no stamp: release refuses"
+    assert_eq "$before" "$(r_state)" "$at no stamp: …and changes nothing"
+
+    rc=0; r_stamp "$stamped" || rc=$?
+    assert_eq 0 "$rc" "$at the stamp block runs"
+    # #811: the flag says who stamped and when, and which commit the review read.
+    assert_eq "by=session-$sh-$backend|head=$stamped" \
+        "$(grep '^by=' "$r/$stamp_rel" 2>/dev/null || true)|$(grep '^head=' "$r/$stamp_rel" 2>/dev/null || true)" \
+        "$at the stamp flag names this session and the reviewed head"
+    assert_eq 1 "$(grep -cE '^at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$r/$stamp_rel" 2>/dev/null || true)" \
+        "$at the stamp flag carries the time, in UTC"
+    r_hook
+    assert_eq 2 "$hook_status" "$at stamped: the hook refuses"
+
+    before="$(r_state)"
+    rc=0; r_run bash "$sidecar_sh" stamp release feature >/dev/null 2>&1 || rc=$?
+    assert_eq 2 "$rc" "$at no --reason: release exits nonzero"
+    assert_eq "$before" "$(r_state)" "$at no --reason: …and changes nothing"
+    rc=0; r_run bash "$sidecar_sh" stamp release feature --reason "" >/dev/null 2>&1 || rc=$?
+    assert_eq 2 "$rc" "$at empty --reason: release exits nonzero"
+    rc=0; r_run bash "$sidecar_sh" stamp release feature --reason "   " >/dev/null 2>&1 || rc=$?
+    assert_eq 2 "$rc" "$at blank --reason: release exits nonzero"
+    rc=0; r_run bash "$sidecar_sh" stamp release other --reason "copy" >/dev/null 2>&1 || rc=$?
+    assert_eq 1 "$rc" "$at a branch that is not checked out: release refuses"
+    assert_eq "$before" "$(r_state)" "$at empty, blank, other branch: …and none changes anything"
+    if [ "$backend" = github ]; then
+        rc=0; r_run env GH_FAIL=1 bash "$sidecar_sh" stamp release feature --reason "copy" >/dev/null 2>&1 || rc=$?
+        assert_eq 1 "$rc" "$at gh cannot read the PR: release refuses rather than guessing"
+        assert_eq "$before" "$(r_state)" "$at gh cannot read the PR: …and changes nothing"
+    fi
+
+    rc=0
+    rel_out="$(r_run bash "$sidecar_sh" stamp release feature --reason 'the user asked for a "copy" change' 2>/dev/null)" || rc=$?
+    assert_eq 0 "$rc" "$at release exits 0"
+    assert_eq "lock released: make the edit, then re-run /pre-merge to review it and re-stamp" "$rel_out" \
+        "$at release prints the next step"
+    if [ -e "$r/$stamp_rel" ]; then left=present; else left=gone; fi
+    assert_eq gone "$left" "$at release removes the stamp flag"
+    released_rel="$(find "$r/.claude" -type f | sed "s|^$r/||")"
+    assert_eq "$released_rel" "$(grep -xF -- "$released_rel" <<<"$tdd_flags" || true)" \
+        "$at the one file release leaves is a marker the hook's first clause reads"
+    assert_eq 'reason=the user asked for a "copy" change' "$(grep '^reason=' "$r/$released_rel" 2>/dev/null || true)" \
+        "$at the marker holds the reason"
+    assert_eq "head=$stamped" "$(grep '^head=' "$r/$released_rel" 2>/dev/null || true)" "$at the marker holds the released head"
+    assert_eq 1 "$(grep -cE '^released_at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$r/$released_rel" 2>/dev/null || true)" \
+        "$at the marker holds the time, in UTC"
+    assert_eq "$stamped" "$(r_run bash "$sidecar_sh" stamp released feature 2>/dev/null || true)" \
+        "$at stamp released prints the released head"
+    assert_eq 'the user asked for a "copy" change' "$(r_run bash "$sidecar_sh" stamp released feature --reason 2>/dev/null || true)" \
+        "$at stamp released --reason prints the release's reason"
+    if [ "$backend" = sidecar ]; then
+        # /execute Step 6 removes the flag before /pre-merge reads the reason.
+        cp "$r/$released_rel" "$r/.claude/flag.keep"
+        rm -f "$r/$released_rel"
+        assert_eq 'the user asked for a "copy" change' "$(r_run bash "$sidecar_sh" stamp released feature --reason 2>/dev/null || true)" \
+            "$at the reason outlives the flag: it is read from the committed record"
+        mv "$r/.claude/flag.keep" "$r/$released_rel"
+        assert_eq "feature $stamped the user asked for a \"copy\" change" \
+            "$(jq -r '"\(.branch) \(.head) \(.reason)"' "$root/release/reviews/released/feature.json" 2>/dev/null || true)" \
+            "$at the record beside the stamp holds branch, head and reason"
+        assert_eq "" "$(git -C "$root/release" status --porcelain)" "$at the record is committed"
+        assert_eq "$stamped" "$(r_run bash "$sidecar_sh" stamp read feature 2>/dev/null || true)" "$at release wrote no stamp: it still names the reviewed head"
+    else
+        assert_eq 1 "$(grep -cF "reviewed-at: $stamped" "$body" || true)" "$at release wrote no stamp: the PR body still names the reviewed head"
+    fi
+
+    r_hook
+    assert_eq 0 "$hook_status" "$at released: the hook allows the edit"
+    printf 'export const x = 2\n' > "$r/src/service.ts"
+    r_git commit -q --no-verify -am "the requested edit"
+    edited="$(r_git rev-parse HEAD)"
+    assert_eq "review scope: post-stamp delta, from $stamped" \
+        "$(r_run "$sh" -c "$(fill_block "$scope_step")" 2>/dev/null | grep '^review scope:' || true)" \
+        "$at the next review starts at the released head"
+
+    rc=0; r_stamp "$edited" || rc=$?
+    assert_eq 0 "$rc" "$at the re-stamp runs"
+    left=""
+    for m in "${markers[@]}"; do
+        if [ -e "$r/$m" ]; then left="$left$m "; fi
+    done
+    assert_eq "" "$left" "$at the re-stamp removes the release marker"
+    r_hook
+    assert_eq 2 "$hook_status" "$at re-stamped: the hook refuses again"
+    assert_eq "" "$(r_run bash "$sidecar_sh" stamp released feature 2>/dev/null || echo failed)" \
+        "$at the re-stamp spends the release record"
+    assert_eq "" "$(r_run bash "$sidecar_sh" stamp released feature --reason 2>/dev/null || echo failed)" \
+        "$at the re-stamp spends the release's reason"
+    if [ "$backend" = sidecar ]; then
+        assert_eq "" "$(git -C "$root/release" status --porcelain)" "$at …and commits that in the sidecar"
+        r_run bash "$sidecar_sh" stamp release feature --reason "again" >/dev/null 2>&1 || true
+        r_run bash "$sidecar_sh" stamp clear feature >/dev/null 2>&1 || true
+        assert_eq "" "$(find "$root/release/reviews" -type f)" "$at stamp clear takes the release record with the stamp"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+
+section "13. a flag says who made it and when, and a second session is told (#811)"
+
+# /fix-findings' harness line writes its flag once and never over another
+# session's, and /pre-merge's owner block names a stamp flag this session did
+# not write. Both run as written, in both shells. The session id is the one
+# Claude Code sets for Bash commands, CLAUDE_CODE_SESSION_ID.
+owner_block="$(awk '
+    /^   # Who left the review lock on this checkout\?/ { on = 1 }
+    on && /^   ```$/                                    { exit }
+    on                                                  { print substr($0, 4) }
+' pre-merge/SKILL.md)"
+[ -n "$owner_block" ] || fatal "no owner block found in pre-merge/SKILL.md Phase 1 step 6"
+
+owner_case() {  # $1 = shell
+    local sh="$1" o="$scratch/owner-$1" out first
+    mkdir -p "$o"
+    git init -q "$o"
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$o" commit -q --allow-empty --no-verify -m "owner $o"
+    # shellcheck disable=SC2329,SC2317  # called by name below
+    o_run() {  # $1 = session id, $2 = command text
+        ( cd "$o" && CLAUDE_PROJECT_DIR="$o" CLAUDE_CODE_SESSION_ID="$1" "$sh" -c "$2" 2>&1 )
+    }
+
+    out="$(o_run session-a "$fixer_write")"
+    first="$(cat "$o/$fixer_rel" 2>/dev/null || true)"
+    assert_eq "by=session-a|head=$(git -C "$o" rev-parse HEAD)" \
+        "$(grep '^by=' <<<"$first" || true)|$(grep '^head=' <<<"$first" || true)" \
+        "[$sh] the harness line writes the fixer flag with this session and HEAD"
+    assert_eq 1 "$(grep -cE '^at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' <<<"$first" || true)" \
+        "[$sh] …and the time, in UTC"
+    out="$(o_run session-b "$fixer_write")"
+    assert_eq "$first" "$(cat "$o/$fixer_rel" 2>/dev/null || true)" \
+        "[$sh] a second session's load leaves the first session's flag as it was"
+    case "$out" in
+        *"by=session-a"*) assert_eq ok ok "[$sh] …and prints it, so the second session can see whose lock it is" ;;
+        *) assert_eq "the flag's by=session-a line" "$out" "[$sh] …and prints it, so the second session can see whose lock it is" ;;
+    esac
+
+    rm -f "$o/$stamp_rel"
+    assert_eq "" "$(o_run session-a "$owner_block")" "[$sh] no stamp flag: the owner block prints nothing"
+    mkdir -p "$o/.claude"
+    printf 'by=session-a\nat=2026-11-20T10:00:00Z\nhead=0\n' > "$o/$stamp_rel"
+    assert_eq "" "$(o_run session-a "$owner_block")" "[$sh] this session's stamp flag: the owner block prints nothing"
+    out="$(o_run session-b "$owner_block")"
+    case "$out" in
+        *"session-a"*"2026-11-20T10:00:00Z"*) assert_eq ok ok "[$sh] another session's stamp flag: the owner block names who and when" ;;
+        *) assert_eq "a line naming session-a and its time" "$out" "[$sh] another session's stamp flag: the owner block names who and when" ;;
+    esac
+    : > "$o/$stamp_rel"
+    out="$(o_run session-a "$owner_block")"
+    case "$out" in
+        *unknown*) assert_eq ok ok "[$sh] an empty flag from before #811: the owner block says it cannot tell" ;;
+        *) assert_eq "a line saying the maker is unknown" "$out" "[$sh] an empty flag from before #811: the owner block says it cannot tell" ;;
+    esac
+}
+owner_case bash
+if command -v zsh >/dev/null 2>&1; then
+    owner_case zsh
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the owner rows ran under zsh (CI is set, so a missing zsh fails)"
+else
+    printf '  SKIP zsh is not on PATH, so the owner rows ran under bash only\n'
+fi
+
+release_round_trip bash github
+release_round_trip bash sidecar
+if command -v zsh >/dev/null 2>&1; then
+    release_round_trip zsh github
+    release_round_trip zsh sidecar
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the release round trip ran under zsh (CI is set, so a missing zsh fails)"
+else
+    printf '  SKIP zsh is not on PATH, so the release round trip ran under bash only\n'
+fi
+
+# Claude Code started in a subdirectory sets $CLAUDE_PROJECT_DIR below the top
+# level. The stamp, the release and the re-stamp must all name that directory:
+# a release that names another one prints "lock released" while the stamp's
+# flag stays, and leaves a .post-review-edit the re-stamp never removes.
+release_subdir() {
+    local r="$scratch/release-subdir" body="$scratch/release-subdir.body" sha out rc got
+    git init -q -b main "$r"
+    printf '.claude/\n' > "$r/.git/info/exclude"
+    mkdir -p "$r/app"
+    printf 'x\n' > "$r/app/a.txt"
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" add app/a.txt
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" commit -q --no-verify -m base
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" switch -q -c feature
+    sha="$(git -C "$r" rev-parse HEAD)"
+    printf '<!-- reviewed-at: %s -->\n' "$sha" > "$body"
+    flags() {
+        printf '%s|%s|%s|%s' \
+            "$([ -e "$r/app/.claude/.review-stamped" ] && echo stamped || echo -)" \
+            "$([ -e "$r/app/.claude/.post-review-edit" ] && echo released || echo -)" \
+            "$([ -e "$r/.claude/.review-stamped" ] && echo stamped || echo -)" \
+            "$([ -e "$r/.claude/.post-review-edit" ] && echo released || echo -)"
+    }
+    ( cd "$r/app" && REVIEWED_SHA="$sha" CLAUDE_PROJECT_DIR="$r/app" CLAUDE_CODE_SESSION_ID=s bash -c "$stamp_write" ) \
+        || assert_eq 0 1 "subdirectory project dir: Phase 4's flag write runs"
+    assert_eq "stamped|-|-|-" "$(flags)" "subdirectory project dir: the stamp locks the subdirectory"
+    rc=0
+    out="$( cd "$r/app" && PATH="$release_bin:$PATH" GH_BODY="$body" GIT_CONFIG_GLOBAL="$sc_gitconfig" \
+        SKILL_KIT_SIDECAR_ROOT="$r.sidecars" SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" \
+        CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp release feature --reason "copy" 2>&1 )" || rc=$?
+    assert_eq 0 "$rc" "subdirectory project dir: release exits 0 ($out)"
+    assert_eq "-|released|-|-" "$(flags)" "subdirectory project dir: release swaps the stamp's own flag"
+    got="$( cd "$r/app" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
+        CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp released feature 2>/dev/null )" || true
+    assert_eq "$sha" "$got" "subdirectory project dir: stamp released reads the release"
+    ( cd "$r/app" && REVIEWED_SHA="$sha" CLAUDE_PROJECT_DIR="$r/app" CLAUDE_CODE_SESSION_ID=s bash -c "$stamp_write" ) \
+        || assert_eq 0 1 "subdirectory project dir: the re-stamp's flag write runs"
+    assert_eq "stamped|-|-|-" "$(flags)" "subdirectory project dir: the re-stamp leaves no released flag in either directory"
+}
+release_subdir
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1

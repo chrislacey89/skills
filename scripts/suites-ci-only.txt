@@ -1,0 +1,10 @@
+# suites-ci-only.txt — the suites that run in CI only, one per line. Each
+# re-runs the other suites, so a local run of it takes minutes and repeats the
+# work pre-push already did; its own header says why it is CI only.
+#
+# Read by scripts/run-changed-suites.sh (it never runs these, --all included),
+# scripts/test-fixture-git-isolation.sh (it re-runs every suite but these), and
+# scripts/test-changed-suites.sh (these need no line in suites-always.txt). A
+# new suite that re-runs the others goes here, and nowhere else.
+scripts/test-fixture-git-isolation.sh
+scripts/test-fixture-root-collision.sh

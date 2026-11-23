@@ -18,12 +18,12 @@
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
 #   sidecar.sh config set system <label>   (joins this project's group for related-solutions-dirs; "" leaves it)
-#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager|runtime_check> <cmd>   ("" declares none)
+#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager|runtime_check|test_changed> <cmd>   ("" declares none)
 #   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
 #   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
 #   sidecar.sh config set design <json {ref, note?}>   (one pointer the pack names and never fetches; "" declares none)
 #   sidecar.sh profile   (the repo-facts block a brief pastes: base ref, verify commands, hazards, conventions)
-#   sidecar.sh base-ref [--name]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name)
+#   sidecar.sh base-ref [--name] [--no-pr]   (the base branch: a ref safe as a range endpoint, or with --name the bare branch name; --no-pr skips the open PR's base)
 #   sidecar.sh range [<W-n>]   (the commits a slice's review covers: <start_sha>..HEAD, or <base-ref>..HEAD)
 #   sidecar.sh path <research|solutions|review-responses>
 #   sidecar.sh solutions-dirs   (prints, one per line, the directories to search for lessons; no sidecar needed)
@@ -36,7 +36,9 @@
 #   sidecar.sh backend <prds|slices|stamp>   (prints github or sidecar; github when no sidecar resolves)
 #   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
 #   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
+#   sidecar.sh stamp released <branch> [--reason]   (prints the head stamp release recorded, or with --reason its reason; nothing with exit 0)
 #   sidecar.sh stamp clear <branch>
+#   sidecar.sh stamp release <branch> --reason <why>   (opens the post-review edit lock on record, on either backend; never writes a stamp)
 #   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>] [--work <W-n>]
 #   sidecar.sh fixrun list <branch> [--range <rev-range>]   (one "<sha> <run-id> <thread-url|->" line per record)
 #   sidecar.sh footprint <rev-range> [--accept "<short sha> ..."]   (prints each pack marker in the range's commit messages; exit 1 on any, 2 if unread; no sidecar needed)
@@ -70,6 +72,17 @@
 # JSON branch field, and prints nothing for a stamp it cannot parse or whose
 # reviewed_sha is not 40 lowercase hex. /pre-merge is the only skill that
 # writes one (scripts/test-review-currency-marker.sh).
+#
+# stamp release. The route past the post-review edit lock for an edit that is
+# not a finding. It refuses, changing nothing, with no reason, for a branch that
+# is not checked out, or with no stamp to release: the sidecar's, or on the
+# github backend the PR body's marker, read with gh. It writes
+# .claude/.post-review-edit (branch, released_at, head, reason, one key=value
+# line each) and removes .claude/.review-stamped, both under $CLAUDE_PROJECT_DIR,
+# else the top level, as the hook reads them. On the sidecar backend it first
+# commits the same record as reviews/released/<slug>.json, a directory of its
+# own because <branch>.released is itself a branch name; stamp write and stamp
+# clear remove it. On the github backend the marker is the only record.
 #
 # fixrun. <sidecar>/fix-runs/<slug>.jsonl holds one line per /fix-findings fix
 # commit on the sidecar backend, {branch, run, sha, thread?, work?}, where the
@@ -213,6 +226,9 @@
 # one and the first member of a real group looks the same.
 # verify.<field> is a one-line command that is not all blanks; "" declares that
 # the repo has none.
+# verify.test_changed is optional: a command that takes paths as arguments and
+# runs the tests that read them. Absent means verify.test, so profile prints it
+# only once it is declared and never lists it under Not declared.
 # verify.hazards is a JSON array whose every entry has a non-empty one-line
 # reason and, optionally, a non-blank one-line command in Claude Code
 # permission-rule syntax (Bash(<pattern>)); no other keys. [] declares none.
@@ -238,7 +254,14 @@
 # or conventions value of the wrong type, blank, or spanning lines) exits 1 and
 # prints no block.
 #
-# base-ref. A declared base_ref wins. A sidecar miss, or a sidecar with no
+# base-ref. An open PR for the current branch states its own target, and that
+# wins: gh pr view is asked for it only on a github.com remote whose stamp
+# backend is github, the places the pack already talks to GitHub, and a missing
+# gh, a failed read, or a PR that is not open falls through, silently, to what
+# follows. A PR base that resolves to no ref exits 1, as a declared one does.
+# --no-pr skips that read, for a caller asking for the repo's base rather than
+# this branch's PR target (/init-pipeline's base_ref question).
+# Otherwise a declared base_ref wins. A sidecar miss, or a sidecar with no
 # base_ref key, falls back to the derivation every skill used to inline:
 # origin/HEAD's branch, else the first of main master prod develop trunk that
 # resolves. The ref form is origin/<name> when that resolves, else the local
@@ -280,7 +303,8 @@
 # at startup, so no git call it makes can see them. Git exports GIT_DIR into
 # hooks; left set, `git -C <sidecar> commit` exits 0 and lands the commit in the
 # project. Nothing here writes to the project's
-# tree or its .git, and nothing pushes, pulls, or fetches.
+# tree or its .git, except stamp release's two flag files under .claude/, and
+# nothing pushes, pulls, or fetches.
 #
 # Requires git >= 2.31 (--path-format=absolute) and jq >= 1.6.
 #
@@ -1010,7 +1034,7 @@ config_set_system() {
 # The verify command fields, in the order profile prints them. config set
 # accepts exactly these plus hazards, and VERIFY_FIELDS is derived from this
 # list, so a field added here is both writable and rendered.
-VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager runtime_check)
+VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager runtime_check test_changed)
 VERIFY_FIELDS="[$(printf '"%s",' "${VERIFY_FIELD_NAMES[@]}")"
 VERIFY_FIELDS="${VERIFY_FIELDS%,}]"
 
@@ -1154,7 +1178,7 @@ PROFILE_JQ="$ONE_LINE_JQ"'
     (if $cv == null then empty
      elif ($cv | length) == 0 then "Conventions: none"
      else "Conventions:", ($cv[] | "  - " + .) end),
-    ([($rows[] | select(.st == "unasked") | .f), (if $hz == null then "hazards" else empty end),
+    ([($rows[] | select(.st == "unasked" and .f != "test_changed") | .f), (if $hz == null then "hazards" else empty end),
       (if $cv == null then "conventions" else empty end)]
      | if length > 0 then "Not declared (ask before running anything not listed): " + join(", ") else empty end)'
 
@@ -1200,16 +1224,37 @@ base_ref_of() {
     fi
 }
 
+# pr_base_name: the base of the current branch's open PR, or nothing. The
+# conditions under which gh is asked at all are in the header.
+pr_base_name() {
+    local name
+    command -v gh >/dev/null 2>&1 || return 0
+    [ "$(forge_kind_of "$(current_keys 2>/dev/null)")" = github ] || return 0
+    [ "$(cmd_backend stamp 2>/dev/null)" = github ] || return 0
+    name="$(GH_PROMPT_DISABLED=1 gh pr view --json baseRefName,state -q 'select(.state == "OPEN") | .baseRefName' </dev/null 2>/dev/null)" || return 0
+    printf '%s\n' "$name" | head -n 1
+}
+
 # The base branch; the three outcomes are in the header.
 cmd_base_ref() {
-    local want=ref sc errf v name="" candidate ref
-    case "$#:${1:-}" in
-        0:) ;;
-        1:--name) want=name ;;
-        *) die_usage "usage: sidecar.sh base-ref [--name]" ;;
-    esac
+    local want=ref pr=yes sc errf v name="" candidate ref
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) want=name ;;
+            --no-pr) pr=no ;;
+            *) die_usage "usage: sidecar.sh base-ref [--name] [--no-pr]" ;;
+        esac
+        shift
+    done
     in_repo || refuse "not inside a git repository"
     command -v jq >/dev/null 2>&1 || refuse "base-ref: jq is required to read the sidecar and is not on PATH; refusing rather than answering the origin/HEAD default"
+    [ "$pr" = no ] || name="$(pr_base_name)"
+    if [ -n "$name" ]; then
+        ref="$(base_ref_of "$name")" \
+            || refuse "base-ref: this branch's open PR targets $name, and neither origin/$name nor $name resolves; run git fetch origin $name"
+        if [ "$want" = name ]; then printf '%s\n' "$name"; else printf '%s\n' "$ref"; fi
+        return 0
+    fi
     errf="$(mktemp)" || refuse "base-ref: cannot create a temp file"
     if sc="$(do_resolve 2>"$errf")"; then
         cat "$errf" >&2; rm -f "$errf"
@@ -1624,8 +1669,104 @@ branch_slug() {
     printf '%s' "$out"
 }
 
+# stamp_recorded <file> <branch>: the sidecar stamp's SHA, or nothing for a
+# stamp that is absent or cannot be trusted.
+stamp_recorded() {
+    local sha
+    [ -f "$1" ] || return 0
+    sha="$(jq -r --arg b "$2" 'select(.branch == $b) | .reviewed_sha // empty' "$1" 2>/dev/null)" || {
+        printf 'sidecar.sh: stamp read: %s does not parse; treating it as no stamp\n' "$1" >&2; return 0; }
+    printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$sha"
+    return 0
+}
+
+# The directory whose .claude/ the classification hook reads, named the way
+# /pre-merge's stamp and every cleanup of these flags name it. An inherited
+# $CLAUDE_PROJECT_DIR that names another checkout is not handled here: a rule
+# for it has to change the stamp, the cleanups and the hook in the same change.
+lock_project() {
+    if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+        printf '%s\n' "$CLAUDE_PROJECT_DIR"
+    else
+        pgit rev-parse --show-toplevel
+    fi
+}
+
+# stamp_released <branch> [reason]: the head the branch's lock was released
+# at, or with "reason" the reason it was released for, or nothing. On the
+# sidecar backend both come from the committed record, which outlives the
+# cleanups that remove .claude/.post-review-edit before /pre-merge reads it.
+stamp_released() {
+    local backend sc proj f key="${2:-head}" val=""
+    backend="$(cmd_backend stamp)" || exit 1
+    if [ "$backend" = sidecar ]; then
+        sc="$(do_resolve)" || exit 1
+        f="$sc/reviews/released/$(branch_slug "$1").json"
+        [ -f "$f" ] || return 0
+        val="$(jq -r --arg b "$1" --arg k "$key" 'select(.branch == $b) | .[$k] // empty' "$f" 2>/dev/null)" || return 0
+    else
+        proj="$(lock_project)" || refuse "stamp released: cannot find the project directory"
+        f="$proj/.claude/.post-review-edit"
+        [ -f "$f" ] || return 0
+        grep -qxF -- "branch=$1" "$f" || return 0
+        val="$(sed -n "s/^$key=//p" "$f")"
+    fi
+    if [ "$key" = reason ]; then
+        [ -n "$val" ] && printf '%s\n' "$val"
+    else
+        printf '%s' "$val" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$val"
+    fi
+    return 0
+}
+
+# stamp_release <branch> <reason>: the rules are in the header. Nothing is
+# written until every refusal has had its turn.
+stamp_release() {
+    local branch="$1" reason backend sc="" body stamped="" head at proj flags tmp rec
+    # One line, so a reason cannot write a key=value line of its own.
+    reason="$(printf '%s' "$2" | tr '\n\r' '  ')"
+    in_repo || refuse "not inside a git repository"
+    [ "$(pgit branch --show-current)" = "$branch" ] \
+        || refuse "stamp release: $branch is not the branch checked out here; releasing nothing"
+    backend="$(cmd_backend stamp)" || exit 1
+    if [ "$backend" = sidecar ]; then
+        sc="$(do_resolve)" || exit 1
+        stamped="$(stamp_recorded "$sc/reviews/$(branch_slug "$branch").json" "$branch")"
+    else
+        command -v gh >/dev/null 2>&1 \
+            || refuse "stamp release: the stamp is in the PR body and gh is not on PATH to read it; releasing nothing"
+        body="$(gh pr list --head "$branch" --json body -q '.[0].body // ""' </dev/null)" \
+            || refuse "stamp release: cannot read the PR body that holds the stamp; releasing nothing"
+        # The reader /closeout Step 2 uses; test-review-currency-marker.sh pins the two identical.
+        stamped="$(printf '%s\n' "$body" | sed -n 's/.*<!-- reviewed-at: \([0-9a-f]\{40\}\) -->.*/\1/p' | tail -1)"
+    fi
+    [ -n "$stamped" ] || refuse "stamp release: $branch has no review stamp, so there is nothing to release"
+    head="$(pgit rev-parse --verify -q 'HEAD^{commit}')" || refuse "stamp release: HEAD names no commit"
+    proj="$(lock_project)" || refuse "stamp release: cannot find the project directory"
+    flags="$proj/.claude"
+    at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    mkdir -p "$flags" || refuse "stamp release: cannot create $flags"
+    tmp="$(mktemp "$flags/.post-review-edit.XXXXXX")" || refuse "stamp release: cannot write in $flags"
+    if ! printf 'branch=%s\nreleased_at=%s\nhead=%s\nreason=%s\n' "$branch" "$at" "$head" "$reason" > "$tmp"; then
+        rm -f "$tmp"; refuse "stamp release: cannot write in $flags"
+    fi
+    if [ "$backend" = sidecar ]; then
+        rec="reviews/released/$(branch_slug "$branch").json"
+        if ! mkdir -p "$sc/reviews/released" \
+            || ! jq -n --arg b "$branch" --arg at "$at" --arg h "$head" --arg why "$reason" \
+                '{schema: 1, branch: $b, released_at: $at, head: $h, reason: $why}' > "$sc/$rec" \
+            || ! commit_paths "$sc" "sidecar: release the lock on $branch at ${head:0:7}" "$rec"; then
+            rm -f "$tmp"; refuse "stamp release: cannot record the release in $sc; the lock stays on"
+        fi
+    fi
+    mv "$tmp" "$flags/.post-review-edit" || { rm -f "$tmp"; refuse "stamp release: cannot write $flags/.post-review-edit; the lock stays on"; }
+    rm -f "$flags/.review-stamped" || refuse "stamp release: cannot remove $flags/.review-stamped; the lock stays on"
+    # No range: where the next review starts is /pre-merge Phase 1 step 4's to decide.
+    printf 'lock released: make the edit, then re-run /pre-merge to review it and re-stamp\n'
+}
+
 cmd_stamp() {
-    local sub="${1:-}" branch sha base="" sc f tmp
+    local sub="${1:-}" branch sha base="" reason="" sc f rel p tmp
     [ $# -gt 0 ] && shift
     case "$sub" in
         write)
@@ -1642,14 +1783,32 @@ cmd_stamp() {
             [ $# -eq 1 ] || die_usage "usage: sidecar.sh stamp $sub <branch>"
             branch="$1"
             ;;
-        *) die_usage "usage: sidecar.sh stamp <write|read|clear> <branch> ..." ;;
+        released)
+            if [ $# -eq 2 ] && [ "$2" = --reason ]; then reason=reason
+            elif [ $# -ne 1 ]; then die_usage "usage: sidecar.sh stamp released <branch> [--reason]"; fi
+            branch="$1"
+            ;;
+        release)
+            if [ $# -ne 3 ] || [ "$2" != --reason ]; then
+                die_usage "usage: sidecar.sh stamp release <branch> --reason <why>"
+            fi
+            branch="$1"; reason="$3"
+            case "$reason" in
+                *[![:space:]]*) ;;
+                *) die_usage "stamp release: --reason needs the reason for the edit; releasing nothing" ;;
+            esac
+            ;;
+        *) die_usage "usage: sidecar.sh stamp <write|read|released|clear|release> <branch> ..." ;;
     esac
     case "$branch" in ''|*$'\n'*) die_usage "stamp $sub: the branch must be one non-empty line" ;; esac
     if [ "$sub" = write ] && ! printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}'; then
         refuse "stamp write refused: the SHA must be 40 lowercase hex characters (git rev-parse HEAD): $sha"
     fi
+    if [ "$sub" = release ]; then stamp_release "$branch" "$reason"; return 0; fi
+    if [ "$sub" = released ]; then stamp_released "$branch" "${reason:-head}"; return 0; fi
     sc="$(do_resolve)" || exit 1
     f="reviews/$(branch_slug "$branch").json"
+    rel="reviews/released/$(branch_slug "$branch").json"
     case "$sub" in
         write)
             mkdir -p "$sc/reviews" || refuse "stamp write: cannot create $sc/reviews"
@@ -1660,20 +1819,26 @@ cmd_stamp() {
             else
                 rm -f "$tmp"; refuse "stamp write: could not write $sc/$f"
             fi
-            commit_paths "$sc" "sidecar: stamp $branch at ${sha:0:7}" "$f" || exit 1
+            # A new stamp spends the release it follows.
+            set -- "$f"
+            if [ -f "$sc/$rel" ]; then
+                rm -f "$sc/$rel"
+                if sgit "$sc" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1; then set -- "$@" "$rel"; fi
+            fi
+            commit_paths "$sc" "sidecar: stamp $branch at ${sha:0:7}" "$@" || exit 1
             ;;
         read)
-            [ -f "$sc/$f" ] || return 0
-            sha="$(jq -r --arg b "$branch" 'select(.branch == $b) | .reviewed_sha // empty' "$sc/$f" 2>/dev/null)" || {
-                printf 'sidecar.sh: stamp read: %s does not parse; treating it as no stamp\n' "$sc/$f" >&2; return 0; }
-            printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$sha"
-            return 0
+            stamp_recorded "$sc/$f" "$branch"
             ;;
         clear)
-            [ -f "$sc/$f" ] || return 0
-            rm -f "$sc/$f"
-            if sgit "$sc" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
-                commit_paths "$sc" "sidecar: clear stamp $branch" "$f" || exit 1
+            set --
+            for p in "$f" "$rel"; do
+                [ -f "$sc/$p" ] || continue
+                rm -f "$sc/$p"
+                if sgit "$sc" ls-files --error-unmatch -- "$p" >/dev/null 2>&1; then set -- "$@" "$p"; fi
+            done
+            if [ $# -gt 0 ]; then
+                commit_paths "$sc" "sidecar: clear stamp $branch" "$@" || exit 1
             fi
             ;;
     esac

@@ -29,11 +29,11 @@ The list is deliberately not restated in this file. It was, and the copy was wro
 
 Create `.claude/hooks/enforce-classification.sh` and make it executable. This blocks Write/Edit to implementation files unless the `/execute` Step 3 classification gate has been passed.
 
-The hook checks for any of `.claude/.tdd-active` (TDD invoked), `.claude/.tdd-skipped` (visual frontend, explicitly opted out), or `.claude/.lfg-active` (`/lfg` proof-of-concept mode). No path checking beyond the trigger surface — it enforces "did you go through the gate?"
+The hook checks for any of `.claude/.tdd-active` (TDD invoked), `.claude/.tdd-skipped` (visual frontend, explicitly opted out), `.claude/.lfg-active` (`/lfg` proof-of-concept mode), or `.claude/.post-review-edit` (`sidecar.sh stamp release` opened the review lock for an edit that is not a finding). No path checking beyond the trigger surface — it enforces "did you go through the gate?"
 
 It carries a second clause on the same trigger surface: the **post-review edit lock**, which refuses an implementation write while `.claude/.review-stamped` exists and `.claude/.fix-findings-active` does not. The first clause asks "was this work classified?"; the second asks "is this edit landing after a review, authored by the session the review went around?" Both are one script because both key off the same file-pattern decision.
 
-**The two clauses are ordered, not independent — read the `.review-stamped` term in the first one before editing either.** The classification clause stands down on a stamped branch, so the post-review clause is the only one that decides there. This is not a stylistic preference: `/execute` Step 6 removes `.claude/.tdd-active`, `.claude/.tdd-skipped`, and `.claude/.lfg-active` *before* it hands off to `/pre-merge`, so a stamped branch never carries a classification marker. Two independent clauses in this order therefore never reach the second one — the `/fix-findings` fixer is refused despite holding the flag written for it, and the authoring session is refused by the wrong clause, told to invoke `/tdd` and never told that `/fix-findings` is the route. A lock whose designed affordance never prints is a lock nobody can use, and it was described here as "independent" while behaving this way. `scripts/test-post-review-edit-lock.sh` now drives `/execute` Step 6's removal as part of the round trip, so the ordering is measured rather than asserted.
+**The two clauses are ordered, not independent — read the `.review-stamped` term in the first one before editing either.** The classification clause stands down on a stamped branch, so the post-review clause is the only one that decides there. This is not a stylistic preference: `/execute` Step 6 removes `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, and `.claude/.post-review-edit` *before* it hands off to `/pre-merge`, so a stamped branch never carries a classification marker. Two independent clauses in this order therefore never reach the second one — the `/fix-findings` fixer is refused despite holding the flag written for it, and the authoring session is refused by the wrong clause, told to invoke `/tdd` and never told that `/fix-findings` is the route. A lock whose designed affordance never prints is a lock nobody can use, and it was described here as "independent" while behaving this way. `scripts/test-post-review-edit-lock.sh` now drives `/execute` Step 6's removal as part of the round trip, so the ordering is measured rather than asserted.
 
 **Install-time: the run takes one of four paths, and at most one of them applies at a time.** Read `.claude/hooks/enforce-classification.sh` in the target project before writing anything. What is already installed there decides the path — not how this skill was invoked, because `/execute` Step 0 routes both of its verdicts (`hooks-absent` and `hooks-stale`) to the same auto-invocation. Two things the per-path rules below do key on: on a fresh install (Path A or B), whether a user is present to answer, which an HITL `/execute` session supplies and an AFK run does not; and on a hook that is already installed (Path C, Path D, and § 8's skip), whether a user typed `/init-pipeline` by hand or another skill auto-invoked it, because a user being present in the calling session does not turn an auto-invocation into a hand-run. Take no instruction from a path you are not on. The one handover between paths is Path C's, below: a hand-run that rewrites a stale hook has, by the end of that rewrite, the hook Path D is for.
 
@@ -82,7 +82,7 @@ if [[ "$FILE_PATH" == *.config.* ]]; then
 fi
 # Check for classification markers — on a file inside this project only. A
 # Write to /tmp/scratch.ts or a sibling checkout is no business of either clause
-# below, and refusing it sends the agent to /tdd, or to deleting .review-stamped,
+# below, and refusing it sends the agent to /tdd, or to releasing the review lock,
 # for a file the pipeline does not own. Both sides are resolved through `cd -P`
 # first, the file through its nearest existing directory, so neither `..` nor a
 # symlink carries a path across the boundary in either direction. A relative
@@ -104,7 +104,7 @@ fi
 # write: the /fix-findings fixer is refused outright, and the authoring session is
 # refused by the wrong clause, under a message that names /tdd and never names the
 # route the lock was built to offer.
-if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" ]; then
+if [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.post-review-edit" ]; then
   echo '{"decision":"block","reason":"BLOCKED: classify work in /execute Step 3 before writing implementation files. Either invoke /tdd (backend/behavior-heavy), create .claude/.tdd-skipped (visual frontend), or invoke /lfg (proof-of-concept mode)."}' >&2
   exit 2
 fi
@@ -112,18 +112,21 @@ fi
 # review-currency stamp; /fix-findings touches .fix-findings-active when it
 # loads and removes it when it reports. Between those two, an implementation
 # edit is a post-review fix authored by the session the review just went around.
+# `sidecar.sh stamp release` is the route for an edit that is not a finding: it
+# swaps .review-stamped for .post-review-edit, which the clause above reads.
 if [ -f "$CLAUDE_PROJECT_DIR/.claude/.review-stamped" ] && [ ! -f "$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active" ]; then
-  echo '{"decision":"block","reason":"BLOCKED: this branch has been reviewed and stamped. A post-review fix needs an independent author. Ask the human which findings to fix and run /fix-findings with exactly the numbers they name (never numbers you chose), or delete .claude/.review-stamped to take the edit yourself."}' >&2
+  echo '{"decision":"block","reason":"BLOCKED: this branch has been reviewed and stamped. For a review finding, ask the human which findings to fix and run /fix-findings with exactly the numbers they name (never numbers you chose). For any other edit the human asked for (a copy change, a merge resolution, new scope), run: sidecar.sh stamp release <branch> --reason \"<why>\" (sidecar.sh is in the references directory of the /pre-merge skill), make the edit, then re-run /pre-merge so the change is reviewed and the branch is stamped again."}' >&2
   exit 2
 fi
 exit 0
 ```
 
 **The two routes the refusal names, and what the clause actually refuses.**
-Invoking `/fix-findings` routes the edit to a sub-agent that did not write the
-code; deleting `.claude/.review-stamped` by hand takes the edit anyway. That
-second choice is made silently today, and printing it is what makes it visible.
-It is not the only way out, and the difference matters at install time: the hook
+Invoking `/fix-findings` routes a finding's fix to a sub-agent that did not write
+the code. `sidecar.sh stamp release <branch> --reason "<why>"` opens the lock for
+any other edit the human asked for, leaving the reason and the head on record
+for the `/pre-merge` re-run that reviews the edit and stamps again.
+Those are not the only ways out, and the difference matters at install time: the hook
 is registered in § 3 below on `"matcher": "Write|Edit"`, so no `Bash` write is
 ever presented to it — `sed -i`, `tee`, a heredoc, `printf >`, or `rm
 .claude/.review-stamped` itself — and within Write/Edit it refuses only a path
@@ -332,6 +335,7 @@ Append these lines if not already present:
 .claude/.tdd-active
 .claude/.tdd-skipped
 .claude/.lfg-active
+.claude/.post-review-edit
 .claude/.ralph-checked
 .claude/.review-stamped
 .claude/.fix-findings-active
@@ -436,7 +440,7 @@ bash "$SC" init --name <suggested> --mode <Q1> --write <Q3> --in-tree-path <Q2>
 SC="<this skill's directory>/scripts/sidecar.sh"
 CUR="$(bash "$SC" config get base_ref)" || { echo "base_ref: config get failed; stop and relay it" >&2; exit 1; }
 if [ -n "$CUR" ]; then echo "base_ref=$CUR (answered; not asking)"; exit 0; fi
-DETECTED="$(bash "$SC" base-ref --name 2>/dev/null)" || DETECTED=
+DETECTED="$(bash "$SC" base-ref --name --no-pr 2>/dev/null)" || DETECTED=
 echo "detected=${DETECTED:-none}"
 ```
 

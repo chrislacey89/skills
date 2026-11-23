@@ -33,6 +33,8 @@ Use `/visual-recap` when:
 - The change's topology (what moved where, which hunks are load-bearing) is hard to hold in your head from flat terminal output.
 - You want a portable, line-anchored artifact you can open in a browser and feed answers back from.
 - A **plan** commits to decisions that a reader skims past in prose. `/write-a-prd`'s `## Implementation Decisions` is a flat bullet list; nothing in it marks which bullets foreclose something. Reconnects at the `/write-a-prd` → `/prd-to-issues` boundary rather than the merge boundary, and produces the same transient artifact.
+- A **`/shape` closing summary** has to be grasped by someone who was not in the session. Reconnects at the `/shape` → `/research` boundary.
+- A **PRD's slice set** has to be seen as a build order, with what is still open. Reconnects at the `/prd-to-issues` → `/execute` boundary.
 
 Choosing between the two comprehension side-routes: `/walk-commits` steps the branch commit-by-commit with per-commit sign-off — reach for it when the history is the story and each commit deserves its own verdict. `/visual-recap` renders the whole change as one connected surface — reach for it when the final shape matters more than the path that produced it.
 
@@ -54,7 +56,7 @@ The skip gate cuts filler — but a change that *passes* the gate owes the revie
 
 ## The shared rendering core
 
-All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so artifacts come out consistent run-to-run. That doc has two parts, and they are two **modes**, not two layouts: **Part I (§1–§17)** is the scrolling recap; **Part II (§D1–§D9)** is the walkthrough deck. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. Read the core and the part your mode selects, before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
+All of the HTML vocabulary, the copy-text serializer, the Grounding Rule, secret-redaction, and the Tufte quality bar live in **`references/visual-rendering-core.md`** — the single bar this skill and `/walk-commits` both author against. The concrete shapes it points at — the fixed CSS token core and copy-paste-ready markup for each block — live in **`references/visual-recap-design.md`**, the canonical skeleton you copy from so artifacts come out consistent run-to-run. That doc has two parts, and they are two **modes**, not two layouts: **Part I (§1–§18)** is the scrolling recap; **Part II (§D1–§D9)** is the walkthrough deck. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading budget, and the transient-artifact rule. Read the core and the part your mode selects, before rendering. The points below are the skill-level discipline; the core is the rendering contract and the design doc is the skeleton.
 
 When a *choice* is what needs rendering rather than a change — three or more mutually exclusive options, each carrying three or more attributes, not orderable on one axis — the block is the **options-comparison** (`references/visual-recap-design.md` §11), and its threshold and its relationship to the `AskUserQuestion` menu live in `references/next-step-menu.md`. That block is forward-looking, so its grounding rule differs: each cell is cited with its source or visibly marked asserted (`references/visual-rendering-core.md` §1, *Forward-looking blocks*).
 
@@ -119,18 +121,231 @@ The diff is three-dot and the log two-dot inside each scope, for the reason the 
 
 > **Is there one story the screens advance? → the deck. Is the reviewer auditing parallel hunks? → the scroll.**
 
-- **Scroll recap** (`references/visual-recap-design.md` Part I, §1–§17) — a single scrolling column. Take it when the reviewer's job is to check a topology: which files moved, which contracts changed, which hunks are load-bearing. They already hold the *why* and need the *where*.
+- **Scroll recap** (`references/visual-recap-design.md` Part I, §1–§18) — a single scrolling column. Take it when the reviewer's job is to check a topology: which files moved, which contracts changed, which hunks are load-bearing. They already hold the *why* and need the *where*.
 - **Walkthrough deck** (`references/visual-recap-design.md` Part II, §D1–§D9) — one idea per screen, paged, with a grouped rail and the arc **premise → the changes → the mechanism → aftermath**. Take it when the change has a causal arc and the *why* has to land before any hunk means anything: a sweep with one thesis, a chain of moves that depend on each other, a review's own story.
 
 When both fit, take the scroll — it is the cheaper artifact. Two rules bound the deck and are not negotiable (§D2): **no comparison may span screens**, and **never page a population** — N near-identical instances of one cause are the finding, so they go co-visible in one screen, never one per screen.
 
-**When the subject is a plan rather than a diff, the mode question is answered before you get here.** A shaped PRD, a research artifact, or a proposal has no diff, so the resolve step above does not apply: skip it and render the **forward-looking blocks** instead — **decision cards** (`references/visual-recap-design.md` §13) for the commitments the plan makes, an **options-comparison** (§11) for a fork it has not settled, an **open question** (§14) for what it cannot settle yet, and a **§5 diagram** for the architecture it implies. The scroll shell holds them; the deck holds them when the plan has a causal arc.
+**When the subject is a plan rather than a diff, the mode question is answered before you get here.** A shaped PRD, a research artifact, or a proposal has no diff, so the resolve step above does not apply: skip it and render the **forward-looking blocks** instead — **decision cards** (`references/visual-recap-design.md` §13) for the commitments the plan makes, an **options-comparison** (§11) for a fork it has not settled, an **open question** (§14) for what it cannot settle yet, and a **§5 diagram** for the architecture it implies. A named plan subject (below) also gets a **staged scene** (§18) when it has an order to show. The scroll shell holds them; the deck holds them when the plan has a causal arc.
 
 Those first three are one decision at three stages, and a live plan surface usually shows more than one stage at once: a question that has no options yet, a fork rendered as a matrix, a choice already made and rendered as a card. **When a card records the outcome of a matrix on the same surface, carry the winning option's slug into the card's id** — the derivation and its worked example are in `references/visual-rendering-core.md` §4's id registry. Numbering the decisions instead is the failure: insert one, regenerate, and every answer already pasted back attaches to a different decision with nothing reporting it.
 
-Two things change, and both are load-bearing. **The Grounding Rule inverts** — there is nothing to derive from, so every field is *cited* (quoted from the PRD or issue body, the research artifact, or current code at `file:line`, and showing that source) or visibly *asserted*, per `references/visual-rendering-core.md` §1. **The skip gate gets stricter, not looser**: render a decision card only for a decision that forecloses something. A plan whose decisions are all preferences reads faster as the prose it already is, and drawing it gives commitments weight they have not earned — the same Lie Factor the recap side guards against, measured in evidence instead of lines.
+Two things change, and both are load-bearing. **The Grounding Rule inverts** — there is nothing to derive from, so every field is *cited* (quoted from the PRD or issue body, the research artifact, or current code at `file:line`, and showing that source) or visibly *asserted*, per `references/visual-rendering-core.md` §1. The one part of a plan that stays derived by tooling is a slice set's structure (*Subject: the slice set of a PRD*, below). **The skip gate gets stricter, not looser**: render a decision card only for a decision that forecloses something. A plan whose decisions are all preferences reads faster as the prose it already is, and drawing it gives commitments weight they have not earned — the same Lie Factor the recap side guards against, measured in evidence instead of lines.
 
 **When the change feels abstract to the audience, recommend `/re-pitch` — never invoke it.** The deck's premise screen is a re-pitch-shaped retelling (one anchor sentence, every domain term glossed on first use, no forward references), and in the field a `/re-pitch` run mid-session became a deck's opening screen directly. If the reader signals the change is not landing, name `/re-pitch` as the option and let them take it; same rule as every other cross-skill seam here.
+
+#### Named plan subjects
+
+Asking for a subject by name ("the shape", "PRD #n", "the slices of #n") is the selection. There is no flag. For each one, the rows of its mapping are Step 3's coverage inventory: render each row, or say the source had nothing for it. Run secret-redaction over the subject's text before any of it reaches the HTML (`references/visual-rendering-core.md` §2). Write the page's blocks first, each with a stable id, so the scene's steps can cite them.
+
+#### Subject: a `/shape` closing summary
+
+`/shape` writes no file, so the summary is the one in this conversation or the one the user pastes. **When neither is present, stop and ask for it.** Do not rebuild a summary from an issue, a research note, or the transcript's shaping questions.
+
+The scene (`references/visual-recap-design.md` §18) has three views, all on the page: **the problem today**; **the choices added up**; **where each assumption sits**, which sets each assumption's state on the part of the picture it sits under (`maybe` for `Uncertain`, `risk` for `Speculative`). Each step cites the ids of the cards or rows it rests on, or is marked asserted. When the summary has no order to show, there is no scene: use a §5 diagram or prose, and say which on the page.
+
+| Category | Renders as |
+|---|---|
+| **Choices** | a decision card (§13) for each choice that forecloses something, a table row with an id for every other choice, and the scene's second view. What a choice leaves out is that card's "rules out", or its own row under "left out" |
+| **Terms** | a table: the term, its one-sentence definition, the alias to avoid. Use the same word in the scene |
+| **Assumptions** | `Uncertain` and `Speculative`: an open question (§14) each, carrying the tag and its research question. `Likely` and `Established`: a table with the tag. All of them: the scene's third view |
+| **Impositions** | a table: the constraint and where it comes from |
+| **Structural signals** | a short table, in plain prose per row, with no decision card |
+
+#### Subject: a PRD
+
+Read the PRD by its id with the block below, never from memory. It takes `#<n>` or `W-<n>`, asks `sidecar.sh backend prds` where PRDs live, and prints the body. A nonzero exit prints no body and says why on stderr: relay that and stop. On GitHub the read is [gh issue view](https://cli.github.com/manual/gh_issue_view), and "is a PRD" is `/execute` Step 0's shaped-pitch headings, minus a slice and a feature issue that is still a bet.
+
+```bash
+# visual-recap: read prd
+# Fill in the PRD's id: #<n>, or W-<n> on the sidecar backend.
+PRD="<prd id>"
+SC="<this skill's directory>/references/sidecar.sh"
+BACKEND="$(bash "$SC" backend prds)" || { echo "backend refused: not guessing where the PRD is" >&2; exit 1; }
+case "$BACKEND" in
+  github)
+    N="${PRD#\#}"
+    case "$N" in ''|*[!0-9]*) echo "[$PRD] is not an issue number, and PRDs here are GitHub issues" >&2; exit 1 ;; esac
+    ITEM="$(gh issue view "$N" --json number,url,body)" || { echo "could not read #$N" >&2; exit 1; }
+    ;;
+  sidecar)
+    case "$PRD" in W-*) ;; *) echo "[$PRD] is not a W-<n> id, and PRDs here are work items" >&2; exit 1 ;; esac
+    ITEM="$(bash "$SC" work view "$PRD" --json)" || { echo "could not read $PRD" >&2; exit 1; }
+    ;;
+  *) echo "backend answered [$BACKEND]: not guessing" >&2; exit 1 ;;
+esac
+UNFENCED='
+def unfenced: split("\n") | map(sub("\r$"; ""))
+  | reduce .[] as $l ({code: false, out: []};
+      if ($l | test("^ *(```|~~~)")) then .code |= not elif .code then . else .out += [$l] end)
+  | .out;'
+IS_PRD='
+if has("kind") then .kind == "prd" and (.maturity // "prd") == "prd"
+else ((.body // "") | unfenced) as $lines
+  | ((.url // "") | test("/pull/") | not)
+    and any($lines[]; test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\s*$"; "i"))
+    and (any($lines[]; test("^## Parent PRD\\s*$")) | not)
+    and ($lines | join("\n") | test("(^|\n)[#*` -]*Current maturity[:*`\\s]*(roadmap bet|research-ready)"; "i") | not)
+end'
+printf '%s' "$ITEM" | jq -e "$UNFENCED $IS_PRD" >/dev/null || { echo "$PRD is not a shaped PRD" >&2; exit 1; }
+BODY="$(printf '%s' "$ITEM" | jq -r '.body // ""')" || { echo "could not read the body of $PRD" >&2; exit 1; }
+[ -n "$BODY" ] || { echo "$PRD has an empty body" >&2; exit 1; }
+printf '%s\n' "$BODY"
+```
+
+The scene has two views, both on the page: **how it works today** and **how it works as specified**. Both are drawn from the mechanism in the Solution, on the same items in the same places, so the difference is what the reader sees. Each step cites the PRD section it comes from or current code at `file:line`, or is marked asserted. **A PRD whose Solution has no ordered steps gets no scene.** Use a §5 diagram, or prose when there is nothing to connect, and say on the page which it is and why.
+
+| Section | Renders as |
+|---|---|
+| **Problem** | plain prose at the top, and the source of the scene's first view |
+| **Appetite** | plain prose: the budget, and that it is a target |
+| **Target / Estimate / Commitment** | plain prose, the three kept apart |
+| **Uncertainty / Confidence** | plain prose for the confidence, an open question (§14) for each driver still unanswered |
+| **Solution** | the staged scene (§18), or the §5 diagram or prose that stands in for it |
+| **Rabbit Holes** | a table: the risk and its resolution. A decision card (§13) only for a resolution that forecloses something |
+| **No-gos** | a table, in the PRD's words |
+| **User Stories** | plain prose: the numbered list, must-haves before nice-to-haves, numbers unchanged |
+| **API Contract Sketch** | plain prose and a table of operations, each cited to the sketch |
+| **Implementation Decisions** | a decision card for each that forecloses something, a table row with an id for every other, and each locked contract shape verbatim as a code block |
+| **Research Reference** | plain prose: the reference, as written |
+| **Lessons from Past Solutions** | plain prose: each lesson's path and what it changes here |
+
+#### Subject: the slice set of a PRD
+
+Read the set by the PRD's id with the block below, never from memory. It resolves the id as *read prd* does, then prints one JSON object on either backend:
+
+```json
+{"prd": "<id>", "slices": [{"id": "<id>", "title": "<str>", "state": "open", "type": "AFK", "blocked_by": ["<id>"]}]}
+```
+
+`state` is `open` or `closed`. `type` is `AFK`, `HITL`, or empty when the body states none. The array is already a dependency order. On GitHub the read is [gh issue list](https://cli.github.com/manual/gh_issue_list): a slice is an issue whose own `## Parent PRD` section names this PRD, and its blockers are its dependency edges, or its `## Blocked by` section when no edge was ever wired. On the sidecar backend a slice is a work item with this parent, its blockers are the `blocked_by` field, and its title, which the store has no field for, is the first sentence of its `## What to Build`. A slice whose prose and recorded blockers differ is named on stderr, one line each: show those lines on the page. A nonzero exit prints no JSON and says why, a cycle included: relay that and draw no scene.
+
+```bash
+# visual-recap: read slices
+# Fill in the PRD's id: #<n>, or W-<n> on the sidecar backend.
+PRD="<prd id>"
+SC="<this skill's directory>/references/sidecar.sh"
+BACKEND="$(bash "$SC" backend prds)" || { echo "backend refused: not guessing where the PRD is" >&2; exit 1; }
+case "$BACKEND" in
+  github)
+    N="${PRD#\#}"
+    case "$N" in ''|*[!0-9]*) echo "[$PRD] is not an issue number, and PRDs here are GitHub issues" >&2; exit 1 ;; esac
+    ITEM="$(gh issue view "$N" --json number,url,body)" || { echo "could not read #$N" >&2; exit 1; }
+    ;;
+  sidecar)
+    case "$PRD" in W-*) ;; *) echo "[$PRD] is not a W-<n> id, and PRDs here are work items" >&2; exit 1 ;; esac
+    ITEM="$(bash "$SC" work view "$PRD" --json)" || { echo "could not read $PRD" >&2; exit 1; }
+    ;;
+  *) echo "backend answered [$BACKEND]: not guessing" >&2; exit 1 ;;
+esac
+UNFENCED='
+def unfenced: split("\n") | map(sub("\r$"; ""))
+  | reduce .[] as $l ({code: false, out: []};
+      if ($l | test("^ *(```|~~~)")) then .code |= not elif .code then . else .out += [$l] end)
+  | .out;'
+IS_PRD='
+if has("kind") then .kind == "prd" and (.maturity // "prd") == "prd"
+else ((.body // "") | unfenced) as $lines
+  | ((.url // "") | test("/pull/") | not)
+    and any($lines[]; test("^#+ *(Appetite|Rabbit Holes|No-gos|User Stories|Implementation Decisions)\\s*$"; "i"))
+    and (any($lines[]; test("^## Parent PRD\\s*$")) | not)
+    and ($lines | join("\n") | test("(^|\n)[#*` -]*Current maturity[:*`\\s]*(roadmap bet|research-ready)"; "i") | not)
+end'
+printf '%s' "$ITEM" | jq -e "$UNFENCED $IS_PRD" >/dev/null || { echo "$PRD is not a shaped PRD" >&2; exit 1; }
+PRD="$(printf '%s' "$ITEM" | jq -r 'if has("kind") then .id else "#\(.number)" end')" || exit 1
+REPO=""
+if [ "$BACKEND" = github ]; then
+  REPO="$(printf '%s' "$ITEM" | jq -r '.url | capture("^[a-z]+://[^/]+/(?<repo>[^/]+/[^/]+)/").repo')" || exit 1
+  ROWS="$(gh issue list --state all --limit 10000 --json number,title,state,url,body,blockedBy)" || { echo "could not list issues" >&2; exit 1; }
+  printf '%s' "$ROWS" | jq -e 'length < 10000' >/dev/null || { echo "the issue list is unreadable or cut short: not guessing" >&2; exit 1; }
+else
+  IDS="$(bash "$SC" work list --kind slice --parent "$PRD" --state all)" || { echo "could not list the slices of $PRD" >&2; exit 1; }
+  VIEWS=""
+  while IFS= read -r ID; do
+    [ -n "$ID" ] || continue
+    VIEW="$(bash "$SC" work view "$ID" --json </dev/null)" || { echo "could not read $ID" >&2; exit 1; }
+    VIEWS="$VIEWS $VIEW"
+  done <<<"$IDS"
+  ROWS="$(printf '%s' "$VIEWS" | jq -cs .)" || { echo "could not read the slices of $PRD" >&2; exit 1; }
+fi
+SLICES_JQ='
+def section($name): unfenced
+  | reduce .[] as $l ({on: false, out: []};
+      if ($l | test("^## ")) then .on = ($l | test("^## " + $name + "\\s*$"))
+      elif .on then .out += [$l] else . end)
+  | .out;
+def local_id: if startswith($repo + "#") then "#" + (split("#") | last) else . end;
+def named: if $backend == "sidecar" then scan("\\bW-[0-9]+\\b")
+  else scan("(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#[0-9]+") | local_id end;
+def edge: capture("^[a-z]+://[^/]+/(?<r>[^/]+/[^/]+)/[a-z]+/(?<n>[0-9]+)$") // error("unreadable blocker url")
+  | (.r + "#" + .n) | local_id;
+def slice_type: first(unfenced[] | capture("^\\*\\*Type:\\*\\* *(?<t>AFK|HITL)\\b").t) // "";
+def first_sentence: (first(section("What to Build")[] | select(test("\\S"))) // "")
+  | sub("[.!?](\\s.*)?$"; "");
+
+def github_slice:
+  (.body // "") as $body
+  | select($body | contains("Parent PRD"))
+  | select((first($body | section("Parent PRD")[] | named) // "") == $prd)
+  | .blockedBy as $b
+  | if ($b.totalCount // 0) != (($b.nodes // []) | length) then error("the blockers of #\(.number) were cut short") else . end
+  | {id: "#\(.number)", title, state: (.state | ascii_downcase), body: $body,
+     field: [($b.nodes // [])[].url | edge], has_field: (($b.totalCount // 0) > 0)};
+def sidecar_slice:
+  {id, title: (.body | first_sentence), state, body, field: (.blocked_by // []), has_field: true};
+def in_order:
+  sort_by(.id | sub("^.*[#-]"; "") | tonumber) as $all
+  | [$all[].id] as $ids
+  | reduce range(0; $all | length) as $i ([];
+      . as $done
+      | [$done[].id] as $placed
+      | $done + [first($all[]
+          | select(.id | IN($placed[]) | not)
+          | select(.blocked_by | all(.[]; IN($placed[]) or (IN($ids[]) | not))))]);
+def reach($edges):
+  def grow: . as $s | ([$s[], ($s[] | ($edges[.] // [])[])] | unique) as $more
+    | if $more == $s then $s else $more | grow end;
+  unique | grow;
+
+[.[] | if $backend == "sidecar" then sidecar_slice else github_slice end
+  | . as $s
+  | ([$s.body | section("Blocked by")[]
+      | select(test("^[-* ]*(none|n/a|nothing)\\b"; "i") | not)
+      | named | select(. != $prd)] | unique) as $prose
+  | {slice: {id, title, state, type: ($s.body | slice_type),
+             blocked_by: (if .has_field then .field else $prose end)},
+     differs: (if .has_field and ($prose != (.field | unique))
+       then "\(.id): blocked by [\(.field | unique | join(", "))], but its Blocked by section says [\($prose | join(", "))]"
+       else null end)}
+] as $read
+| [$read[].slice] as $slices
+| ($slices | map({key: .id, value: .blocked_by}) | from_entries) as $edges
+| [$slices[] | .id as $id | select(.blocked_by | reach($edges) | any(.[]; . == $id)) | .id] as $cycle
+| {cycle: $cycle,
+   differs: [$read[].differs | select(. != null)],
+   out: {prd: $prd, slices: (if ($cycle | length) > 0 then [] else ($slices | in_order) end)}}'
+RESULT="$(printf '%s' "$ROWS" | jq -c --arg prd "$PRD" --arg repo "$REPO" --arg backend "$BACKEND" "$UNFENCED $SLICES_JQ")" ||
+  { echo "could not read the slices of $PRD" >&2; exit 1; }
+printf '%s' "$RESULT" | jq -r '.differs[]' >&2
+CYCLE="$(printf '%s' "$RESULT" | jq -r '.cycle | join(", ")')" || exit 1
+[ -z "$CYCLE" ] || { echo "the blockers form a cycle: $CYCLE; no order to draw" >&2; exit 1; }
+printf '%s' "$RESULT" | jq -c '.out'
+```
+
+**The scene's items, edges, and states are written from that JSON, never typed from the issues or from memory.** One view, the build order: one box per slice, one edge per `blocked_by` entry pointing at the slice it blocks, one step per slice in the array's order. **A blocker that is not in the array is an outside box** (a `box` item, dashed, holding its id and no state), never dropped. Which parts of the scene are graded is stated in `references/visual-rendering-core.md` §1, *Forward-looking blocks*. The captions are the only authored part, and each cites its slice's id or is marked asserted. **An empty `slices` array draws no scene**: say the PRD has no slices yet. A set too large to place at reading size takes a §5 Mermaid graph written from the same JSON.
+
+Beside the scene, read each slice's body (`gh issue view`, or `work view W-<n> --json` on the sidecar backend) for its Boundary Map.
+
+| Field | Renders as |
+|---|---|
+| **id** | the box's item id, the step's source, and the row's id in the table |
+| **title** | the box's title, unshortened in the table |
+| **state** | the box's subtitle says `open` or `closed`; a closed slice is `ok` from the view's `init`, and an open one is `focus` only on its own step |
+| **type** | the box's subtitle, beside the state, and a table column |
+| **blocked_by** | the edges, the outside boxes, and a table column that says which blockers are still open when the array holds them |
+| **Produces** | plain prose beside the scene, one table row per slice, verbatim |
+| **Consumes** | the next column of that row, verbatim, so what each slice hands the next reads across |
+| **Context** | plain prose only where it changes what is open: a gotcha naming an unfinished slice. Otherwise left to the issue |
 
 ### 2. Derive the grounded skeleton (tooling, not prose)
 
@@ -231,14 +446,14 @@ Delete the HTML (and any screenshots) when the review round is done. What persis
 
 - **Not a defect review.** It does not sweep the diff for bugs — `/pre-merge` does that and emits advisory findings. Recap renders comprehension.
 - **Not free-form diagramming.** It stays clean and structured; exploratory "diagrams that argue" are `/excalidraw-diagram`.
-- **Not a graph-layout engine.** Trivial spines use the CSS diagram primitive; multi-stage and behavioral graphs come from `/mermaid`. The core owns callouts and diffs, not hand-positioned graph layout.
+- **Not a graph-layout engine.** Trivial spines use the CSS diagram primitive; multi-stage and behavioral graphs come from `/mermaid`. The core owns callouts and diffs, not hand-positioned graph layout. The one exception is a staged scene's few items (`references/visual-recap-design.md` §18), placed by hand because the block shows order.
 - **Not a renderer we ship.** The core is a vocabulary the agent hand-authors against — no package, no build, no server, no committed app. The canonical skeleton (`references/visual-recap-design.md`) is a *copyable reference the agent inlines*, the same status as the §4 serializer — **not** the runtime component library this bullet forbids: no package, no build step, no CDN runtime, nothing the artifact imports. If "self-contained HTML with CDN imports" starts growing state, routing, or an imported component library, pull it back.
 - **Not a mandatory stage, and not auto-invoked.** It is optional, gated by the skip-for-small-diffs rule. If a later PR sample shows it is rarely invoked or only fires on diffs `/pre-merge` already covers, fold it into `/pre-merge` as an optional phase (mirrors `/walk-commits`'s own self-deprecation clause).
 - **Not a committed artifact.** The HTML is transient — gitignored or `mktemp`, deleted after the round. Per SYSTEM-OVERVIEW §Philosophy.
 
 ## Handoff
 
-- **Expected input:** either a finished change to comprehend — a branch range, a PR number, or a working diff, plus the base branch to diff against — or a plan to render forward: a shaped PRD issue, a research artifact, or a proposal whose decisions and architecture a reader has to grasp before slices get cut. No upstream artifact is required for the diff case, though a linked PRD or slice issue helps frame intent.
-- **Produces:** a transient, self-contained interactive HTML artifact in the selected mode — a **scrolling recap** (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites, a decision trail of the commitments a finished diff carries out, a sitting plan when the excerpts exceed one reading budget) or a **walkthrough deck** (premise → changes → mechanism → aftermath, one idea per screen, before/after panes inside the screen) — or, for a plan, the **forward-looking blocks**: decision cards for the commitments it makes, an options-comparison for a fork it has not settled, and the architecture it implies, every field cited or visibly asserted. Diagrams render as a CSS spine when trivial and Mermaid-via-CDN when multi-stage or behavioral. Plus the reader's feedback, copied back where the artifact is handed off, with durable items promoted to GitHub PR review comments (diff case) or to the PRD issue body (plan case). A comprehension surface and a decision, not a committed file.
-- **Reconnects at:** the `/pre-merge` → merge boundary for a diff — run it before approving, then continue with `/compound` in-PR if a durable lesson emerged, a `/pre-merge` re-run that re-stamps, then `/closeout`. For a plan, the `/write-a-prd` → `/prd-to-issues` boundary: run it when the PRD is shaped and someone who was not in the shaping session has to react before slices get cut.
+- **Expected input:** either a finished change to comprehend — a branch range, a PR number, or a working diff, plus the base branch to diff against — or a plan to render forward: a `/shape` closing summary (in the conversation or pasted), a shaped PRD by its id (`#<n>`, or `W-<n>` on the sidecar backend), the slice set of a PRD by that PRD's id, a research artifact, or a proposal whose decisions and architecture a reader has to grasp before slices get cut. No upstream artifact is required for the diff case, though a linked PRD or slice issue helps frame intent.
+- **Produces:** a transient, self-contained interactive HTML artifact in the selected mode — a **scrolling recap** (file-tree + change flags, annotated split diffs with line-anchored callouts, schema/API contract cards, UI wireframes for rendered-UI changes, labeled before/after columns, a per-unit series when one root cause repeats across four or more near-identical sites, a decision trail of the commitments a finished diff carries out, a sitting plan when the excerpts exceed one reading budget) or a **walkthrough deck** (premise → changes → mechanism → aftermath, one idea per screen, before/after panes inside the screen) — or, for a plan, the **forward-looking blocks**: decision cards for the commitments it makes, an options-comparison for a fork it has not settled, a staged scene for the order it states (`references/visual-recap-design.md` §18), and the architecture it implies, every field cited or visibly asserted. Diagrams render as a CSS spine when trivial and Mermaid-via-CDN when multi-stage or behavioral. Plus the reader's feedback, copied back where the artifact is handed off, with durable items promoted to GitHub PR review comments (diff case) or to the PRD issue body (plan case). A comprehension surface and a decision, not a committed file.
+- **Reconnects at:** the `/pre-merge` → merge boundary for a diff — run it before approving, then continue with `/compound` in-PR if a durable lesson emerged, a `/pre-merge` re-run that re-stamps, then `/closeout`. For a shape's closing summary, the `/shape` → `/research` boundary. For a PRD, the `/write-a-prd` → `/prd-to-issues` boundary: run it when the PRD is shaped and someone who was not in the shaping session has to react before slices get cut. For a slice set, the `/prd-to-issues` → `/execute` boundary.
 - **What comes next:** the user merges, or decomposes the plan (or pauses on unresolved items). `/visual-recap` does not invoke anything.

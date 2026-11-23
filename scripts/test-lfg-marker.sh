@@ -233,8 +233,8 @@ clause_one="${clause_one#*:}"
 # so a rename there moves this suite's idea of "not a marker" in lockstep.
 stamp_block="$(fenced_blocks pre-merge/SKILL.md bash 'review-stamped')"
 [ -n "$stamp_block" ] || fatal "no stamp block found in pre-merge/SKILL.md"
-stamp_rel="$(path_set <<<"$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$stamp_block")")"
-[ -n "$stamp_rel" ] || fatal "could not read a .claude/ stamp-flag path out of /pre-merge's touch"
+stamp_rel="$(path_set <<<"$(sed -n 's|.*> "\([^"]*\)".*|\1|p' <<<"$stamp_block")")"
+[ -n "$stamp_rel" ] || fatal "could not read a .claude/ stamp-flag path out of /pre-merge's flag write"
 [ "$(grep -c '' <<<"$stamp_rel")" -eq 1 ] || fatal "/pre-merge's block touches more than one .claude/ path — the stand-down flag is ambiguous"
 
 clause_paths="$(path_set <<<"$clause_one")"
@@ -746,7 +746,7 @@ else
     bad "/tdd's load-time line creates no marker the hook accepts" "created: ${tdd_load:-nothing}; markers: $(tr '\n' ' ' <<<"$markers")"
 fi
 
-ff_load="$(path_set <<<"$(grep -o 'touch [^&]*' <<<"$(load_line fix-findings/SKILL.md)" || true)")"
+ff_load="$(path_set <<<"$(grep -o '> "[^"]*"' <<<"$(load_line fix-findings/SKILL.md)" || true)")"
 if [ -n "$ff_load" ] && [ -z "$(set_minus "$ff_load" "$lock_paths")" ] && [ -z "$(set_intersect "$ff_load" "$markers")" ]; then
     ok "/fix-findings' load-time line creates the flag the lock clause tests ($ff_load)"
 else
@@ -769,7 +769,7 @@ clears() {  # $1 = label, $2 = expected count, $3 = text
         bad "$1 does not clear exactly the marker set" "sites found: $n (expected $2); wrong sets: ${wrong:-none}"
     fi
 }
-clears "/pre-merge Phase 4 (both stamp blocks)" 2 "$(fenced_blocks pre-merge/SKILL.md bash 'touch.*review-stamped')"
+clears "/pre-merge Phase 4 (both stamp blocks)" 2 "$(fenced_blocks pre-merge/SKILL.md bash 'by=%s.*review-stamped')"
 clears "/fix-findings' report step" 1 "$(fenced_blocks fix-findings/SKILL.md bash 'rm -f.*tdd-active')"
 
 # -----------------------------------------------------------------------------

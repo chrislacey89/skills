@@ -412,11 +412,11 @@ gh issue view -R chrislacey89/skills <n> --json number,title,state
 
 A non-zero exit means the entry cites an issue that is not there — do not commit it. This is weaker than a contract test and deliberately so: the citation lives in a downstream repo's `docs/solutions/` file, which this repo's CI cannot read, so there is nothing for a `scripts/test-*.sh` to assert against. What the suite *can* pin is that this command is still here, and `scripts/test-q4-mechanism-names.sh` does — the check runs where the claim is made, and the pin stops the check itself from being quietly dropped.
 
-**Citation check (DO-CONFIRM — verify before committing the entry).** Every 7-to-40-character hex token in the entry that contains a digit is either a commit on the base or gets rewritten to a durable anchor (Phase 3) before this commit. A SHA from this branch is not on the base yet and will not be after the fold or the squash. Set `<path/to/entry.md>` to the entry file; the block asks `sidecar.sh base-ref` for the base itself, because an earlier block's shell variable does not reach this one. [`git merge-base --is-ancestor`](https://git-scm.com/docs/git-merge-base) is the test, and a non-zero exit of any kind counts as not on the base:
+**Citation check (DO-CONFIRM — verify before committing the entry).** Every 7-to-40-character hex token in the entry that contains a digit is either a commit on the base or gets rewritten to a durable anchor (Phase 3) before this commit. A SHA from this branch is not on the base yet and will not be after the fold or the squash. Set `<path/to/entry.md>` to the entry file; the block asks `sidecar.sh base-ref --no-pr` for the base itself, because an earlier block's shell variable does not reach this one, and `--no-pr` because a stacked PR's target is not where the commit has to survive. [`git merge-base --is-ancestor`](https://git-scm.com/docs/git-merge-base) is the test, and a non-zero exit of any kind counts as not on the base:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
-BASE_REF="$(bash "$SC" base-ref)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
+BASE_REF="$(bash "$SC" base-ref --no-pr)" || { echo "base-ref failed: not guessing a base" >&2; exit 1; }
 ENTRY=<path/to/entry.md>
 STALE=0
 for tok in $(grep -owE '[0-9a-f]{7,40}' "$ENTRY" | grep '[0-9]' | sort -u); do
