@@ -332,6 +332,24 @@ for sh in $shells; do
     CPD=""
     check "$sh: …on an unstamped branch the leftover lock in that folder is removed" "" "$([ -f "$O/.claude/.review-stamped" ] && echo left)"
     check "$sh: …and this checkout's .claude is not judged" yes "$([ -f "$P/.claude/.review-stamped" ] && echo yes)"
+    # A CLAUDE_PROJECT_DIR that contains this checkout: a worktree nested in the
+    # main checkout, with the variable naming the main checkout. The block names
+    # that folder, as the hook does, and never the worktree's own top level.
+    M="$P"
+    W="$M/wt$n"
+    git -C "$M" worktree add -q -b nest "$W" >/dev/null 2>&1 || bad "$sh: fixture: nested worktree" "worktree add failed"
+    (cd "$W" && bash "$SC" stamp write nest "$(git rev-parse HEAD)") >/dev/null 2>&1 || bad "$sh: fixture: stamp nest" "stamp write failed"
+    rm -f "$M/.claude/.review-stamped"
+    printf 'by=x\n' > "$M/.claude/.review-stamped"
+    P="$W"; CPD="$M"
+    run "$sh" "$lock_block" ""
+    check "$sh: CLAUDE_PROJECT_DIR containing the checkout: the stamped branch keeps the lock in that folder" yes "$([ -f "$M/.claude/.review-stamped" ] && echo yes)"
+    check "$sh: …and prints the stamp release for this branch" 1 "$(grep -c 'stamp release nest' <<<"$out")"
+    check "$sh: …and writes nothing under the worktree's own top level" "" "$([ -e "$W/.claude" ] && echo made)"
+    git -C "$W" checkout -q -b nest-next
+    run "$sh" "$lock_block" ""
+    check "$sh: …on an unstamped branch the leftover lock in that folder is removed" "" "$([ -f "$M/.claude/.review-stamped" ] && echo left)"
+    P="$M"; CPD=""
 done
 
 # -----------------------------------------------------------------------------
