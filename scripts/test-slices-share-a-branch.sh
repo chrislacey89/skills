@@ -81,6 +81,12 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$tmp/bin/gh"
+# A sidecar.sh whose `work view` fails and whose every other verb is the real one.
+cat > "$tmp/view-fails-sc.sh" <<VF
+#!/usr/bin/env bash
+[ "\$1 \${2:-}" = "work view" ] && { echo "work view refused" >&2; exit 1; }
+exec bash "$SC" "\$@"
+VF
 URL="https://github.com/acme/stack/pull/7"
 
 # shellcheck disable=SC2016  # the needles are the skills' literal text
@@ -222,6 +228,44 @@ for sh in $shells; do
     check "$sh: …saying the stamp lives in the PR body there" 1 "$(grep -c 'PR body' <<<"$err")"
     run "$sh" "$mode_block" "W-1"
     check "$sh: the menu read on the github stamp backend says pr" "pr_mode: pr" "$out"
+
+    # -------------------------------------------------------------------------
+    # A read that fails is not a "pr" answer: a PR is an outside write (#812).
+    section "$sh: a failed pr_mode read opens no PR and answers no menu"
+
+    mkproj guest
+    S1="$(mk --kind slice)"; S2="$(mk --kind slice)"
+    (cd "$P" && bash "$SC" work set "$S1" branch stack && bash "$SC" work set "$S1" pr_mode none \
+        && bash "$SC" work set "$S2" branch stack) >/dev/null 2>&1 \
+        || bad "$sh: fixture: a Stamp only slice on the branch" "work set failed"
+    WD="$(cd "$P" && bash "$SC" resolve)/work"
+    cp "$WD/$S1.md" "$tmp/s1.md"
+    { printf 'not frontmatter\n'; cat "$tmp/s1.md"; } > "$WD/$S1.md"
+    run "$sh" "$pm_block" "$S2"
+    check "$sh: work list fails: Phase 2 exits non-zero" 1 "$rc"
+    check "$sh: …opens no PR and calls no gh" "" "$(cat "$tmp/calls")"
+    check "$sh: …records no pr" "" "$(field "$S2" pr)"
+    check "$sh: …and says the read failed" 1 "$(grep -c 'PR aborted: sidecar.sh work list' <<<"$err")"
+    run "$sh" "$mode_block" "$S2"
+    check "$sh: work list fails: the menu read exits non-zero" 1 "$rc"
+    check "$sh: …answers neither pr nor none" "" "$out"
+    check "$sh: …and says pr_mode is unread" 1 "$(grep -c 'pr_mode unread: sidecar.sh work list' <<<"$err")"
+    cp "$tmp/s1.md" "$WD/$S1.md"
+    # A W naming no work item is not a failed read: it records nothing (as
+    # test-guest-footprint.sh pins for Phase 2), and the branch's item still answers.
+    run "$sh" "$mode_block" "W-99"
+    check "$sh: a W naming no item: the menu read still finds the branch's" "pr_mode: none ($S1)" "$out"
+    VSC="$SC"; SC="$tmp/view-fails-sc.sh"
+    run "$sh" "$pm_block" "$S2"
+    check "$sh: work view fails: Phase 2 exits non-zero" 1 "$rc"
+    check "$sh: …opens no PR and calls no gh" "" "$(cat "$tmp/calls")"
+    check "$sh: …and says the read failed" 1 "$(grep -c "PR aborted: sidecar.sh work view $S2" <<<"$err")"
+    run "$sh" "$mode_block" "$S2"
+    check "$sh: work view fails: the menu read exits non-zero" 1 "$rc"
+    check "$sh: …answers neither pr nor none" "" "$out"
+    check "$sh: …and says pr_mode is unread" 1 "$(grep -c "pr_mode unread: sidecar.sh work view $S2" <<<"$err")"
+    SC="$VSC"
+    check "$sh: …and Phase 2 recorded no pr" "" "$(field "$S2" pr)"
 
     # -------------------------------------------------------------------------
     section "$sh: /execute Step 0 keeps a review lock whose stamp names this branch"

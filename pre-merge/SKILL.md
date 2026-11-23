@@ -315,11 +315,23 @@ case "$(bash "$SC" backend stamp)" in
 esac
 # Stamp only: a work item of this branch records pr_mode none, so no PR is opened.
 BRANCH=$(git branch --show-current)
-ITEMS="$W"
-if [ -n "$BRANCH" ]; then ITEMS="$ITEMS"$'\n'"$(bash "$SC" work list --branch "$BRANCH" 2>/dev/null)"; fi
+ALL=$(bash "$SC" work list --state all) \
+  || { echo "PR aborted: sidecar.sh work list failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+# A W that names no work item records nothing, so it does not stop this block.
+ITEMS=""
+if [ -n "$W" ] && printf '%s\n' "$ALL" | grep -qxF -- "$W"; then ITEMS="$W"; fi
+if [ -n "$BRANCH" ]; then
+  LISTED=$(bash "$SC" work list --branch "$BRANCH") \
+    || { echo "PR aborted: sidecar.sh work list --branch $BRANCH failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+  ITEMS="$ITEMS"$'\n'"$LISTED"
+fi
 while IFS= read -r I; do
   [ -n "$I" ] || continue
-  if [ "$(bash "$SC" work view "$I" --json 2>/dev/null | jq -r '.pr_mode // empty' 2>/dev/null)" = none ]; then
+  VIEW=$(bash "$SC" work view "$I" --json) \
+    || { echo "PR aborted: sidecar.sh work view $I failed, so whether it records Stamp only is unknown" >&2; exit 1; }
+  MODE=$(jq -r '.pr_mode // empty' <<<"$VIEW") \
+    || { echo "PR aborted: the pr_mode of $I does not parse" >&2; exit 1; }
+  if [ "$MODE" = none ]; then
     echo "no PR: $I records pr_mode none (Stamp only), so this branch ($BRANCH) gets no PR of its own"
     exit 0
   fi
@@ -977,7 +989,7 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 
 **While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Beside it, offer **Stamp only — this branch will not get its own PR (it is stacked under another branch, or stays local)**. Stamp only exists only where the stamp does not need a PR: Phase 2 defers only on the `sidecar` stamp backend, and on the `github` backend the stamp lives in the PR body, so a branch with no PR would have nowhere to keep it. On a pick, record the answer on the work item with the second block below. `/execute` Step 0 then keeps the review lock whose stamp names this branch instead of treating it as left over. With no work item there is nowhere to record the answer, so the block refuses and the next run offers the PR again. Once Phase 2 has run, offer the menu above, unless the branch records Stamp only.
 
-**A branch that records Stamp only gets neither menu.** Before building either menu, on every author-mode run whether or not Phase 2 was deferred, run the first block below. When it prints `pr_mode: none`, there is no PR to open, to commit a lesson onto, or to merge, so leave out **Open the PR**, **`/compound` in this PR**, and **`/closeout`**, and do not offer Stamp only again. Lead with **→ Stop here (recommended — the branch is stamped and gets no PR of its own; it lands with the branch it is stacked under)**, and keep the finding-disposition pair. When it prints `pr_mode: pr`, build the menu the rest of this section describes.
+**A branch that records Stamp only gets neither menu.** Before building either menu, on every author-mode run whether or not Phase 2 was deferred, run the first block below. When it prints `pr_mode: none`, there is no PR to open, to commit a lesson onto, or to merge, so leave out **Open the PR**, **`/compound` in this PR**, and **`/closeout`**, and do not offer Stamp only again. Lead with **→ Stop here (recommended — the branch is stamped and gets no PR of its own; it lands with the branch it is stacked under)**, and keep the finding-disposition pair. When it prints `pr_mode: pr`, build the menu the rest of this section describes. When it exits non-zero with `pr_mode unread` on stderr, a read failed: relay that line and offer no menu until the read succeeds.
 
 ```bash
 # Does this branch record Stamp only? Prints "pr_mode: none (W-<n>)" or "pr_mode: pr".
@@ -989,11 +1001,23 @@ case "$(bash "$SC" backend stamp)" in
   *) echo "pr_mode unread: sidecar.sh backend stamp failed" >&2; exit 1 ;;
 esac
 BRANCH=$(git branch --show-current)
-ITEMS="$W"
-if [ -n "$BRANCH" ]; then ITEMS="$ITEMS"$'\n'"$(bash "$SC" work list --branch "$BRANCH" 2>/dev/null)"; fi
+ALL=$(bash "$SC" work list --state all) \
+  || { echo "pr_mode unread: sidecar.sh work list failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+# A W that names no work item records nothing, so it does not stop this block.
+ITEMS=""
+if [ -n "$W" ] && printf '%s\n' "$ALL" | grep -qxF -- "$W"; then ITEMS="$W"; fi
+if [ -n "$BRANCH" ]; then
+  LISTED=$(bash "$SC" work list --branch "$BRANCH") \
+    || { echo "pr_mode unread: sidecar.sh work list --branch $BRANCH failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+  ITEMS="$ITEMS"$'\n'"$LISTED"
+fi
 while IFS= read -r I; do
   [ -n "$I" ] || continue
-  if [ "$(bash "$SC" work view "$I" --json 2>/dev/null | jq -r '.pr_mode // empty' 2>/dev/null)" = none ]; then
+  VIEW=$(bash "$SC" work view "$I" --json) \
+    || { echo "pr_mode unread: sidecar.sh work view $I failed, so whether it records Stamp only is unknown" >&2; exit 1; }
+  MODE=$(jq -r '.pr_mode // empty' <<<"$VIEW") \
+    || { echo "pr_mode unread: the pr_mode of $I does not parse" >&2; exit 1; }
+  if [ "$MODE" = none ]; then
     echo "pr_mode: none ($I)"
     exit 0
   fi
