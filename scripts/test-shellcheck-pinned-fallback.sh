@@ -396,9 +396,7 @@ run_case daemon-hang none 0.11.0 strict clean
 assert_eq 3 "$rc" "exit 3"
 assert_eq local "$log" "the local release linted"
 # This only proves the run did not wait for the stub to answer (it hangs 30s).
-# The bound's own length (about 5s of wall-clock time) is not asserted: a
-# tighter ceiling fails on a loaded machine, and an unbounded check is already
-# caught above, since the stub answering would let Docker lint.
+# For the bound's own length, see the slow-machine section below.
 if [ "$elapsed" -lt 29 ]; then ok "returned in ${elapsed}s (the stub hangs for 30s)"; else bad "bounded daemon check" "took ${elapsed}s"; fi
 
 section "Docker daemon hangs on a slow machine: the bound is wall-clock time, not polling rounds"
