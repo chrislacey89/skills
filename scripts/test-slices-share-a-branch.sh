@@ -81,10 +81,10 @@ case "$1 $2" in
 esac
 STUB
 chmod +x "$tmp/bin/gh"
-# A sidecar.sh whose `work view` fails and whose every other verb is the real one.
-cat > "$tmp/view-fails-sc.sh" <<VF
+# A sidecar.sh whose `work pr-mode` fails and whose every other verb is the real one.
+cat > "$tmp/pr-mode-fails-sc.sh" <<VF
 #!/usr/bin/env bash
-[ "\$1 \${2:-}" = "work view" ] && { echo "work view refused" >&2; exit 1; }
+[ "\$1 \${2:-}" = "work pr-mode" ] && { echo "work pr-mode refused" >&2; exit 1; }
 exec bash "$SC" "\$@"
 VF
 URL="https://github.com/acme/stack/pull/7"
@@ -218,6 +218,12 @@ for sh in $shells; do
     git -C "$P" checkout -q -b other
     run "$sh" "$mode_block" ""
     check "$sh: the menu read on another branch says pr" "pr_mode: pr" "$out"
+    (cd "$P" && bash "$SC" work set "$S1" branch other && bash "$SC" work close "$S1") >/dev/null 2>&1
+    run "$sh" "$mode_block" ""
+    check "$sh: a closed item on the branch records nothing for it" "pr_mode: pr" "$out"
+    run "$sh" "$mode_block" "$S1"
+    check "$sh: …but the named item is read whatever its state" "pr_mode: none ($S1)" "$out"
+    (cd "$P" && bash "$SC" work set "$S1" state open && bash "$SC" work set "$S1" branch stack) >/dev/null 2>&1
     git -C "$P" checkout -q stack
     run "$sh" "$so_block" ""
     check "$sh: Stamp only with no work item records nothing and says so" 1 "$rc"
@@ -245,25 +251,26 @@ for sh in $shells; do
     check "$sh: work list fails: Phase 2 exits non-zero" 1 "$rc"
     check "$sh: …opens no PR and calls no gh" "" "$(cat "$tmp/calls")"
     check "$sh: …records no pr" "" "$(field "$S2" pr)"
-    check "$sh: …and says the read failed" 1 "$(grep -c 'PR aborted: sidecar.sh work list' <<<"$err")"
+    check "$sh: …and says the read failed" 1 "$(grep -c 'PR aborted: sidecar.sh work pr-mode failed' <<<"$err")"
+    check "$sh: …because the store does not parse" 1 "$(grep -c 'does not parse' <<<"$err")"
     run "$sh" "$mode_block" "$S2"
     check "$sh: work list fails: the menu read exits non-zero" 1 "$rc"
     check "$sh: …answers neither pr nor none" "" "$out"
-    check "$sh: …and says pr_mode is unread" 1 "$(grep -c 'pr_mode unread: sidecar.sh work list' <<<"$err")"
+    check "$sh: …and says pr_mode is unread" 1 "$(grep -c 'pr_mode unread: sidecar.sh work pr-mode failed' <<<"$err")"
     cp "$tmp/s1.md" "$WD/$S1.md"
     # A W naming no work item is not a failed read: it records nothing (as
     # test-guest-footprint.sh pins for Phase 2), and the branch's item still answers.
     run "$sh" "$mode_block" "W-99"
     check "$sh: a W naming no item: the menu read still finds the branch's" "pr_mode: none ($S1)" "$out"
-    VSC="$SC"; SC="$tmp/view-fails-sc.sh"
+    VSC="$SC"; SC="$tmp/pr-mode-fails-sc.sh"
     run "$sh" "$pm_block" "$S2"
-    check "$sh: work view fails: Phase 2 exits non-zero" 1 "$rc"
+    check "$sh: work pr-mode fails: Phase 2 exits non-zero" 1 "$rc"
     check "$sh: …opens no PR and calls no gh" "" "$(cat "$tmp/calls")"
-    check "$sh: …and says the read failed" 1 "$(grep -c "PR aborted: sidecar.sh work view $S2" <<<"$err")"
+    check "$sh: …and says the read failed" 1 "$(grep -c 'PR aborted: sidecar.sh work pr-mode failed' <<<"$err")"
     run "$sh" "$mode_block" "$S2"
-    check "$sh: work view fails: the menu read exits non-zero" 1 "$rc"
+    check "$sh: work pr-mode fails: the menu read exits non-zero" 1 "$rc"
     check "$sh: …answers neither pr nor none" "" "$out"
-    check "$sh: …and says pr_mode is unread" 1 "$(grep -c "pr_mode unread: sidecar.sh work view $S2" <<<"$err")"
+    check "$sh: …and says pr_mode is unread" 1 "$(grep -c 'pr_mode unread: sidecar.sh work pr-mode failed' <<<"$err")"
     SC="$VSC"
     check "$sh: …and Phase 2 recorded no pr" "" "$(field "$S2" pr)"
 

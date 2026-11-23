@@ -53,6 +53,7 @@
 #   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
 #   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|built|closed|all>]
 #                        (open, the default, is every item not closed, built among them)
+#   sidecar.sh work pr-mode [<W-n>] [--branch <name>]   (prints "none <W-n>" when <W-n> or an item not closed on the branch records pr_mode none, else "pr"; read-only)
 #   sidecar.sh lessons match <path>... [--record <start|changed>]   (the lessons whose paths name these files or a folder above them; --record appends the run to lookups/)
 #   sidecar.sh lessons check [<lesson-file>]   (loose ends, one "<kind><TAB><lesson><TAB><detail>" line each, then "loose ends: <n>"; read-only)
 #   sidecar.sh lessons audit [--branch <name>]   (self-check, coverage, group, loose ends, and per-branch runs; --branch prints that branch's runs line only; read-only)
@@ -2065,12 +2066,12 @@ cmd_work() {
     local sub="${1:-}"
     [ $# -gt 0 ] && shift
     case "$sub" in
-        create|view|edit|set|comment|close|list|lesson) ;;
-        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list|lesson> ..." ;;
+        create|view|edit|set|comment|close|list|lesson|pr-mode) ;;
+        *) die_usage "usage: sidecar.sh work <create|view|edit|set|comment|close|list|lesson|pr-mode> ..." ;;
     esac
     WORK_SC="$(do_resolve)" || exit 1
     WORK_DIR="$WORK_SC/work"
-    "work_$sub" "$@"
+    "work_${sub//-/_}" "$@"
 }
 
 # lesson_norm <file>: the form `work lesson` stores for an existing file. A
@@ -2416,6 +2417,33 @@ work_list() {
                       elif $s == "all" then true elif $s == "open" then .state != "closed" else .state == $s end)))
         | sort_by(.id | ltrimstr("W-") | tonumber)
         | .[].id'
+}
+
+# work_pr_mode [<W-n>] [--branch <name>]: whether a branch records Stamp only,
+# the one read /pre-merge's Phase 2 and its menu both make. The items read are
+# <W-n> (whatever its state) and every item not closed on <name>; the first that
+# records pr_mode none, <W-n> before the branch's in id order, answers
+# "none <its id>", and otherwise the answer is "pr". A <W-n> that names no item
+# records nothing, so it is not an error, and an empty <name> reads no branch.
+# A failed read exits non-zero and prints no answer.
+work_pr_mode() {
+    local id="" branch="" all
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --branch) [ $# -ge 2 ] || die_usage "work pr-mode: --branch needs a value"; branch="$2"; shift 2 ;;
+            -*) die_usage "work pr-mode: unknown argument: $1" ;;
+            *) [ -z "$id" ] || die_usage "usage: sidecar.sh work pr-mode [<W-n>] [--branch <name>]"; id="$1"; shift ;;
+        esac
+    done
+    all="$(work_all_fm "work pr-mode")" || exit 1
+    # shellcheck disable=SC2016  # $-names are jq variables
+    printf '%s\n' "$all" | jq -rs --arg w "$id" --arg br "$branch" '
+        map(select(. != null)) as $items
+        | [$items[] | select(.id == $w)]
+          + ($items | map(select($br != "" and .branch == $br and .state != "closed")) | sort_by(.id | ltrimstr("W-") | tonumber))
+        | map(select(.pr_mode == "none"))
+        | if length > 0 then "none \(.[0].id)" else "pr" end' \
+        || refuse "work pr-mode: could not read the work items"
 }
 
 # trace's text extraction, appended to WORK_JQ. section($h) is the lines after

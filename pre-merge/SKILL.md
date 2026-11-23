@@ -314,28 +314,18 @@ case "$(bash "$SC" backend stamp)" in
   *) echo "PR aborted: sidecar.sh backend stamp failed; not guessing the github templates" >&2; exit 1 ;;
 esac
 # Stamp only: a work item of this branch records pr_mode none, so no PR is opened.
-BRANCH=$(git branch --show-current)
-ALL=$(bash "$SC" work list --state all) \
-  || { echo "PR aborted: sidecar.sh work list failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
 # A W that names no work item records nothing, so it does not stop this block.
-ITEMS=""
-if [ -n "$W" ] && printf '%s\n' "$ALL" | grep -qxF -- "$W"; then ITEMS="$W"; fi
-if [ -n "$BRANCH" ]; then
-  LISTED=$(bash "$SC" work list --branch "$BRANCH") \
-    || { echo "PR aborted: sidecar.sh work list --branch $BRANCH failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
-  ITEMS="$ITEMS"$'\n'"$LISTED"
-fi
-while IFS= read -r I; do
-  [ -n "$I" ] || continue
-  VIEW=$(bash "$SC" work view "$I" --json) \
-    || { echo "PR aborted: sidecar.sh work view $I failed, so whether it records Stamp only is unknown" >&2; exit 1; }
-  MODE=$(jq -r '.pr_mode // empty' <<<"$VIEW") \
-    || { echo "PR aborted: the pr_mode of $I does not parse" >&2; exit 1; }
-  if [ "$MODE" = none ]; then
+BRANCH=$(git branch --show-current)
+MODE=$(bash "$SC" work pr-mode "$W" --branch "$BRANCH") \
+  || { echo "PR aborted: sidecar.sh work pr-mode failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+case "$MODE" in
+  pr) ;;
+  "none "*)
+    I="${MODE#none }"
     echo "no PR: $I records pr_mode none (Stamp only), so this branch ($BRANCH) gets no PR of its own; to give it one, run sidecar.sh work set $I pr_mode pr and run this block again"
-    exit 0
-  fi
-done <<<"$ITEMS"
+    exit 0 ;;
+  *) echo "PR aborted: sidecar.sh work pr-mode answered '$MODE', so whether this branch records Stamp only is unknown" >&2; exit 1 ;;
+esac
 FP_RANGE=$(bash "$SC" range) || { echo "PR aborted: sidecar.sh range failed" >&2; exit 1; }
 FP_ACCEPT=""   # short SHAs the operator confirmed are false matches (a client route like /help, a form like W-9); else empty
 FP_RC=0
@@ -1000,29 +990,15 @@ case "$(bash "$SC" backend stamp)" in
   github) echo "pr_mode: pr"; exit 0 ;;
   *) echo "pr_mode unread: sidecar.sh backend stamp failed" >&2; exit 1 ;;
 esac
-BRANCH=$(git branch --show-current)
-ALL=$(bash "$SC" work list --state all) \
-  || { echo "pr_mode unread: sidecar.sh work list failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
 # A W that names no work item records nothing, so it does not stop this block.
-ITEMS=""
-if [ -n "$W" ] && printf '%s\n' "$ALL" | grep -qxF -- "$W"; then ITEMS="$W"; fi
-if [ -n "$BRANCH" ]; then
-  LISTED=$(bash "$SC" work list --branch "$BRANCH") \
-    || { echo "pr_mode unread: sidecar.sh work list --branch $BRANCH failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
-  ITEMS="$ITEMS"$'\n'"$LISTED"
-fi
-while IFS= read -r I; do
-  [ -n "$I" ] || continue
-  VIEW=$(bash "$SC" work view "$I" --json) \
-    || { echo "pr_mode unread: sidecar.sh work view $I failed, so whether it records Stamp only is unknown" >&2; exit 1; }
-  MODE=$(jq -r '.pr_mode // empty' <<<"$VIEW") \
-    || { echo "pr_mode unread: the pr_mode of $I does not parse" >&2; exit 1; }
-  if [ "$MODE" = none ]; then
-    echo "pr_mode: none ($I)"
-    exit 0
-  fi
-done <<<"$ITEMS"
-echo "pr_mode: pr"
+BRANCH=$(git branch --show-current)
+MODE=$(bash "$SC" work pr-mode "$W" --branch "$BRANCH") \
+  || { echo "pr_mode unread: sidecar.sh work pr-mode failed, so whether this branch records Stamp only is unknown" >&2; exit 1; }
+case "$MODE" in
+  pr) echo "pr_mode: pr" ;;
+  "none "*) echo "pr_mode: none (${MODE#none })" ;;
+  *) echo "pr_mode unread: sidecar.sh work pr-mode answered '$MODE'" >&2; exit 1 ;;
+esac
 ```
 
 ```bash
