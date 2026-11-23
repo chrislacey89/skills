@@ -253,6 +253,17 @@ handoff_block="$(fenced_with "$premerge_skill" 'scope line ending "read as its r
 [[ "$handoff_block" == *'--remerge-diff'* && "$handoff_block" == *'"$SCOPE_FROM..HEAD"'* ]] \
     || fatal "no Phase 3 author-mode hand-off block for merges read as resolutions found in $premerge_skill"
 
+# Phase 4's /compound check, whole. Section 15 fills its READ_AS_RESOLUTION
+# placeholder the way an agent does, from the scope line, and runs it in a
+# fresh shell given only SCOPE_FROM.
+compound_template="$(fenced_with "$premerge_skill" 'do not re-recommend /compound')"
+[[ "$compound_template" == *'READ_AS_RESOLUTION="<'* ]] \
+    || fatal "Phase 4's /compound check in $premerge_skill has no READ_AS_RESOLUTION placeholder"
+# fill_resolution <block> <yes|empty> — the placeholder line, filled.
+fill_resolution() { printf '%s\n' "$1" | sed "s/^READ_AS_RESOLUTION=\"<[^\"]*>\".*\$/READ_AS_RESOLUTION=\"$2\"/"; }
+[[ "$(fill_resolution "$compound_template" yes)" == *'READ_AS_RESOLUTION="yes"'* ]] \
+    || fatal "could not fill the /compound check's READ_AS_RESOLUTION placeholder"
+
 # /pre-merge Phase 2's shared-branch block (#572), whole: it prints its verdict.
 shared_block="$(fenced_with "$premerge_skill" 'git ls-remote --heads')"
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
@@ -2154,7 +2165,7 @@ if [[ "$have_zsh" == yes ]]; then fold_publish_case zsh; fi
 section "merges from the base after the stamp are reviewed as their resolutions"
 # diff_files <output> — the files a diff's text names, sorted, space-joined.
 diff_files() { printf '%s\n' "$1" | sed -n 's|^diff --git a/\([^ ]*\) b/.*|\1|p' | sort -u | tr '\n' ' ' | sed 's/ $//'; }
-merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
+merge_case() {  # $1 = shell, $2 = clean | ordinary | compound | resolved | topic | old-git
     local sh="$1" kind="$2" r="$sandbox/merge-$1-$2" stamped out
     mkdir -p "$r"
     git init -q -b main "$r"
@@ -2173,6 +2184,12 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
         printf 'later\n' > "$r/later.txt"
         git -C "$r" add later.txt
         git -C "$r" commit -q -m 'feature: later'
+    fi
+    if [[ "$kind" == compound ]]; then
+        mkdir -p "$r/docs/solutions"
+        printf 'lesson\n' > "$r/docs/solutions/lesson.md"
+        git -C "$r" add docs/solutions/lesson.md
+        git -C "$r" commit -q -m 'docs: compound'
     fi
     if [[ "$kind" == resolved ]]; then
         printf 'shared, as the branch has it\n' > "$r/shared.txt"
@@ -2209,7 +2226,7 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
     else
         out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" env -u BASE_REF "$sh" -c "$scope_block" 2>&1)"
     fi
-    local scope files handed
+    local scope files handed verdict
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(stat_files "$out")"
     # What Phase 3 hands the reviewers, from its own block in a fresh shell.
@@ -2226,6 +2243,23 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
                 *) assert_eq "the resolved line, as diff text" "$handed" "$sh: Phase 3's hand-off carries the resolution's diff text" ;;
             esac ;;
     esac
+    # Phase 4's /compound check, from its own block in a fresh shell, with its
+    # placeholder filled from the scope line as an agent fills it.
+    case "$kind" in
+        compound | ordinary | resolved)
+            verdict="$(cd "$r" && env -u BASE_REF SCOPE_FROM="$stamped" "$sh" -c "$(fill_resolution "$compound_template" yes)" 2>&1)" ;;
+    esac
+    case "$kind" in
+        compound)
+            assert_eq "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout" "$verdict" \
+                "$sh: Phase 4's /compound check: a lesson and a clean merge from the base is a /compound entry, not code"
+            # Control: the three-dot diff, which the empty placeholder reads, names the base's file.
+            assert_eq "" "$(cd "$r" && env -u BASE_REF SCOPE_FROM="$stamped" "$sh" -c "$(fill_resolution "$compound_template" "")" 2>&1)" \
+                "$sh: control: read as a three-dot diff, the same delta carries the base's file" ;;
+        ordinary | resolved)
+            assert_eq "" "$verdict" \
+                "$sh: Phase 4's /compound check: the $kind case, beside a merge from the base, still counts as code" ;;
+    esac
     case "$kind" in
         clean)
             assert_eq "review scope: none, every commit since $stamped is a clean merge from main|" "$scope|$files" \
@@ -2233,6 +2267,9 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
         ordinary)
             assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution|later.txt" "$scope|$files" \
                 "$sh: an ordinary commit and a clean merge: only the ordinary commit is read" ;;
+        compound)
+            assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution" "$scope" \
+                "$sh: a /compound commit and a clean merge: the scope reads the merge as its resolution" ;;
         resolved)
             assert_eq "review scope: post-stamp delta, from $stamped, with each merge from main read as its resolution|shared.txt" "$scope|$files" \
                 "$sh: a merge resolved by hand: only what the resolution changed is read, not the base's own file"
@@ -2256,7 +2293,7 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
             esac ;;
     esac
 }
-for kind in clean ordinary resolved topic old-git; do
+for kind in clean ordinary compound resolved topic old-git; do
     merge_case bash "$kind"
     if [[ "$have_zsh" == yes ]]; then merge_case zsh "$kind"; fi
 done

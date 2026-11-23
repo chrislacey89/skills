@@ -737,7 +737,7 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 **Input:** PR #<pr-number>  (capture the lesson onto this PR branch, before /closeout merges)
 ```
 
-**Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta holds only what the block below counts as the captured lesson, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed:
+**Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta holds only what the block below counts as the captured lesson, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed, and fill the block's `READ_AS_RESOLUTION` line from its scope line: a merge from the base after the stamp is read as its resolution here too, as in Phase 3's author-mode block, so the base's own files do not count as code in the delta:
 
 ```bash
 # This block runs in its own shell — $SCOPE_FROM was assigned in Phase 1 step
@@ -755,7 +755,21 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 # the exact inversion of the verdict, in the direction that suppresses the
 # recommendation on a delta carrying code. `grep -v` without `-q` is correct
 # under both.
-outside=$(git diff --name-only "$SCOPE_FROM...HEAD" | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
+READ_AS_RESOLUTION="<yes when Phase 1 step 4's scope line ended with 'read as its resolution', else empty>"
+if [ "$READ_AS_RESOLUTION" = yes ]; then
+  # The three-dot diff would carry the base's own changes: name what Phase 3's
+  # author-mode block hands over instead, each ordinary commit's files and each
+  # merge's hand resolution.
+  names=$(
+    git log --first-parent --no-merges --name-only --format=%n "$SCOPE_FROM..HEAD"
+    git log --first-parent --merges --format=%H "$SCOPE_FROM..HEAD" | while IFS= read -r C; do
+      git show --remerge-diff --no-ext-diff --name-only --format= "$C"
+    done
+  )
+else
+  names=$(git diff --name-only "$SCOPE_FROM...HEAD")
+fi
+outside=$(printf '%s\n' "$names" | sed '/^$/d' | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
 if [ -z "$outside" ]; then
   echo "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout"
 fi
