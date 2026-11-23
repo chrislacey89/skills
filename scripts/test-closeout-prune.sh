@@ -408,9 +408,11 @@ has "Handoff's Next-step menu is skipped in the project-dir case" "$co" "**Next-
 # so a changed manual fails here instead of silently drifting.
 um="$(git help -m update-ref 2>/dev/null | col -b | tr -s ' \t\n' ' ')"
 if [ -n "$um" ]; then
-    # Matches both wordings: "verifying it exists with <oldvalue>" (git 2.43) and
-    # "verifying that it exists with <old-oid>" (git 2.56).
-    has_re "git's manual still says update-ref -d verifies the old value (either wording)" "$um" "delete <ref> after verifying( that)? it exists with <old(value|-oid)>"
+    # Pins the -d option's own sentence, not the --stdin "delete" command's line.
+    # Matches both wordings: "With -d flag, it deletes the named <ref> after verifying
+    # it still contains <oldvalue>" (git 2.43) and "With -d, it deletes the named <ref>
+    # after verifying that it still contains <old-oid>" (git 2.56).
+    has_re "git's manual still says update-ref -d verifies the old value (the -d option's sentence, either wording)" "$um" "With -d( flag)?, it deletes the named <ref> after verifying( that)? it still contains <old(value|-oid)>"
 else
     printf '  SKIP git manual pages are not installed\n'
 fi
