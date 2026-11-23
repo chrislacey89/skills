@@ -130,15 +130,18 @@ make_stubs() {
     mkdir -p "$dir/bin" "$dir/cache"
     for f in "$realbin"/*; do ln -s "$(readlink "$f")" "$dir/bin/$(basename "$f")"; done
 
-    # With slow_sleep=1, sleep turns the script's 0.1s polling pause into 0.5s
-    # and passes any other length through (the hanging stub's 30s stays 30s).
-    # It stands in for a loaded machine, where each round costs more than the
-    # pause it asks for.
+    # With slow_sleep=1, sleep makes every sub-second pause five times longer
+    # (whatever length the script's polling loop asks for, so the arm does not
+    # depend on its 0.1s) and passes whole seconds through (the hanging stub's
+    # 30s stays 30s). It stands in for a loaded machine, where each round costs
+    # more than the pause it asks for.
     if [ "$slow_sleep" = 1 ]; then
         rm -f "$dir/bin/sleep"
         cat > "$dir/bin/sleep" <<STUB
 #!/bin/sh
-if [ "\$1" = 0.1 ]; then exec "$(readlink "$realbin/sleep")" 0.5; fi
+case "\$1" in
+    0.*|.*) exec "$(readlink "$realbin/sleep")" "\$("$(readlink "$realbin/awk")" -v s="\$1" 'BEGIN { print s * 5 }')" ;;
+esac
 exec "$(readlink "$realbin/sleep")" "\$@"
 STUB
     fi
@@ -399,9 +402,10 @@ assert_eq local "$log" "the local release linted"
 if [ "$elapsed" -lt 29 ]; then ok "returned in ${elapsed}s (the stub hangs for 30s)"; else bad "bounded daemon check" "took ${elapsed}s"; fi
 
 section "Docker daemon hangs on a slow machine: the bound is wall-clock time, not polling rounds"
-# Every 0.1s polling pause takes 0.5s here. A bound read from the clock still
-# kills the check after 5-6s, so the arm returns in about 7s; a bound that
-# counts 50 rounds would wait about 25s. The 15s ceiling sits between the two
+# Every sub-second polling pause takes five times as long here, whatever its
+# length. A bound read from the clock still kills the check after 5-6s, so the
+# arm returns in about 7s; a bound that counts rounds sized to 5s of pauses
+# would wait about 25s. The 15s ceiling sits between the two
 # with room on both sides, so load on the machine does not turn it red. The
 # floor is the bound's own promise (at least 5s); load only makes a run longer.
 slow_sleep=1
@@ -409,7 +413,7 @@ run_case daemon-hang none 0.11.0 strict clean
 slow_sleep=0
 assert_eq 3 "$rc" "exit 3"
 assert_eq local "$log" "the local release linted"
-if [ "$elapsed" -lt 15 ]; then ok "returned in ${elapsed}s with slow polling (a 50-round count takes about 25s)"; else bad "wall-clock bound under slow polling" "took ${elapsed}s"; fi
+if [ "$elapsed" -lt 15 ]; then ok "returned in ${elapsed}s with slow polling (a round count takes about 25s)"; else bad "wall-clock bound under slow polling" "took ${elapsed}s"; fi
 if [ "$elapsed" -ge 5 ]; then ok "waited at least the 5s bound (${elapsed}s)"; else bad "bound at least 5s" "returned in ${elapsed}s"; fi
 
 # --- 6. No instrument at all ----------------------------------------------------
