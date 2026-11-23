@@ -245,6 +245,14 @@ fold_block_template="$(printf '%s\n' "$fold_block_template" | sed 's/^W="<[^"]*>
 # run_fold <repo> [stacked branch] — the fold, in a shell with no BASE_REF.
 run_fold() { (cd "$1" && env -u BASE_REF bash -c "$(fill_base "$fold_block_template" "${2:-}")" 2>&1); }
 
+# Phase 3's author-mode hand-off for a scope read as resolutions (#808), whole.
+# Section 15 runs it in a fresh shell given only SCOPE_FROM, and checks the
+# diff text it prints, not a --stat listing.
+handoff_block="$(fenced_with "$premerge_skill" 'scope line ending "read as its resolution"')"
+# shellcheck disable=SC2016  # the pattern is the skill's literal text
+[[ "$handoff_block" == *'--remerge-diff'* && "$handoff_block" == *'"$SCOPE_FROM..HEAD"'* ]] \
+    || fatal "no Phase 3 author-mode hand-off block for merges read as resolutions found in $premerge_skill"
+
 # /pre-merge Phase 2's shared-branch block (#572), whole: it prints its verdict.
 shared_block="$(fenced_with "$premerge_skill" 'git ls-remote --heads')"
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
@@ -2135,6 +2143,8 @@ if [[ "$have_zsh" == yes ]]; then fold_publish_case zsh; fi
 # wrote, never reach the review. Any other merge, or a git that rejects the
 # option, keeps the whole-slice fallback and says why.
 section "merges from the base after the stamp are reviewed as their resolutions"
+# diff_files <output> — the files a diff's text names, sorted, space-joined.
+diff_files() { printf '%s\n' "$1" | sed -n 's|^diff --git a/\([^ ]*\) b/.*|\1|p' | sort -u | tr '\n' ' ' | sed 's/ $//'; }
 merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
     local sh="$1" kind="$2" r="$sandbox/merge-$1-$2" stamped out
     mkdir -p "$r"
@@ -2190,9 +2200,23 @@ merge_case() {  # $1 = shell, $2 = clean | ordinary | resolved | topic | old-git
     else
         out="$(cd "$r" && GH_STUB_BODY="$(stamped_body "$stamped")" env -u BASE_REF "$sh" -c "$scope_block" 2>&1)"
     fi
-    local scope files
+    local scope files handed
     scope="$(printf '%s\n' "$out" | grep '^review scope:' || true)"
     files="$(stat_files "$out")"
+    # What Phase 3 hands the reviewers, from its own block in a fresh shell.
+    handed="$(cd "$r" && env -u BASE_REF SCOPE_FROM="$stamped" "$sh" -c "$handoff_block" 2>&1)"
+    case "$kind" in
+        ordinary)
+            assert_eq "later.txt" "$(diff_files "$handed")" \
+                "$sh: Phase 3's hand-off: the ordinary commit's diff text, and nothing the base wrote" ;;
+        resolved)
+            assert_eq "shared.txt" "$(diff_files "$handed")" \
+                "$sh: Phase 3's hand-off: only the hand resolution, not the base's own file"
+            case "$handed" in
+                *"+shared, resolved by hand"*) assert_eq ok ok "$sh: Phase 3's hand-off carries the resolution's diff text" ;;
+                *) assert_eq "the resolved line, as diff text" "$handed" "$sh: Phase 3's hand-off carries the resolution's diff text" ;;
+            esac ;;
+    esac
     case "$kind" in
         clean)
             assert_eq "review scope: none, every commit since $stamped is a clean merge from main|" "$scope|$files" \
