@@ -85,7 +85,7 @@ The doc opens with these two lines, filled in:
 
 ```markdown
 Written: <date and time, with its time zone> by the session on branch <branch>.
-Reader: summarize this doc and confirm the next step with the human before changing anything.
+Reader: summarize this doc and confirm the next step with the human before changing anything. Delete this file once the work it hands off is done, or once a newer handoff doc replaces it.
 ```
 
 Order:
@@ -131,7 +131,7 @@ Skip the cold read only with a one-line reason written into the doc, for example
 
 Print the path, a one-line preview of the lede, and any stale pointers from Step 5. The user picks the path up and pastes it into a fresh session.
 
-After printing the path, say in one line that this session no longer makes decisions about the handed-off work. If the human keeps working here and something changes, write a new doc at a new path. Never edit a doc that has been printed, because another session may already have read it. `/handoff` does nothing else — it does not auto-invoke another skill, it does not modify any other artifact (stale ones are listed, not edited), it does not commit anything.
+After printing the path, say in one line that this session no longer makes decisions about the handed-off work. If the human keeps working here and something changes, write a new doc at a new path. Never edit a doc that has been printed, because another session may already have read it. For the same reason this session never deletes one: the session that picked the doc up deletes it once the handed-off work is done or a newer doc replaces it, as the doc's Reader line tells it to, and the human may delete one at any time. Nothing else removes a doc from `handoffs/`. `/handoff` does nothing else — it does not auto-invoke another skill, it does not modify any other artifact (stale ones are listed, not edited), it does not commit anything.
 
 ## Common Rationalizations
 
