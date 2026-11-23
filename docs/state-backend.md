@@ -86,7 +86,7 @@ Every write commits inside the sidecar and never pushes. No verb writes to the p
 | The stamp it requires | the marker in the open PR's body, read with `gh`; with no `gh`, a failed read, or no marker it refuses | the branch's `reviews/<branch-slug>.json`; with none it refuses |
 | Where `released_at`, `head` and `reason` are kept | in `.claude/.post-review-edit` alone, local and gone at the re-stamp; nothing is written to the PR | in that file, and committed as `<sidecar>/reviews/released/<branch-slug>.json` until the next `stamp write` or `stamp clear` |
 
-It also refuses a missing or blank reason, and a branch other than the one checked out. A refusal changes nothing. `stamp read <branch> --released` prints the recorded head, or nothing. `/pre-merge` Phase 1 step 4 starts its review there only when that head carries the stamped tree, so a commit made between the stamp and the release is never skipped.
+It also refuses a missing or blank reason, and a branch other than the one checked out. A refusal changes nothing. `stamp released <branch>` prints the recorded head, or nothing. `/pre-merge` Phase 1 step 4 starts its review there only when that head carries the stamped tree, so a commit made between the stamp and the release is never skipped.
 
 ## Work items
 

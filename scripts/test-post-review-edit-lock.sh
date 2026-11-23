@@ -1669,8 +1669,8 @@ release_round_trip() {  # $1 = shell, $2 = backend
     assert_eq "head=$stamped" "$(grep '^head=' "$r/$released_rel" 2>/dev/null || true)" "$at the marker holds the released head"
     assert_eq 1 "$(grep -cE '^released_at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$r/$released_rel" 2>/dev/null || true)" \
         "$at the marker holds the time, in UTC"
-    assert_eq "$stamped" "$(r_run bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true)" \
-        "$at stamp read --released prints the released head"
+    assert_eq "$stamped" "$(r_run bash "$sidecar_sh" stamp released feature 2>/dev/null || true)" \
+        "$at stamp released prints the released head"
     if [ "$backend" = sidecar ]; then
         assert_eq "feature $stamped the user asked for a \"copy\" change" \
             "$(jq -r '"\(.branch) \(.head) \(.reason)"' "$root/release/reviews/released/feature.json" 2>/dev/null || true)" \
@@ -1699,7 +1699,7 @@ release_round_trip() {  # $1 = shell, $2 = backend
     assert_eq "" "$left" "$at the re-stamp removes the release marker"
     r_hook
     assert_eq 2 "$hook_status" "$at re-stamped: the hook refuses again"
-    assert_eq "" "$(r_run bash "$sidecar_sh" stamp read feature --released 2>/dev/null || echo failed)" \
+    assert_eq "" "$(r_run bash "$sidecar_sh" stamp released feature 2>/dev/null || echo failed)" \
         "$at the re-stamp spends the release record"
     if [ "$backend" = sidecar ]; then
         assert_eq "" "$(git -C "$root/release" status --porcelain)" "$at …and commits that in the sidecar"
@@ -1819,8 +1819,8 @@ release_subdir() {
     assert_eq "-|released|-|-" "$(flags)" "subdirectory project dir: release swaps the stamp's own flag"
     assert_eq "$sha" \
         "$( cd "$r/app" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
-            CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
-        "subdirectory project dir: stamp read --released reads the release"
+            CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp released feature 2>/dev/null || true )" \
+        "subdirectory project dir: stamp released reads the release"
     ( cd "$r/app" && REVIEWED_SHA="$sha" CLAUDE_PROJECT_DIR="$r/app" CLAUDE_CODE_SESSION_ID=s bash -c "$stamp_write" ) \
         || assert_eq 0 1 "subdirectory project dir: the re-stamp's flag write runs"
     assert_eq "stamped|-|-|-" "$(flags)" "subdirectory project dir: the re-stamp leaves no released flag in either directory"

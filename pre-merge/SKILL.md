@@ -137,7 +137,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
    # for a stamp that was folded away only when it carries the stamped tree:
    # starting anywhere else would skip commits no review has read.
    if [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null; then
-     RELEASED_HEAD=$(bash "$SC" stamp read "$(git branch --show-current)" --released) || RELEASED_HEAD=
+     RELEASED_HEAD=$(bash "$SC" stamp released "$(git branch --show-current)") || RELEASED_HEAD=
      if [ -n "$RELEASED_HEAD" ] && [ "$RELEASED_HEAD" != "$(git rev-parse HEAD)" ] \
        && git merge-base --is-ancestor "$RELEASED_HEAD" HEAD 2>/dev/null \
        && [ "$(git rev-parse "$RELEASED_HEAD^{tree}")" = "$(git rev-parse -q --verify "$REVIEWED_SHA^{tree}")" ]; then

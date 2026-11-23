@@ -35,7 +35,8 @@
 #   sidecar.sh require <path> --from <referrer>   (on a hit, prints the absolute resolved path)
 #   sidecar.sh backend <prds|slices|stamp>   (prints github or sidecar; github when no sidecar resolves)
 #   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
-#   sidecar.sh stamp read <branch> [--released]   (prints the 40-hex SHA, or nothing with exit 0; --released: the head stamp release recorded)
+#   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
+#   sidecar.sh stamp released <branch>   (prints the head stamp release recorded, or nothing with exit 0)
 #   sidecar.sh stamp clear <branch>
 #   sidecar.sh stamp release <branch> --reason <why>   (opens the post-review edit lock on record, on either backend; never writes a stamp)
 #   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>] [--work <W-n>]
@@ -1698,7 +1699,7 @@ stamp_released() {
         [ -f "$f" ] || return 0
         head="$(jq -r --arg b "$1" 'select(.branch == $b) | .head // empty' "$f" 2>/dev/null)" || return 0
     else
-        proj="$(lock_project)" || refuse "stamp read: cannot find the project directory"
+        proj="$(lock_project)" || refuse "stamp released: cannot find the project directory"
         f="$proj/.claude/.post-review-edit"
         [ -f "$f" ] || return 0
         grep -qxF -- "branch=$1" "$f" || return 0
@@ -1755,7 +1756,7 @@ stamp_release() {
 }
 
 cmd_stamp() {
-    local sub="${1:-}" branch sha base="" reason="" released=0 sc f rel p tmp
+    local sub="${1:-}" branch sha base="" reason="" sc f rel p tmp
     [ $# -gt 0 ] && shift
     case "$sub" in
         write)
@@ -1768,16 +1769,8 @@ cmd_stamp() {
                 esac
             done
             ;;
-        read)
-            case "$#:${2:-}" in
-                1:) ;;
-                2:--released) released=1 ;;
-                *) die_usage "usage: sidecar.sh stamp read <branch> [--released]" ;;
-            esac
-            branch="$1"
-            ;;
-        clear)
-            [ $# -eq 1 ] || die_usage "usage: sidecar.sh stamp clear <branch>"
+        read|released|clear)
+            [ $# -eq 1 ] || die_usage "usage: sidecar.sh stamp $sub <branch>"
             branch="$1"
             ;;
         release)
@@ -1790,14 +1783,14 @@ cmd_stamp() {
                 *) die_usage "stamp release: --reason needs the reason for the edit; releasing nothing" ;;
             esac
             ;;
-        *) die_usage "usage: sidecar.sh stamp <write|read|clear|release> <branch> ..." ;;
+        *) die_usage "usage: sidecar.sh stamp <write|read|released|clear|release> <branch> ..." ;;
     esac
     case "$branch" in ''|*$'\n'*) die_usage "stamp $sub: the branch must be one non-empty line" ;; esac
     if [ "$sub" = write ] && ! printf '%s' "$sha" | grep -qxE '[0-9a-f]{40}'; then
         refuse "stamp write refused: the SHA must be 40 lowercase hex characters (git rev-parse HEAD): $sha"
     fi
     if [ "$sub" = release ]; then stamp_release "$branch" "$reason"; return 0; fi
-    if [ "$released" = 1 ]; then stamp_released "$branch"; return 0; fi
+    if [ "$sub" = released ]; then stamp_released "$branch"; return 0; fi
     sc="$(do_resolve)" || exit 1
     f="reviews/$(branch_slug "$branch").json"
     rel="reviews/released/$(branch_slug "$branch").json"
