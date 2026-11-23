@@ -55,6 +55,7 @@ bad() { printf '  FAIL %s\n' "$1"; printf '       %s\n' "$2"; fail=$((fail + 1))
 section() { printf '\n=== %s ===\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi; }
 has() { if grep -qF -- "$3" <<<"$2"; then ok "$1"; else bad "$1" "[$3] not found in: $2"; fi; }
+has_re() { if grep -Eqi -- "$3" <<<"$2"; then ok "$1"; else bad "$1" "[$3] not matched in: $2"; fi; }
 hasnt() { if grep -qF -- "$3" <<<"$2"; then bad "$1" "[$3] found in: $2"; else ok "$1"; fi; }
 
 # block <file> <literal> — the first fenced bash block containing <literal>.
@@ -407,7 +408,9 @@ has "Handoff's Next-step menu is skipped in the project-dir case" "$co" "**Next-
 # so a changed manual fails here instead of silently drifting.
 um="$(git help -m update-ref 2>/dev/null | col -b | tr -s ' \t\n' ' ')"
 if [ -n "$um" ]; then
-    has "git's manual still says update-ref -d verifies the old value" "$um" "Delete <ref> after verifying it exists with <oldvalue>, if given."
+    # Matches both wordings: "verifying it exists with <oldvalue>" (git 2.43) and
+    # "verifying that it exists with <old-oid>" (git 2.56).
+    has_re "git's manual still says update-ref -d verifies the old value (either wording)" "$um" "delete <ref> after verifying( that)? it exists with <old(value|-oid)>"
 else
     printf '  SKIP git manual pages are not installed\n'
 fi
