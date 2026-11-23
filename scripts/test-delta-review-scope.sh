@@ -1997,9 +1997,13 @@ git -C "$repo5" remote set-url origin "$bare5"
 # the released head carries the stamped tree, it may, and it is the only start
 # that is not the whole slice. When the head had already moved past the stamp,
 # it may not: starting there would stamp the commits in between with nobody
-# having read them, so the review starts at the stamp.
+# having read them, so the review starts at the stamp. When a fold replaced the
+# stamped commit and changed its content too (an unreviewed fix folded into it),
+# the released head does not carry the stamped tree, so it may not stand in for
+# the stamp: the review falls back to the whole slice. That case is the one
+# that fails if the tree comparison is dropped from the block.
 section "released lock: the delta starts at the released head, and never skips an unreviewed commit"
-release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
+release_scope_case() {  # $1 = shell, $2 = folded | past-stamp | rewritten
     local sh="$1" kind="$2" r="$sandbox/release-$1-$2" stamped released out
     mkdir -p "$r"
     git init -q -b main "$r"
@@ -2016,6 +2020,10 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
     stamped="$(git -C "$r" rev-parse HEAD)"
     if [[ "$kind" == folded ]]; then
         git -C "$r" commit -q --amend -m 'feature: one, reworded'
+    elif [[ "$kind" == rewritten ]]; then
+        printf 'one, with a fix no review has read\n' > "$r/one.txt"
+        git -C "$r" add one.txt
+        git -C "$r" commit -q --amend -m 'feature: one, with an unreviewed fix folded in'
     else
         printf 'fix\n' > "$r/fix.txt"
         git -C "$r" add fix.txt
@@ -2027,6 +2035,9 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
     if [[ "$kind" == folded ]]; then
         assert_eq "lock released: make the edit, then re-run /pre-merge to review $released..HEAD and re-stamp" "$out" \
             "$sh, folded then released: the verb names the released head"
+    elif [[ "$kind" == rewritten ]]; then
+        assert_eq "lock released: " "${out:0:15}" \
+            "$sh, folded with a content change, then released: the release succeeds"
     else
         assert_eq "lock released: make the edit, then re-run /pre-merge to review $stamped..HEAD and re-stamp" "$out" \
             "$sh, released past the stamp: the verb names the stamp, where the unread commits start"
@@ -2039,6 +2050,10 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
         assert_eq "review scope: post-stamp delta, from $released|edit.txt" \
             "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
             "$sh, folded then released: the review starts at the released head"
+    elif [[ "$kind" == rewritten ]]; then
+        assert_eq "review scope: whole branch, from main|edit.txt one.txt" \
+            "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
+            "$sh, folded with a content change, then released: the released head does not carry the stamped tree, so the whole slice is read"
     else
         assert_eq "review scope: post-stamp delta, from $stamped|edit.txt fix.txt" \
             "$(printf '%s\n' "$out" | grep '^review scope:' || true)|$(stat_files "$out")" \
@@ -2047,9 +2062,11 @@ release_scope_case() {  # $1 = shell, $2 = folded | past-stamp
 }
 release_scope_case bash folded
 release_scope_case bash past-stamp
+release_scope_case bash rewritten
 if [[ "$have_zsh" == yes ]]; then
     release_scope_case zsh folded
     release_scope_case zsh past-stamp
+    release_scope_case zsh rewritten
 fi
 
 # --- 16. The fold on a branch built on a pushed branch (#810) ------------------
