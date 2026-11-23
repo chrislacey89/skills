@@ -423,6 +423,13 @@ jobs:
       - name: Run closeout work-close contract suite
         run: bash scripts/test-closeout-work-close.sh
 
+      # /closeout Step 6's prune block, Step 1's open-items read and Step 5's
+      # project-directory check, extracted and run under bash and zsh in a scratch
+      # repo, the prune after the real git guard allowed it: the branch ref goes only
+      # when the PR is merged and the local tip is the PR's head (#809).
+      - name: Run closeout prune contract suite
+        run: bash scripts/test-closeout-prune.sh
+
       # /pre-merge Phase 2's github-backend PR block, extracted and run against a
       # stubbed gh: the declared base must reach --base; a failing base-ref aborts (#604).
       - name: Run github PR base contract suite
@@ -468,6 +475,17 @@ jobs:
       # not in scripts/suites-always.txt or any suite is not in this workflow.
       - name: Run changed-suites selection suite
         run: bash scripts/test-changed-suites.sh
+
+      # /visual-recap's staged scene: the design's §18 example, extracted and
+      # checked as markup, its script parsed and run under node, and the skill's
+      # plan-subject mappings read against their source templates (#798).
+      - name: Run staged scene contract suite
+        run: bash scripts/test-staged-scene-contract.sh
+
+      # scripts/shellcheck-pinned.sh against stubs: a local-release fallback
+      # exits 3 unless overridden, and the Docker tier is the pinned run (#814).
+      - name: Run shellcheck-pinned fallback suite
+        run: bash scripts/test-shellcheck-pinned-fallback.sh
 
       # A git hook exports GIT_DIR, and a suite that runs `git init` or
       # `git config` in a fixture without clearing it writes into the real repo

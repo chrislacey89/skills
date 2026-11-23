@@ -4,8 +4,8 @@ The fixed token system and per-block markup that Skill Kit's visual review surfa
 from. It is the **canonical skeleton** referenced by `visual-rendering-core.md` §3 and §6,
 shared by `/visual-recap` and the `/walk-commits` per-commit callouts. §3–§9 are the blocks
 that render a change which already exists (§1, §2, and §10 are the token core, the shell, and
-the interactions they all share); §11 is the one forward-looking block, used by any skill that
-emits an N-way fork of options that do not exist yet.
+the interactions they all share); §11, §13, and §18 are the forward-looking blocks, which render
+what does not exist yet. §11 is used by any skill that emits an N-way fork of options.
 
 **There is no `/visual-plan` skill, and none is coming.** An earlier draft of this header named
 one as future work; chrislacey89/skills#317 ruled against it and withdrew the promise rather than leave it
@@ -13,7 +13,7 @@ resolving to nothing. Forward-looking blocks live in this file and `/visual-reca
 them.
 
 **The document has two parts, and they are two rendering modes, not two layouts of one thing.**
-Everything numbered §1–§17 is **Part I — the scroll recap**: a single scrolling column for a
+Everything numbered §1–§18 is **Part I — the scroll recap**: a single scrolling column for a
 reviewer *auditing* a change. **Part II — the walkthrough deck** (§D1–§D9, at the end of this
 file) is a paged, one-idea-per-screen shell for a reviewer being *argued through* a change with a
 causal arc. Both share the §1 token core, the Grounding Rule, secret-redaction, the reading
@@ -1065,12 +1065,15 @@ Worked example — a share popover gaining a "Copy link" action, as a §7 column
 Three tiny handlers — theme toggle, callout active-state, review verdict. No framework,
 no state library; if this grows routing or a store it has become the app the surface exists
 to avoid (`visual-rendering-core.md` §4). The §4 `copyFeedback()` serializer is separate and
-unchanged. The one addition is §17's sitting-plan script, present only when a recap carries
-a sitting plan; it counts reviewed hunks per reader and keeps nothing a viewer shares.
+unchanged. Two blocks bring their own script, each present only with its block: §17's
+sitting plan, which counts reviewed hunks per reader and keeps nothing a viewer shares, and
+§18's staged scene, which keeps each view's current step and nothing else.
 
 There is deliberately **no** handler that swaps which state is on screen. Every block here
 renders all of its states as real elements in the document, so comparison is a glance or a
-scroll — never a click that hides one side. That is also the rule §12 is built to respect.
+scroll — never a click that hides one side. That is also the rule §12 is built to respect. §18's
+Next moves one frame through steps that are all in the list beside it. It never changes which
+frames show.
 
 ```html
 <script>
@@ -1903,6 +1906,357 @@ budget needs, each one sized from its own excerpts.
 
 ---
 
+## 18. Block: staged scene (forward-looking)
+
+**Scope note: the block for order.** §5's diagram shows what connects to what. A staged scene
+shows what happens first, what happens next, and how the same picture differs between a plan's
+views: one picture of boxes, chips, and arrows, drawn once per **view**, each view in its own
+frame with numbered steps. Pressing Next or Play moves that one view forward: a box lights up,
+its text changes, a dot moves to where the work is, and the caption says what happened and what
+the step rests on. Beside every frame the same steps are a plain numbered list, always visible.
+It is for plans only.
+
+**When to draw one.** The plan states an order: steps of a mechanism, a build order, a before
+and an after that each happen in sequence. A plan with no ordered steps gets a §5 diagram or
+prose, and the page says which. A picture that needs more boxes than can be placed by hand at
+reading size, at the width of one frame, is a §5 Mermaid graph. One to three views; which views
+a subject gets is `/visual-recap` Step 1's.
+
+**Views are co-visible frames.** Every view is a real, visible `<section>`: side by side when
+two fit, stacked when they do not (§7, §10, §D2 Rule 1). No tab, toggle, or handler changes
+which view shows. Motion runs inside a frame; the comparison between frames stays a glance or a
+scroll.
+
+**Read `visual-rendering-core.md` §1 "Forward-looking blocks" before rendering this.** It is
+the block's defining constraint. A step is a cell and a view is an option: each step shows its
+source or the `asserted` treatment, each view states its split, and that section's floor and
+chip bar apply to each view unchanged. A chipped view carries `vr-scene-chip` in its header. An
+example value follows the same section's rule: `data-example` on the value, the `example
+values` label in that frame, and an asserted step where the value appears. A field the plan
+never named stays unnamed in the picture ("a field, not yet named"); never invent the name.
+
+**The data.** One JSON block per scene, inside its figure:
+
+| Key | Holds |
+|---|---|
+| `id` | the slug. The figure's id is `scene-<slug>` and a view's is `scene-<slug>/<view id>` (`visual-rendering-core.md` §4) |
+| `w`, `h`, `aria` | the canvas, drawn to read at the width of one frame, and one sentence saying what the picture shows |
+| `items` | `k` (`node`, `chip`, `edge`, `box`, `label`), `id`, `x`, `y`, `w`, `h`, `t` (title), `s` (subtitle), `only` (comma-separated view ids, absent for every view), `isNew` (a fixed `NEW` tag, `vr-scene-new`). An edge runs from `x,y` to `x+w,y+h` |
+| `views` | `id`, `label`, `sub`, `tone` (`fail`, `ok`, `risk`), `init`, and `steps` |
+| a step | `c` (the caption), `src` (ids of blocks on this page, `file:line`, or an issue and its section), `asserted`, `set` (item id to state), `text` (`<item id>.t` or `<item id>.s` to new text), `at` (the item the dot rests on) |
+
+A state is one of `focus`, `ok`, `fail`, `risk`, `maybe`, `dim`, `new`, or `""` to clear it, and
+each draws the mark the key shows, so color is never the only signal. A view at step *n* is
+`init` plus steps 0 to *n*, applied in order. Nothing else is stored.
+
+**The markup is the last frame.** Author each view's SVG, caption, and list in the document as
+that view stands after its last step, with one `<g data-item>` per item the view shows, each on
+one line. With the script removed the page still shows every frame and every list. With it, each
+view opens on its first step and waits for the reader. Text from an issue or a conversation goes
+through redaction (`visual-rendering-core.md` §2), is HTML-escaped in the markup, and writes `<`
+as `\u003c` in the JSON.
+
+**The worked example is the plan in chrislacey89/skills#798, as it was written.** Copy the style
+once per page, a figure per scene, and the script once, after the last figure.
+
+```html
+<style>
+  /* staged-scene primitives (§18): §1 tokens only */
+  .vr-scene{margin:0;font-family:var(--sans);color:var(--fg)}
+  .vr-scene-title{font-size:15px;font-weight:650;margin-bottom:var(--s3)}
+  .vr-scene-key{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s4);align-items:center;
+    font-size:13px;color:var(--fg-muted);margin-bottom:var(--s3)}
+  .vr-scene-key>span{display:inline-flex;align-items:center;gap:var(--s2)}
+  .vr-scene-sw{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:20px;
+    padding:0 var(--s1);border:2px solid currentColor;border-radius:var(--r1);
+    background:var(--bg-elev);font:700 11px/1 var(--mono)}
+  .vr-scene-sw[data-state="maybe"]{border-style:dashed}
+  .vr-scene-sw[data-state="dim"]{border-style:dotted}
+  .vr-scene-sw.is-dot{min-width:0;width:12px;height:12px;padding:0;border-radius:999px;background:var(--accent);color:var(--accent)}
+
+  /* one rule per state, shared by the key's swatches and the marks they explain */
+  .vr-scene [data-item]{color:var(--border-strong)}
+  .vr-scene [data-state="focus"]{color:var(--accent)}
+  .vr-scene [data-state="ok"]{color:var(--add)}
+  .vr-scene [data-state="fail"]{color:var(--del)}
+  .vr-scene [data-state="risk"]{color:var(--risk)}
+  .vr-scene [data-state="maybe"]{color:var(--fg-muted)}
+  .vr-scene [data-state="dim"]{color:var(--fg-faint)}
+  .vr-scene [data-state="new"]{color:var(--flag-new)}
+
+  /* frames wrap: side by side when two fit, stacked when they do not, one scale for all */
+  .vr-scene-views{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));
+    gap:var(--s4);align-items:start;margin-top:var(--s3)}
+  .vr-scene-view{min-width:0;padding:var(--s3);border:1px solid var(--border);
+    border-top:3px solid var(--border-strong);border-radius:var(--r3);background:var(--bg-elev)}
+  .vr-scene-view[data-tone="fail"]{border-top-color:var(--del)}
+  .vr-scene-view[data-tone="ok"]{border-top-color:var(--add)}
+  .vr-scene-view[data-tone="risk"]{border-top-color:var(--risk)}
+  .vr-scene-head{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);align-items:baseline;min-height:40px;font-size:13px}
+  .vr-scene-sub{color:var(--fg-muted)}
+  .vr-scene-split{margin-left:auto;font:10.5px var(--mono);color:var(--fg-muted)}
+  .vr-scene-chip{padding:1px var(--s2);border:1px solid var(--risk);border-radius:999px;
+    color:var(--risk);font:700 10px var(--mono)}
+
+  .vr-scene-view svg{display:block;width:100%;max-width:480px;height:auto;margin:0 auto;overflow:visible}
+  .vr-scene-sh{fill:var(--bg-subtle);stroke:currentColor;stroke-width:1.5}
+  [data-kind="box"]>.vr-scene-sh{fill:none;stroke-dasharray:7 4}
+  [data-state]:not([data-state=""])>.vr-scene-sh{stroke-width:2.5}
+  [data-state="maybe"]>.vr-scene-sh{stroke-dasharray:6 4}
+  [data-state="dim"]>.vr-scene-sh{stroke-dasharray:2 4}
+  .vr-scene-hd{fill:currentColor}
+  .vr-scene-g{fill:currentColor;text-anchor:end;font:700 12px var(--mono)}
+  .vr-scene-new{fill:var(--flag-new);font:700 10px var(--mono)}
+  .vr-scene-ex{fill:var(--risk);font:700 11px var(--mono)}
+  .vr-scene text[data-slot]{fill:var(--fg-muted);font:600 11px var(--sans)}
+  .vr-scene-tx{height:100%;display:flex;flex-direction:column;justify-content:center;
+    padding:0 26px;text-align:center;line-height:1.25;color:var(--fg)}
+  .vr-scene-tx b{font-size:13px;font-weight:600}
+  .vr-scene-tx span{font-size:11px;color:var(--fg-muted)}
+  .vr-scene [data-example]{font-style:italic;text-decoration:underline dashed var(--risk)}
+  .vr-scene-dot{fill:var(--accent);stroke:var(--bg-elev);stroke-width:2}
+
+  .vr-scene-ctl{display:flex;gap:var(--s2);margin-top:var(--s2)}
+  .vr-scene-ctl button{padding:var(--s1) var(--s3);border:1px solid var(--border-strong);
+    border-radius:var(--r2);background:var(--bg-subtle);color:var(--fg);font:12px var(--sans);cursor:pointer}
+  .vr-scene-cap{min-height:88px;margin:var(--s2) 0;padding:var(--s2) var(--s3);
+    border-left:2px solid var(--accent);font-size:13px;line-height:1.5}
+  .vr-scene-cap[data-asserted="true"]{border-left:2px dashed var(--risk);color:var(--fg-muted);font-style:italic}
+  .vr-scene-n{display:block;font:700 10.5px var(--mono);color:var(--fg-muted)}
+  .vr-scene-src{display:block;font:10.5px var(--mono);color:var(--fg-muted);font-style:normal;overflow-wrap:anywhere}
+  .vr-scene-steps{margin:0;padding-left:var(--s5);font-size:12.5px;line-height:1.45}
+  .vr-scene-steps li{padding:var(--s1) var(--s2);border-left:2px solid var(--fg-faint);margin-bottom:var(--s1)}
+  .vr-scene-steps li.asserted{border-left:2px dashed var(--risk);color:var(--fg-muted);font-style:italic}
+  .vr-scene-steps li[aria-current="step"]{background:var(--accent-dim)}
+  .vr-scene-note{display:block;width:100%;margin-top:var(--s2);padding:4px 7px;border:1px solid var(--border);
+    border-radius:var(--r1);background:var(--bg);color:var(--fg);font:11.5px var(--sans)}
+
+  /* motion starts with the reader's first press, never on load */
+  [data-moving] [data-item]{transition:color .3s ease}
+  [data-moving] .vr-scene-dot{transition:transform .4s ease}
+  @media (prefers-reduced-motion: reduce){
+    .vr-scene *,.vr-scene *::before,.vr-scene *::after{transition:none!important;animation:none!important}
+  }
+</style>
+
+<figure class="vr-scene" data-feedback-id="scene-plan-in-order" data-feedback-kind="scene">
+  <figcaption class="vr-scene-title">How a plan's order reaches its reader</figcaption>
+  <div class="vr-scene-key">
+    <span><span class="vr-scene-sw" data-state="focus">▸</span>here now</span>
+    <span><span class="vr-scene-sw" data-state="ok">✓</span>works</span>
+    <span><span class="vr-scene-sw" data-state="fail">✕</span>breaks</span>
+    <span><span class="vr-scene-sw" data-state="risk">!</span>at risk</span>
+    <span><span class="vr-scene-sw" data-state="maybe">?</span>assumed</span>
+    <span><span class="vr-scene-sw" data-state="dim">–</span>in the background</span>
+    <span><span class="vr-scene-sw" data-state="new">NEW</span>added by the plan</span>
+    <span><span class="vr-scene-sw is-dot"></span>where the work is</span>
+    <span><i data-example>underlined</i>an example value</span>
+  </div>
+  <textarea class="vr-scene-note" data-feedback-note placeholder="Response to the whole scene…"></textarea>
+  <div class="vr-scene-views">
+    <section class="vr-scene-view" data-view="today" data-tone="fail" data-feedback-id="scene-plan-in-order/today" data-feedback-kind="scene-view">
+      <div class="vr-scene-head"><b>✕ Today</b><span class="vr-scene-sub">the problem</span><span class="vr-scene-split">3 cited · 0 asserted</span></div>
+      <svg role="img" viewBox="0 0 340 300" aria-label="Today a plan reaches the reader as a diagram, and the reader rebuilds the order from prose.">
+        <g data-item="page" data-kind="box" data-state=""><rect class="vr-scene-sh" x="30" y="88" width="280" height="204" rx="12"/><text data-slot="t" x="40" y="105">the page</text><text class="vr-scene-g" x="304" y="105"></text></g>
+        <g data-item="down" data-kind="edge" data-state=""><line class="vr-scene-sh" x1="170" y1="74" x2="170" y2="104"/><polygon class="vr-scene-hd" points="165,104 175,104 170,112"/><text class="vr-scene-g" x="164" y="86"></text></g>
+        <g data-item="order-from" data-kind="edge" data-state=""><line class="vr-scene-sh" x1="170" y1="160" x2="170" y2="176"/><polygon class="vr-scene-hd" points="165,176 175,176 170,184"/><text class="vr-scene-g" x="164" y="176"></text></g>
+        <g data-item="reader" data-kind="label" data-state=""><text data-slot="t" x="186" y="176">the reader gets</text><text class="vr-scene-g" x="300" y="176"></text></g>
+        <g data-item="plan" data-kind="node" data-state=""><rect class="vr-scene-sh" x="50" y="28" width="240" height="46" rx="8"/><foreignObject x="50" y="28" width="240" height="46"><div class="vr-scene-tx"><b data-slot="t">The plan</b><span data-slot="s">a shape, a PRD, or slices</span></div></foreignObject><text class="vr-scene-g" x="284" y="43"></text></g>
+        <g data-item="picture" data-kind="node" data-state="risk"><rect class="vr-scene-sh" x="50" y="112" width="240" height="48" rx="8"/><foreignObject x="50" y="112" width="240" height="48"><div class="vr-scene-tx"><b data-slot="t">Diagram</b><span data-slot="s">what connects to what</span></div></foreignObject><text class="vr-scene-g" x="284" y="127">!</text></g>
+        <g data-item="order" data-kind="node" data-state="fail"><rect class="vr-scene-sh" x="50" y="184" width="240" height="48" rx="8"/><foreignObject x="50" y="184" width="240" height="48"><div class="vr-scene-tx"><b data-slot="t">The order</b><span data-slot="s">rebuilt from prose</span></div></foreignObject><text class="vr-scene-g" x="284" y="199">✕</text></g>
+        <circle class="vr-scene-dot" r="6" style="transform:translate(50px,208px)"/>
+      </svg>
+      <p class="vr-scene-cap" aria-live="polite" data-asserted="false"><span class="vr-scene-n">step 3 of 3</span><span class="vr-scene-c">A reader who was not there rebuilds the order from prose.</span><span class="vr-scene-src">chrislacey89/skills#798 Problem</span></p>
+      <ol class="vr-scene-steps">
+        <li data-src="chrislacey89/skills#798 Problem"><span class="vr-scene-c">A plan reaches its reader as cards and a diagram.</span><span class="vr-scene-src">chrislacey89/skills#798 Problem</span></li>
+        <li data-src="chrislacey89/skills#798 Problem"><span class="vr-scene-c">The diagram shows what connects to what, not what happens first.</span><span class="vr-scene-src">chrislacey89/skills#798 Problem</span></li>
+        <li data-src="chrislacey89/skills#798 Problem"><span class="vr-scene-c">A reader who was not there rebuilds the order from prose.</span><span class="vr-scene-src">chrislacey89/skills#798 Problem</span></li>
+      </ol>
+      <textarea class="vr-scene-note" data-feedback-note placeholder="Response to this view…"></textarea>
+    </section>
+
+    <section class="vr-scene-view" data-view="choices" data-tone="ok" data-feedback-id="scene-plan-in-order/choices" data-feedback-kind="scene-view">
+      <div class="vr-scene-head"><b>✓ Choices</b><span class="vr-scene-sub">added up</span><span class="vr-scene-split">3 cited · 1 asserted</span></div>
+      <svg role="img" viewBox="0 0 340 300" aria-label="With the choices added up, the plan is drawn as a staged scene whose order is numbered beside each frame.">
+        <text class="vr-scene-ex" x="8" y="16">example values</text>
+        <g data-item="page" data-kind="box" data-state=""><rect class="vr-scene-sh" x="30" y="88" width="280" height="204" rx="12"/><text data-slot="t" x="40" y="105">the page</text><text class="vr-scene-g" x="304" y="105"></text></g>
+        <g data-item="down" data-kind="edge" data-state=""><line class="vr-scene-sh" x1="170" y1="74" x2="170" y2="104"/><polygon class="vr-scene-hd" points="165,104 175,104 170,112"/><text class="vr-scene-g" x="164" y="86"></text></g>
+        <g data-item="order-from" data-kind="edge" data-state="ok"><line class="vr-scene-sh" x1="170" y1="160" x2="170" y2="176"/><polygon class="vr-scene-hd" points="165,176 175,176 170,184"/><text class="vr-scene-g" x="164" y="176">✓</text></g>
+        <g data-item="reader" data-kind="label" data-state=""><text data-slot="t" x="186" y="176">the reader gets</text><text class="vr-scene-g" x="300" y="176"></text></g>
+        <g data-item="plan" data-kind="node" data-state=""><rect class="vr-scene-sh" x="50" y="28" width="240" height="46" rx="8"/><foreignObject x="50" y="28" width="240" height="46"><div class="vr-scene-tx"><b data-slot="t">The plan</b><span data-slot="s">a shape, a PRD, or slices</span></div></foreignObject><text class="vr-scene-g" x="284" y="43"></text></g>
+        <g data-item="picture" data-kind="node" data-state="new"><rect class="vr-scene-sh" x="50" y="112" width="240" height="48" rx="8"/><foreignObject x="50" y="112" width="240" height="48"><div class="vr-scene-tx"><b data-slot="t">Staged scene</b><span data-slot="s">one frame per view</span></div></foreignObject><text class="vr-scene-g" x="284" y="127">NEW</text></g>
+        <g data-item="order" data-kind="node" data-state="ok"><rect class="vr-scene-sh" x="50" y="184" width="240" height="48" rx="8"/><foreignObject x="50" y="184" width="240" height="48"><div class="vr-scene-tx"><b data-slot="t">The order</b><span data-slot="s">numbered beside each frame</span></div></foreignObject><text class="vr-scene-g" x="284" y="199">✓</text></g>
+        <g data-item="file" data-kind="chip" data-state="dim"><rect class="vr-scene-sh" x="85" y="250" width="170" height="30" rx="15"/><foreignObject x="85" y="250" width="170" height="30"><div class="vr-scene-tx"><b data-slot="t" data-example>recap.html</b></div></foreignObject><text class="vr-scene-g" x="245" y="269">–</text><text class="vr-scene-new" x="98" y="248">NEW</text></g>
+        <circle class="vr-scene-dot" r="6" style="transform:translate(85px,265px)"/>
+      </svg>
+      <p class="vr-scene-cap" aria-live="polite" data-asserted="true"><span class="vr-scene-n">step 4 of 4</span><span class="vr-scene-c">The reader opens one file, recap.html in this example.</span><span class="vr-scene-src">asserted</span></p>
+      <ol class="vr-scene-steps">
+        <li data-src="chrislacey89/skills#798 Solution"><span class="vr-scene-c">Naming the subject picks a staged scene. There is no flag.</span><span class="vr-scene-src">chrislacey89/skills#798 Solution</span></li>
+        <li data-src="chrislacey89/skills#798 Solution"><span class="vr-scene-c">Each view is its own frame, and all are on the page at once.</span><span class="vr-scene-src">chrislacey89/skills#798 Solution</span></li>
+        <li data-src="chrislacey89/skills#798 Solution"><span class="vr-scene-c">Beside every frame the same steps are a numbered list.</span><span class="vr-scene-src">chrislacey89/skills#798 Solution</span></li>
+        <li class="asserted"><span class="vr-scene-c">The reader opens one file, recap.html in this example.</span><span class="vr-scene-src">asserted</span></li>
+      </ol>
+      <textarea class="vr-scene-note" data-feedback-note placeholder="Response to this view…"></textarea>
+    </section>
+
+    <section class="vr-scene-view" data-view="assumptions" data-tone="risk" data-feedback-id="scene-plan-in-order/assumptions" data-feedback-kind="scene-view">
+      <div class="vr-scene-head"><b>! Assumptions</b><span class="vr-scene-sub">where each sits</span><span class="vr-scene-chip">asserted</span><span class="vr-scene-split">1 cited · 2 asserted</span></div>
+      <svg role="img" viewBox="0 0 340 300" aria-label="The assumptions sit on the staged scene, on the width of the page that holds it, and on the numbered order.">
+        <g data-item="page" data-kind="box" data-state="risk"><rect class="vr-scene-sh" x="30" y="88" width="280" height="204" rx="12"/><text data-slot="t" x="40" y="105">the page</text><text class="vr-scene-g" x="304" y="105">!</text></g>
+        <g data-item="down" data-kind="edge" data-state=""><line class="vr-scene-sh" x1="170" y1="74" x2="170" y2="104"/><polygon class="vr-scene-hd" points="165,104 175,104 170,112"/><text class="vr-scene-g" x="164" y="86"></text></g>
+        <g data-item="order-from" data-kind="edge" data-state=""><line class="vr-scene-sh" x1="170" y1="160" x2="170" y2="176"/><polygon class="vr-scene-hd" points="165,176 175,176 170,184"/><text class="vr-scene-g" x="164" y="176"></text></g>
+        <g data-item="reader" data-kind="label" data-state=""><text data-slot="t" x="186" y="176">the reader gets</text><text class="vr-scene-g" x="300" y="176"></text></g>
+        <g data-item="plan" data-kind="node" data-state=""><rect class="vr-scene-sh" x="50" y="28" width="240" height="46" rx="8"/><foreignObject x="50" y="28" width="240" height="46"><div class="vr-scene-tx"><b data-slot="t">The plan</b><span data-slot="s">a shape, a PRD, or slices</span></div></foreignObject><text class="vr-scene-g" x="284" y="43"></text></g>
+        <g data-item="picture" data-kind="node" data-state="maybe"><rect class="vr-scene-sh" x="50" y="112" width="240" height="48" rx="8"/><foreignObject x="50" y="112" width="240" height="48"><div class="vr-scene-tx"><b data-slot="t">Staged scene</b><span data-slot="s">co-visible frames, not yet built</span></div></foreignObject><text class="vr-scene-g" x="284" y="127">?</text></g>
+        <g data-item="order" data-kind="node" data-state="maybe"><rect class="vr-scene-sh" x="50" y="184" width="240" height="48" rx="8"/><foreignObject x="50" y="184" width="240" height="48"><div class="vr-scene-tx"><b data-slot="t">The order</b><span data-slot="s">the list alone is enough</span></div></foreignObject><text class="vr-scene-g" x="284" y="199">?</text></g>
+        <circle class="vr-scene-dot" r="6" style="transform:translate(50px,208px)"/>
+      </svg>
+      <p class="vr-scene-cap" aria-live="polite" data-asserted="true"><span class="vr-scene-n">step 3 of 3</span><span class="vr-scene-c">With motion off, the list alone is enough to follow the order.</span><span class="vr-scene-src">asserted</span></p>
+      <ol class="vr-scene-steps">
+        <li data-src="chrislacey89/skills#798 Uncertainty / Confidence"><span class="vr-scene-c">Co-visible frames have not been built.</span><span class="vr-scene-src">chrislacey89/skills#798 Uncertainty / Confidence</span></li>
+        <li class="asserted"><span class="vr-scene-c">A frame half a page wide is still large enough to read.</span><span class="vr-scene-src">asserted</span></li>
+        <li class="asserted"><span class="vr-scene-c">With motion off, the list alone is enough to follow the order.</span><span class="vr-scene-src">asserted</span></li>
+      </ol>
+      <textarea class="vr-scene-note" data-feedback-note placeholder="Response to this view…"></textarea>
+    </section>
+  </div>
+<script type="application/json" data-scene>
+{"id": "plan-in-order", "w": 340, "h": 300, "aria": "A plan, the picture a reader gets of it, and where its order comes from.",
+ "items": [
+  {"k": "box", "id": "page", "x": 30, "y": 88, "w": 280, "h": 204, "t": "the page"},
+  {"k": "edge", "id": "down", "x": 170, "y": 74, "w": 0, "h": 38},
+  {"k": "edge", "id": "order-from", "x": 170, "y": 160, "w": 0, "h": 24},
+  {"k": "label", "id": "reader", "x": 186, "y": 176, "t": "the reader gets"},
+  {"k": "node", "id": "plan", "x": 50, "y": 28, "w": 240, "h": 46, "t": "The plan", "s": "a shape, a PRD, or slices"},
+  {"k": "node", "id": "picture", "x": 50, "y": 112, "w": 240, "h": 48, "t": "Diagram", "s": "what connects to what"},
+  {"k": "node", "id": "order", "x": 50, "y": 184, "w": 240, "h": 48, "t": "The order", "s": "rebuilt from prose"},
+  {"k": "chip", "id": "file", "x": 85, "y": 250, "w": 170, "h": 30, "t": "recap.html", "only": "choices", "isNew": true}
+ ],
+ "views": [
+  {"id": "today", "label": "Today", "sub": "the problem", "tone": "fail", "init": {"set": {}}, "steps": [
+   {"c": "A plan reaches its reader as cards and a diagram.", "src": ["chrislacey89/skills#798 Problem"], "asserted": false, "set": {"plan": "focus"}, "at": "plan"},
+   {"c": "The diagram shows what connects to what, not what happens first.", "src": ["chrislacey89/skills#798 Problem"], "asserted": false, "set": {"plan": "", "picture": "risk"}, "at": "picture"},
+   {"c": "A reader who was not there rebuilds the order from prose.", "src": ["chrislacey89/skills#798 Problem"], "asserted": false, "set": {"order": "fail"}, "at": "order"}
+  ]},
+  {"id": "choices", "label": "Choices", "sub": "added up", "tone": "ok", "init": {"set": {}}, "steps": [
+   {"c": "Naming the subject picks a staged scene. There is no flag.", "src": ["chrislacey89/skills#798 Solution"], "asserted": false, "set": {"plan": "focus"}, "text": {"picture.t": "Staged scene", "picture.s": "one frame per view"}, "at": "plan"},
+   {"c": "Each view is its own frame, and all are on the page at once.", "src": ["chrislacey89/skills#798 Solution"], "asserted": false, "set": {"plan": "", "picture": "new"}, "at": "picture"},
+   {"c": "Beside every frame the same steps are a numbered list.", "src": ["chrislacey89/skills#798 Solution"], "asserted": false, "set": {"order-from": "ok", "order": "ok"}, "text": {"order.s": "numbered beside each frame"}, "at": "order"},
+   {"c": "The reader opens one file, recap.html in this example.", "src": [], "asserted": true, "set": {"file": "dim"}, "at": "file"}
+  ]},
+  {"id": "assumptions", "label": "Assumptions", "sub": "where each sits", "tone": "risk", "init": {"set": {}}, "steps": [
+   {"c": "Co-visible frames have not been built.", "src": ["chrislacey89/skills#798 Uncertainty / Confidence"], "asserted": false, "set": {"picture": "maybe"}, "text": {"picture.t": "Staged scene", "picture.s": "co-visible frames, not yet built", "order.s": "numbered beside each frame"}, "at": "picture"},
+   {"c": "A frame half a page wide is still large enough to read.", "src": [], "asserted": true, "set": {"page": "risk"}, "at": "page"},
+   {"c": "With motion off, the list alone is enough to follow the order.", "src": [], "asserted": true, "set": {"order": "maybe"}, "text": {"order.s": "the list alone is enough"}, "at": "order"}
+  ]}
+ ]}
+</script>
+</figure>
+
+<script>
+  // §18: the one thing kept is each view's current step. Every frame stays on screen.
+  (() => {
+    const MARK = { focus: '▸', ok: '✓', fail: '✕', risk: '!', maybe: '?', dim: '–', new: 'NEW' };
+    const PACE = 2200;
+    document.querySelectorAll('figure.vr-scene').forEach(fig => {
+      const scene = JSON.parse(fig.querySelector('script[data-scene]').textContent);
+      const item = new Map(scene.items.map(i => [i.id, i]));
+      scene.views.forEach(v => wire({ view: fig.querySelector('[data-view="' + v.id + '"]'), spec: v, item }));
+    });
+
+    function wire({ view, spec, item }){
+      const last = spec.steps.length - 1;
+      const cap = view.querySelector('.vr-scene-cap');
+      const dot = view.querySelector('.vr-scene-dot');
+      const ctl = document.createElement('div');
+      ctl.setAttribute('class', 'vr-scene-ctl');
+      button({ act: 'back', label: 'Back', onPress: () => move(-1) });
+      const playButton = button({ act: 'play', label: 'Play', onPress: play });
+      button({ act: 'next', label: 'Next', onPress: () => move(1) });
+      cap.before(ctl);
+      let step = 0, timer = null;
+      render();
+
+      function button({ act, label, onPress }){
+        const b = document.createElement('button');
+        b.setAttribute('type', 'button');
+        b.setAttribute('data-act', act);
+        b.setAttribute('aria-label', label + ': ' + spec.label);
+        b.textContent = label;
+        b.addEventListener('click', onPress);
+        ctl.append(b);
+        return b;
+      }
+      function move(by){
+        stop();
+        view.setAttribute('data-moving', '');
+        step = Math.min(last, Math.max(0, step + by));
+        render();
+      }
+      function play(){
+        if (timer) return stop();
+        view.setAttribute('data-moving', '');
+        if (step === last) { step = 0; render(); }
+        if (step === last) return;
+        playButton.textContent = 'Pause';
+        timer = setTimeout(tick, PACE);
+      }
+      function tick(){
+        step += 1;
+        render();
+        if (step < last) timer = setTimeout(tick, PACE); else stop();
+      }
+      function stop(){
+        clearTimeout(timer);
+        timer = null;
+        playButton.textContent = 'Play';
+      }
+      // the state at step n is init plus steps 0..n, applied in order
+      function render(){
+        const set = {}, text = {};
+        let at = null;
+        [spec.init || {}, ...spec.steps.slice(0, step + 1)].forEach(d => {
+          Object.assign(set, d.set);
+          Object.assign(text, d.text);
+          if (d.at) at = d.at;
+        });
+        view.querySelectorAll('[data-item]').forEach(g => {
+          const id = g.dataset.item, state = set[id] || '';
+          g.dataset.state = state;
+          g.querySelector('.vr-scene-g').textContent = MARK[state] || '';
+          g.querySelectorAll('[data-slot]').forEach(el => {
+            el.textContent = text[id + '.' + el.dataset.slot] ?? item.get(id)[el.dataset.slot] ?? '';
+          });
+        });
+        const now = spec.steps[step], src = (now.src || []).join('; ');
+        cap.dataset.asserted = now.asserted === true;
+        cap.querySelector('.vr-scene-n').textContent = 'step ' + (step + 1) + ' of ' + (last + 1);
+        cap.querySelector('.vr-scene-c').textContent = now.c;
+        cap.querySelector('.vr-scene-src').textContent =
+          now.asserted ? (src ? 'asserted · ' + src : 'asserted') : src;
+        view.querySelectorAll('li').forEach((li, i) => {
+          if (i === step) li.setAttribute('aria-current', 'step'); else li.removeAttribute('aria-current');
+        });
+        if (!dot) return;
+        const t = item.get(at);
+        dot.setAttribute('r', t ? '6' : '0');
+        if (t) dot.style.transform = 'translate(' + (t.x + (t.k === 'edge' ? t.w / 2 : 0)) + 'px,' + (t.y + (t.h || 0) / 2) + 'px)';
+      }
+    }
+  })();
+</script>
+```
+
+- **Do** give every step a source or the `asserted` mark, in the data and in the list, with the
+  same caption in both.
+- **Do** put the key above the first frame, with swatches drawn like the marks they explain.
+- **Don't** put a view behind a tab, a toggle, or any control, and don't start playback on load.
+- **Don't** let the picture carry a point its list does not: losing the figure never loses the
+  finding (`visual-rendering-core.md` §6).
+- **Don't** add state beyond each view's current step, read storage, or make a network call.
+
+---
+
 ## Do's and Don'ts
 
 - **Do** copy the §1 token core verbatim and keep the variable names — that fixed system is
@@ -1998,7 +2352,8 @@ a deck that breaks either one is worse than the scroll it replaced.
 option-comparison shares a single screen. Paging separates **topics**; it never separates the
 halves of a comparison. This is why `.panes` (§D5) is a wrapping pair, side by side when both fit and stacked when one
 does not, rather than a toggle:
-the comparison is the payload, and the payload is never the thing you page away from.
+the comparison is the payload, and the payload is never the thing you page away from. A staged
+scene (§18) sits on a single deck screen, all of its views on that screen.
 
 **Rule 2 — never page a population.** When N sites are near-identical instances of one cause,
 the population *is* the finding, and N screens turn "five fixed, one deliberately exempt, two

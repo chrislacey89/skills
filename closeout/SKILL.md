@@ -114,7 +114,33 @@ esac
 
 On `route: already merged`, the confirmation below names the teardown, not a merge, and Step 2 narrows to its fully-pushed check while Step 3's merge is skipped, as those steps say. Everything after the merge still runs: the post-review lock release, the work-item close, and Steps 4 through 8.
 
-Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
+**Before asking, list what is still open.**
+
+- **Every unticked `- [ ]` line in the PR body**, and **every row of the `## Review Disposition Ledger` whose State is `open`**. The ledger is the durable record with a State column, and its rows carry no severity tier, so list every open row and let the human read its tier from the review output. On the `github` backend both are in the PR body, read once:
+
+```bash
+BODY="$(gh pr view <number> --json body -q .body)" || { echo "open items unknown: cannot read the PR body" >&2; exit 1; }
+printf '%s\n' "$BODY" | grep -nE '^[[:space:]]*- \[ \]' || echo "unticked checklist lines: none"
+OPEN="$(printf '%s\n' "$BODY" | awk -F'|' '$(2) ~ /^ *[0-9]+ *$/ { s = $(5); gsub(/ /, "", s); if (s == "open") print }')"
+if [ -n "$OPEN" ]; then
+  printf '%s\n' "$OPEN"
+elif grep -qE '^[[:space:]]*#+[[:space:]]*Review Disposition Ledger' <<<"$BODY"; then
+  echo "open ledger rows: none"
+else
+  echo "no ledger block in the PR body"
+fi
+```
+
+  Open rows are listed whatever the heading line looks like. When none is found, a PR body with no `## Review Disposition Ledger` heading prints `no ledger block in the PR body`, which says no ledger was consulted; `open ledger rows: none` means a ledger heading was found and no open row sits under it.
+
+  On the `sidecar` backend the ledger is the newest comment on the work item whose first line is `## Review Disposition Ledger` ([references/state-backend.md](references/state-backend.md) § Where the review's records live), read with `bash "$SC" work view <W-n> --json`; the PR body carries no ledger there, so only its unticked lines come from the block above.
+- **Every Concern the review printed that is not recorded as fixed, and every breaker verdict of `survived` or `not-run`.** Neither has a durable home: the Concerns are `/pre-merge` Phase 4's terminal output, and the verdicts are `/fix-findings`' report. Read them from this session's own record of those two. When the session holds neither, say "no review output in this session", because that is not an empty list.
+
+When a read fails, say the open items are unknown rather than empty, and ask before going on. When every read succeeded and the list is empty, say so in the confirmation block. When it is not empty, show it and ask one question: **fix first**, **file as follow-ups, then merge**, or **merge as is**. Record a **merge as is** answer in the terminal with the list beside it. On `route: already merged` there is nothing left to hold back, so the list is information and the question is not asked.
+
+**A menu pick starts this skill; it does not answer this step.** Choosing `/closeout` from another skill's menu is not the go-ahead to merge. Ask once, here, after the list, however the user came into this skill, except where the paragraph above says the question is not asked. Show the block below together with the list and the question, so the answer is given with the PR, the teardown and the base in view. A **merge as is** answer, or a **file as follow-ups, then merge** answer once the follow-ups are filed, is the confirmation the block waits for, so the user is not asked a second time; a **fix first** answer is not a go-ahead.
+
+Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation: where no question is asked it is a plain yes. If there is no PR on this branch, stop and route to `/pre-merge`.
 
 ### 2. Verify safety preconditions before any destructive step
 
@@ -189,7 +215,7 @@ Three outcomes, and only one of them interrupts:
   Then ask once, with a single `AskUserQuestion`, recommended option first:
 
   - **→ Re-review the delta with `/pre-merge` (recommended)** — put the added commits through the review dimensions, then re-stamp and return here. `/pre-merge` reads this same stamp itself and takes the post-stamp delta as its subject (its Phase 1 step 4), so there is no range to pass it; it falls back to the whole branch on the force-push case above and when a merge commit landed after the stamp.
-  - **Merge anyway — I've seen these commits** — an explicit acknowledgement. Repeat it in the Step 3 merge confirmation so the choice is on the record rather than implicit.
+  - **Merge anyway — I've seen these commits** — an explicit acknowledgement. Record it in the terminal when you run the Step 3 merge, so the choice is on the record rather than implicit.
   - **Stop — I want to look at this first** — leaves the PR unmerged and the workspace untouched.
 
   The platform's free-text "Other" option is the escape hatch — don't add one.
@@ -220,7 +246,7 @@ esac
 
 ### 3. Merge the PR
 
-If the PR already reports `MERGED`, skip the merge and its confirmation (the client merged it), and start at "Then release the post-review edit lock" below. On the `sidecar` backend this route matters: nothing else closes the slice's work item.
+If the PR already reports `MERGED`, skip the merge (the client merged it), and start at "Then release the post-review edit lock" below. On the `sidecar` backend this route matters: nothing else closes the slice's work item.
 
 Merge with the repo's convention (squash is the common default; confirm if unsure). Let the merge delete the remote branch where the platform supports it, and **give the squash commit the PR body as its message**. Without `--body-file`, `gh` builds the squash message from the per-unit commit messages, so a reader who runs `git blame` months later lands on every fix-round message concatenated (bodies of 200–400 lines were measured across four repos on 2026-09-10) and never on the walkthrough `/pre-merge` Phase 2 wrote. That is also why authors put history in code comments: it was the only per-line record that survived the merge. `/execute` and `/compound` route incident history to the PR body on the promise that it lasts; this flag is what keeps the promise.
 
@@ -361,6 +387,18 @@ Either way, confirm the shell is no longer inside the feature worktree before pr
 
 ### 5. Remove the worktree (only if one was created — skip when isolation is host-owned, Step 0)
 
+Before removing it, note whether this session's project directory is that worktree. The path stops existing at the removal, so compare first:
+
+```bash
+if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
+  echo "project-dir-unknown: CLAUDE_PROJECT_DIR is not set in this shell, so the worktree being removed cannot be compared with this session's project directory"
+elif [ "$(cd "<worktree-path>" && pwd -P)" = "$(cd "$CLAUDE_PROJECT_DIR" && pwd -P)" ]; then
+  echo "project-dir: the worktree being removed is this session's project directory"
+fi
+```
+
+The variable is only an inherited environment variable, and a shell can lack it. The shell is already back in the base checkout, so the base checkout's top-level directory says nothing about this session and is not a fallback. If the check printed the `project-dir-unknown:` line, tell the user in your report that it could not tell, and that the project hooks may stop running after the removal.
+
 Now that the shell is anchored to the base checkout, removing the worktree is safe:
 
 ```bash
@@ -373,14 +411,40 @@ When worktrunk made the worktree, remove it with `wt remove`: worktrunk's [hook 
 
 If the worktree has uncommitted or untracked changes you have not accounted for, `git worktree remove` will refuse — investigate rather than forcing `--force`. (Everything reviewed in the PR is already merged; anything left behind is unexpected.)
 
+**When the worktree just removed was this session's project directory, say so and stop after cleanup.** That is the case when the check above printed its `project-dir:` line. Every project hook this session registered now points at a path that does not exist, so nothing project-level gates what this session does next. How the harness treats a hook command it cannot find is in the [hooks reference](https://code.claude.com/docs/en/hooks); do not rely on a project hook here. Finish Steps 6 to 8. Then print "This session's project hooks no longer run. Start the next piece of work in a new session." and offer no next step that continues in this session: Step 9's `/compound` and cleanup hand-offs become instructions for the new session, named and not run here.
+
 ### 6. Prune the merged branch (skip when isolation is host-owned, Step 0)
 
 The local feature branch (and its now-`[gone]` remote-tracking ref) is dead weight after merge. Prune it:
 
 ```bash
-git fetch --prune                       # drop the [gone] remote-tracking ref
-git branch -d <feature-branch>           # safe delete; fails if not merged — investigate if it does
+git fetch --prune                        # drop the [gone] remote-tracking ref
+B="<feature-branch>"; N="<pr-number>"
+if ! git branch -d "$B" 2>/dev/null; then
+  # A squash or rebase merge leaves the branch "not fully merged" in git's eyes.
+  # Delete it only on proof that nothing on it is unmerged: the PR is merged and
+  # the local tip is the exact commit the PR carried.
+  LOCAL="$(git rev-parse --verify -q "refs/heads/$B")" || { echo "no local branch $B: nothing to prune"; exit 0; }
+  if git worktree list --porcelain | grep -qxF "branch refs/heads/$B"; then
+    echo "prune skipped: $B is checked out in a worktree; remove that worktree first" >&2
+  else
+    STATE="$(gh pr view "$N" --json state -q .state)" || { echo "prune skipped: cannot read the PR's state" >&2; exit 1; }
+    PR_HEAD="$(gh pr view "$N" --json headRefOid -q .headRefOid)" || { echo "prune skipped: cannot read the PR's head" >&2; exit 1; }
+    if [ "$STATE" = MERGED ] && [ "$LOCAL" = "$PR_HEAD" ]; then
+      if git update-ref -d "refs/heads/$B" "$LOCAL"; then
+        git config --remove-section "branch.$B" 2>/dev/null
+        echo "pruned $B (merged as PR $N)"
+      else
+        echo "prune failed: update-ref could not delete $B" >&2; exit 1
+      fi
+    else
+      echo "prune skipped: $B is at $LOCAL and the PR's head is $PR_HEAD (state $STATE); commits may exist only locally" >&2
+    fi
+  fi
+fi
 ```
+
+**Why this block and not a forced delete.** `git branch -d` deletes only a branch that is fully merged in its upstream or in `HEAD` ([git-branch](https://git-scm.com/docs/git-branch)), and a squash or rebase merge leaves the branch's own commits out of the base's history, so it refuses after one. The pack's git guard refuses the forced form by design, and it is not changed. `git update-ref -d <ref> <oldvalue>` deletes a ref "after verifying it exists with `<oldvalue>`" ([git-update-ref](https://git-scm.com/docs/git-update-ref)), so the delete fails rather than removing a branch that moved after the tip was read. It is honest only because of the proof in front of it: the PR's state is `MERGED` and the local tip equals the PR's head. A tip that differs is a commit the PR never carried; the block prints both commits and deletes nothing. With no `gh` reach the block cannot prove either, so it deletes nothing and exits nonzero: never delete without the proof. The branch's config section goes with it, as `git branch -d` would have removed it. Step 8's "Branch pruned" item is what catches a skipped prune.
 
 `commit-commands:clean_gone` removes all `[gone]` branches and their worktrees in one pass — prefer it when several stale worktrees have accumulated (the recurring symptom this skill exists to stop). Do not reimplement what it already does.
 
@@ -416,7 +480,7 @@ Report the end state in one short block. If any check fails, say which and stop 
 
 ### 9. Hand off
 
-- If a durable lesson emerged from this work and was **not** already captured on the PR (per the PR-attachable `/compound` model), invoke `/compound` now. If the lesson already rode the PR, say so and skip it. `/closeout` never captures lessons itself.
+- If a durable lesson emerged from this work and was **not** already captured on the PR (per the PR-attachable `/compound` model), invoke `/compound` now, except when Step 5's check printed its `project-dir:` line, where Step 5 says how it is named instead. If the lesson already rode the PR, say so and skip it. `/closeout` never captures lessons itself.
 - Closing the PRD and any remaining slice issues, and confirming the research artifact's frontmatter still reflects what shipped (superseding with a new dated artifact if a version bumped), is the cleanup prose in `SYSTEM-OVERVIEW.md` Step 9 — name it as the remaining tail work (on the `sidecar` backend Step 3 has already closed the merged slice's work item, and the PRD is closed only on the user's confirm); do not perform research-artifact supersession from here.
 
 ## Common Rationalizations
@@ -459,6 +523,6 @@ A run of `/closeout` is not complete until:
 - **Expected input:** a reviewed, mergeable PR created by `/pre-merge`, on a feature branch (in a worktree or a plain checkout)
 - **Produces:** the PR merged, the worktree torn down, the merged branch pruned, the base branch pulled, and a verified clean end state — no filesystem state introduced; on the `sidecar` backend, also every merged slice's work item closed (Step 3)
 - **May invoke:** `/compound` when a durable lesson emerged and was not already captured on the PR
-- **Comes next by default:** `/compound` (only when an uncaptured lesson is worth recording) and the `SYSTEM-OVERVIEW.md` Step 9 cleanup prose (close the PRD and any slices still open, confirm research-artifact frontmatter). After that, the loop is closed — `/help` when you return to the repo.
+- **Comes next by default:** `/compound` (only when an uncaptured lesson is worth recording) and the `SYSTEM-OVERVIEW.md` Step 9 cleanup prose (close the PRD and any slices still open, confirm research-artifact frontmatter). After that, the loop is closed — `/help` when you return to the repo. When Step 5's check printed its `project-dir:` line, these are named for the new session and not run here (Step 5).
 
-**Next-step menu.** With the merge done and a clean base reached, offer the tail as a menu rather than leaving it to recall (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/compound` (capture a lesson from this change)** when an uncaptured lesson is worth recording, **`SYSTEM-OVERVIEW.md` Step 9 issue-closing still to do** when a PRD or slice issues remain, **Stopping here — clean base, nothing left open**, **`/help` (pick up the next piece of work)**. The last three are distinct destinations, not one state described three ways: `SYSTEM-OVERVIEW.md` Step 9's cleanup prose, ending the session, and asking what to start next. Each label leads with the act that distinguishes it, not with a shared word the reader has to scan past. Name `SYSTEM-OVERVIEW.md` Step 9 as remaining work; do not perform it from here. The platform's free-text "Other" option is the escape hatch — don't add one.
+**Next-step menu.** When Step 5's check printed its `project-dir:` line, show no menu: the tail is printed as instructions for the new session, as Step 5 says. Otherwise, with the merge done and a clean base reached, offer the tail as a menu rather than leaving it to recall (see `references/next-step-menu.md`). Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill: **→ `/compound` (capture a lesson from this change)** when an uncaptured lesson is worth recording, **`SYSTEM-OVERVIEW.md` Step 9 issue-closing still to do** when a PRD or slice issues remain, **Stopping here — clean base, nothing left open**, **`/help` (pick up the next piece of work)**. The last three are distinct destinations, not one state described three ways: `SYSTEM-OVERVIEW.md` Step 9's cleanup prose, ending the session, and asking what to start next. Each label leads with the act that distinguishes it, not with a shared word the reader has to scan past. Name `SYSTEM-OVERVIEW.md` Step 9 as remaining work; do not perform it from here. The platform's free-text "Other" option is the escape hatch — don't add one.
