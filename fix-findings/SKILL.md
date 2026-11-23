@@ -13,7 +13,9 @@ sources:
 
 # Fix Findings
 
-!`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" && mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.fix-findings-active" && echo "fix-findings marker created at $PROJECT_DIR/.claude/.fix-findings-active — post-review edit lock open for this run"`
+!`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" && mkdir -p "$PROJECT_DIR/.claude" && { [ -e "$PROJECT_DIR/.claude/.fix-findings-active" ] || printf 'by=%s\nat=%s\nhead=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse HEAD 2>/dev/null)" > "$PROJECT_DIR/.claude/.fix-findings-active"; } && echo "fix-findings marker at $PROJECT_DIR/.claude/.fix-findings-active — post-review edit lock open for this run; $(tr '\n' ' ' < "$PROJECT_DIR/.claude/.fix-findings-active")"`
+
+**Whose run is this?** The line above prints the fix-run flag's `by=`, `at=` and `head=` lines, and leaves a flag that is already there as it was. `by=` is the session id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands ([environment variables](https://code.claude.com/docs/en/env-vars)). When it is not this session's, or is empty, another session may be running this skill on the branch: tell the human who opened it and when, and ask before going on. If they say stop, stop without Step 3's removal, because the flag is that session's.
 
 Take the review findings a human has already chosen, have a **fresh** sub-agent
 write each fix, have a **second** fresh sub-agent try to break it, and report
@@ -266,16 +268,19 @@ The fixer's instructions, in order:
    FIXUP_TARGET=$(git -c blame.blankBoundary=false -c blame.markUnblamableLines=false blame -l -s -L "$START,$END" "$BASE_REF..HEAD" -- "$FILE" \
      | awk '{ print $(1) }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
+   C="${FIXUP_TARGET:-HEAD}"   # the commit a fold of this fixup would rewrite
+   F=$(git merge-base "$BASE_REF" HEAD 2>/dev/null) || F=   # the widest start the fold takes, the one it uses with no work item; none found counts as shared
    B=$(git branch --show-current)
    R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
    HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ]; then FIXUP_TARGET=; fi
+   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ] || [ -z "$F" ] || [ "$(git rev-list --count "$C" --not "$F" --remotes)" != "$(git rev-list --count "$C" --not "$F")" ]; then FIXUP_TARGET=; fi
    printf 'FIXUP_TARGET=%s\n' "$FIXUP_TARGET"
    ```
 
    A SHA on the printed line means one branch commit wrote every anchored
-   line and the branch is unshared: the four lines above the `printf` are
-   `/pre-merge` Phase 2's shared-branch block, which says what they check. A pushed branch gets no fixups because `/pre-merge`
+   line and the branch is unshared: the lines from `C=` to the `printf` are
+   `/pre-merge` Phase 2's shared-branch block, which says what they check,
+   with the target as the commit no remote branch may hold. A pushed branch gets no fixups because `/pre-merge`
    never offers to fold one, so its `fixup!` subject would merge as-is.
    **The printed line decides, not your own diff:** a SHA means a `--fixup`
    commit of that SHA, and an empty `FIXUP_TARGET=` means an ordinary commit.
@@ -889,7 +894,7 @@ Then clear the classification markers. A fixer that loaded `/tdd` left one, and 
 
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
-rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
 ```
 
 ## The two flags
@@ -905,7 +910,7 @@ is not load-bearing (chrislacey89/skills#326).
 | `.claude/.review-stamped` | `/pre-merge` Phase 4, beside the review-currency stamp, under the same fallback | `.claude/hooks/enforce-classification.sh` — refuses Write/Edit on implementation files while it exists and `.fix-findings-active` does not | `/closeout` Step 3 at merge; `/execute` Step 0's fresh-slate checklist |
 | `.claude/.fix-findings-active` | this skill, by the harness line at the top of this file, when it loads, under `${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}` | the same hook clause, at `$CLAUDE_PROJECT_DIR/.claude/.fix-findings-active` — its presence is what re-opens the lock | Step 3 above, on every exit path, resolving the same fallback and reporting a miss rather than swallowing one; `/execute` Step 0's fresh-slate checklist |
 
-**`.review-stamped` also stands the classification clause down, which is what lets this skill's fixer write at all.** The same hook carries an earlier clause refusing implementation writes unless `.claude/.tdd-active`, `.claude/.tdd-skipped`, or `.claude/.lfg-active` exists — and `/execute` Step 6 removes every one of those *before* `/pre-merge` stamps, so no fixer ever arrives holding one. Were the two clauses genuinely independent in that order, the flag the harness line writes above would be read too late to matter: every fixer would be refused by the classification clause, under a message naming `/tdd`. So on a stamped branch the classification clause does not fire and this lock is the sole decider. Do not remove that coupling on the grounds that it looks like a leak between two unrelated gates — `scripts/test-post-review-edit-lock.sh` § 5 drives the real lifecycle, Step 6's removal included, and fails if it goes.
+**`.review-stamped` also stands the classification clause down, which is what lets this skill's fixer write at all.** The same hook carries an earlier clause refusing implementation writes unless `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, or `.claude/.post-review-edit` exists — and `/execute` Step 6 removes every one of those *before* `/pre-merge` stamps, so no fixer ever arrives holding one. Were the two clauses genuinely independent in that order, the flag the harness line writes above would be read too late to matter: every fixer would be refused by the classification clause, under a message naming `/tdd`. So on a stamped branch the classification clause does not fire and this lock is the sole decider. Do not remove that coupling on the grounds that it looks like a leak between two unrelated gates — `scripts/test-post-review-edit-lock.sh` § 5 drives the real lifecycle, Step 6's removal included, and fails if it goes.
 
 **Two routes the refusal names — which is not the same as two ways out.** The
 refusal message names invoking this skill, and deleting `.claude/.review-stamped`

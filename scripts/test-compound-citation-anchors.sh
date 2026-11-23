@@ -130,6 +130,55 @@ for sh in bash zsh; do
 done
 
 # -----------------------------------------------------------------------------
+section "a stacked PR's target is not the base"
+
+# /compound runs on the open PR's branch. When that PR is stacked on slice-1,
+# `base-ref` answers origin/slice-1, and a slice-1 commit passes as "on the
+# base" though slice-1's own squash merge will rewrite it. The block asks for
+# the repo's base instead. The fixture makes the two answers disagree: a
+# github.com remote, the stub gh reporting an open PR on slice-1, and a repo
+# base of main.
+S="$tmp/stacked"
+mkdir -p "$S/bin" "$S/sidecars"
+cat > "$S/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+filter=""; prev=""
+for a in "$@"; do
+    if [ "$prev" = -q ]; then filter="$a"; fi
+    prev="$a"
+done
+printf '%s' '{"baseRefName":"slice-1","state":"OPEN"}' | jq -r "$filter"
+STUB
+chmod +x "$S/bin/gh"
+git init -q "$S/up"
+git -C "$S/up" commit -q --allow-empty -m "root"
+git -C "$S/up" switch -q -c slice-1
+git -C "$S/up" commit -q --allow-empty -m "slice-1 only"
+SLICE1="$(git -C "$S/up" rev-parse HEAD)"
+git -C "$S/up" switch -q main
+git clone -q "$S/up" "$S/clone"
+git -C "$S/clone" remote set-head origin main >/dev/null
+git -C "$S/clone" remote set-url origin https://github.com/acme/stacked.git
+git -C "$S/clone" switch -q -c feat origin/slice-1
+printf 'The lesson came from %s.\n' "${SLICE1:0:10}" > "$tmp/sibling.md"
+
+run_stacked() {  # $1 = shell, $2 = block text
+    local b="${2//<path\/to\/entry.md>/$tmp/sibling.md}"
+    b="${b//<this skill\'s directory>\/references\/sidecar.sh/$sidecar_sh}"
+    out="$(cd "$S/clone" && PATH="$S/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$S/sidecars" env -u BASE_REF "$1" -c "$b" 2>"$tmp/stderr")"; rc=$?
+}
+
+pr_target="$(cd "$S/clone" && PATH="$S/bin:$PATH" SKILL_KIT_SIDECAR_ROOT="$S/sidecars" bash "$sidecar_sh" base-ref 2>/dev/null)"
+check "fixture: base-ref without --no-pr answers the PR's target" origin/slice-1 "$pr_target"
+
+for sh in bash zsh; do
+    if ! command -v "$sh" >/dev/null 2>&1; then printf '  SKIP %s not installed\n' "$sh"; continue; fi
+    run_stacked "$sh" "$blk"
+    check "$sh: an entry citing the lower PR's commit exits 1" 1 "$rc"
+    check "$sh: it names that commit" 1 "$(grep -c -- "${SLICE1:0:10}" <<<"$out")"
+done
+
+# -----------------------------------------------------------------------------
 section "mutation: the check sees a block that flags nothing"
 
 # shellcheck disable=SC2016
