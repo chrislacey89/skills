@@ -1786,51 +1786,46 @@ else
     printf '  SKIP zsh is not on PATH, so the release round trip ran under bash only\n'
 fi
 
-# An inherited $CLAUDE_PROJECT_DIR that names another checkout is not this
-# tree's project: release unlocks this worktree and leaves the other alone.
-# One that contains the top level is still used.
-release_elsewhere() {
-    local r="$scratch/release-elsewhere" other="$scratch/release-other" body="$scratch/release-elsewhere.body" sha out rc
-    mkdir -p "$r" "$other/.claude"
-    : > "$other/.claude/.review-stamped"
+# Claude Code started in a subdirectory sets $CLAUDE_PROJECT_DIR below the top
+# level. The stamp, the release and the re-stamp must all name that directory:
+# a release that names another one prints "lock released" while the stamp's
+# flag stays, and leaves a .post-review-edit the re-stamp never removes.
+release_subdir() {
+    local r="$scratch/release-subdir" body="$scratch/release-subdir.body" sha out rc
     git init -q -b main "$r"
     printf '.claude/\n' > "$r/.git/info/exclude"
-    printf 'x\n' > "$r/a.txt"
-    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" add a.txt
+    mkdir -p "$r/app"
+    printf 'x\n' > "$r/app/a.txt"
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" add app/a.txt
     GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" commit -q --no-verify -m base
     GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$r" switch -q -c feature
     sha="$(git -C "$r" rev-parse HEAD)"
     printf '<!-- reviewed-at: %s -->\n' "$sha" > "$body"
-    mkdir -p "$r/.claude"
-    : > "$r/.claude/.review-stamped"
+    flags() {
+        printf '%s|%s|%s|%s' \
+            "$([ -e "$r/app/.claude/.review-stamped" ] && echo stamped || echo -)" \
+            "$([ -e "$r/app/.claude/.post-review-edit" ] && echo released || echo -)" \
+            "$([ -e "$r/.claude/.review-stamped" ] && echo stamped || echo -)" \
+            "$([ -e "$r/.claude/.post-review-edit" ] && echo released || echo -)"
+    }
+    ( cd "$r/app" && REVIEWED_SHA="$sha" CLAUDE_PROJECT_DIR="$r/app" CLAUDE_CODE_SESSION_ID=s bash -c "$stamp_write" ) \
+        || assert_eq 0 1 "subdirectory project dir: Phase 4's flag write runs"
+    assert_eq "stamped|-|-|-" "$(flags)" "subdirectory project dir: the stamp locks the subdirectory"
     rc=0
-    out="$( cd "$r" && PATH="$release_bin:$PATH" GH_BODY="$body" GIT_CONFIG_GLOBAL="$sc_gitconfig" \
+    out="$( cd "$r/app" && PATH="$release_bin:$PATH" GH_BODY="$body" GIT_CONFIG_GLOBAL="$sc_gitconfig" \
         SKILL_KIT_SIDECAR_ROOT="$r.sidecars" SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" \
-        CLAUDE_PROJECT_DIR="$other" bash "$sidecar_sh" stamp release feature --reason "copy" 2>&1 )" || rc=$?
-    assert_eq 0 "$rc" "another checkout's project dir: release exits 0 ($out)"
-    assert_eq "gone|present" \
-        "$([ -e "$r/.claude/.review-stamped" ] && echo present || echo gone)|$([ -e "$r/.claude/.post-review-edit" ] && echo present || echo gone)" \
-        "another checkout's project dir: release unlocks this worktree"
-    assert_eq "present|gone" \
-        "$([ -e "$other/.claude/.review-stamped" ] && echo present || echo gone)|$([ -e "$other/.claude/.post-review-edit" ] && echo present || echo gone)" \
-        "another checkout's project dir: …and leaves that checkout's lock alone"
+        CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp release feature --reason "copy" 2>&1 )" || rc=$?
+    assert_eq 0 "$rc" "subdirectory project dir: release exits 0 ($out)"
+    assert_eq "-|released|-|-" "$(flags)" "subdirectory project dir: release swaps the stamp's own flag"
     assert_eq "$sha" \
-        "$( cd "$r" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
-            CLAUDE_PROJECT_DIR="$other" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
-        "another checkout's project dir: stamp read --released reads this worktree's marker"
-    mkdir -p "$r/sub" "$scratch/release-parent"
-    mv "$r" "$scratch/release-parent/tree"
-    r="$scratch/release-parent/tree"
-    assert_eq "$sha" \
-        "$( cd "$r" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
-            CLAUDE_PROJECT_DIR="$r/sub" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
-        "a project dir below the top level does not contain the tree: the top level's marker is read"
-    assert_eq "" \
-        "$( cd "$r" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
-            CLAUDE_PROJECT_DIR="$scratch/release-parent" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
-        "a project dir that contains the top level is used: its .claude/ holds no marker"
+        "$( cd "$r/app" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
+            CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp read feature --released 2>/dev/null || true )" \
+        "subdirectory project dir: stamp read --released reads the release"
+    ( cd "$r/app" && REVIEWED_SHA="$sha" CLAUDE_PROJECT_DIR="$r/app" CLAUDE_CODE_SESSION_ID=s bash -c "$stamp_write" ) \
+        || assert_eq 0 1 "subdirectory project dir: the re-stamp's flag write runs"
+    assert_eq "stamped|-|-|-" "$(flags)" "subdirectory project dir: the re-stamp leaves no released flag in either directory"
 }
-release_elsewhere
+release_subdir
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]] || exit 1

@@ -77,8 +77,8 @@
 # is not checked out, or with no stamp to release: the sidecar's, or on the
 # github backend the PR body's marker, read with gh. It writes
 # .claude/.post-review-edit (branch, released_at, head, reason, one key=value
-# line each) and removes .claude/.review-stamped, both under the directory
-# lock_project names. On the sidecar backend it first
+# line each) and removes .claude/.review-stamped, both under $CLAUDE_PROJECT_DIR,
+# else the top level, as the hook reads them. On the sidecar backend it first
 # commits the same record as reviews/released/<slug>.json, a directory of its
 # own because <branch>.released is itself a branch name; stamp write and stamp
 # clear remove it. On the github backend the marker is the only record.
@@ -1676,21 +1676,16 @@ stamp_recorded() {
     return 0
 }
 
-# The directory whose .claude/ the classification hook reads. An inherited
-# $CLAUDE_PROJECT_DIR can name another checkout, so it counts only when it
-# contains this tree's top level (the containment rule /execute Step 0 applies
-# to CONDUCTOR_WORKSPACE_PATH); otherwise the top level does.
+# The directory whose .claude/ the classification hook reads, named the way
+# /pre-merge's stamp and every cleanup of these flags name it. An inherited
+# $CLAUDE_PROJECT_DIR that names another checkout is not handled here: a rule
+# for it has to change the stamp, the cleanups and the hook in the same change.
 lock_project() {
-    local top dir
-    top="$(pgit rev-parse --show-toplevel)" || return 1
-    top="$(cd "$top" && pwd -P)" || return 1
     if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-        dir="$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)" || dir=
-        if [ -n "$dir" ]; then
-            case "$top/" in "$dir"/*) printf '%s\n' "$CLAUDE_PROJECT_DIR"; return 0 ;; esac
-        fi
+        printf '%s\n' "$CLAUDE_PROJECT_DIR"
+    else
+        pgit rev-parse --show-toplevel
     fi
-    printf '%s\n' "$top"
 }
 
 # stamp_released <branch>: the head the branch's lock was released at, or nothing.
