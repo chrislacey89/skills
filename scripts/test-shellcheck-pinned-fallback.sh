@@ -98,7 +98,9 @@ for tool in git xargs awk tr grep cat mkdir tar rm sleep dirname uname sed head;
 done
 
 # A stub's log line records which instrument linted, so an arm can assert that
-# the local release was (or was not) run.
+# the local release was (or was not) run. The local stub also records, in the
+# case directory's override.seen, whether SHELLCHECK_PINNED_ALLOW_FALLBACK was
+# in its environment at all, so an unset arm can prove it ran unset.
 lint_log="$sandbox/lint.log"
 
 # make_stubs <dir> <docker-mode> <cached-mode> <local-version>
@@ -123,6 +125,7 @@ make_stubs() {
 #!/bin/sh
 if [ "\$1" = --version ]; then printf 'ShellCheck - stub\nversion: %s\n' "$local_v"; exit 0; fi
 echo local >> "$lint_log"
+if [ -n "\${SHELLCHECK_PINNED_ALLOW_FALLBACK+set}" ]; then echo present; else echo absent; fi >> "$dir/override.seen"
 for f in "\$@"; do if grep -q FINDING "\$f"; then echo "\$f: finding"; exit 1; fi; done
 exit 0
 STUB
@@ -199,7 +202,8 @@ STUB
 # the script. Section 1 runs both exit-3 sites under strict and under unset, so
 # a default that turns unset into accept, and a check that accepts any
 # non-empty value, each go red. finding plants a script with a lint finding.
-# Sets: rc, err (stderr), log (instruments that linted, space-joined), elapsed.
+# Sets: rc, err (stderr), log (instruments that linted, space-joined), elapsed,
+# seen (present or absent: whether the override reached the local stub).
 run_case() {
     local dir="$sandbox/case"
     local override=()
@@ -224,6 +228,7 @@ run_case() {
     end="$(date +%s)"
     elapsed=$((end - start))
     log="$(tr '\n' ' ' < "$lint_log" | sed 's/ $//')"
+    seen="$(cat "$dir/override.seen" 2>/dev/null)"
 }
 
 # --- 0. The pinned paths are unchanged -------------------------------------------
@@ -245,6 +250,7 @@ section "download impossible, no Docker: the local fallback lints, then exits 3"
 run_case none none 0.11.0 strict clean
 assert_eq 3 "$rc" "exit 3"
 assert_eq local "$log" "the local release still linted"
+assert_eq present "$seen" "strict: the override variable is in the script's environment"
 assert_contains "$err" "SHELLCHECK_PINNED_ALLOW_FALLBACK=1" "the exit-3 message names the override"
 assert_contains "$err" "NOT THE MERGE GATE'S INSTRUMENT" "the warning is still printed"
 
@@ -258,9 +264,11 @@ section "the override left unset (how the pre-push hook and CI run it): exit 3, 
 run_case none none 0.11.0 unset clean
 assert_eq 3 "$rc" "download site, unset: exit 3"
 assert_eq local "$log" "download site, unset: the local release still linted"
+assert_eq absent "$seen" "download site, unset: the override variable is not in the script's environment"
 run_case none unrunnable 0.11.0 unset clean
 assert_eq 3 "$rc" "unrunnable site, unset: exit 3"
 assert_eq local "$log" "unrunnable site, unset: the local release still linted"
+assert_eq absent "$seen" "unrunnable site, unset: the override variable is not in the script's environment"
 
 # --- 2. With the override a clean fallback exits 0 ------------------------------
 section "SHELLCHECK_PINNED_ALLOW_FALLBACK=1: a clean fallback exits 0, at both sites"
