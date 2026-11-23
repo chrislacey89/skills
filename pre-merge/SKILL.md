@@ -109,7 +109,7 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
    **Residual:** `$BASE_REF` is only as fresh as the last `git fetch`. When `origin/<base>` does not resolve, `base-ref` measures against the local branch and says so on stderr; if the counts look wrong, `git fetch` and re-run.
 
-4. **Decide the scope — the whole slice, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole slice: `sidecar.sh range` gives its left end, which is the slice's recorded start when the work item step 2 named has one still on this branch, and `$BASE_REF` otherwise, so on the `github` backend a slice is the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or a hand fix after a deliberate lock deletion — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
+4. **Decide the scope — the whole slice, or the post-stamp delta.** This decision is author-mode only. Loop-mode skips it and sets `SCOPE_FROM="$BASE_REF"` unconditionally, reading the whole branch on every invocation, per Phase 3's loop-mode bullet. A first review reads the whole slice: `sidecar.sh range` gives its left end, which is the slice's recorded start when the work item step 2 named has one still on this branch, and `$BASE_REF` otherwise, so on the `github` backend a slice is the whole branch. A re-run against a PR this skill already stamped, whose head has since moved — a `/fix-findings` round, or an edit made after `stamp release` — takes the post-stamp delta as its subject. The stamp lives where `backend stamp` says, per [references/state-backend.md](references/state-backend.md): the PR body, or the sidecar. Read the PR body with the same expression `/closeout` Step 2 uses; `scripts/test-review-currency-marker.sh` pins the two byte-identical, and `scripts/test-delta-review-scope.sh` runs this block against a fixture for every branch state it names, on both backends:
    ```bash
    SC="<this skill's directory>/references/sidecar.sh"
    case "$(bash "$SC" backend stamp)" in
@@ -133,30 +133,86 @@ If you are running on a branch other than the user's working branch and `--pr` w
      [ "$SLICE_FROM" != "$BASE_REF" ] || SLICE_FROM="$STACKED_REF"
      BASE_REF="$STACKED_REF"
    fi
+   # `stamp release` records the head it opened the lock at. That head stands in
+   # for a stamp that was folded away only when it carries the stamped tree:
+   # starting anywhere else would skip commits no review has read.
+   if [ -n "$REVIEWED_SHA" ] && ! git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null; then
+     RELEASED_HEAD=$(bash "$SC" stamp released "$(git branch --show-current)") || RELEASED_HEAD=
+     if [ -n "$RELEASED_HEAD" ] && [ "$RELEASED_HEAD" != "$(git rev-parse HEAD)" ] \
+       && git merge-base --is-ancestor "$RELEASED_HEAD" HEAD 2>/dev/null \
+       && [ "$(git rev-parse "$RELEASED_HEAD^{tree}")" = "$(git rev-parse -q --verify "$REVIEWED_SHA^{tree}")" ]; then
+       REVIEWED_SHA="$RELEASED_HEAD"
+     fi
+   fi
    SCOPE_FROM="$SLICE_FROM"
+   MERGES_READ=""
    if [ -n "$REVIEWED_SHA" ] \
      && git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
-     && [ "$REVIEWED_SHA" != "$(git rev-parse HEAD)" ] \
-     && [ -z "$(git log --merges --format=%H "$REVIEWED_SHA..HEAD")" ]; then
-     SCOPE_FROM="$REVIEWED_SHA"
+     && [ "$REVIEWED_SHA" != "$(git rev-parse HEAD)" ]; then
+     if [ -z "$(git log --merges --format=%H "$REVIEWED_SHA..HEAD")" ]; then
+       SCOPE_FROM="$REVIEWED_SHA"
+     else
+       # Merges after the stamp: read each merge from the base as its resolution.
+       COMMITS=$(git log --reverse --first-parent --format=%H "$REVIEWED_SHA..HEAD")
+       WHY=""; OWN=0
+       [ "$(git rev-parse "$(printf '%s\n' "$COMMITS" | head -n 1)^")" = "$REVIEWED_SHA" ] \
+         || WHY="the stamped commit is not on this branch's first-parent line"
+       while IFS= read -r C; do
+         [ -n "$C" ] && [ -z "$WHY" ] || continue
+         N=$(git rev-list --parents -n 1 "$C" | wc -w | tr -d ' ')
+         if [ "$N" = 2 ]; then OWN=$((OWN + 1)); continue; fi
+         if [ "$N" != 3 ] || ! git merge-base --is-ancestor "$C^2" "$BASE_REF" 2>/dev/null; then
+           WHY="merge $(git rev-parse --short "$C") does not bring in $BASE_REF"; continue
+         fi
+         if ! RESOLUTION=$(git show --remerge-diff --no-ext-diff --format= "$C" 2>/dev/null); then
+           WHY="this git cannot run git show --remerge-diff"; continue
+         fi
+         [ -z "$RESOLUTION" ] || OWN=$((OWN + 1))
+         MERGES_READ=$(printf '%s\n%s' "$MERGES_READ" "$C")
+       done <<<"$COMMITS"
+       if [ -n "$WHY" ]; then
+         MERGES_READ=""
+         echo "whole slice, because $WHY"
+       elif [ "$OWN" -eq 0 ]; then
+         SCOPE_FROM="HEAD"
+       else
+         SCOPE_FROM="$REVIEWED_SHA"
+       fi
+     fi
    elif [ -n "$REVIEWED_SHA" ] \
      && ! git merge-base --is-ancestor "$REVIEWED_SHA" HEAD 2>/dev/null \
      && [ "$(git rev-parse -q --verify "$REVIEWED_SHA^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ]; then
      SCOPE_FROM="HEAD"
    fi
-   if [ "$SCOPE_FROM" = HEAD ]; then
+   if [ "$SCOPE_FROM" = HEAD ] && [ -n "$MERGES_READ" ]; then
+     echo "review scope: none, every commit since $REVIEWED_SHA is a clean merge from $BASE_REF"
+   elif [ "$SCOPE_FROM" = HEAD ]; then
      echo "review scope: none, history-only rewrite — HEAD carries the tree reviewed at $REVIEWED_SHA"
    elif [ "$SCOPE_FROM" = "$BASE_REF" ]; then
      echo "review scope: whole branch, from $BASE_REF"
    elif [ "$SCOPE_FROM" = "$SLICE_FROM" ]; then
      echo "review scope: whole slice, from $SLICE_FROM ($W's recorded start)"
+   elif [ -n "$MERGES_READ" ]; then
+     echo "review scope: post-stamp delta, from $SCOPE_FROM, with each merge from $BASE_REF read as its resolution"
    else
      echo "review scope: post-stamp delta, from $SCOPE_FROM"
    fi
-   git diff "$SCOPE_FROM...HEAD" --stat
-   git log --oneline "$SCOPE_FROM..HEAD"
+   if [ -n "$MERGES_READ" ]; then
+     # What Phase 3 reads: each ordinary commit's diff, then each merge's resolution.
+     git log --first-parent --no-merges --stat --oneline "$SCOPE_FROM..HEAD"
+     while IFS= read -r C; do
+       [ -z "$C" ] || git show --remerge-diff --no-ext-diff --stat --format='%h %s (what was resolved by hand)' "$C"
+     done <<<"$MERGES_READ"
+   else
+     git diff "$SCOPE_FROM...HEAD" --stat
+     git log --oneline "$SCOPE_FROM..HEAD"
+   fi
    ```
-   Four states fall back to the whole slice, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` and whose tree `HEAD` no longer carries (the branch was rewritten and the content changed with it, or the reviewed commit is gone — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge commit after the stamp (the post-stamp diff would carry the base branch's own changes, which nobody on this branch wrote). The whole slice is the whole branch unless `range` found a recorded start, and when it finds one that a fold or rebase rewrote away it says so on stderr and answers `$BASE_REF`, never re-anchoring the start. The decision is printed so the terminal readout and the PR say the same thing about what was read.
+   Four states fall back to the whole slice, each on purpose: no stamp (a first review, or a hand-authored PR); a stamp that is not an ancestor of `HEAD` and whose tree `HEAD` no longer carries (the branch was rewritten and the content changed with it, or the reviewed commit is gone — `/closeout` calls this the *stronger* divergence signal, and it is not a smaller review); a stamp equal to `HEAD` (nothing new to scope to); and a merge after the stamp that the next paragraph cannot read as a resolution (one that does not bring in the base, or a git that rejects `--remerge-diff`), whose post-stamp diff would carry changes nobody on this branch wrote. The whole slice is the whole branch unless `range` found a recorded start, and when it finds one that a fold or rebase rewrote away it says so on stderr and answers `$BASE_REF`, never re-anchoring the start. The decision is printed so the terminal readout and the PR say the same thing about what was read.
+
+   **A merge from the base after the stamp is reviewed as its resolution.** When every post-stamp commit on this branch's first-parent line is either an ordinary commit or a merge whose second parent is on the base branch, the review scope is two things: the ordinary commits' own diffs, and each merge's `git show --remerge-diff` output, which shows only what the person resolving the merge changed by hand ([git-show](https://git-scm.com/docs/git-show); the option arrived in [git 2.36](https://github.com/git/git/blob/v2.36.0/Documentation/RelNotes/2.36.0.txt)). An empty remerge diff is a clean merge: nobody on this branch wrote anything in it. When every post-stamp commit is a clean merge, the block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`, and the run goes on as for a history-only rewrite, below: no Phase 3, and the stamp moves to `HEAD`. Otherwise the block lists the commits and resolutions it read, and their full text, from Phase 3's author-mode block, not `git diff "$SCOPE_FROM...HEAD"`, is the diff Phase 3's reviewers are handed, because the three-dot diff would carry the base's own changes. Any other merge shape, or a git that rejects the option, keeps the whole-slice fallback, and the block prints why.
+
+   **After a `stamp release`, the delta starts at the released head, and never past a commit no review read.** When the head at release was the stamped commit, the two starts are one. When a fold had replaced the stamped commit, the block starts at the released head if it carries the stamped tree. When commits had landed after the stamp and before the release, it starts at the stamp, so they are read too. Give each reviewer the release's reason, from `bash "$SC" stamp released "$(git branch --show-current)" --reason`, as the claim the edit has to meet. When it prints nothing, tell the reviewers no reason is on record: on the github backend the reason lives only in `.claude/.post-review-edit`, which `/execute` Step 6 removes.
 
    **A rewrite that kept the reviewed tree is not a divergence.** When the stamped commit is not an ancestor of `HEAD` but still exists locally and carries the same tree as `HEAD`, history changed and content did not: the fold Phase 4's handoff offers (`git rebase -i --autosquash`) produces exactly this. The block prints `review scope: none` and sets `SCOPE_FROM="HEAD"`. Skip Phase 3 and everything in Phase 4 except the stamp, which re-stamps at `HEAD` (run Phase 3's one-line SHA block for the value its `REVIEWED_SHA=` line takes), and the handoff menu. The stamp certifies reviewed content, and a tree hash is that content exactly. If the stamped commit is not available locally, the tree cannot be compared, and the rewrite takes the whole-branch fallback above.
 
@@ -175,6 +231,19 @@ If you are running on a branch other than the user's working branch and `--pr` w
    ```
    Keep the line it prints for Phase 4. It names no lesson, and [references/state-backend.md](references/state-backend.md) § Lesson recall says what each line means.
 
+6. **Check whose lock this is.** This step runs in author-mode and loop-mode. A stamp flag another session wrote means two sessions may be acting on this branch. The block below prints a line only when the flag exists and its `by=` is not this session's id; when it does, tell the human who wrote it and when, and ask before going on. With nobody to ask, as on an AFK loop-mode run, stop and report the line.
+   ```bash
+   # Who left the review lock on this checkout? Prints nothing when this session did, or nobody did.
+   FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
+   if [ -f "$FLAG" ]; then
+     BY=$(sed -n 's/^by=//p' "$FLAG")
+     AT=$(sed -n 's/^at=//p' "$FLAG")
+     if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
+       echo "review lock: made by session ${BY:-unknown} at ${AT:-unknown}, not by this session"
+     fi
+   fi
+   ```
+
 **Reviewer-mode (`--pr <number>`):**
 
 1. **Fetch the PR and its diff:**
@@ -192,14 +261,24 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 **Skip this phase entirely in reviewer-mode** — the PR already exists, you did not author it, and rewriting someone else's PR body is out of scope. Proceed to Phase 3.
 
-**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared:
+**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared. So does a head commit that any remote branch holds, under any name, which is the case of a branch built on a pushed branch before its own first commit ([git-rev-list](https://git-scm.com/docs/git-rev-list) on `--not --remotes`). So does any commit in the range the fold in Phase 4's handoff would rewrite, which starts at the start the slice's work item records, or with none at the branch's fork point with the base (with the sibling slice's branch, for a stacked PR). The fold refuses on that range, so a branch built on a pushed branch with no recorded start reads as shared, and the fold is not offered there:
 
 ```bash
 # Is this branch shared? Prints "shared: yes" or "shared: no".
+SC="<this skill's directory>/references/sidecar.sh"
+W="<the W-<n> Phase 1 step 2 named, or empty>"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 1 step 3 was given; an earlier block's shell variable does not reach this one
+# Where the fold in Phase 4's handoff starts, found the way that block finds it.
+FOLD_RANGE=$(bash "$SC" range ${W:+"$W"}) && FOLD_START="${FOLD_RANGE%%..*}" || FOLD_START=
+if [ -n "$BASE_BRANCH" ] && [ "$FOLD_START" = "$(bash "$SC" base-ref 2>/dev/null)" ]; then
+  FOLD_START=$(git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" || git rev-parse --verify -q "$BASE_BRANCH^{commit}")
+fi
+C=HEAD   # the newest commit a fold would rewrite
+F=$(git merge-base "$FOLD_START" HEAD 2>/dev/null) || F=   # the fold rewrites every commit after this one; none found counts as shared
 B=$(git branch --show-current)
 R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
 HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ]; then SHARED=yes; else SHARED=no; fi
+if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ] || [ -z "$F" ] || [ "$(git rev-list --count "$C" --not "$F" --remotes)" != "$(git rev-list --count "$C" --not "$F")" ]; then SHARED=yes; else SHARED=no; fi
 echo "shared: $SHARED"
 ```
 
@@ -355,7 +434,16 @@ For non-trivial PRs, write a plain-language walkthrough: one paragraph of domain
 
 Consult `review-checklist.md` for the review dimensions and their violation patterns. That file is the roster — its `## N.` headings are the only place the set of dimensions is defined, and nothing here restates it. The dimensions run identically in all three modes; only the `diff` they read differs:
 
-- **Author-mode** — the local `git diff "$SCOPE_FROM...HEAD"`, where Phase 1 step 4 set `$SCOPE_FROM` to the left end of `sidecar.sh range` (a first review: the whole slice, which is `$BASE_REF` unless the work item records a start) or to the stamped SHA (a re-run whose head moved: the post-stamp delta). On a delta re-run each reviewer is also briefed with the findings the post-stamp commits claim to close and any breaker verdicts, and reads the tree around the delta as the checklist's context contract allows — the delta is the subject, not the reading limit.
+- **Author-mode** — the local `git diff "$SCOPE_FROM...HEAD"`, where Phase 1 step 4 set `$SCOPE_FROM` to the left end of `sidecar.sh range` (a first review: the whole slice, which is `$BASE_REF` unless the work item records a start) or to the stamped SHA (a re-run whose head moved: the post-stamp delta). When the scope line ends `read as its resolution`, the three-dot diff would carry the base's own changes, so the reviewers are handed this block's output instead: each ordinary commit's diff, then each merge's hand resolution.
+  ```bash
+  # Author-mode, scope line ending "read as its resolution": the diff Phase 3's reviewers are handed.
+  : "${SCOPE_FROM:?resolve it with the Phase 1 step 4 scope-decision block before running this}"
+  git log -p --oneline --first-parent --no-merges --no-ext-diff "$SCOPE_FROM..HEAD"
+  git log --reverse --first-parent --merges --format=%H "$SCOPE_FROM..HEAD" | while IFS= read -r C; do
+    git show --remerge-diff --no-ext-diff --format='%h %s (what was resolved by hand)' "$C"
+  done
+  ```
+  On a delta re-run each reviewer is also briefed with the findings the post-stamp commits claim to close and any breaker verdicts, and reads the tree around the delta as the checklist's context contract allows — the delta is the subject, not the reading limit.
 - **Reviewer-mode** — the `gh pr diff <pr-number>` output.
 - **Loop-mode** — the local `git diff "$BASE_REF...HEAD"` — the whole branch on every invocation; loop-mode does not take the delta scope. Loop-mode makes no commits, so on a later invocation the diff has moved only if the *operator* pushed fixes; the ledger, not a narrowed diff, is what stops the pass re-reporting settled findings.
 
@@ -572,10 +660,10 @@ fi
 [ -z "$W" ] || bash "$SC" work set "$W" reviewed_sha "$REVIEWED_SHA" || echo "stamped, but $REVIEWED_SHA is not recorded on $W" >&2
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
-mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
+mkdir -p "$PROJECT_DIR/.claude" && printf 'by=%s\nat=%s\nhead=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEWED_SHA" > "$PROJECT_DIR/.claude/.review-stamped"
 # A stamped branch carries no classification marker. /execute Step 6 removes
 # them, but a session that reached this review some other way may still hold one.
-rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
 ```
 
 Retry a failed write **once**, as on the PR-body path. `stamp write` replaces the branch's one stamp file rather than adding to it, so a retry cannot double-stamp.
@@ -626,7 +714,8 @@ rm -f "$BODY_FILE"
 # The stamp's local twin. `.claude/.review-stamped` is read by
 # .claude/hooks/enforce-classification.sh, which refuses implementation writes
 # while it exists and .claude/.fix-findings-active does not — so a post-review
-# fix has to go through /fix-findings or through a visible hand deletion.
+# fix has to go through /fix-findings, and any other edit through
+# `sidecar.sh stamp release`, which records its reason.
 # /closeout removes it at merge. The guard on the `gh pr edit` above is what
 # makes this line reachable only after the stamp write succeeded; without it the
 # touch would run on an aborted stamp too.
@@ -634,17 +723,17 @@ rm -f "$BODY_FILE"
 # expansion would resolve to "/.claude" — a silent no-write that leaves the
 # lock disengaged while everything above reports success.
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
-mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
+mkdir -p "$PROJECT_DIR/.claude" && printf 'by=%s\nat=%s\nhead=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEWED_SHA" > "$PROJECT_DIR/.claude/.review-stamped"
 # A stamped branch carries no classification marker. /execute Step 6 removes
 # them, but a session that reached this review some other way may still hold one.
-rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active"
+rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
 ```
 
 - **All three guards refuse rather than repair, and an abort is not a failed review.** Retry the fetch **once**, and a failed write **once** — the write sets the body from a file rather than appending, so a retry cannot double-stamp; if the second attempt also aborts, report it and hand back with the findings you already presented standing. The bound matters — an unbudgeted retry loop against a flaking API was an untimed contributor to the incident this guard came from. Losing a stamp costs one `/closeout` prompt about review currency. Overwriting a PR body costs the lineage, the `Closes #N` lines, and the `## Review Notes` `/execute` wrote — the things nothing else holds a copy of.
 - **`$SHORT_SHA` is pinned to 7 characters rather than taken from `git rev-parse --short`.** The abbreviation `--short` picks is variable-width and grows as a repo does, so a re-stamp could swap an 8-character short form for a 7-character one and leave the body one byte shorter than what was read — which the write guard would correctly refuse, on a write that was correct. Pinning the width is what makes the guard's "never shorter" premise true rather than nearly true.
 
 - **The HTML comment carries the full 40-character SHA — never the short form.** The two placeholders sit on adjacent lines and are not interchangeable: `<full-sha>` is the untruncated SHA Phase 3 printed, `<short-sha>` is the abbreviated form and belongs *only* in the visible prose line. `/closeout` compares the extracted marker against `headRefOid`, which is always 40 characters, so a short SHA in the comment can never compare equal — the gate would then report divergence on a PR whose head never moved, and a gate that cries wolf is one that gets clicked through. `/closeout`'s parser requires exactly 40 hex characters, so a swapped placeholder does not degrade quietly into a prefix match; it fails to parse. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this contract by round-tripping this template through `/closeout`'s own extraction, so the two skills cannot drift apart silently.
-- **Exactly one stamp per PR, and it names what a review read.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer. Fixes made in response to these findings move the head past the stamp, and stay past it until a re-run's Phase 3 reads them: the re-stamp names that run's printed SHA, never a later head. `/closeout` Step 2 makes that divergence *visible* at merge; the `.claude/.review-stamped` flag written above is what makes it *cost something* at the moment of the edit, by routing the fix to `/fix-findings` — a sub-agent that did not write the code — or forcing a deliberate hand deletion. The flag is local and transient; the stamp remains the durable record, and this skill remains its only writer.
+- **Exactly one stamp per PR, and it names what a review read.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer. Fixes made in response to these findings move the head past the stamp, and stay past it until a re-run's Phase 3 reads them: the re-stamp names that run's printed SHA, never a later head. `/closeout` Step 2 makes that divergence *visible* at merge; the `.claude/.review-stamped` flag written above is what makes it *cost something* at the moment of the edit, by routing the fix to `/fix-findings` — a sub-agent that did not write the code — or, for an edit that is not a finding, requiring a `stamp release` with its reason on record. The flag names who wrote it (`by=`, the session id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), when (`at=`, UTC), and the reviewed head (`head=`); an empty `by=` means the session could not be told. The hook reads only that the flag exists. The flag is local and transient; the stamp remains the durable record, and this skill remains its only writer.
 - **The stamp claims coverage over commits, not one whole-tree read.** Its own visible line says what it means: commits after the SHA have not been through the review dimensions. A re-run in delta scope (Phase 1 step 4) satisfies that claim for every commit up to the new head — the earlier review covered the commits up to the old stamp, this one covered the rest — so it re-stamps at the SHA its own Phase 3 printed, with the same template. Nothing in the block records the scope, deliberately: the block is width-pinned by the never-shorter guard above, and a scope field that shrank on the next whole-branch re-stamp would abort it. The scope is printed to the terminal in Phase 1 instead.
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
 - **Reviewer-mode does not stamp, and does not touch `.claude/.review-stamped`.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify. Locking a local checkout on the strength of comments nobody has posted would refuse edits on a branch the reviewer does not own.
@@ -657,7 +746,7 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 **Input:** PR #<pr-number>  (capture the lesson onto this PR branch, before /closeout merges)
 ```
 
-**Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta holds only what the block below counts as the captured lesson, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed:
+**Do not print it on the re-run `/compound` itself handed back.** That run is in delta scope (Phase 1 step 4) and its subject is the `docs/solutions/` entry — the lesson it would recommend capturing is the commit under review. Recommending it again would hand back to `/compound`, which would hand back here, and neither step has a counter to stop on; the "if — and only if — a durable lesson emerged" condition is what forecloses it, because a captured lesson has not emerged uncaptured. The discriminator is the delta, not memory of the session: when the post-stamp delta holds only what the block below counts as the captured lesson, this recommendation is already answered and the exit is `/closeout`. Read that off the delta the scope decision printed, and fill the block's `READ_AS_RESOLUTION` line from its scope line: a merge from the base after the stamp is read as its resolution here too, as in Phase 3's author-mode block, so the base's own files do not count as code in the delta:
 
 ```bash
 # This block runs in its own shell — $SCOPE_FROM was assigned in Phase 1 step
@@ -675,7 +764,21 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 # the exact inversion of the verdict, in the direction that suppresses the
 # recommendation on a delta carrying code. `grep -v` without `-q` is correct
 # under both.
-outside=$(git diff --name-only "$SCOPE_FROM...HEAD" | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
+READ_AS_RESOLUTION="<yes when Phase 1 step 4's scope line ended with 'read as its resolution', else empty>"
+if [ "$READ_AS_RESOLUTION" = yes ]; then
+  # The three-dot diff would carry the base's own changes: name what Phase 3's
+  # author-mode block hands over instead, each ordinary commit's files and each
+  # merge's hand resolution.
+  names=$(
+    git log --first-parent --no-merges --name-only --format=%n "$SCOPE_FROM..HEAD"
+    git log --first-parent --merges --format=%H "$SCOPE_FROM..HEAD" | while IFS= read -r C; do
+      git show --remerge-diff --no-ext-diff --name-only --format= "$C"
+    done
+  )
+else
+  names=$(git diff --name-only "$SCOPE_FROM...HEAD")
+fi
+outside=$(printf '%s\n' "$names" | sed '/^$/d' | grep -v -E '^(docs/solutions/|UBIQUITOUS_LANGUAGE\.md$)' || true)
 if [ -z "$outside" ]; then
   echo "delta is a /compound entry — do not re-recommend /compound; the exit is /closeout"
 fi
@@ -872,14 +975,15 @@ If a disagreement is anticipated (e.g., the finding overturns a deliberate choic
 - **May invoke:** `/ts-audit` on changed `.ts`/`.tsx` — in loop-mode only; author-mode and reviewer-mode mention it without invoking
 - **Comes next by default:** when a durable lesson emerged, `/compound` first — captured onto this open PR, then handed back here for a re-run over its commit, so the entry is reviewed and merged with the code it explains rather than merged unreviewed (skip when the work was a clean execution of a pre-shaped plan); then `/closeout` — confirm, merge the reviewed PR, re-anchor off the worktree before removing it, prune the merged branch, pull base, and verify a clean end state. When no lesson is worth capturing, go straight to `/closeout`. Lessons that only surface during or after merge can still be compounded post-merge as the fallback. In reviewer-mode, the user reviews and posts the draft comments; the next step is the author's response, not `/closeout`. In loop-mode, the ledger hands back to the operator: settle the `open` rows — fix, file, accept, or drop each one — then either re-invoke `/pre-merge --loop` on the updated diff or continue to `/compound`, the `/pre-merge` re-run it hands back to, and `/closeout` as above
 
-**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). It does not apply on AFK loop-mode runs — there is no user to ask, so print the exit readout and the handoff line instead. Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended — capture the lesson)**, **`/closeout` (merge and clean up — no lesson worth capturing)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then capture the lesson**. When no lesson emerged, lead with **→ `/closeout` (recommended — merge and clean up)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then merge**. Route those findings to `/qa` or `/request-refactor-plan` after the choice, rather than naming two skills in one label. When the human picks **Fix a finding on this branch first**, ask one follow-up question — which findings to fix — as a `multiSelect` `AskUserQuestion` with one option per open finding, labeled with its number and a one-line statement of its claim. A `survived` breaker verdict carried from an earlier `/fix-findings` round is its own option, beside the finding it is about. Pre-select nothing, mark no option recommended, and propose no set in the question text or anywhere before it ("S1 to S3?"): a suggested set that the human confirms is the model's choice with the human's signature on it, which is the boundary chrislacey89/skills#190 protects. The tool caps a question's options (`references/next-step-menu.md`), so with more than four open findings ask in number order, four per question and one question per turn, and take every selection together. Invoke `/fix-findings` with exactly the numbers they select, in number order, or in the order they typed them if they answered through "Other"; never fill the numbers in yourself, because choosing them is the human's disposition, not this skill's. On the sidecar backend, hand it the slice's `W-<n>` from Phase 1 step 2 as well, which `/fix-findings`' round count reads. For a stacked PR, hand it the sibling slice's branch too, the one in this skill's `BASE_BRANCH=` placeholders. The menu's own option labels name no finding numbers, so the menu choice never carries a set into the follow-up. Both menus carry the finding-disposition pair because it is a separate axis from the lesson: whether a finding can wait does not depend on whether a lesson emerged, and a reviewer holding both has to be able to say so. **On the re-run `/compound` handed back, take the no-lesson menu even though a lesson plainly emerged from the branch: it is already captured, in the commit this run just reviewed, so `/compound` is not an option to re-offer and `/closeout` leads.** Phase 4's delta test says so only when the post-stamp delta holds nothing but the captured lesson. When that commit also carries the mechanism `/compound` stages with the entry, the test is silent, and Phase 4's *"if — and only if — a durable lesson emerged"* condition is what decides it; the test's silence is not a reason to re-offer `/compound`. Within the finding-disposition pair the discriminator is *now vs. later*, not severity — so each label leads with the act that distinguishes it (*fix* vs. *hand off*) and closes with the step it returns to, rather than leading with the step both options share. In reviewer-mode the options differ — **Post the draft comments**, **Talk it through offline first (MMG Exchange)**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
+**Next-step menu.** This is a genuine branch point, so offer the next step as a menu rather than leaving the user to retype a command (see `references/next-step-menu.md`). It does not apply on AFK loop-mode runs — there is no user to ask, so print the exit readout and the handoff line instead. Present a single `AskUserQuestion` with the recommended step first, each option naming its outcome rather than just its skill. In author-mode, when a durable lesson emerged: **→ `/compound` in this PR (recommended — capture the lesson)**, **`/closeout` (merge and clean up — no lesson worth capturing)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then capture the lesson**. When no lesson emerged, lead with **→ `/closeout` (recommended — merge and clean up)**, **Fix a finding on this branch first (`/fix-findings <numbers>` — fresh fixer, then a `/pre-merge` re-run reads the post-stamp delta and re-stamps)**, **Hand the findings off as issues, then merge**. Route those findings to `/qa` or `/request-refactor-plan` after the choice, rather than naming two skills in one label. When the human picks **Fix a finding on this branch first**, ask one follow-up question — which findings to fix — as a `multiSelect` `AskUserQuestion` with one option per open finding, labeled with its number and a one-line statement of its claim. A `survived` breaker verdict carried from an earlier `/fix-findings` round is its own option, beside the finding it is about. Pre-select nothing, mark no option recommended, and propose no set in the question text or anywhere before it ("S1 to S3?"): a suggested set that the human confirms is the model's choice with the human's signature on it, which is the boundary chrislacey89/skills#190 protects. The tool caps a question's options (`references/next-step-menu.md`), so with more than four open findings ask in number order (Concerns first when one is open), four per question and one question per turn, and take every selection together. Invoke `/fix-findings` with exactly the numbers they select, in number order, or in the order they typed them if they answered through "Other"; never fill the numbers in yourself, because choosing them is the human's disposition, not this skill's. On the sidecar backend, hand it the slice's `W-<n>` from Phase 1 step 2 as well, which `/fix-findings`' round count reads. For a stacked PR, hand it the sibling slice's branch too, the one in this skill's `BASE_BRANCH=` placeholders. The menu's own option labels name no finding numbers, so the menu choice never carries a set into the follow-up. Both menus carry the finding-disposition pair because it is a separate axis from the lesson: whether a finding can wait does not depend on whether a lesson emerged, and a reviewer holding both has to be able to say so. **On a re-run after a fix round, what is still open decides the menu.** When this run reviewed a post-stamp delta and no Concern is open, do not offer **Fix a finding on this branch first** as a peer of the merge. Lead with **→ `/closeout` (recommended — merge; the remaining Suggestions and Observations stay listed in the Review Notes)**, then **Hand the remaining findings off as issues, then merge**, then **Fix one anyway (`/fix-findings <numbers>` — this starts another fixer, breaker and re-review)**, which is that same fix option, with the same follow-up question, under a label that states its cost. When a lesson emerged that is not captured yet, `/compound` stays on that menu, after `/closeout`. When a Concern is open, on this run or any other, whether this run raised it or an earlier one left it unfixed, `/closeout` does not lead and is not marked recommended: lead with **Fix a finding on this branch first**, and list Concerns before Suggestions in the follow-up question. This rule sets the order over both menus above, and while Phase 2 is deferred **Open the PR** takes `/closeout`'s place in it. The human still chooses every number. What changes is which option leads, and what its label says the choice costs. **On the re-run `/compound` handed back, take the no-lesson menu even though a lesson plainly emerged from the branch: it is already captured, in the commit this run just reviewed, so `/compound` is not an option to re-offer and `/closeout` leads unless a Concern is open.** Phase 4's delta test says so only when the post-stamp delta holds nothing but the captured lesson. When that commit also carries the mechanism `/compound` stages with the entry, the test is silent, and Phase 4's *"if — and only if — a durable lesson emerged"* condition is what decides it; the test's silence is not a reason to re-offer `/compound`. Within the finding-disposition pair the discriminator is *now vs. later*, not severity (an open Concern changes which option leads, as above, and not what either one means) — so each label leads with the act that distinguishes it (*fix* vs. *hand off*) and closes with the step it returns to, rather than leading with the step both options share. In reviewer-mode the options differ — **Post the draft comments**, **Talk it through offline first (MMG Exchange)**, **Revise a draft comment** — because the next move is the author's response, not `/closeout`. The platform's free-text "Other" option is the escape hatch — don't add one.
 
 **While Phase 2 is deferred, lead with the PR.** When this run deferred Phase 2, there is no PR for `/compound` to commit onto or `/closeout` to merge yet. Replace those options with **→ Open the PR (recommended — push the branch with `git push -u origin <branch>` so it has an upstream, and create the PR with Phase 2's body)**, and keep the finding-disposition pair. Once Phase 2 has run, offer the menu above.
 
-**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (Step 1, item 5) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and Phase 2's shared-branch block prints `shared: no`, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
+**Offer the fold when the branch is unpushed and carries reviewed fixups.** `/fix-findings`' own rule (the commit rule in Step 1's fixer brief) states when it commits a fix as `fixup! <subject>`. A fix commit helps the reviewer who checks that finding 3 was closed. It is noise for the next reader, who steps through the commits and meets the mistake in one commit and its correction several later. When this run stamped `HEAD`, a subject in Phase 1 step 3's `git log --oneline` output starts with `fixup! `, and Phase 2's shared-branch block prints `shared: no`, add **Fold the fixups into the commits they correct (then a `/pre-merge` re-run re-stamps without re-reviewing)**. Leave it out when a `/fix-findings` report handed to this run names a leftover `fixup!` commit, a `blocked` fix or one a fold trial skipped: the fold stops at that commit every time until it is reworded by hand, so the option could only abort. On a pick, run:
 
 ```bash
 SC="<this skill's directory>/references/sidecar.sh"
+W="<the W-<n> Phase 1 step 2 named, or empty>"
 BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 1 step 3 was given; an earlier block's shell variable does not reach this one
 fold_abort() { echo "fold aborted: ${1}; the branch is as it was" >&2; exit 1; }
 if [ -n "$BASE_BRANCH" ]; then
@@ -889,10 +993,18 @@ if [ -n "$BASE_BRANCH" ]; then
 else
   BASE_REF=$(bash "$SC" base-ref) || fold_abort "sidecar.sh base-ref failed"
 fi
-# Rebase onto the branch's own fork point, not the base's tip: a base that moved
-# since the branch forked would change the tree, and the re-run would then read
-# the fold as new content.
-FORK_POINT=$(git merge-base "$BASE_REF" HEAD) || fold_abort "no merge base with $BASE_REF"
+# Fold only this slice's commits: from the start its work item records, which
+# `range` prints, and otherwise from the branch's own fork point, not the base's
+# tip, since a base that moved since the branch forked would change the tree.
+FOLD_RANGE=$(bash "$SC" range ${W:+"$W"}) || fold_abort "sidecar.sh range failed"
+FOLD_START="${FOLD_RANGE%%..*}"
+[ -z "$BASE_BRANCH" ] || [ "$FOLD_START" != "$(bash "$SC" base-ref 2>/dev/null)" ] || FOLD_START="$BASE_REF"
+FORK_POINT=$(git merge-base "$FOLD_START" HEAD) || fold_abort "no merge base with $FOLD_START"
+# Never rewrite a commit that any remote branch holds, under any name.
+TOTAL=$(git rev-list --count HEAD --not "$FORK_POINT") || fold_abort "git rev-list failed"
+UNPUBLISHED=$(git rev-list --count HEAD --not "$FORK_POINT" --remotes) || fold_abort "git rev-list failed"
+[ "$TOTAL" = "$UNPUBLISHED" ] \
+  || fold_abort "$((TOTAL - UNPUBLISHED)) of the $TOTAL commits from ${FORK_POINT:0:12} are already on a remote branch; folding would rewrite published history"
 TREE_BEFORE=$(git rev-parse 'HEAD^{tree}')
 if ! GIT_SEQUENCE_EDITOR=: git rebase -q -i --autosquash "$FORK_POINT"; then
   # Only a stop with unmerged paths is a conflict; a signer or a hook that refused is not.
@@ -908,6 +1020,8 @@ elif [ "$(git rev-parse 'HEAD^{tree}')" = "$TREE_BEFORE" ]; then
 else
   echo "folded, but the tree changed: the re-run will review the whole branch" >&2
 fi
+LEFT=$(git log --format=%s HEAD --not "$FORK_POINT" | grep -c '^fixup! ' || true)
+[ "$LEFT" = 0 ] || echo "$LEFT fixup! commit(s) name a commit before this slice's start and were left as they are; reword each by hand" >&2
 ```
 
-An abort names its cause: a commit that `conflicted`, by SHA and subject, or a rebase that failed without a conflict (a signer or a hook refused, and git's own message is printed above it). Either way the branch is as it was. Otherwise, re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.
+The fold rebases only this slice's commits: from the start its work item records, and with no work item from the branch's fork point with the base. It refuses before it starts when any commit in that range is already on a remote branch, under any name, and says how many. A `fixup!` commit that names a commit before the slice's start is left in place, and the fold says so. An abort names its cause: a commit that `conflicted`, by SHA and subject, or a rebase that failed without a conflict (a signer or a hook refused, and git's own message is printed above it). Either way the branch is as it was. Otherwise, re-run `/pre-merge`. Phase 1 step 4 reads the fold as a history-only rewrite and re-stamps. Do not offer the fold once the branch has an upstream: those commits are shared, and *Pro Git* (Ch. 6) says to answer review on an open PR with new commits rather than force-push over it. A fold changes no merge strategy, and `/closeout` still squashes by default.

@@ -77,6 +77,13 @@ Read the path before writing to it (the file exists, empty, after the block). Wr
 
 Follow the plain-language walkthrough shape from `references/writing-for-humans.md`. The body should be readable in one pass by someone who has not seen this conversation.
 
+The doc opens with these two lines, filled in:
+
+```markdown
+Written: <date and time, with its time zone> by the session on branch <branch>.
+Reader: summarize this doc and confirm the next step with the human before changing anything.
+```
+
 Order:
 
 1. **Domain setup** — one paragraph. What part of the system or what problem this conversation has been about, in the user's own words.
@@ -94,17 +101,19 @@ Order:
 
 Revise once before saving. Apply the bar in `references/writing-for-humans.md`: strip clutter, cut warm-up, prefer active verbs and concrete nouns, ensure the lede earns the next sentence.
 
-Then confirm three things about the content. Each can be checked; none asks whether the doc reads well to you, which is the question the writer is least able to answer (Step 5 asks someone else).
+Then confirm five things about the content. Each can be checked; none asks whether the doc reads well to you, which is the question the writer is least able to answer (Step 5 asks someone else).
 
 - **Mutable external state was re-checked during this run.** A claim about a deploy, a secret, a database row, a live URL, or a test result was checked in this run, or the doc marks it "unverified". A fact recalled from earlier in the session is not checked.
 - **No pointer leads into session scratch.** Apart from the doc itself, nothing the doc points to lives under a session scratchpad or `$TMPDIR` path, because the next session may not have it. Move the content into the doc, or into a durable home, or drop the pointer.
 - **Every open decision is marked.** An approach the doc suggests is either marked "checked feasible", with what was checked, or "unverified".
+- **An absence claim names what was searched.** "X does not exist" is written as "no X in <the places searched>", or marked "unverified".
+- **A step that needs the human's yes is not a numbered step.** A push, a post, a merge, or any write to a shared system goes under an **Ask the human first** heading, never in the list the next session carries out.
 
 ### 5. Cold read (DO-CONFIRM)
 
 A handoff's reader lacks the writer's context by construction, and the writer is the one person who cannot see what is missing from it. So before printing the path, spawn one fresh, read-only sub-agent and give it only the doc's path. Ask it:
 
-- Could you start the **Next session** step from this doc and the files it points to, without asking the user anything? If not, what would you have to ask?
+- Could you start the **Next session** step from this doc and the files it points to, without asking the user anything beyond the confirmation its Reader line asks for? If not, what would you have to ask?
 - Separate **facts only the writing session holds** (an approach already ruled out, a value never written down, a step that was run) from **planning the next skill will do on its own** (which functions to add, which migration to write). List only the first kind; the second stays out, because the doc carries pointers, not plans.
 - Open each file, issue, or PR the doc points to. Where one contradicts the doc, or is stale against it, say which and how.
 
@@ -116,7 +125,9 @@ Skip the cold read only with a one-line reason written into the doc, for example
 
 ### 6. Print the path and exit
 
-Print the `mktemp` path, a one-line preview of the lede, and any stale pointers from Step 5. The user picks the path up and pastes it into a fresh session. `/handoff` does nothing else — it does not auto-invoke another skill, it does not modify any other artifact (stale ones are listed, not edited), it does not commit anything.
+Print the `mktemp` path, a one-line preview of the lede, and any stale pointers from Step 5. The user picks the path up and pastes it into a fresh session.
+
+After printing the path, say in one line that this session no longer makes decisions about the handed-off work. If the human keeps working here and something changes, write a new doc at a new path. Never edit a doc that has been printed, because another session may already have read it. `/handoff` does nothing else — it does not auto-invoke another skill, it does not modify any other artifact (stale ones are listed, not edited), it does not commit anything.
 
 ## Common Rationalizations
 
@@ -149,7 +160,9 @@ A run of `/handoff` is not complete until:
 - the body references durable artifacts by path, URL, or issue number — not by quoted content
 - the body includes a `**Next session:**` block in the conventional shape
 - every process the session left running was stopped or is listed in the doc
-- the Step 4 checks hold: mutable external state re-checked or marked "unverified", no pointer into session scratch, every open decision marked
+- the doc opens with its Written and Reader lines
+- the Step 4 checks hold: mutable external state re-checked or marked "unverified", no pointer into session scratch, every open decision marked, every absence claim naming what was searched, and no step that needs the human's yes in the numbered list
+- the message that printed the path said this session no longer decides about the handed-off work
 - the Step 5 cold read ran and its facts were fixed in the doc, or the doc states why it was skipped
 - the path was printed to the user
 - the doc was not staged, committed, or moved inside the repo

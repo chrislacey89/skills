@@ -502,6 +502,16 @@ assert_eq 'RANGE="$(bash "$SC" range ${W:+"$W"})" SLICE_FROM="${RANGE%%..*}"' "$
 # Two readers, one marker. /pre-merge's Phase 1 reader and /closeout's Step 2
 # reader must be the same sed script, or the scope decision and the merge gate
 # can disagree about which SHA was reviewed.
+resolver_reader_expr="$(grep -m1 "sed -n 's/[^']*reviewed-at" "$repo_root/init-pipeline/scripts/sidecar.sh" \
+    | grep -o "sed -n 's/[^']*reviewed-at[^']*'" \
+    | sed "s/^sed -n '//; s/'\$//" || true)"
+assert_eq "$reader_expr" "$resolver_reader_expr" \
+    "sidecar.sh stamp release reads the stamp with closeout's exact sed script"
+# The resolver reads that marker and never emits one: `stamp release` is not a
+# second writer (#807).
+assert_eq 0 "$(grep -cF "$writer_template" "$repo_root/init-pipeline/scripts/sidecar.sh" || true)" \
+    "sidecar.sh carries no marker template to write"
+
 assert_eq "$reader_expr" "$premerge_reader_expr" \
     "pre-merge Phase 1 step 4 reads the stamp with closeout's exact sed script (two readers, byte-identical)"
 

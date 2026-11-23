@@ -795,6 +795,100 @@ check "with jq missing, base-ref exits 1 and prints no ref" "1 " "$rc $out"
 contains "with jq missing, the refusal says why" "jq is required" "$(cat "$BR/err")"
 check "base-ref commits nothing in the project" "" "$(git -C "$BR/clone" status --porcelain)"
 
+section "base-ref: an open PR's base comes first, where gh may be asked (#810)"
+# gh is asked only where the pack already talks to GitHub: a github.com remote
+# and the github stamp backend. Everywhere else, and whenever gh is missing or
+# fails, base-ref answers exactly what it answered before, with nothing on stderr.
+PRB="$tmp/prb"; mkdir -p "$PRB/bin"
+PRB_ROOT="$PRB/sidecars"
+cat > "$PRB/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${PRB_GH_LOG:?}"
+[ -z "${PRB_GH_FAIL:-}" ] || exit 1
+filter=""; prev=""
+for a in "$@"; do
+    if [ "$prev" = -q ]; then filter="$a"; fi
+    prev="$a"
+done
+printf '%s' "${PRB_PR_JSON:?}" | jq -r "$filter"
+STUB
+chmod +x "$PRB/bin/gh"
+export PRB_GH_LOG="$PRB/gh.log"
+: > "$PRB_GH_LOG"
+mkrepo "$PRB/up"
+git -C "$PRB/up" branch develop
+git -C "$PRB/up" branch integration
+git clone -q "$PRB/up" "$PRB/clone"
+git -C "$PRB/clone" remote set-head origin develop >/dev/null
+git -C "$PRB/clone" remote set-url origin https://github.com/acme/prbase.git
+git -C "$PRB/clone" checkout -q -b feat
+# prb_run <PR json> <args...> — sidecar.sh with the stub gh first on PATH.
+prb_run() {
+    local json="$1"; shift
+    out="$(cd "$PRB/clone" && PATH="$PRB/bin:$PATH" PRB_PR_JSON="$json" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" bash "$SC" "$@" 2>"$PRB/err")"; rc=$?
+    err="$(cat "$PRB/err")"
+}
+calls() { grep -c . "$PRB_GH_LOG" || true; }
+open_pr='{"baseRefName":"integration","state":"OPEN"}'
+
+prb_run "$open_pr" base-ref
+check "an open PR's base: base-ref answers it" "0 origin/integration" "$rc $out"
+check "…with nothing on stderr" "" "$err"
+contains "…having asked gh pr view for the base and the state" "pr view --json baseRefName,state" "$(cat "$PRB_GH_LOG")"
+prb_run "$open_pr" base-ref --name
+check "an open PR's base, --name: the bare branch" "0 integration" "$rc $out"
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref --name --no-pr
+check "an open PR's base, --no-pr: the repo's base instead" "0 develop" "$rc $out"
+check "…and gh is never asked" 0 "$(calls)"
+prb_run "$open_pr" base-ref --no-pr --name
+check "--no-pr and --name in either order" "0 develop" "$rc $out"
+prb_run "$open_pr" base-ref --no-pr
+check "--no-pr without --name: the ref form" "0 origin/develop" "$rc $out"
+prb_run "$open_pr" base-ref --bogus
+check "an unknown flag is a usage error" 2 "$rc"
+prb_run '{"baseRefName":"integration","state":"CLOSED"}' base-ref
+check "a closed PR is ignored: the answer is today's" "0 origin/develop" "$rc $out"
+prb_run '{"baseRefName":"integration","state":"MERGED"}' base-ref
+check "a merged PR is ignored: the answer is today's" "0 origin/develop" "$rc $out"
+out="$(cd "$PRB/clone" && PATH="$PRB/bin:$PATH" PRB_GH_FAIL=1 PRB_PR_JSON="$open_pr" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" bash "$SC" base-ref 2>"$PRB/err")"; rc=$?
+check "gh fails (no PR, no auth, no network): the answer is today's" "0 origin/develop" "$rc $out"
+check "…with nothing on stderr" "" "$(cat "$PRB/err")"
+nogh="$PRB/nogh-bin"; mkdir -p "$nogh"
+for d in /opt/homebrew/bin /usr/local/bin /usr/bin /bin; do
+    [ -d "$d" ] || continue
+    for f in "$d"/*; do
+        b="${f##*/}"; [ "$b" = gh ] && continue
+        [ -e "$nogh/$b" ] || ln -s "$f" "$nogh/$b"
+    done
+done
+out="$(cd "$PRB/clone" && PATH="$nogh" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" bash "$SC" base-ref 2>"$PRB/err")"; rc=$?
+check "gh absent: the answer is today's" "0 origin/develop" "$rc $out"
+check "…with nothing on stderr" "" "$(cat "$PRB/err")"
+prb_run '{"baseRefName":"nowhere","state":"OPEN"}' base-ref
+check "an open PR whose base resolves to no ref: base-ref refuses rather than guessing" "1 " "$rc $out"
+contains "…and says to fetch it" "git fetch origin nowhere" "$err"
+
+git -C "$PRB/clone" remote set-url origin https://gitlab.com/acme/prbase.git
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref
+check "a GitLab remote: the answer is today's" "0 origin/develop" "$rc $out"
+check "…and gh is never asked" 0 "$(calls)"
+git -C "$PRB/clone" remote set-url origin https://github.com/acme/prbase.git
+
+prb_run "$open_pr" init --name prbase --mode owned --write sidecar --in-tree-path none --no-migrate-archive
+check "init an owned sidecar (fixture sanity)" 0 "$rc"
+prb_run "$open_pr" config set base_ref develop
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref
+check "owned on GitHub, with a declared base_ref: the open PR's base comes first" "0 origin/integration" "$rc $out"
+prb_run "$open_pr" config set mode guest
+: > "$PRB_GH_LOG"
+prb_run "$open_pr" base-ref
+check "a guest sidecar (the sidecar stamp backend): the declared base_ref, as today" "0 origin/develop" "$rc $out"
+check "…and gh is never asked" 0 "$(calls)"
+check "base-ref's PR read commits nothing in the project" "" "$(git -C "$PRB/clone" status --porcelain)"
+
 # fenced_with <file> <marker> — the first fenced block containing <marker>, dedented.
 fenced_with() {
     awk -v m="$2" '
@@ -818,6 +912,20 @@ bset '.base_ref = "develop"'
 q4out="$(cd "$BR/clone" && SKILL_KIT_SIDECAR_ROOT="$BR_ROOT" bash -c "$q4" 2>&1)"
 check "Q4 on an answered key does not ask" "base_ref=develop (answered; not asking)" "$q4out"
 contains "/init-pipeline writes the answer through config set base_ref" 'config set base_ref <branch>' "$(cat "$repo_root/init-pipeline/SKILL.md")"
+
+# Q4 run from a branch with an open PR, on an owned GitHub sidecar with base_ref
+# unasked: it offers the repo's base, never that one PR's target, in both shells.
+prb_run "$open_pr" config set mode owned
+prb_run "$open_pr" resolve
+PRB_SJ="$out/sidecar.json"
+jq 'del(.base_ref)' "$PRB_SJ" > "$PRB/sj" && mv "$PRB/sj" "$PRB_SJ"
+for sh in bash zsh; do
+    if ! command -v "$sh" >/dev/null 2>&1; then echo "SKIP: Q4 under $sh: $sh not installed"; continue; fi
+    : > "$PRB_GH_LOG"
+    q4out="$(cd "$PRB/clone" && PATH="$PRB/bin:$PATH" PRB_PR_JSON="$open_pr" SKILL_KIT_SIDECAR_ROOT="$PRB_ROOT" "$sh" -c "$q4" 2>&1)"
+    check "Q4 ($sh) with an open PR targeting integration offers the repo's base" "detected=develop" "$q4out"
+    check "Q4 ($sh) never asks gh for the PR's base" 0 "$(calls)"
+done
 
 # /pre-merge Phase 1 step 3 takes both forms from the verb and derives nothing itself.
 # shellcheck disable=SC2016 # the dollars are the skill's literal text
@@ -919,6 +1027,35 @@ prun "$PF/clone" config set verify.runtime_check ""
 prun "$PF/clone" profile
 contains "a declared-empty runtime_check renders as none" "  runtime_check: none" "$out"
 cp "$PF/pre-rc.json" "$PSJ"; git -C "$PF_ROOT/pf" commit -q -am "fixture: runtime_check unasked again"
+
+# test_changed (#806): a verify field like the others once it is declared, and
+# optional. Unset it prints nothing, not even under Not declared, because
+# verify.test stands in for it and /init-pipeline Q5 asks every key on that line.
+prun "$PF/clone" profile
+lacks "an unset test_changed is nowhere in the profile" "test_changed" "$out"
+unset_profile="$out"
+prun "$PF/clone" config set verify.test_changed "bash scripts/run-changed-suites.sh"
+check "config set verify.test_changed succeeds" 0 "$rc"
+check "the test_changed write is committed" "sidecar: set verify.test_changed" "$(git -C "$PF_ROOT/pf" log -1 --format=%s)"
+prun "$PF/clone" profile
+contains "profile prints a declared test_changed" "  test_changed: bash scripts/run-changed-suites.sh" "$out"
+check "a declared test_changed adds that one line and changes no other" "$unset_profile" "$(printf '%s\n' "$out" | grep -v '^  test_changed: ')"
+prun "$PF/clone" config get verify.test_changed
+check "config get reads test_changed back" "0 bash scripts/run-changed-suites.sh" "$rc $out"
+prun "$PF/clone" config set verify.test_changed "   "
+check "a whitespace-only test_changed is refused" 1 "$rc"
+prun "$PF/clone" config set verify.test_changed ""
+prun "$PF/clone" profile
+contains "a declared-empty test_changed renders as none" "  test_changed: none" "$out"
+cp "$PF/pre-rc.json" "$PSJ"; git -C "$PF_ROOT/pf" commit -q -am "fixture: test_changed unasked again"
+
+# Writer and reader: each verify key /fix-findings names is one config set takes,
+# and test_changed is among them.
+ff_keys="$(grep -oE 'verify\.[a-z_]+' "$repo_root/fix-findings/SKILL.md" | sed 's/^verify\.//' | sort -u)"
+contains "/fix-findings reads verify.test_changed" "test_changed" "$ff_keys"
+set_keys="$(sed -n 's/^VERIFY_FIELD_NAMES=(\(.*\))$/\1/p' "$SC" | tr ' ' '\n')"
+check "every verify key /fix-findings names is one config set accepts" "" \
+    "$(printf '%s\n' "$ff_keys" | while IFS= read -r k; do [ -z "$k" ] || grep -qxF -- "$k" <<<"$set_keys" || echo "$k"; done)"
 
 # Every refused hazard list writes nothing and commits nothing.
 cp "$PSJ" "$PF/good.json"
