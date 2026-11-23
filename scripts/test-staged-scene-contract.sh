@@ -488,7 +488,6 @@ JS
         planted_data() {
             jq -c '.views[0].steps += [{"c": "A caption that says </script> stays inside the data, and so does a second </script>.", "src": [], "asserted": true}]' <<<"$data"
         }
-        # escape_lt: every < on stdin written as <, the way §18 says.
         escape_lt() {
             sed 's/</\\u003c/g'
         }
