@@ -284,17 +284,19 @@ tdd_marker_remove="$(fenced_bash_block execute/SKILL.md 'rm -f.*tdd-active' || t
 
 # --- The flag paths, read out of the writers rather than typed here ----------
 
-stamp_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$stamp_write")"
+# Each flag is written with a redirect (#811), so its path is the target of the
+# last `> "…"` on the writing line.
+stamp_arg="$(sed -n 's|.*> "\([^"]*\)".*|\1|p' <<<"$stamp_write")"
 stamp_rel="${stamp_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
 # `if [ -z … ] || [ -z … ]` rather than `[ -n … ] && [ … ] || fatal`: the second
 # form is SC2015, which local shellcheck 0.11.0 accepts and the pinned CI 0.9.0
 # rejects. test-markdown-diff-attribute.sh:132 states the same house idiom for
 # the same reason.
 if [ -z "$stamp_rel" ] || [ "$stamp_rel" = "$stamp_arg" ]; then
-    fatal "could not read a project-relative stamp-flag path out of /pre-merge's touch"
+    fatal "could not read a project-relative stamp-flag path out of /pre-merge's flag write"
 fi
 
-fixer_arg="$(sed -n 's|.*touch "\([^"]*\)".*|\1|p' <<<"$fixer_write")"
+fixer_arg="$(sed -n 's|.*> "\([^"]*\)".*|\1|p' <<<"$fixer_write")"
 fixer_rel="${fixer_arg#*/}"                      # strip the $PROJECT_DIR/ prefix
 if [ -z "$fixer_rel" ] || [ "$fixer_rel" = "$fixer_arg" ]; then
     fatal "could not read a project-relative fixer-flag path out of /fix-findings' harness line"
@@ -1578,7 +1580,7 @@ release_round_trip() {  # $1 = shell, $2 = backend
     r_run() {
         ( cd "$r" && PATH="$release_bin:$PATH" GH_BODY="$body" GIT_CONFIG_GLOBAL="$sc_gitconfig" \
             SKILL_KIT_SIDECAR_ROOT="$root" SKILL_KIT_RESEARCH_ARCHIVE="$scratch/archive" \
-            CLAUDE_PROJECT_DIR="$r" "$@" )
+            CLAUDE_PROJECT_DIR="$r" CLAUDE_CODE_SESSION_ID="session-$sh-$backend" "$@" )
     }
     # Everything a refused release must leave as it was.
     r_state() {
@@ -1626,6 +1628,12 @@ release_round_trip() {  # $1 = shell, $2 = backend
 
     rc=0; r_stamp "$stamped" || rc=$?
     assert_eq 0 "$rc" "$at the stamp block runs"
+    # #811: the flag says who stamped and when, and which commit the review read.
+    assert_eq "by=session-$sh-$backend|head=$stamped" \
+        "$(grep '^by=' "$r/$stamp_rel" 2>/dev/null || true)|$(grep '^head=' "$r/$stamp_rel" 2>/dev/null || true)" \
+        "$at the stamp flag names this session and the reviewed head"
+    assert_eq 1 "$(grep -cE '^at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$r/$stamp_rel" 2>/dev/null || true)" \
+        "$at the stamp flag carries the time, in UTC"
     r_hook
     assert_eq 2 "$hook_status" "$at stamped: the hook refuses"
 
@@ -1700,6 +1708,72 @@ release_round_trip() {  # $1 = shell, $2 = backend
         assert_eq "" "$(find "$root/release/reviews" -type f)" "$at stamp clear takes the release record with the stamp"
     fi
 }
+
+# -----------------------------------------------------------------------------
+
+section "13. a flag says who made it and when, and a second session is told (#811)"
+
+# /fix-findings' harness line writes its flag once and never over another
+# session's, and /pre-merge's owner block names a stamp flag this session did
+# not write. Both run as written, in both shells. The session id is the one
+# Claude Code sets for Bash commands, CLAUDE_CODE_SESSION_ID.
+owner_block="$(awk '
+    /^   # Who left the review lock on this checkout\?/ { on = 1 }
+    on && /^   ```$/                                    { exit }
+    on                                                  { print substr($0, 4) }
+' pre-merge/SKILL.md)"
+[ -n "$owner_block" ] || fatal "no owner block found in pre-merge/SKILL.md Phase 1 step 4"
+
+owner_case() {  # $1 = shell
+    local sh="$1" o="$scratch/owner-$1" out first
+    mkdir -p "$o"
+    git init -q "$o"
+    GIT_CONFIG_GLOBAL="$sc_gitconfig" git -C "$o" commit -q --allow-empty --no-verify -m "owner $o"
+    # shellcheck disable=SC2329,SC2317  # called by name below
+    o_run() {  # $1 = session id, $2 = command text
+        ( cd "$o" && CLAUDE_PROJECT_DIR="$o" CLAUDE_CODE_SESSION_ID="$1" "$sh" -c "$2" 2>&1 )
+    }
+
+    out="$(o_run session-a "$fixer_write")"
+    first="$(cat "$o/$fixer_rel" 2>/dev/null || true)"
+    assert_eq "by=session-a|head=$(git -C "$o" rev-parse HEAD)" \
+        "$(grep '^by=' <<<"$first" || true)|$(grep '^head=' <<<"$first" || true)" \
+        "[$sh] the harness line writes the fixer flag with this session and HEAD"
+    assert_eq 1 "$(grep -cE '^at=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' <<<"$first" || true)" \
+        "[$sh] …and the time, in UTC"
+    out="$(o_run session-b "$fixer_write")"
+    assert_eq "$first" "$(cat "$o/$fixer_rel" 2>/dev/null || true)" \
+        "[$sh] a second session's load leaves the first session's flag as it was"
+    case "$out" in
+        *"by=session-a"*) assert_eq ok ok "[$sh] …and prints it, so the second session can see whose lock it is" ;;
+        *) assert_eq "the flag's by=session-a line" "$out" "[$sh] …and prints it, so the second session can see whose lock it is" ;;
+    esac
+
+    rm -f "$o/$stamp_rel"
+    assert_eq "" "$(o_run session-a "$owner_block")" "[$sh] no stamp flag: the owner block prints nothing"
+    mkdir -p "$o/.claude"
+    printf 'by=session-a\nat=2026-11-20T10:00:00Z\nhead=0\n' > "$o/$stamp_rel"
+    assert_eq "" "$(o_run session-a "$owner_block")" "[$sh] this session's stamp flag: the owner block prints nothing"
+    out="$(o_run session-b "$owner_block")"
+    case "$out" in
+        *"session-a"*"2026-11-20T10:00:00Z"*) assert_eq ok ok "[$sh] another session's stamp flag: the owner block names who and when" ;;
+        *) assert_eq "a line naming session-a and its time" "$out" "[$sh] another session's stamp flag: the owner block names who and when" ;;
+    esac
+    : > "$o/$stamp_rel"
+    out="$(o_run session-a "$owner_block")"
+    case "$out" in
+        *unknown*) assert_eq ok ok "[$sh] an empty flag from before #811: the owner block says it cannot tell" ;;
+        *) assert_eq "a line saying the maker is unknown" "$out" "[$sh] an empty flag from before #811: the owner block says it cannot tell" ;;
+    esac
+}
+owner_case bash
+if command -v zsh >/dev/null 2>&1; then
+    owner_case zsh
+elif [ -n "${CI:-}" ]; then
+    assert_eq "zsh on PATH" "zsh absent" "the owner rows ran under zsh (CI is set, so a missing zsh fails)"
+else
+    printf '  SKIP zsh is not on PATH, so the owner rows ran under bash only\n'
+fi
 
 release_round_trip bash github
 release_round_trip bash sidecar

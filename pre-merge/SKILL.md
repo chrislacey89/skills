@@ -218,6 +218,19 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
    **On a delta re-run, the delta is the subject and the tree is still readable.** Brief each Phase 3 reviewer with the findings the post-stamp commits claim to close — the earlier readout in this session, the ledger if loop-mode wrote one (where [references/state-backend.md](references/state-backend.md) § Where the review's records live says), or the commit messages themselves — with the `/fix-findings` breaker verdicts when there are any, and with the `bash "$SC" profile` output, verbatim, that Phase 3's contract hands every reviewer. The first question per commit is whether the fix closes its finding at every site the finding named, which is the Fix Completeness dimension; the second is what the new text contradicts nearby, which is the census in `references/restated-claims.md`. Both need the surrounding tree, and the checklist's context contract already grants it; the scope narrows what the review is *about*, never what the reviewer may open.
 
+   **Check whose lock this is.** A stamp flag another session wrote means two sessions may be acting on this branch. The block below prints a line only when the flag exists and its `by=` is not this session's id; when it does, tell the human who wrote it and when, and ask before going on. With nobody to ask, as on an AFK loop-mode run, stop and report the line.
+   ```bash
+   # Who left the review lock on this checkout? Prints nothing when this session did, or nobody did.
+   FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
+   if [ -f "$FLAG" ]; then
+     BY=$(sed -n 's/^by=//p' "$FLAG")
+     AT=$(sed -n 's/^at=//p' "$FLAG")
+     if [ -z "$BY" ] || [ "$BY" != "$CLAUDE_CODE_SESSION_ID" ]; then
+       echo "review lock: made by session ${BY:-unknown} at ${AT:-unknown}, not by this session"
+     fi
+   fi
+   ```
+
 5. **Read whether this branch has a lesson lookup on record.** `/execute` looks up the lessons that point at a slice's files, and the lookup command records each run in the sidecar itself; [references/state-backend.md](references/state-backend.md) § Lesson recall lists the cases where a run that happened goes unrecorded. This reads that record and writes nothing:
    <!-- sidecar-read: pre-merge-lessons -->
    ```bash
@@ -629,7 +642,7 @@ fi
 [ -z "$W" ] || bash "$SC" work set "$W" reviewed_sha "$REVIEWED_SHA" || echo "stamped, but $REVIEWED_SHA is not recorded on $W" >&2
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
-mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
+mkdir -p "$PROJECT_DIR/.claude" && printf 'by=%s\nat=%s\nhead=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEWED_SHA" > "$PROJECT_DIR/.claude/.review-stamped"
 # A stamped branch carries no classification marker. /execute Step 6 removes
 # them, but a session that reached this review some other way may still hold one.
 rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
@@ -692,7 +705,7 @@ rm -f "$BODY_FILE"
 # expansion would resolve to "/.claude" — a silent no-write that leaves the
 # lock disengaged while everything above reports success.
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}"
-mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.review-stamped"
+mkdir -p "$PROJECT_DIR/.claude" && printf 'by=%s\nat=%s\nhead=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$REVIEWED_SHA" > "$PROJECT_DIR/.claude/.review-stamped"
 # A stamped branch carries no classification marker. /execute Step 6 removes
 # them, but a session that reached this review some other way may still hold one.
 rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$PROJECT_DIR/.claude/.lfg-active" "$PROJECT_DIR/.claude/.post-review-edit"
@@ -702,7 +715,7 @@ rm -f "$PROJECT_DIR/.claude/.tdd-active" "$PROJECT_DIR/.claude/.tdd-skipped" "$P
 - **`$SHORT_SHA` is pinned to 7 characters rather than taken from `git rev-parse --short`.** The abbreviation `--short` picks is variable-width and grows as a repo does, so a re-stamp could swap an 8-character short form for a 7-character one and leave the body one byte shorter than what was read — which the write guard would correctly refuse, on a write that was correct. Pinning the width is what makes the guard's "never shorter" premise true rather than nearly true.
 
 - **The HTML comment carries the full 40-character SHA — never the short form.** The two placeholders sit on adjacent lines and are not interchangeable: `<full-sha>` is the untruncated SHA Phase 3 printed, `<short-sha>` is the abbreviated form and belongs *only* in the visible prose line. `/closeout` compares the extracted marker against `headRefOid`, which is always 40 characters, so a short SHA in the comment can never compare equal — the gate would then report divergence on a PR whose head never moved, and a gate that cries wolf is one that gets clicked through. `/closeout`'s parser requires exactly 40 hex characters, so a swapped placeholder does not degrade quietly into a prefix match; it fails to parse. In the Skill Kit repo, `scripts/test-review-currency-marker.sh` pins this contract by round-tripping this template through `/closeout`'s own extraction, so the two skills cannot drift apart silently.
-- **Exactly one stamp per PR, and it names what a review read.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer. Fixes made in response to these findings move the head past the stamp, and stay past it until a re-run's Phase 3 reads them: the re-stamp names that run's printed SHA, never a later head. `/closeout` Step 2 makes that divergence *visible* at merge; the `.claude/.review-stamped` flag written above is what makes it *cost something* at the moment of the edit, by routing the fix to `/fix-findings` — a sub-agent that did not write the code — or, for an edit that is not a finding, requiring a `stamp release` with its reason on record. The flag is local and transient; the stamp remains the durable record, and this skill remains its only writer.
+- **Exactly one stamp per PR, and it names what a review read.** Re-running `/pre-merge` replaces the existing block rather than appending a second one. `/closeout` reads the stamp as a single value, and two stamps make "which SHA was reviewed" ambiguous — with the stale one being the more dangerous answer. Fixes made in response to these findings move the head past the stamp, and stay past it until a re-run's Phase 3 reads them: the re-stamp names that run's printed SHA, never a later head. `/closeout` Step 2 makes that divergence *visible* at merge; the `.claude/.review-stamped` flag written above is what makes it *cost something* at the moment of the edit, by routing the fix to `/fix-findings` — a sub-agent that did not write the code — or, for an edit that is not a finding, requiring a `stamp release` with its reason on record. The flag names who wrote it (`by=`, the session id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands, per its [environment variables](https://code.claude.com/docs/en/env-vars)), when (`at=`, UTC), and the reviewed head (`head=`); an empty `by=` means the session could not be told. The hook reads only that the flag exists. The flag is local and transient; the stamp remains the durable record, and this skill remains its only writer.
 - **The stamp claims coverage over commits, not one whole-tree read.** Its own visible line says what it means: commits after the SHA have not been through the review dimensions. A re-run in delta scope (Phase 1 step 4) satisfies that claim for every commit up to the new head — the earlier review covered the commits up to the old stamp, this one covered the rest — so it re-stamps at the SHA its own Phase 3 printed, with the same template. Nothing in the block records the scope, deliberately: the block is width-pinned by the never-shorter guard above, and a scope field that shrank on the next whole-branch re-stamp would abort it. The scope is printed to the terminal in Phase 1 instead.
 - **Keep both halves.** The HTML comment is what `/closeout` greps for; the visible line is what tells a human skimming the PR why an unfamiliar SHA is sitting in the body.
 - **Reviewer-mode does not stamp, and does not touch `.claude/.review-stamped`.** It never creates or rewrites the PR body (Phase 2 is skipped for the same reason), and its findings are drafts the user has not yet posted — nothing has been reviewed *into* that PR to certify. Locking a local checkout on the strength of comments nobody has posted would refuse edits on a branch the reviewer does not own.

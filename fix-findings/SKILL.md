@@ -13,7 +13,9 @@ sources:
 
 # Fix Findings
 
-!`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" && mkdir -p "$PROJECT_DIR/.claude" && touch "$PROJECT_DIR/.claude/.fix-findings-active" && echo "fix-findings marker created at $PROJECT_DIR/.claude/.fix-findings-active — post-review edit lock open for this run"`
+!`PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}" && mkdir -p "$PROJECT_DIR/.claude" && { [ -e "$PROJECT_DIR/.claude/.fix-findings-active" ] || printf 'by=%s\nat=%s\nhead=%s\n' "$CLAUDE_CODE_SESSION_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(git rev-parse HEAD 2>/dev/null)" > "$PROJECT_DIR/.claude/.fix-findings-active"; } && echo "fix-findings marker at $PROJECT_DIR/.claude/.fix-findings-active — post-review edit lock open for this run; $(tr '\n' ' ' < "$PROJECT_DIR/.claude/.fix-findings-active")"`
+
+**Whose run is this?** The line above prints the fix-run flag's `by=`, `at=` and `head=` lines, and leaves a flag that is already there as it was. `by=` is the session id Claude Code sets as `CLAUDE_CODE_SESSION_ID` for Bash commands ([environment variables](https://code.claude.com/docs/en/env-vars)). When it is not this session's, or is empty, another session may be running this skill on the branch: tell the human who opened it and when, and ask before going on. If they say stop, stop without Step 3's removal, because the flag is that session's.
 
 Take the review findings a human has already chosen, have a **fresh** sub-agent
 write each fix, have a **second** fresh sub-agent try to break it, and report
