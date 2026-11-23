@@ -18,7 +18,9 @@
 #     pinned image lints, and the exit is the lint's result (0 or nonzero,
 #     never 3); the local release is not run
 #   - Docker installed with a daemon that does not answer (fails fast, or
-#     hangs) falls through to the local fallback within a bound
+#     hangs) falls through to the local fallback within a bound; with a slow
+#     `sleep` standing in for a loaded machine, the bound is still measured
+#     in wall-clock time, not in polling rounds
 #   - first use, image not yet present: a successful pull lets the pinned image
 #     lint; a pull that succeeds but yields another release falls through to the
 #     local fallback (exit 3), so the version check runs after a pull too; a
@@ -112,6 +114,7 @@ done
 # the options the lint's `docker run` passed before the image name, so a
 # Docker-tier arm can assert the container's isolation flags.
 lint_log="$sandbox/lint.log"
+slow_sleep=0
 
 # make_stubs <dir> <docker-mode> <cached-mode> <local-version>
 #   docker-mode:  none | ok | ok-findings | daemon-down | daemon-hang | wrong-version
@@ -126,6 +129,19 @@ make_stubs() {
     rm -rf "$dir"
     mkdir -p "$dir/bin" "$dir/cache"
     for f in "$realbin"/*; do ln -s "$(readlink "$f")" "$dir/bin/$(basename "$f")"; done
+
+    # With slow_sleep=1, sleep turns the script's 0.1s polling pause into 0.5s
+    # and passes any other length through (the hanging stub's 30s stays 30s).
+    # It stands in for a loaded machine, where each round costs more than the
+    # pause it asks for.
+    if [ "$slow_sleep" = 1 ]; then
+        rm -f "$dir/bin/sleep"
+        cat > "$dir/bin/sleep" <<STUB
+#!/bin/sh
+if [ "\$1" = 0.1 ]; then exec "$(readlink "$realbin/sleep")" 0.5; fi
+exec "$(readlink "$realbin/sleep")" "\$@"
+STUB
+    fi
 
     # curl always fails: no arm may reach the network.
     printf '#!/bin/sh\nexit 22\n' > "$dir/bin/curl"
@@ -381,6 +397,20 @@ assert_eq local "$log" "the local release linted"
 # tighter ceiling fails on a loaded machine, and an unbounded check is already
 # caught above, since the stub answering would let Docker lint.
 if [ "$elapsed" -lt 29 ]; then ok "returned in ${elapsed}s (the stub hangs for 30s)"; else bad "bounded daemon check" "took ${elapsed}s"; fi
+
+section "Docker daemon hangs on a slow machine: the bound is wall-clock time, not polling rounds"
+# Every 0.1s polling pause takes 0.5s here. A bound read from the clock still
+# kills the check after 5-6s, so the arm returns in about 7s; a bound that
+# counts 50 rounds would wait about 25s. The 15s ceiling sits between the two
+# with room on both sides, so load on the machine does not turn it red. The
+# floor is the bound's own promise (at least 5s); load only makes a run longer.
+slow_sleep=1
+run_case daemon-hang none 0.11.0 strict clean
+slow_sleep=0
+assert_eq 3 "$rc" "exit 3"
+assert_eq local "$log" "the local release linted"
+if [ "$elapsed" -lt 15 ]; then ok "returned in ${elapsed}s with slow polling (a 50-round count takes about 25s)"; else bad "wall-clock bound under slow polling" "took ${elapsed}s"; fi
+if [ "$elapsed" -ge 5 ]; then ok "waited at least the 5s bound (${elapsed}s)"; else bad "bound at least 5s" "returned in ${elapsed}s"; fi
 
 # --- 6. No instrument at all ----------------------------------------------------
 section "no pinned binary, no Docker, no local shellcheck: exit 1, not 0 or 3"
