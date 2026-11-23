@@ -23,7 +23,9 @@
 #   - Docker installed with a daemon that does not answer (fails fast, or
 #     hangs) falls through to the local fallback within a bound
 #   - first use, image not yet present: a successful pull lets the pinned image
-#     lint; a failed pull skips the Docker tier without running the image and
+#     lint; a pull that succeeds but yields another release falls through to the
+#     local fallback (exit 3), so the version check runs after a pull too; a
+#     failed pull skips the Docker tier without running the image and
 #     falls through to the local fallback (exit 3). The stub docker only records
 #     the pull; no arm contacts a registry
 #
@@ -101,8 +103,10 @@ lint_log="$sandbox/lint.log"
 
 # make_stubs <dir> <docker-mode> <cached-mode> <local-version>
 #   docker-mode:  none | ok | ok-findings | daemon-down | daemon-hang | wrong-version
-#                 | absent-pull-ok | absent-pull-fails
-#                 (absent-*: `image inspect` exits 1 until a pull succeeds)
+#                 | absent-pull-ok | absent-pull-wrong-version | absent-pull-fails
+#                 (absent-*: `image inspect` exits 1 until a pull succeeds;
+#                 wrong-version and absent-pull-wrong-version: the image
+#                 reports 0.0.1, not the pinned release)
 #   cached-mode:  none | runnable | unrunnable
 #   local-version: version the PATH shellcheck reports, or "none"
 make_stubs() {
@@ -125,10 +129,15 @@ STUB
     fi
 
     if [ "$docker_mode" != none ]; then
-        local image_v="$pinned" lint_exit_on_finding=1
-        [ "$docker_mode" = wrong-version ] && image_v="0.0.1"
+        local image_v="$pinned" lint_exit_on_finding=1 pull_ok=0
+        if [ "$docker_mode" = wrong-version ] || [ "$docker_mode" = absent-pull-wrong-version ]; then
+            image_v="0.0.1"
+        fi
+        if [ "$docker_mode" = absent-pull-ok ] || [ "$docker_mode" = absent-pull-wrong-version ]; then
+            pull_ok=1
+        fi
         # The image is present unless the mode starts absent; only a pull in
-        # absent-pull-ok creates it. A run without it stands in for docker's own
+        # absent-pull-ok or absent-pull-wrong-version creates it. A run without it stands in for docker's own
         # implicit pull, so it is logged and fails rather than answering.
         local present="$dir/image-present"
         case "$docker_mode" in absent-*) ;; *) : > "$present" ;; esac
@@ -143,7 +152,7 @@ case "\$1" in
   image) [ -f "$present" ] && exit 0; exit 1 ;;
   pull)
     echo pull >> "$lint_log"
-    [ "\$mode" = absent-pull-ok ] && { : > "$present"; exit 0; }
+    [ "$pull_ok" = 1 ] && { : > "$present"; exit 0; }
     echo "stub docker: pull failed (this suite never contacts a registry)" >&2; exit 1 ;;
   run)
     if [ ! -f "$present" ]; then echo run-without-image >> "$lint_log"; echo "stub docker: Unable to find image" >&2; exit 125; fi
@@ -293,6 +302,12 @@ run_case absent-pull-ok none 0.11.0 strict clean
 assert_eq 0 "$rc" "exit 0"
 assert_eq "pull docker" "$log" "the image was pulled, then it linted; the local release did not"
 assert_contains "$err" "pulling koalaman/shellcheck:v$pinned (first use)" "stderr names the first-use pull"
+
+section "first use, image absent, pull succeeds but the image is not the pinned release: the local fallback exits 3"
+run_case absent-pull-wrong-version none 0.11.0 strict clean
+assert_eq 3 "$rc" "exit 3"
+assert_eq "pull local" "$log" "the image was pulled, its version was checked, and the local release linted"
+assert_contains "$err" "reports version '0.0.1', not $pinned" "stderr names the pulled image's wrong version"
 
 section "first use, image absent, pull fails: skip the Docker tier, then the local fallback exits 3"
 run_case absent-pull-fails none 0.11.0 strict clean
