@@ -113,6 +113,7 @@ An id is never a bare `#N`. A `#N` names a GitHub issue or PR, and on a guest re
 | Record a lesson | nothing; `/compound` skips it | `work lesson W-n <lesson-path>` (adds the path once; works on a closed item) |
 | Close | `gh issue close <n>` | `work close W-n [--superseded-by W-m]` |
 | List | `gh issue list …` | `work list [--kind] [--parent W-n] [--branch <name>] [--unblocked] [--state open\|built\|closed\|all]` (ids, one per line; open by default, and `open` lists every item not closed, `built` among them) |
+| Read a branch's PR mode | nothing; Stamp only exists only on the `sidecar` stamp backend | `work pr-mode [W-n] [--branch <name>]` (prints `none W-n` or `pr`; an empty `<name>` reads no branch; read-only) |
 
 Three rules differ from the GitHub side:
 
