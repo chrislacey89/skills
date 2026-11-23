@@ -1801,7 +1801,7 @@ fi
 # a release that names another one prints "lock released" while the stamp's
 # flag stays, and leaves a .post-review-edit the re-stamp never removes.
 release_subdir() {
-    local r="$scratch/release-subdir" body="$scratch/release-subdir.body" sha out rc
+    local r="$scratch/release-subdir" body="$scratch/release-subdir.body" sha out rc got
     git init -q -b main "$r"
     printf '.claude/\n' > "$r/.git/info/exclude"
     mkdir -p "$r/app"
@@ -1827,10 +1827,9 @@ release_subdir() {
         CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp release feature --reason "copy" 2>&1 )" || rc=$?
     assert_eq 0 "$rc" "subdirectory project dir: release exits 0 ($out)"
     assert_eq "-|released|-|-" "$(flags)" "subdirectory project dir: release swaps the stamp's own flag"
-    assert_eq "$sha" \
-        "$( cd "$r/app" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
-            CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp released feature 2>/dev/null || true )" \
-        "subdirectory project dir: stamp released reads the release"
+    got="$( cd "$r/app" && GIT_CONFIG_GLOBAL="$sc_gitconfig" SKILL_KIT_SIDECAR_ROOT="$r.sidecars" \
+        CLAUDE_PROJECT_DIR="$r/app" bash "$sidecar_sh" stamp released feature 2>/dev/null )" || true
+    assert_eq "$sha" "$got" "subdirectory project dir: stamp released reads the release"
     ( cd "$r/app" && REVIEWED_SHA="$sha" CLAUDE_PROJECT_DIR="$r/app" CLAUDE_CODE_SESSION_ID=s bash -c "$stamp_write" ) \
         || assert_eq 0 1 "subdirectory project dir: the re-stamp's flag write runs"
     assert_eq "stamped|-|-|-" "$(flags)" "subdirectory project dir: the re-stamp leaves no released flag in either directory"
