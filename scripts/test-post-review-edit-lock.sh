@@ -1671,7 +1671,15 @@ release_round_trip() {  # $1 = shell, $2 = backend
         "$at the marker holds the time, in UTC"
     assert_eq "$stamped" "$(r_run bash "$sidecar_sh" stamp released feature 2>/dev/null || true)" \
         "$at stamp released prints the released head"
+    assert_eq 'the user asked for a "copy" change' "$(r_run bash "$sidecar_sh" stamp released feature --reason 2>/dev/null || true)" \
+        "$at stamp released --reason prints the release's reason"
     if [ "$backend" = sidecar ]; then
+        # /execute Step 6 removes the flag before /pre-merge reads the reason.
+        cp "$r/$released_rel" "$r/.claude/flag.keep"
+        rm -f "$r/$released_rel"
+        assert_eq 'the user asked for a "copy" change' "$(r_run bash "$sidecar_sh" stamp released feature --reason 2>/dev/null || true)" \
+            "$at the reason outlives the flag: it is read from the committed record"
+        mv "$r/.claude/flag.keep" "$r/$released_rel"
         assert_eq "feature $stamped the user asked for a \"copy\" change" \
             "$(jq -r '"\(.branch) \(.head) \(.reason)"' "$root/release/reviews/released/feature.json" 2>/dev/null || true)" \
             "$at the record beside the stamp holds branch, head and reason"
@@ -1701,6 +1709,8 @@ release_round_trip() {  # $1 = shell, $2 = backend
     assert_eq 2 "$hook_status" "$at re-stamped: the hook refuses again"
     assert_eq "" "$(r_run bash "$sidecar_sh" stamp released feature 2>/dev/null || echo failed)" \
         "$at the re-stamp spends the release record"
+    assert_eq "" "$(r_run bash "$sidecar_sh" stamp released feature --reason 2>/dev/null || echo failed)" \
+        "$at the re-stamp spends the release's reason"
     if [ "$backend" = sidecar ]; then
         assert_eq "" "$(git -C "$root/release" status --porcelain)" "$at …and commits that in the sidecar"
         r_run bash "$sidecar_sh" stamp release feature --reason "again" >/dev/null 2>&1 || true

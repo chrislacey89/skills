@@ -36,7 +36,7 @@
 #   sidecar.sh backend <prds|slices|stamp>   (prints github or sidecar; github when no sidecar resolves)
 #   sidecar.sh stamp write <branch> <sha> [--base-ref <ref>]
 #   sidecar.sh stamp read <branch>   (prints the 40-hex SHA, or nothing with exit 0)
-#   sidecar.sh stamp released <branch>   (prints the head stamp release recorded, or nothing with exit 0)
+#   sidecar.sh stamp released <branch> [--reason]   (prints the head stamp release recorded, or with --reason its reason; nothing with exit 0)
 #   sidecar.sh stamp clear <branch>
 #   sidecar.sh stamp release <branch> --reason <why>   (opens the post-review edit lock on record, on either backend; never writes a stamp)
 #   sidecar.sh fixrun record <branch> <run-id> <sha> [--thread <url>] [--work <W-n>]
@@ -1689,23 +1689,30 @@ lock_project() {
     fi
 }
 
-# stamp_released <branch>: the head the branch's lock was released at, or nothing.
+# stamp_released <branch> [reason]: the head the branch's lock was released
+# at, or with "reason" the reason it was released for, or nothing. On the
+# sidecar backend both come from the committed record, which outlives the
+# cleanups that remove .claude/.post-review-edit before /pre-merge reads it.
 stamp_released() {
-    local backend sc proj f head=""
+    local backend sc proj f key="${2:-head}" val=""
     backend="$(cmd_backend stamp)" || exit 1
     if [ "$backend" = sidecar ]; then
         sc="$(do_resolve)" || exit 1
         f="$sc/reviews/released/$(branch_slug "$1").json"
         [ -f "$f" ] || return 0
-        head="$(jq -r --arg b "$1" 'select(.branch == $b) | .head // empty' "$f" 2>/dev/null)" || return 0
+        val="$(jq -r --arg b "$1" --arg k "$key" 'select(.branch == $b) | .[$k] // empty' "$f" 2>/dev/null)" || return 0
     else
         proj="$(lock_project)" || refuse "stamp released: cannot find the project directory"
         f="$proj/.claude/.post-review-edit"
         [ -f "$f" ] || return 0
         grep -qxF -- "branch=$1" "$f" || return 0
-        head="$(sed -n 's/^head=//p' "$f")"
+        val="$(sed -n "s/^$key=//p" "$f")"
     fi
-    printf '%s' "$head" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$head"
+    if [ "$key" = reason ]; then
+        [ -n "$val" ] && printf '%s\n' "$val"
+    else
+        printf '%s' "$val" | grep -qxE '[0-9a-f]{40}' && printf '%s\n' "$val"
+    fi
     return 0
 }
 
@@ -1769,8 +1776,13 @@ cmd_stamp() {
                 esac
             done
             ;;
-        read|released|clear)
+        read|clear)
             [ $# -eq 1 ] || die_usage "usage: sidecar.sh stamp $sub <branch>"
+            branch="$1"
+            ;;
+        released)
+            if [ $# -eq 2 ] && [ "$2" = --reason ]; then reason=reason
+            elif [ $# -ne 1 ]; then die_usage "usage: sidecar.sh stamp released <branch> [--reason]"; fi
             branch="$1"
             ;;
         release)
@@ -1790,7 +1802,7 @@ cmd_stamp() {
         refuse "stamp write refused: the SHA must be 40 lowercase hex characters (git rev-parse HEAD): $sha"
     fi
     if [ "$sub" = release ]; then stamp_release "$branch" "$reason"; return 0; fi
-    if [ "$sub" = released ]; then stamp_released "$branch"; return 0; fi
+    if [ "$sub" = released ]; then stamp_released "$branch" "${reason:-head}"; return 0; fi
     sc="$(do_resolve)" || exit 1
     f="reviews/$(branch_slug "$branch").json"
     rel="reviews/released/$(branch_slug "$branch").json"
