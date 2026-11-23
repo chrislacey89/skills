@@ -85,13 +85,18 @@ utc() {
 }
 
 P="$tmp/proj"
+git init -q "$P"
 mkdir -p "$P/.claude"
 M="$P/.claude/.session"
+# A folder an inherited CLAUDE_PROJECT_DIR can name that does not contain $P (#812).
+O="$tmp/other"
+mkdir -p "$O/.claude"
+CPD="$P"   # the CLAUDE_PROJECT_DIR run() hands the block
 # run <shell> <block> <this session's id> [take over] — stdout in $out, exit in $rc.
 run() {
     local b="${2//SLICE=\"<the W-<n> or issue number this run builds, or a short name for a one-off task>\"/SLICE=\"W-7\"}"
     [ "${4:-}" != yes ] || b="${b//TAKE_OVER=\"\"/TAKE_OVER=\"yes\"}"
-    out="$(cd "$P" && CLAUDE_PROJECT_DIR="$P" CLAUDE_CODE_SESSION_ID="$3" "$1" -c "$b" 2>&1)"; rc=$?
+    out="$(cd "$P" && CLAUDE_PROJECT_DIR="$CPD" CLAUDE_CODE_SESSION_ID="$3" "$1" -c "$b" 2>&1)"; rc=$?
 }
 field() { sed -n "s/^$1=//p" "$M"; }
 
@@ -174,6 +179,23 @@ for sh in $shells; do
     run "$sh" "$mark_block" s-iter2
     check "$sh: the next iteration, a new session, is not stopped" 0 "$rc"
     check "$sh: …and the marker is now the next iteration's" s-iter2 "$(field by)"
+
+    section "$sh: an inherited CLAUDE_PROJECT_DIR naming another folder"
+
+    rm -f "$M" "$O/.claude/.session"
+    printf 'by=s-other\nat=%s\nslice=W-3\n' "$(utc 60)" > "$tmp/held"
+    cp "$tmp/held" "$O/.claude/.session"
+    CPD="$O"
+    run "$sh" "$mark_block" s-me
+    check "$sh: the other folder's marker does not stop this checkout" 0 "$rc"
+    check "$sh: …the marker is written in this checkout" s-me "$(field by)"
+    check "$sh: …and the other folder's marker is untouched" "$(cat "$tmp/held")" "$(cat "$O/.claude/.session")"
+    printf 'by=s-me\nat=%s\nslice=W-3\n' "$(utc 60)" > "$O/.claude/.session"
+    cp "$O/.claude/.session" "$tmp/held"
+    run "$sh" "$rm_block" s-me
+    check "$sh: Step 6's removal takes this checkout's marker" no "$([ -e "$M" ] && echo yes || echo no)"
+    check "$sh: …and leaves the other folder's, even one naming this session" "$(cat "$tmp/held")" "$(cat "$O/.claude/.session")"
+    CPD="$P"
 done
 
 printf '\n---\n%d passed, %d failed\n' "$pass" "$fail"

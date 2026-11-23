@@ -269,7 +269,15 @@ install = "pnpm install"
 ```bash
 # Is the review lock in this checkout this branch's own? Prints nothing when there is none.
 SC="<this skill's directory>/references/sidecar.sh"
-FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) dir="$ws" ;; esac
+  fi
+fi
+FLAG="$dir/.claude/.review-stamped"
 B="$(git branch --show-current)"
 STAMP=""
 [ -z "$B" ] || STAMP="$(bash "$SC" stamp read "$B" 2>/dev/null)"
@@ -286,7 +294,15 @@ fi
 
 ```bash
 # Is another session running /execute in this checkout? Writes this session's marker, or stops.
-MARK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.session"
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) dir="$ws" ;; esac
+  fi
+fi
+MARK="$dir/.claude/.session"
 SLICE="<the W-<n> or issue number this run builds, or a short name for a one-off task>"
 TAKE_OVER=""   # "yes" only after the human chose take over
 if [ -f "$MARK" ] && [ "$TAKE_OVER" != yes ]; then
@@ -983,7 +999,15 @@ rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.td
 Remove Step 0's session marker when it is this session's. One another session wrote is left: that session took the slice over.
 
 ```bash
-MARK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.session"
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) dir="$ws" ;; esac
+  fi
+fi
+MARK="$dir/.claude/.session"
 if [ -f "$MARK" ]; then
   if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
   else echo "session marker left: another session holds it"; fi
@@ -1081,7 +1105,15 @@ On a sidecar work item, this comment and the plateau comment below are written w
 After the comment, and before this run exits, remove Step 0's session marker when it is this session's. This exit skips the removal above, and each Ralph iteration is a new session with its own `CLAUDE_CODE_SESSION_ID`, so a marker left here would stop the next iteration on the slice until it is 12 hours old. The plateau stop below runs it too. An iteration that dies before it reaches either exit leaves its marker, and the next AFK iteration stops on it and reports it.
 
 ```bash
-MARK="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.session"
+top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+dir="$top"   # CLAUDE_PROJECT_DIR counts only when it contains this checkout: an inherited one can name another
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  ws=$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P) || ws=
+  if [ -n "$ws" ]; then
+    case "$top/" in "$ws"/*) dir="$ws" ;; esac
+  fi
+fi
+MARK="$dir/.claude/.session"
 if [ -f "$MARK" ]; then
   if [ "$(sed -n 's/^by=//p' "$MARK")" = "$CLAUDE_CODE_SESSION_ID" ]; then rm -f "$MARK" && echo "session marker removed"
   else echo "session marker left: another session holds it"; fi

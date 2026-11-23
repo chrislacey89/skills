@@ -132,7 +132,7 @@ fill() { # <block> <W value> — the placeholders an agent fills, filled
 # run <shell> <block> <W value> — stdout in $out, stderr in $err, exit in $rc.
 run() {
     : > "$tmp/calls"
-    out="$(cd "$P" && CLAUDE_PROJECT_DIR="$P" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "$1" -c "$(fill "$2" "$3")" 2>"$tmp/stderr")"; rc=$?
+    out="$(cd "$P" && CLAUDE_PROJECT_DIR="${CPD:-$P}" GH_CALLS="$tmp/calls" PATH="$tmp/bin:$PATH" "$1" -c "$(fill "$2" "$3")" 2>"$tmp/stderr")"; rc=$?
     err="$(cat "$tmp/stderr")"
 }
 
@@ -242,6 +242,15 @@ for sh in $shells; do
     check "$sh: on another branch the same lock is removed" "" "$(ls -A "$P/.claude")"
     run "$sh" "$lock_block" ""
     check "$sh: with no lock the block prints nothing" "" "$out"
+    # An inherited CLAUDE_PROJECT_DIR naming another folder (#812): its lock is not this checkout's.
+    mkdir -p "$tmp/other$n/.claude"
+    printf 'by=x\n' > "$tmp/other$n/.claude/.review-stamped"
+    printf 'by=x\n' > "$P/.claude/.review-stamped"
+    CPD="$tmp/other$n"
+    run "$sh" "$lock_block" ""
+    CPD=""
+    check "$sh: a leaked CLAUDE_PROJECT_DIR: the other folder's lock is untouched" ".review-stamped" "$(ls -A "$tmp/other$n/.claude")"
+    check "$sh: …and this checkout's leftover lock is removed" "" "$(ls -A "$P/.claude")"
 done
 
 # -----------------------------------------------------------------------------
