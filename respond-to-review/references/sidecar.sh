@@ -45,11 +45,13 @@
 #                          [--maturity <roadmap bet|research-ready|prd>] --body-file <f>   (prints the new id)
 #   sidecar.sh work view <W-n> [--json]
 #   sidecar.sh work edit <W-n> --body-file <f>   (refuses a body shorter than the one it replaces)
-#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|branch|reviewed_sha|start_sha> <value>
+#   sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|pr_mode|branch|reviewed_sha|start_sha> <value>
+#                       (state: open, built, or closed; pr_mode: pr, or none for a branch that gets no PR of its own)
 #   sidecar.sh work comment <W-n> --body-file <f>
 #   sidecar.sh work close <W-n> [--superseded-by W-m]
 #   sidecar.sh work lesson <W-n> <lesson-path>   (adds the path to the lessons list once; a repeat is a no-op)
-#   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|closed|all>]
+#   sidecar.sh work list [--kind <prd|slice>] [--parent W-n] [--branch <name>] [--unblocked] [--state <open|built|closed|all>]
+#                        (open, the default, is every item not closed, built among them)
 #   sidecar.sh lessons match <path>... [--record <start|changed>]   (the lessons whose paths name these files or a folder above them; --record appends the run to lookups/)
 #   sidecar.sh lessons check [<lesson-file>]   (loose ends, one "<kind><TAB><lesson><TAB><detail>" line each, then "loose ends: <n>"; read-only)
 #   sidecar.sh lessons audit [--branch <name>]   (self-check, coverage, group, loose ends, and per-branch runs; --branch prints that branch's runs line only; read-only)
@@ -2276,12 +2278,12 @@ work_blocked_by_cycle() {
 
 work_set() {
     local id="${1:-}" field="${2:-}" value="${3-}" kind
-    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|branch|reviewed_sha|start_sha> <value>"
+    [ $# -eq 3 ] || die_usage "usage: sidecar.sh work set <W-n> <state|maturity|decomposed_into|blocked_by|pr|pr_mode|branch|reviewed_sha|start_sha> <value>"
     work_existing "$id"
     case "$value" in *$'\n'*) die_usage "work set: the value must be one line" ;; esac
     kind="$(work_jq -Rsr "$WORK_JQ parse_work | .fm.kind" "$WORK_DIR/$id.md")" || refuse "work set: $WORK_DIR/$id.md does not parse"
     case "$field" in
-        state) case "$value" in open|closed) ;; *) die_usage "work set: state must be open or closed" ;; esac ;;
+        state) case "$value" in open|built|closed) ;; *) die_usage "work set: state must be open, built, or closed" ;; esac ;;
         maturity)
             [ "$kind" = prd ] || refuse "work set: maturity is for prds; $id is a $kind"
             case "$value" in "roadmap bet"|research-ready|prd) ;; *) die_usage "work set: maturity must be roadmap bet, research-ready, or prd" ;; esac ;;
@@ -2293,10 +2295,13 @@ work_set() {
             value="$(work_ids_csv blocked_by "$value")" || exit $?
             work_blocked_by_cycle "$id" "$value" ;;
         pr) [ -n "$value" ] || die_usage "work set: pr needs a value" ;;
+        # none: this branch gets no PR of its own (Stamp only). pr is the default
+        # an item without the field has, and takes the choice back.
+        pr_mode) case "$value" in pr|none) ;; *) die_usage "work set: pr_mode must be pr or none" ;; esac ;;
         branch) [ -n "$value" ] || die_usage "work set: branch needs a value" ;;
         reviewed_sha|start_sha)
             printf '%s' "$value" | grep -qxE '[0-9a-f]{40}' || refuse "work set refused: $field must be 40 lowercase hex characters: $value" ;;
-        *) die_usage "work set: field must be state, maturity, decomposed_into, blocked_by, pr, branch, reviewed_sha, or start_sha" ;;
+        *) die_usage "work set: field must be state, maturity, decomposed_into, blocked_by, pr, pr_mode, branch, reviewed_sha, or start_sha" ;;
     esac
     if [ "$field" = decomposed_into ] || [ "$field" = blocked_by ]; then
         # Replaced, never appended to: the reader always sees the latest list.
@@ -2347,6 +2352,25 @@ work_close() {
         '.fm.state = "closed" | if $s == "" then . else .fm.superseded_by = $s end' --arg s "$sup"
 }
 
+# work_branch_in_head <branch>: exit 0 when a built item recorded on <branch>
+# is available to build on here: <branch> is checked out, or its tip is an
+# ancestor of HEAD (git merge-base --is-ancestor,
+# https://git-scm.com/docs/git-merge-base). The tip is refs/heads/<branch>,
+# then refs/remotes/origin/<branch>: the local branch is where /execute
+# committed the slice, and the remote-tracking ref stands in for it once the
+# local branch is gone, pushed and then removed with its worktree. No other
+# remote is read. A branch that resolves to neither is not available.
+work_branch_in_head() {
+    local b="$1" tip
+    [ -n "$b" ] || return 1
+    in_repo || return 1
+    [ "$b" = "$(pgit branch --show-current 2>/dev/null)" ] && return 0
+    tip="$(pgit rev-parse -q --verify "refs/heads/$b^{commit}" 2>/dev/null)" \
+        || tip="$(pgit rev-parse -q --verify "refs/remotes/origin/$b^{commit}" 2>/dev/null)" \
+        || return 1
+    pgit merge-base --is-ancestor "$tip" HEAD 2>/dev/null
+}
+
 work_list() {
     local kind="" parent="" branch="" unblocked=0 state=open all
     while [ $# -gt 0 ]; do
@@ -2360,21 +2384,35 @@ work_list() {
         esac
     done
     case "$kind" in ''|prd|slice) ;; *) die_usage "work list: --kind must be prd or slice" ;; esac
-    case "$state" in open|closed|all) ;; *) die_usage "work list: --state must be open, closed, or all" ;; esac
+    case "$state" in open|built|closed|all) ;; *) die_usage "work list: --state must be open, built, closed, or all" ;; esac
     [ -z "$parent" ] || is_work_id "$parent" || die_usage "work list: --parent must be an id like W-3: $parent"
     [ -d "$WORK_DIR" ] || return 0
     all="$(work_all_fm "work list")" || exit 1
-    # An --unblocked item is open and every blocked_by id is closed; an id
-    # missing from the store counts as open, so a typo never unblocks.
-    printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg br "$branch" --arg s "$state" --argjson u "$unblocked" '
+    # The built items whose commits HEAD holds (work_branch_in_head), read only
+    # for --unblocked, because each one costs a git call.
+    met='[]'
+    if [ "$unblocked" -eq 1 ]; then
+        while IFS=$'\t' read -r bid bbr; do
+            [ -n "$bid" ] || continue
+            if work_branch_in_head "$bbr"; then
+                # shellcheck disable=SC2016  # $-names are jq variables
+                met="$(jq -c --arg i "$bid" '. + [$i]' <<<"$met")" || refuse "work list: could not read the built items"
+            fi
+        done <<<"$(printf '%s\n' "$all" | jq -r 'select(type == "object" and .state == "built") | [.id, (.branch // "")] | @tsv')"
+    fi
+    # An --unblocked item is open, and each blocked_by id is closed, or built
+    # with its commits in HEAD; an id missing from the store counts as open,
+    # so a typo never unblocks. --state open is every item not closed: a built
+    # slice is still waiting on its merge.
+    printf '%s\n' "$all" | jq -rs --arg k "$kind" --arg p "$parent" --arg br "$branch" --arg s "$state" --argjson u "$unblocked" --argjson met "$met" '
         map(select(. != null)) as $items
         | ($items | map({key: .id, value: .state}) | from_entries) as $st
         | $items
         | map(select(($k == "" or .kind == $k)
                  and ($p == "" or .parent == $p)
                  and ($br == "" or .branch == $br)
-                 and (if $u == 1 then .state == "open" and ((.blocked_by // []) | all(. as $b | $st[$b] == "closed"))
-                      elif $s == "all" then true else .state == $s end)))
+                 and (if $u == 1 then .state == "open" and ((.blocked_by // []) | all(. as $b | $st[$b] == "closed" or ($st[$b] == "built" and any($met[]; . == $b))))
+                      elif $s == "all" then true elif $s == "open" then .state != "closed" else .state == $s end)))
         | sort_by(.id | ltrimstr("W-") | tonumber)
         | .[].id'
 }
@@ -2569,6 +2607,7 @@ trace_work() {
         (if .superseded_by then "  superseded by  \(.superseded_by | w)" else empty end),
         (.supersedes[] | "  supersedes  \(w)"),
         (if .item.pr then "  pr  \(.item.pr)" else empty end),
+        (if .item.pr_mode then "  pr mode  \(.item.pr_mode)" else empty end),
         (if .item.branch then "  branch  \(.item.branch)" else empty end),
         (if .item.reviewed_sha then "  last reviewed  \(.item.reviewed_sha)" else empty end),
         (.research[] | (if .via then " (via \(.via))" else "" end) as $v

@@ -111,7 +111,7 @@ SIDECAR_VERDICT_JQ='
   else
     ((($i.decomposed_into // []) | length) > 0) as $decomposed
     | ($i.kind == "prd") as $prd
-    | [$i.blocked_by[] | select($st[.] != "closed") | {id: ., state: $st[.]}] as $open_blockers
+    | [$i.blocked_by[] | select($st[.] != "closed" and $st[.] != "built-in-head") | {id: ., state: $st[.]}] as $open_blockers
     | if $i.state == "closed" then "closed \([$i.pr // empty | select(. != "") | {pr: .}] | tojson)"
       elif $prd and ($decomposed | not) then "undecomposed-prd"
       elif ($open_blockers | length) > 0 then "blocked \($open_blockers | tojson)"
@@ -123,7 +123,17 @@ J="$(bash "$SC" work view "$W" --json)" || J=null
 ST='{}'
 while IFS= read -r b; do
   [ -n "$b" ] || continue
-  s="$(bash "$SC" work view "$b" --json | jq -r '.state // empty')"
+  BJ="$(bash "$SC" work view "$b" --json)" || BJ=null
+  s="$(jq -r '.state // empty' <<<"$BJ")"
+  if [ "$s" = built ]; then
+    # Met where its commits are: its branch is checked out, or that branch's tip
+    # (refs/heads/<branch>, then refs/remotes/origin/<branch>) is an ancestor of HEAD.
+    bb="$(jq -r '.branch // empty' <<<"$BJ")"
+    tip="$(git rev-parse -q --verify "refs/heads/$bb^{commit}" || git rev-parse -q --verify "refs/remotes/origin/$bb^{commit}")"
+    if [ -n "$bb" ] && { [ "$bb" = "$(git branch --show-current)" ] || { [ -n "$tip" ] && git merge-base --is-ancestor "$tip" HEAD; }; }; then
+      s=built-in-head
+    fi
+  fi
   ST="$(jq -c --arg b "$b" --arg s "${s:-unreadable}" '. + {($b): $s}' <<<"$ST")"
 done <<<"$(jq -r '(.blocked_by // [])[]?' <<<"$J")"
 jq -rn --arg w "$W" --argjson st "$ST" "$SIDECAR_VERDICT_JQ" <<<"$J" || echo unknown
@@ -134,7 +144,7 @@ Each verdict takes the action listed above, with these differences:
 - **`unknown`** — `work view` failed, or the item's `id`, `state`, `body`, `comments`, or `blocked_by` did not come back. Same rule: re-run once, never proceed on it.
 - **`closed [...]`** — the item's `state` is `closed`. The list names its `pr` field when one is recorded. Same rule: stop and name it.
 - **`undecomposed-prd`** — the item's `kind` is `prd` and `decomposed_into` is empty. The kind field decides, not the body's headings: a PRD whose body lacks the shaped-pitch headings is still undecomposed, and a slice never is (`work set` refuses `decomposed_into` on one). `/prd-to-issues` §8 writes that field, and `work set` replaces it on every write, so there is no "most recent comment" to pick.
-- **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist.
+- **`blocked [...]`** — names each blocker id with its state. A blocker that cannot be read prints as `unreadable` and gates like an open one, the same rule `work list --unblocked` applies to an id that does not exist. A blocker that is `built` on this branch, or on a branch this one contains, is met, as `work list --unblocked` meets it: its commits are already under this slice. A `built` blocker anywhere else is named as `built` and gates, because its commits are not here to build on.
 - **`in-flight [...]`** — the item's `pr` field is set. A sidecar has no `closedByPullRequestsReferences`, so the field is the only signal, and it carries no branch to compare with the current one. When the PR it names is the one this branch opened, continue; otherwise the GraphQL rule applies.
 - **`takeable ever_wired=<k> comments=<m>`** — `ever_wired` counts every `blocked_by` id. Unlike on GitHub, `0` is a real empty list: `/prd-to-issues` writes `blocked_by` with the slice, so there is no pre-wiring repo for it to be confused with.
 
@@ -254,7 +264,23 @@ install = "pnpm install"
 - [ ] `$CLAUDE_PROJECT_DIR` scoping correct — if the project references this env var in scripts, verify it resolves to the worktree path, not the primary repo
 - [ ] **Local git hooks are installed and their manager is on `PATH`** — `ls "$(git rev-parse --git-dir)/hooks/" | grep -v '\.sample$'` lists something, and the manager the repo declares (`lefthook`, `husky`, `pre-commit`, …) resolves. Hooks live in `.git/hooks`, which is **per-worktree and untracked**, so a fresh worktree inherits none of them — and the failure is silent in the worst direction: every commit succeeds, and every guarantee the repo documents at commit time simply did not run. If the manager is absent, either install it (`lefthook install`) or record in the Step 6 review notes that local gates were inactive for this branch, so nobody reads a green local run as the merge gate
 - [ ] Classification marker absent — `.claude/.tdd-active`, `.claude/.tdd-skipped`, `.claude/.lfg-active`, and `.claude/.post-review-edit` do not exist in the worktree (fresh slate; Step 3 creates one)
-- [ ] **Post-review lock flags absent** — `.claude/.review-stamped` and `.claude/.fix-findings-active` do not exist. Both belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete either one you find — you are at the start of a branch that has had no review, so neither can be describing this one
+- [ ] **Post-review lock flags absent, or the lock is this branch's own** — `.claude/.fix-findings-active` does not exist, and `.claude/.review-stamped` does not exist unless the block below kept it. Both normally belong to the *previous* branch's review: `/pre-merge` Phase 4 writes the first, `/fix-findings` writes the second, and `/closeout` and `/fix-findings` respectively remove them at the end of that branch. A leaked `.review-stamped` refuses every implementation write on this slice before it starts; a leaked `.fix-findings-active` holds the lock open for the whole slice, which is the silent direction. Delete a `.fix-findings-active` you find, and run the block below for `.review-stamped`. One case is not a leak: a branch reviewed with **Stamp only** (`/pre-merge`'s handoff menu) is stamped in the sidecar and gets no PR, so the next slice built on it starts under that branch's own lock. The block keeps the lock when the sidecar's stamp names the checked-out branch, and removes it otherwise. A kept lock refuses this slice's edits until the human releases it with the `stamp release` command the block prints, which puts the reason on record and tells the next `/pre-merge` where its review starts
+
+```bash
+# Is the review lock in this checkout this branch's own? Prints nothing when there is none.
+SC="<this skill's directory>/references/sidecar.sh"
+FLAG="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel)}/.claude/.review-stamped"
+B="$(git branch --show-current)"
+STAMP=""
+[ -z "$B" ] || STAMP="$(bash "$SC" stamp read "$B" 2>/dev/null)"
+if [ -f "$FLAG" ]; then
+  if [ -n "$STAMP" ]; then
+    echo "review lock kept: the sidecar's stamp names $B. To edit past it, the human runs: bash \"$SC\" stamp release $B --reason \"<why>\""
+  else
+    rm -f "$FLAG" && echo "review lock removed: no sidecar stamp names this branch ($B), so it was left over from another branch"
+  fi
+fi
+```
 
 **Record where the slice starts.** On `takeable`, once the branch this slice will be committed on is checked out and before its first commit, record `HEAD` as the work item's `start_sha`. `sidecar.sh range` reads it, so `/pre-merge`'s first review and `/fix-findings`' round count cover this slice's commits rather than every slice on a long-lived branch. A start already recorded is kept: a later iteration on the same slice must not move it forward past commits the slice already made, and a start a fold or rebase rewrote is not re-anchored either (`range` falls back to the base and says so):
 
@@ -929,6 +955,26 @@ Remove the classification markers:
 
 ```bash
 rm -f "$CLAUDE_PROJECT_DIR/.claude/.tdd-active" "$CLAUDE_PROJECT_DIR/.claude/.tdd-skipped" "$CLAUDE_PROJECT_DIR/.claude/.lfg-active" "$CLAUDE_PROJECT_DIR/.claude/.post-review-edit"
+```
+
+**Mark the slice built.** On the `sidecar` backend, once the slice's commit is made, its work item moves from `open` to `built`: its commits are on this branch, and its PR has not merged. `work list --unblocked`, and Step 0's gate on the next slice, read a `built` blocker as met where its commits are, on this branch or on a branch built on top of it. `/pre-merge` records the branch's PR on every `built` slice of the branch, and `/closeout` closes each of them at merge ([references/state-backend.md](references/state-backend.md)). On the `github` backend the issue stays open until its PR merges, and nothing is written:
+
+```bash
+SC="<this skill's directory>/references/sidecar.sh"
+W="W-<n>"
+case "$(bash "$SC" backend slices)" in
+  github) echo "work item: none on the github backend; the issue closes when its PR merges" ;;
+  sidecar)
+    ST="$(bash "$SC" work view "$W" --json | jq -r '.state // empty')"
+    case "$ST" in
+      open)
+        bash "$SC" work set "$W" state built || { echo "not marked built: work set failed on $W" >&2; exit 1; }
+        echo "work item: $W built on $(git branch --show-current)" ;;
+      built) echo "work item: $W is already built" ;;
+      *) echo "work item: $W is ${ST:-unreadable}, left as it is" ;;
+    esac ;;
+  *) echo "not marked built: sidecar.sh backend slices failed" >&2; exit 1 ;;
+esac
 ```
 
 **AFK runs persist verified AC too.** AFK Ralph iterations skip the Step 5 user checklist, so the writeback that rides on it never fires. Before an AFK iteration exits, persist any acceptance criterion verified during Step 4 back to the slice issue using the same `gh issue edit --body-file` toggle described in Step 5 (on a work item, Step 5's `work edit` block) — including both of its guards: check the fetch's exit status and refuse the write if the edited body came out shorter than what was read. AFK is the mode with nobody watching the write, so it is the one that most needs them. AFK is the mode that most needs at-a-glance legibility — leaving its issues fully unchecked despite verified work is exactly the gap this closes.

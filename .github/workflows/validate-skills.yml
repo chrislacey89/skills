@@ -450,6 +450,12 @@ jobs:
       - name: Run handoff mktemp contract suite
         run: bash scripts/test-handoff-mktemp.sh
 
+      # Several slices built on one branch (#812): /execute Step 6's built
+      # write, /pre-merge's PR record on every built slice and its Stamp only
+      # choice, and /execute Step 0's review-lock keep, run in bash and zsh.
+      - name: Run slices-share-a-branch contract suite
+        run: bash scripts/test-slices-share-a-branch.sh
+
       # A git hook exports GIT_DIR, and a suite that runs `git init` or
       # `git config` in a fixture without clearing it writes into the real repo
       # (#429: core.bare, core.hooksPath, a fixture [user]). This re-runs every
