@@ -19,7 +19,7 @@
 #   sidecar.sh config set mode <owned|guest>   (re-derives forge.write from the new mode, the way init does, and commits)
 #   sidecar.sh config set base_ref <branch>   (refuses a branch that resolves to no ref)
 #   sidecar.sh config set system <label>   (joins this project's group for related-solutions-dirs; "" leaves it)
-#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager|runtime_check> <cmd>   ("" declares none)
+#   sidecar.sh config set verify.<typecheck|test|lint|package_manager|hook_manager|runtime_check|test_changed> <cmd>   ("" declares none)
 #   sidecar.sh config set verify.hazards <json-array>   (each entry {reason, command?}; [] declares none)
 #   sidecar.sh config set conventions <json-array>   (one string per line of house style; [] declares none)
 #   sidecar.sh config set design <json {ref, note?}>   (one pointer the pack names and never fetches; "" declares none)
@@ -230,6 +230,9 @@
 # one and the first member of a real group looks the same.
 # verify.<field> is a one-line command that is not all blanks; "" declares that
 # the repo has none.
+# verify.test_changed is optional: a command that takes paths as arguments and
+# runs the tests that read them. Absent means verify.test, so profile prints it
+# only once it is declared and never lists it under Not declared.
 # verify.hazards is a JSON array whose every entry has a non-empty one-line
 # reason and, optionally, a non-blank one-line command in Claude Code
 # permission-rule syntax (Bash(<pattern>)); no other keys. [] declares none.
@@ -1035,7 +1038,7 @@ config_set_system() {
 # The verify command fields, in the order profile prints them. config set
 # accepts exactly these plus hazards, and VERIFY_FIELDS is derived from this
 # list, so a field added here is both writable and rendered.
-VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager runtime_check)
+VERIFY_FIELD_NAMES=(typecheck test lint package_manager hook_manager runtime_check test_changed)
 VERIFY_FIELDS="[$(printf '"%s",' "${VERIFY_FIELD_NAMES[@]}")"
 VERIFY_FIELDS="${VERIFY_FIELDS%,}]"
 
@@ -1179,7 +1182,7 @@ PROFILE_JQ="$ONE_LINE_JQ"'
     (if $cv == null then empty
      elif ($cv | length) == 0 then "Conventions: none"
      else "Conventions:", ($cv[] | "  - " + .) end),
-    ([($rows[] | select(.st == "unasked") | .f), (if $hz == null then "hazards" else empty end),
+    ([($rows[] | select(.st == "unasked" and .f != "test_changed") | .f), (if $hz == null then "hazards" else empty end),
       (if $cv == null then "conventions" else empty end)]
      | if length > 0 then "Not declared (ask before running anything not listed): " + join(", ") else empty end)'
 

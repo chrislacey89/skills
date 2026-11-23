@@ -1035,6 +1035,35 @@ prun "$PF/clone" profile
 contains "a declared-empty runtime_check renders as none" "  runtime_check: none" "$out"
 cp "$PF/pre-rc.json" "$PSJ"; git -C "$PF_ROOT/pf" commit -q -am "fixture: runtime_check unasked again"
 
+# test_changed (#806): a verify field like the others once it is declared, and
+# optional. Unset it prints nothing, not even under Not declared, because
+# verify.test stands in for it and /init-pipeline Q5 asks every key on that line.
+prun "$PF/clone" profile
+lacks "an unset test_changed is nowhere in the profile" "test_changed" "$out"
+unset_profile="$out"
+prun "$PF/clone" config set verify.test_changed "bash scripts/run-changed-suites.sh"
+check "config set verify.test_changed succeeds" 0 "$rc"
+check "the test_changed write is committed" "sidecar: set verify.test_changed" "$(git -C "$PF_ROOT/pf" log -1 --format=%s)"
+prun "$PF/clone" profile
+contains "profile prints a declared test_changed" "  test_changed: bash scripts/run-changed-suites.sh" "$out"
+check "a declared test_changed adds that one line and changes no other" "$unset_profile" "$(printf '%s\n' "$out" | grep -v '^  test_changed: ')"
+prun "$PF/clone" config get verify.test_changed
+check "config get reads test_changed back" "0 bash scripts/run-changed-suites.sh" "$rc $out"
+prun "$PF/clone" config set verify.test_changed "   "
+check "a whitespace-only test_changed is refused" 1 "$rc"
+prun "$PF/clone" config set verify.test_changed ""
+prun "$PF/clone" profile
+contains "a declared-empty test_changed renders as none" "  test_changed: none" "$out"
+cp "$PF/pre-rc.json" "$PSJ"; git -C "$PF_ROOT/pf" commit -q -am "fixture: test_changed unasked again"
+
+# Writer and reader: each verify key /fix-findings names is one config set takes,
+# and test_changed is among them.
+ff_keys="$(grep -oE 'verify\.[a-z_]+' "$repo_root/fix-findings/SKILL.md" | sed 's/^verify\.//' | sort -u)"
+contains "/fix-findings reads verify.test_changed" "test_changed" "$ff_keys"
+set_keys="$(sed -n 's/^VERIFY_FIELD_NAMES=(\(.*\))$/\1/p' "$SC" | tr ' ' '\n')"
+check "every verify key /fix-findings names is one config set accepts" "" \
+    "$(printf '%s\n' "$ff_keys" | while IFS= read -r k; do [ -z "$k" ] || grep -qxF -- "$k" <<<"$set_keys" || echo "$k"; done)"
+
 # Every refused hazard list writes nothing and commits nothing.
 cp "$PSJ" "$PF/good.json"
 before="$(git -C "$PF_ROOT/pf" rev-parse HEAD)"
