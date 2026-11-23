@@ -55,6 +55,7 @@ bad() { printf '  FAIL %s\n' "$1"; printf '       %s\n' "$2"; fail=$((fail + 1))
 section() { printf '\n=== %s ===\n' "$1"; }
 check() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1" "expected [$2], got [$3]"; fi; }
 has() { if grep -qF -- "$3" <<<"$2"; then ok "$1"; else bad "$1" "[$3] not found in: $2"; fi; }
+lacks() { if grep -qF -- "$3" <<<"$2"; then bad "$1" "[$3] found in: $2"; else ok "$1"; fi; }
 hasnt() { if grep -qF -- "$3" <<<"$2"; then bad "$1" "[$3] found in: $2"; else ok "$1"; fi; }
 
 # block <file> <literal> — the first fenced bash block containing <literal>.
@@ -370,7 +371,9 @@ co="$(cat "$CO")"
 has "Step 1 asks once, with the three options" "$co" "**fix first**, **file as follow-ups, then merge**, or **merge as is**"
 has "Step 1 says a menu pick is not the go-ahead" "$co" "A menu pick starts this skill; it does not answer this step."
 has "Step 1 asks however the user came in, so it cannot collide with the route: value" "$co" "however the user came into this skill, except where the paragraph above says the question is not asked."
-has "Step 1 takes a merge as is answer as the confirmation" "$co" "A **merge as is** answer is the confirmation the block below waits for, so the user is not asked a second time."
+has "Step 1 shows the confirmation block with the list and the question" "$co" "Show the block below together with the list and the question, so the answer is given with the PR, the teardown and the base in view."
+has "Step 1 names the answers that are the confirmation, and that fix first is not" "$co" "A **merge as is** answer, or a **file as follow-ups, then merge** answer once the follow-ups are filed, is the confirmation the block waits for, so the user is not asked a second time; a **fix first** answer is not a go-ahead."
+lacks "Step 2 does not point at a Step 3 confirmation that Step 3 does not hold" "$co" "Step 3 merge confirmation"
 has "Step 1 reads the unticked checklist lines" "$co" "Every unticked \`- [ ]\` line in the PR body"
 has "Step 1 reads the breaker verdicts" "$co" "\`survived\` or \`not-run\`"
 has "Step 6 cites git's own documentation for update-ref" "$co" "https://git-scm.com/docs/git-update-ref"

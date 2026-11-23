@@ -138,9 +138,9 @@ fi
 
 When a read fails, say the open items are unknown rather than empty, and ask before going on. When every read succeeded and the list is empty, say so in the confirmation block. When it is not empty, show it and ask one question: **fix first**, **file as follow-ups, then merge**, or **merge as is**. Record a **merge as is** answer in the terminal with the list beside it. On `route: already merged` there is nothing left to hold back, so the list is information and the question is not asked.
 
-**A menu pick starts this skill; it does not answer this step.** Choosing `/closeout` from another skill's menu is not the go-ahead to merge. Ask once, here, after the list, however the user came into this skill, except where the paragraph above says the question is not asked. A **merge as is** answer is the confirmation the block below waits for, so the user is not asked a second time.
+**A menu pick starts this skill; it does not answer this step.** Choosing `/closeout` from another skill's menu is not the go-ahead to merge. Ask once, here, after the list, however the user came into this skill, except where the paragraph above says the question is not asked. Show the block below together with the list and the question, so the answer is given with the PR, the teardown and the base in view. A **merge as is** answer, or a **file as follow-ups, then merge** answer once the follow-ups are filed, is the confirmation the block waits for, so the user is not asked a second time; a **fix first** answer is not a go-ahead.
 
-Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation. If there is no PR on this branch, stop and route to `/pre-merge`.
+Tell the user, in one short block: which PR will merge, which worktree (if any) and branch will be torn down, and which base branch you will return to and pull. Wait for confirmation: the answer to the question above is that confirmation in the two cases just named, and where no question is asked it is a plain yes. If there is no PR on this branch, stop and route to `/pre-merge`.
 
 ### 2. Verify safety preconditions before any destructive step
 
@@ -215,7 +215,7 @@ Three outcomes, and only one of them interrupts:
   Then ask once, with a single `AskUserQuestion`, recommended option first:
 
   - **→ Re-review the delta with `/pre-merge` (recommended)** — put the added commits through the review dimensions, then re-stamp and return here. `/pre-merge` reads this same stamp itself and takes the post-stamp delta as its subject (its Phase 1 step 4), so there is no range to pass it; it falls back to the whole branch on the force-push case above and when a merge commit landed after the stamp.
-  - **Merge anyway — I've seen these commits** — an explicit acknowledgement. Repeat it in the Step 3 merge confirmation so the choice is on the record rather than implicit.
+  - **Merge anyway — I've seen these commits** — an explicit acknowledgement. Record it in the terminal when you run the Step 3 merge, so the choice is on the record rather than implicit.
   - **Stop — I want to look at this first** — leaves the PR unmerged and the workspace untouched.
 
   The platform's free-text "Other" option is the escape hatch — don't add one.
