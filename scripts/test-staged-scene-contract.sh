@@ -481,10 +481,12 @@ JS
         fi
         # The </script> probe. The example has no such caption, so a planted
         # copy of its data gains one step whose caption says </script>, the
-        # page is emitted from that copy, and the run above parses it.
+        # page is emitted from that copy, and the run above parses it. The
+        # caption says it twice, so an escape that stops after the first <
+        # leaves the second one to cut the data.
         # planted_data: the data with that step, as one line.
         planted_data() {
-            jq -c '.views[0].steps += [{"c": "A caption that says </script> stays inside the data.", "src": [], "asserted": true}]' <<<"$data"
+            jq -c '.views[0].steps += [{"c": "A caption that says </script> stays inside the data, and so does a second </script>.", "src": [], "asserted": true}]' <<<"$data"
         }
         # escape_lt: every < on stdin written as <, the way §18 says.
         escape_lt() {
