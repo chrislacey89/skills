@@ -499,7 +499,7 @@ JS
             planted_page "$tmp/planted.json" >"$tmp/planted.html"
             node "$tmp/run.js" "$tmp/planted.html" "$tmp/scene.js" probe 2>&1
         }
-        check "run: a </script> caption written as §18 says leaves the data whole" whole "$(probe yes)"
+        check "run: a </script> caption with every < written as \\u003c leaves the data whole" whole "$(probe yes)"
         check "self-test, caught: a </script> caption written with a plain <" cut "$(probe no)"
     else
         bad "the script parses under node --check" "$(cat "$tmp/parse.err")"
