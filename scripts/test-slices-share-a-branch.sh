@@ -263,6 +263,23 @@ for sh in $shells; do
         check "$sh: …and after the $which block's command the menu read says pr" "pr_mode: pr" "$out"
     done
 
+    # Phase 2 run on the branch's next slice, while the earlier slice records
+    # Stamp only: the command it prints must name the item that records it.
+    mkproj guest
+    S1="$(mk --kind slice)"; S2="$(mk --kind slice)"
+    (cd "$P" && bash "$SC" work set "$S1" branch stack && bash "$SC" work set "$S2" branch stack) >/dev/null 2>&1 \
+        || bad "$sh: fixture: two slices on the branch" "work set failed"
+    run "$sh" "$so_block" "$S1"
+    run "$sh" "$pm_block" "$S2"
+    tb="$(grep -o 'sidecar\.sh work set [^ ]* pr_mode [^ ]*' <<<"$out")"
+    check "$sh: Phase 2 on the next slice prints one take-back command" 1 "$(grep -c . <<<"$tb")"
+    read -r -a tb_args <<<"${tb#sidecar.sh }"
+    (cd "$P" && bash "$SC" "${tb_args[@]}") >/dev/null 2>"$tmp/tb.err" \
+        || bad "$sh: Phase 2's take-back command on the next slice runs" "$(cat "$tmp/tb.err")"
+    run "$sh" "$pm_block" "$S2"
+    check "$sh: …and after it Phase 2 on the next slice opens the PR" 1 "$(grep -c '^pr create' "$tmp/calls")"
+    check "$sh: …and records it on that slice" "$URL" "$(field "$S2" pr)"
+
     # -------------------------------------------------------------------------
     # A read that fails is not a "pr" answer: a PR is an outside write (#812).
     section "$sh: a failed pr_mode read opens no PR and answers no menu"
