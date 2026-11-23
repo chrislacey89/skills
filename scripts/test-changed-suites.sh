@@ -103,8 +103,12 @@ plant always "nothing"
 plant args "nothing else"
 plant fixture-git-isolation "alpha/SKILL.md"
 plant fixture-root-collision "alpha/SKILL.md"
+plant ci-heavy "alpha/SKILL.md"
 printf '# a comment\n\nscripts/test-always.sh\nscripts/test-args.sh\n' >"$fx/$ALWAYS"
-cp "$CI_ONLY" "$fx/$CI_ONLY"
+# The fixture's own CI-only list names a suite the real list does not, so a
+# runner that hard-codes the real list's names runs it and fails the checks below.
+! grep -qxF scripts/test-ci-heavy.sh "$CI_ONLY" || fatal "$CI_ONLY names test-ci-heavy.sh; the fixture's list no longer differs from it"
+{ list_entries "$CI_ONLY"; printf 'scripts/test-ci-heavy.sh\n'; } >"$fx/$CI_ONLY"
 printf '      - name: Run args\n        run: bash scripts/test-args.sh beta/arg.md\n' >"$fx/$WORKFLOW"
 printf 'alpha, one\nalpha, two\nalpha, three\n' >"$fx/alpha/SKILL.md"
 printf 'beta\n' >"$fx/beta/SKILL.md"
@@ -114,7 +118,7 @@ printf 'notes\n' >"$fx/two words/notes.md"
 selection() { (cd "$fx" && bash "$SELECT" "$@") | sed 's#^scripts/test-##; s#\.sh$##' | sort | paste -sd' ' -; }
 
 check "a path selects the suites naming it, plus the always-run ones" \
-    "alpha always args fixture-git-isolation fixture-root-collision" "$(selection alpha/SKILL.md)"
+    "alpha always args ci-heavy fixture-git-isolation fixture-root-collision" "$(selection alpha/SKILL.md)"
 check "a leading ./ is the same path" "always args beta" "$(selection ./beta/SKILL.md)"
 check "an absolute path inside the repo is the same path" "always args beta" "$(selection "$fx/beta/SKILL.md")"
 check "a path with a space is one path" "always args spaced" "$(selection "two words/notes.md")"
