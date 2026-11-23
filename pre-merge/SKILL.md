@@ -261,15 +261,24 @@ If you are running on a branch other than the user's working branch and `--pr` w
 
 **Skip this phase entirely in reviewer-mode** — the PR already exists, you did not author it, and rewriting someone else's PR body is out of scope. Proceed to Phase 3.
 
-**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared. So does a head commit that any remote branch holds, under any name, which is the case of a branch built on a pushed branch before its own first commit ([git-rev-list](https://git-scm.com/docs/git-rev-list) on `--not --remotes`):
+**On the sidecar backend, an unpushed branch runs this phase last.** In author-mode, when `bash "$SC" backend stamp` answers `sidecar` and the branch is unshared, nobody else has seen this branch yet. A branch is **unshared** when the block below prints `shared: no`. It has no upstream, and the remote it pushes to answered and holds no `refs/heads/<branch>`: a plain `git push origin <branch>` publishes a branch without setting an upstream, so the upstream check alone would call a published branch private ([git-ls-remote](https://git-scm.com/docs/git-ls-remote)). The block asks `branch.<name>.pushRemote`, then `remote.pushDefault`, then `branch.<name>.remote` for that remote, and `origin` when none is set ([git-config](https://git-scm.com/docs/git-config#Documentation/git-config.txt-branchnamepushRemote)). An `ls-remote` that fails, on a remote it cannot reach, counts as shared. So does a head commit that any remote branch holds, under any name, which is the case of a branch built on a pushed branch before its own first commit ([git-rev-list](https://git-scm.com/docs/git-rev-list) on `--not --remotes`). So does any commit in the range the fold in Phase 4's handoff would rewrite, which starts at the start the slice's work item records, or with none at the branch's fork point with the base (with the sibling slice's branch, for a stacked PR). The fold refuses on that range, so a branch built on a pushed branch with no recorded start reads as shared, and the fold is not offered there:
 
 ```bash
 # Is this branch shared? Prints "shared: yes" or "shared: no".
+SC="<this skill's directory>/references/sidecar.sh"
+W="<the W-<n> Phase 1 step 2 named, or empty>"
+BASE_BRANCH="<sibling slice branch for a stacked PR, else empty>"   # the same branch Phase 1 step 3 was given; an earlier block's shell variable does not reach this one
+# Where the fold in Phase 4's handoff starts, found the way that block finds it.
+FOLD_RANGE=$(bash "$SC" range ${W:+"$W"}) && FOLD_START="${FOLD_RANGE%%..*}" || FOLD_START=
+if [ -n "$BASE_BRANCH" ] && [ "$FOLD_START" = "$(bash "$SC" base-ref 2>/dev/null)" ]; then
+  FOLD_START=$(git rev-parse --verify -q "origin/$BASE_BRANCH^{commit}" || git rev-parse --verify -q "$BASE_BRANCH^{commit}")
+fi
 C=HEAD   # the newest commit a fold would rewrite
+F=$(git merge-base "$FOLD_START" HEAD 2>/dev/null) || F=   # the fold rewrites every commit after this one; none found counts as shared
 B=$(git branch --show-current)
 R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
 HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ]; then SHARED=yes; else SHARED=no; fi
+if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ] || [ -z "$F" ] || [ "$(git rev-list --count "$C" --not "$F" --remotes)" != "$(git rev-list --count "$C" --not "$F")" ]; then SHARED=yes; else SHARED=no; fi
 echo "shared: $SHARED"
 ```
 

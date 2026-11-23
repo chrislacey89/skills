@@ -268,6 +268,15 @@ fill_resolution() { printf '%s\n' "$1" | sed "s/^READ_AS_RESOLUTION=\"<[^\"]*>\"
 shared_block="$(fenced_with "$premerge_skill" 'git ls-remote --heads')"
 # shellcheck disable=SC2016  # the pattern is the skill's literal text
 [[ "$shared_block" == *'echo "shared: $SHARED"'* ]] || fatal "no shared-branch block printing its verdict found in $premerge_skill"
+# It asks where the fold would start, the way the fold does: SHARED_W fills its
+# W= placeholder (empty: no work item), and its stacked placeholder is left
+# empty, as on an unstacked branch. Section 16 runs it against the fold itself.
+[[ "$shared_block" == *"$sidecar_sh"* ]] || fatal "the shared-branch block does not ask sidecar.sh where the fold starts"
+# shellcheck disable=SC2016  # the ${...} is text for the extracted block to expand, not this shell
+shared_block="$(printf '%s\n' "$shared_block" | sed 's/^W="<[^"]*>"$/W="${SHARED_W:-}"/')"
+# shellcheck disable=SC2016
+[[ "$shared_block" == *'W="${SHARED_W:-}"'* ]] || fatal "the shared-branch block has no W= placeholder for the slice's work item"
+shared_block="$(fill_base "$shared_block" "")" || fatal "could not fill the shared-branch block's BASE_BRANCH placeholder"
 
 # The fixup-target block from /fix-findings Step 1, in the fixer brief's commit rule (#566), de-indented
 # out of its list item and whole, from its comment to the line that prints the
@@ -1165,10 +1174,11 @@ git -C "$repo4" config --unset blame.ignoreRevsFile
 git -C "$repo4" push -q origin "$change_b_sha:refs/heads/elsewhere" 2>/dev/null
 git -C "$repo4" fetch -q origin 2>/dev/null
 assert_eq "" "$(run_target 2 2)" "a target another remote branch holds: no target, so no fixup of a published commit"
-assert_eq "$add_d_sha" "$(run_target 4 4)" "…while a line from a commit no remote holds keeps its target"
+assert_eq "" "$(run_target 4 4)" "…and a line from a later commit no remote holds: the fold's range from the base holds the published one, so the fold would refuse and there is no target"
 git -C "$repo4" push -q origin --delete elsewhere 2>/dev/null
 git -C "$repo4" fetch -q --prune origin 2>/dev/null
 assert_eq "$change_b_sha" "$(run_target 2 2)" "control: with the other branch gone, the same line has its target again"
+assert_eq "$add_d_sha" "$(run_target 4 4)" "control: …and so does the later commit's line"
 
 # A shared branch never gets a fixup: /pre-merge offers the fold only on an
 # unshared branch, so a `fixup!` subject there would merge as-is (#611). Both
@@ -1998,6 +2008,10 @@ shared_both "shared: yes" "origin cannot be reached: ls-remote fails, so shared"
 git -C "$repo5" remote set-url origin "$bare5"
 git -C "$repo5" push -q fork feature 2>/dev/null
 shared_both "shared: yes" "pushed to fork: HEAD is on a remote branch, so shared whichever remote the branch pushes to"
+# The rows below measure the push-remote lookup alone, so fork keeps the
+# branch's name but at the base's commit: no commit the fold would rewrite is
+# on a remote, and only the name on the asked remote can make it shared.
+git -C "$repo5" push -q -f fork main:refs/heads/feature 2>/dev/null
 printf 'c\n' > "$repo5/h.txt"
 git -C "$repo5" add h.txt
 git -C "$repo5" commit -q -m 'feature: after the fork push'
@@ -2133,6 +2147,15 @@ fold_publish_case() {  # $1 = shell
     git -C "$r" add two.txt
     git -C "$r" commit -q --fixup=HEAD -m 'fix two'
     head="$(git -C "$r" rev-parse HEAD)"
+
+    # The offer and the fixup decision ask the fold's own question, so neither
+    # says yes to a fold that will refuse.
+    out="$(cd "$r" && SHARED_W="" "$sh" -c "$shared_block" 2>/dev/null)"
+    assert_eq "shared: yes" "$out" "$sh, no work item: Phase 2's block reads the branch as shared, so the fold is not offered"
+    out="$(cd "$r" && SHARED_W="$w" "$sh" -c "$shared_block" 2>/dev/null)"
+    assert_eq "shared: no" "$out" "$sh, the slice's recorded start: Phase 2's block reads the branch as unshared, so the fold is offered"
+    out="$(run_target_in "$r" two.txt 1 1)"
+    assert_eq "" "$out" "$sh, no work item: /fix-findings writes no fixup! of a commit the fold would refuse to fold"
 
     rc=0
     out="$(cd "$r" && FOLD_W="" env -u BASE_REF "$sh" -c "$(fill_base "$fold_block_template" "")" 2>&1)" || rc=$?

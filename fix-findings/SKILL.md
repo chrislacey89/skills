@@ -246,10 +246,11 @@ The fixer's instructions, in order:
      | awk '{ print $(1) }' | sort -u)
    [ "$(printf '%s\n' "$FIXUP_TARGET" | grep -c .)" -eq 1 ] && [ "${FIXUP_TARGET#^}" = "$FIXUP_TARGET" ] || FIXUP_TARGET=
    C="${FIXUP_TARGET:-HEAD}"   # the commit a fold of this fixup would rewrite
+   F=$(git merge-base "$BASE_REF" HEAD 2>/dev/null) || F=   # the widest start the fold takes, the one it uses with no work item; none found counts as shared
    B=$(git branch --show-current)
    R=$(git config "branch.$B.pushRemote" || git config remote.pushDefault || git config "branch.$B.remote" || echo origin)
    HEADS=$(git ls-remote --heads "$R" "refs/heads/$B" 2>/dev/null); LS_RC=$?
-   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ]; then FIXUP_TARGET=; fi
+   if [ -z "$B" ] || git rev-parse -q --verify '@{u}' >/dev/null || [ "$LS_RC" -ne 0 ] || [ -n "$(printf '%s\n' "$HEADS" | awk -v r="refs/heads/$B" '$(2) == r')" ] || [ -z "$(git rev-list -n 1 "$C" --not --remotes)" ] || [ -z "$F" ] || [ "$(git rev-list --count "$C" --not "$F" --remotes)" != "$(git rev-list --count "$C" --not "$F")" ]; then FIXUP_TARGET=; fi
    printf 'FIXUP_TARGET=%s\n' "$FIXUP_TARGET"
    ```
 
