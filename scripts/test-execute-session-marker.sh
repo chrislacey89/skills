@@ -178,7 +178,10 @@ for sh in $shells; do
     run "$sh" "$mark_block" s-me
     check "$sh: an at= that does not parse counts as fresh: the block stops" 1 "$rc"
 
-    # GNU date -d reads "" as midnight today, so these read as expired after 12:00 UTC without the shape check.
+    # GNU date -d reads "" as midnight today, so without the shape check these
+    # read as expired once "now" is 12 hours past it. The held clock is in 2027,
+    # so on GNU they catch that at any time of day, not only after 12:00 UTC.
+    RUNPATH="$tmp/clock:$PATH"
     printf 'by=s-other\nat=\nslice=W-3\n' > "$M"
     run "$sh" "$mark_block" s-me
     check "$sh: an empty at= counts as fresh: the block stops" 1 "$rc"
@@ -186,6 +189,7 @@ for sh in $shells; do
     printf 'by=s-other\nslice=W-3\n' > "$M"
     run "$sh" "$mark_block" s-me
     check "$sh: a marker with no at= counts as fresh: the block stops" 1 "$rc"
+    RUNPATH="$PATH"
 
     section "$sh: Step 6's removal"
 

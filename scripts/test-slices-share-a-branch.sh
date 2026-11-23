@@ -243,6 +243,27 @@ for sh in $shells; do
     check "$sh: the menu read on the github stamp backend says pr" "pr_mode: pr" "$out"
 
     # -------------------------------------------------------------------------
+    # Both Stamp only messages print the command that takes it back. Each one is
+    # pulled out of the message as printed and run as written.
+    section "$sh: the take-back command each message prints gives the branch its PR back"
+
+    mkproj guest
+    S1="$(mk --kind slice)"
+    (cd "$P" && bash "$SC" work set "$S1" branch stack) >/dev/null 2>&1 \
+        || bad "$sh: fixture: a slice on the branch" "work set failed"
+    for which in so pm; do
+        run "$sh" "$so_block" "$S1"
+        [ "$which" = so ] || run "$sh" "$pm_block" "$S1"
+        tb="$(grep -o 'sidecar\.sh work set [^ ]* pr_mode [^ ]*' <<<"$out")"
+        check "$sh: the $which block's message prints one take-back command" 1 "$(grep -c . <<<"$tb")"
+        read -r -a tb_args <<<"${tb#sidecar.sh }"
+        (cd "$P" && bash "$SC" "${tb_args[@]}") >/dev/null 2>"$tmp/tb.err" \
+            || bad "$sh: the $which block's take-back command runs" "$(cat "$tmp/tb.err")"
+        run "$sh" "$mode_block" "$S1"
+        check "$sh: …and after the $which block's command the menu read says pr" "pr_mode: pr" "$out"
+    done
+
+    # -------------------------------------------------------------------------
     # A read that fails is not a "pr" answer: a PR is an outside write (#812).
     section "$sh: a failed pr_mode read opens no PR and answers no menu"
 
