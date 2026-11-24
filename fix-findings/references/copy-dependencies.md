@@ -38,18 +38,22 @@ runs code in the copy (the breaker's control, the differential check's base
 run). It asks the loader where it found one project source file that the test
 loads, and fails unless that path is inside the copy.
 
-Set `COPY` to the copy's path, as its block printed it. Set `PROBE` to a command,
-run from the copy, whose last line of output is the path the loader resolved
-that file to. Take the command from the stack's own documentation of how to ask
-where a class or module was loaded from. The probe has to go through the same
-loader the test command uses: a probe that looks the file up some other way
+Set `COPY` to the copy's path, as its block printed it. Replace the placeholder
+line between the `PROBE_END` lines with a command, run from the copy, whose last
+line of output is the path the loader resolved that file to. The heredoc is
+quoted, so the command goes in as written, with any single or double quotes and
+`$`. Take the command from the stack's own documentation of how to ask where a
+class or module was loaded from. The probe has to go through the same loader the
+test command uses: a probe that looks the file up some other way
 (`realpath src/Foo.php`, `ls`) reports the copy's file whatever the loader does,
 and proves nothing.
 
 <!-- copy-check: source-location -->
 ```bash
 COPY="<the copy's path, as its block printed it>"
-PROBE='<a command, run from the copy, whose last line is the path the loader resolved one project source file to>'
+{ PROBE=$(cat); } <<'PROBE_END'
+<a command, run from the copy, whose last line is the path the loader resolved one project source file to>
+PROBE_END
 REAL_COPY="$(cd "$COPY" && pwd -P)" || { echo "copy check failed: cannot enter $COPY" >&2; exit 1; }
 OUT="$(cd "$REAL_COPY" && sh -c "$PROBE")" || { echo "copy check failed: the probe exited nonzero" >&2; exit 1; }
 RESOLVED="$(printf '%s\n' "$OUT" | tr -d '\r' | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//;/^$/d' | tail -n 1)"

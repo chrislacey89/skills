@@ -126,6 +126,8 @@ for sh in bash zsh; do
         "$tmp/via-link" 'sh deps/resolving.sh' pass
     run_case "$sh" "a .. path through a linked folder is resolved by the kernel, not lexically" \
         "$tmp/linked" 'echo deps/../src/foo.sh' fail "$tmp/orig/src/foo.sh, outside the copy"
+    run_case "$sh" "a probe containing single and double quotes goes in verbatim and passes" \
+        "$tmp/installed" "sh -c 'sh deps/resolving.sh' # \"it's\" \$HOME" pass
     run_case "$sh" "a probe that exits nonzero fails" \
         "$tmp/installed" 'sh deps/resolving.sh; exit 3' fail "the probe exited nonzero"
     run_case "$sh" "a probe that prints nothing fails" \
