@@ -635,10 +635,14 @@ Nor does it infer the diff from the fixer's report, on a different axis: that
 report cannot move, but relying on it would make the breaker's verdict a
 restatement of the fixer's own account of its fix rather than an independent
 read of the fix, and independence is the reason this sub-agent exists at all.
-Carrying dependencies into the copy is permitted on the same mutability axis:
-a fixer repairing a review finding does not edit a dependency tree or
-`.env.local` and its siblings, so symlinking the tree in and copying those
-files brings over the test command's apparatus, not anything that moves.
+Copying `.env.local` and its siblings into the copy is permitted on the same
+mutability axis: a fixer repairing a review finding does not edit them, so the
+copies are the test command's apparatus, not anything that moves. A dependency
+tree is apparatus only while its loader finds the copy's source. A linked tree
+whose loader resolves its own real path loads the project from the original
+working tree, which moves and which this breaker may not read;
+[references/copy-dependencies.md](references/copy-dependencies.md) says when
+linking is sound.
 
 PR and issue bodies are on the other side of that line. Nothing in a
 `/fix-findings` run edits them — this skill opens no PRs and edits no bodies,
@@ -723,10 +727,11 @@ should not be added on the assumption that unset behaves differently from
 unresolvable here; it does not.
 
 The cost is that the copy has no git history and none of the repo's ignored
-files. Bring over what the test command needs — symlink a read-only dependency
-tree, copy `.env.local` and its siblings — or run the project's install command
-inside the copy. If neither is affordable here, the breaker reports **`not-run`**
-with the reason. It does not report `survived` on a mutation it could not run.
+files. Bring over what the test command needs as
+[references/copy-dependencies.md](references/copy-dependencies.md) says, and run
+its source-location check before the control. When that check fails, or the
+dependencies cannot be brought over here, the breaker reports **`not-run`** with
+the reason. It does not report `survived` on a mutation it could not run.
 
 **What the breaker does**, once per finding and then stop:
 

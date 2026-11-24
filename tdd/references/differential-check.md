@@ -72,8 +72,11 @@ echo "base copy: $BASE_DIR"
 Run each input once against `$BASE_DIR` and once against the working tree, each
 from its own fresh scratch directory, so a side effect of one run cannot become
 the other's input. Ignored files (`.env.local`, dependencies) are not in the
-archive; copy or link what the code under test needs, as the breaker's copy
-does. Remove `$BASE_DIR` when the comparison is done.
+archive. Bring over what the code under test needs as
+[copy-dependencies.md](copy-dependencies.md) says, and run its source-location
+check against `$BASE_DIR` before the base run: a base copy whose loader resolves
+to the working tree runs the working tree's code, and agrees with it on every
+input. Remove `$BASE_DIR` when the comparison is done.
 
 ## How it differs from the mutation rung
 

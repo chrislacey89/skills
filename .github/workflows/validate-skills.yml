@@ -329,6 +329,10 @@ jobs:
       - name: Run differential check suite
         run: bash scripts/test-differential-check.sh
 
+      # #823: a dependency tree linked into a throwaway copy can send its loader back to the original checkout's source. Runs the doc's source-location check against linked and installed fixture trees under bash and zsh.
+      - name: Run copy dependencies suite
+        run: bash scripts/test-copy-dependencies.sh
+
       # #586: /walk-commits given a work item walks that slice's range from
       # sidecar.sh range; run on a two-slice branch under bash and zsh.
       - name: Run walk-commits range suite

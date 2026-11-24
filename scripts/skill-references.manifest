@@ -50,6 +50,9 @@ docs/mutation-at-consumption.md  execute
 docs/mutation-at-consumption.md  fix-findings
 docs/differential-check.md  execute
 docs/differential-check.md  tdd
+docs/copy-dependencies.md  execute
+docs/copy-dependencies.md  fix-findings
+docs/copy-dependencies.md  tdd
 docs/next-step-menu.md          fix-findings
 docs/trivial-task-rule.md  execute
 docs/trivial-task-rule.md  lfg
