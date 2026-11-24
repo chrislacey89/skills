@@ -124,6 +124,8 @@ for sh in bash zsh; do
         "$tmp/pre" 'sh deps/resolving.sh' fail "$tmp/pre-orig/src/foo.sh"
     run_case "$sh" "a copy reached through a symlinked path still passes" \
         "$tmp/via-link" 'sh deps/resolving.sh' pass
+    run_case "$sh" "a .. path through a linked folder is resolved by the kernel, not lexically" \
+        "$tmp/linked" 'echo deps/../src/foo.sh' fail "$tmp/orig/src/foo.sh, outside the copy"
     run_case "$sh" "a probe that exits nonzero fails" \
         "$tmp/installed" 'sh deps/resolving.sh; exit 3' fail "the probe exited nonzero"
     run_case "$sh" "a probe that prints nothing fails" \

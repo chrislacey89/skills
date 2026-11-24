@@ -55,7 +55,7 @@ OUT="$(cd "$REAL_COPY" && sh -c "$PROBE")" || { echo "copy check failed: the pro
 RESOLVED="$(printf '%s\n' "$OUT" | sed '/^$/d' | tail -n 1)"
 [ -n "$RESOLVED" ] || { echo "copy check failed: the probe printed no path" >&2; exit 1; }
 case "$RESOLVED" in /*) ;; *) RESOLVED="$REAL_COPY/$RESOLVED" ;; esac
-DIR="$(cd "$(dirname "$RESOLVED")" 2>/dev/null && pwd -P)" || { echo "copy check failed: $RESOLVED does not exist" >&2; exit 1; }
+DIR="$(cd -P "$(dirname "$RESOLVED")" 2>/dev/null && pwd -P)" || { echo "copy check failed: $RESOLVED does not exist" >&2; exit 1; }
 RESOLVED="$DIR/$(basename "$RESOLVED")"
 case "$RESOLVED" in
   "$REAL_COPY"/*) echo "copy check: the loader resolved $RESOLVED, inside the copy" ;;
