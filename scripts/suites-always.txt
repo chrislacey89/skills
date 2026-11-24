@@ -20,6 +20,7 @@ scripts/test-bundled-pointer-resolution.sh
 scripts/test-canon-coverage.sh
 scripts/test-changed-suites.sh
 scripts/test-compound-clustering-single-source.sh
+scripts/test-copy-dependencies.sh
 scripts/test-decision-card-grounding.sh
 scripts/test-differential-check.sh
 scripts/test-documented-git-commands.sh
