@@ -154,6 +154,8 @@ for sh in bash zsh; do
         "$tmp/installed" 'echo "   "' fail "printed no path"
     run_case "$sh" "a probe printing CRLF line endings passes" \
         "$tmp/installed" 'printf "src/foo.sh\r\n"' pass
+    run_case "$sh" "a probe printing several CRLF lines takes the last one" \
+        "$tmp/installed" 'printf "noise\r\nsrc/foo.sh\r\n"' pass
     run_case "$sh" "a probe printing a CRLF path outside the copy fails" \
         "$tmp/linked" 'printf "deps/../src/foo.sh\r\n"' fail "$tmp/orig/src/foo.sh, outside the copy"
     # Pasted indented, the PROBE_END line is not at column 0, the heredoc swallows
