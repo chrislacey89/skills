@@ -132,6 +132,10 @@ for sh in bash zsh; do
         "$tmp/installed" 'true' fail "printed no path"
     run_case "$sh" "a probe that prints a path that does not exist fails" \
         "$tmp/installed" 'echo nowhere/at/all.sh' fail "does not exist"
+    run_case "$sh" "a probe that prints a missing file in a real folder fails" \
+        "$tmp/installed" 'echo src/missing.sh' fail "is not an existing file"
+    run_case "$sh" "a probe whose only output is whitespace prints no path" \
+        "$tmp/installed" 'echo "   "' fail "printed no path"
 done
 
 section "the skills point at the doc, and bundle it"
