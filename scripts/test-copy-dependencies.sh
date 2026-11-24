@@ -137,6 +137,11 @@ for sh in bash zsh; do
         "$tmp/linked" 'echo deps/../src/foo.sh' fail "$tmp/orig/src/foo.sh, outside the copy"
     run_case "$sh" "a probe containing single and double quotes goes in verbatim and passes" \
         "$tmp/installed" "sh -c 'sh deps/resolving.sh' # \"it's\" \$HOME" pass
+    # A variable the probe sets and reads for itself: it survives only when the
+    # heredoc marker is quoted; unquoted, the block's shell expands $F to empty.
+    # shellcheck disable=SC2016 # the probe's own shell expands it
+    run_case "$sh" "a probe that sets and reads its own variable passes (marker is quoted)" \
+        "$tmp/installed" 'F=src/foo.sh; echo "$F"' pass
     run_case "$sh" "a probe that exits nonzero fails" \
         "$tmp/installed" 'sh deps/resolving.sh; exit 3' fail "the probe exited nonzero"
     run_case "$sh" "a probe that prints nothing fails" \
