@@ -52,7 +52,7 @@ COPY="<the copy's path, as its block printed it>"
 PROBE='<a command, run from the copy, whose last line is the path the loader resolved one project source file to>'
 REAL_COPY="$(cd "$COPY" && pwd -P)" || { echo "copy check failed: cannot enter $COPY" >&2; exit 1; }
 OUT="$(cd "$REAL_COPY" && sh -c "$PROBE")" || { echo "copy check failed: the probe exited nonzero" >&2; exit 1; }
-RESOLVED="$(printf '%s\n' "$OUT" | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//;/^$/d' | tail -n 1)"
+RESOLVED="$(printf '%s\n' "$OUT" | tr -d '\r' | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//;/^$/d' | tail -n 1)"
 [ -n "$RESOLVED" ] || { echo "copy check failed: the probe printed no path" >&2; exit 1; }
 case "$RESOLVED" in /*) ;; *) RESOLVED="$REAL_COPY/$RESOLVED" ;; esac
 DIR="$(cd -P "$(dirname "$RESOLVED")" 2>/dev/null && pwd -P)" || { echo "copy check failed: $RESOLVED does not exist" >&2; exit 1; }

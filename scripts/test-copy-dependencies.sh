@@ -136,6 +136,10 @@ for sh in bash zsh; do
         "$tmp/installed" 'echo src/missing.sh' fail "is not an existing file"
     run_case "$sh" "a probe whose only output is whitespace prints no path" \
         "$tmp/installed" 'echo "   "' fail "printed no path"
+    run_case "$sh" "a probe printing CRLF line endings passes" \
+        "$tmp/installed" 'printf "src/foo.sh\r\n"' pass
+    run_case "$sh" "a probe printing a CRLF path outside the copy fails" \
+        "$tmp/linked" 'printf "deps/../src/foo.sh\r\n"' fail "$tmp/orig/src/foo.sh, outside the copy"
 done
 
 section "the skills point at the doc, and bundle it"
