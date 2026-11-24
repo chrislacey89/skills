@@ -42,7 +42,9 @@ Set `COPY` to the copy's path, as its block printed it. Replace the placeholder
 line between the `PROBE_END` lines with a command, run from the copy, whose last
 line of output is the path the loader resolved that file to. The heredoc is
 quoted, so the command goes in as written, with any single or double quotes and
-`$`. Take the command from the stack's own documentation of how to ask where a
+`$`. Both `PROBE_END` lines must start at column 0: pasted indented, the heredoc
+never closes and swallows the rest of the block, so the block's `EXIT` trap
+fails it with `copy check failed: the block did not run to its end`. Take the command from the stack's own documentation of how to ask where a
 class or module was loaded from. The probe has to go through the same loader the
 test command uses: a probe that looks the file up some other way
 (`realpath src/Foo.php`, `ls`) reports the copy's file whatever the loader does,
@@ -51,6 +53,8 @@ and proves nothing.
 <!-- copy-check: source-location -->
 ```bash
 COPY="<the copy's path, as its block printed it>"
+DONE=0
+trap 'rc=$?; [ "$rc" -ne 0 ] || [ "$DONE" = 1 ] || { echo "copy check failed: the block did not run to its end (is PROBE_END at column 0?)" >&2; exit 1; }' EXIT
 { PROBE=$(cat); } <<'PROBE_END'
 <a command, run from the copy, whose last line is the path the loader resolved one project source file to>
 PROBE_END
@@ -62,6 +66,7 @@ case "$RESOLVED" in /*) ;; *) RESOLVED="$REAL_COPY/$RESOLVED" ;; esac
 DIR="$(cd -P "$(dirname "$RESOLVED")" 2>/dev/null && pwd -P)" || { echo "copy check failed: $RESOLVED does not exist" >&2; exit 1; }
 RESOLVED="$DIR/$(basename "$RESOLVED")"
 [ -f "$RESOLVED" ] || { echo "copy check failed: $RESOLVED is not an existing file" >&2; exit 1; }
+DONE=1
 case "$RESOLVED" in
   "$REAL_COPY"/*) echo "copy check: the loader resolved $RESOLVED, inside the copy" ;;
   *) echo "copy check failed: the loader resolved $RESOLVED, outside the copy $REAL_COPY" >&2; exit 1 ;;

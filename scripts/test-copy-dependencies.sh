@@ -25,6 +25,7 @@
 #      linked loader does not resolve its own real path, and when the copy is
 #      reached through a symlinked path. A probe that fails, prints nothing, or
 #      prints a path that does not exist fails the check.
+#      Pasted indented, the heredoc never closes; the block's EXIT trap fails it.
 #   3. /fix-findings and the differential check point at the doc, and each
 #      bundled copy matches it.
 #
@@ -97,6 +98,7 @@ fill() {
     local b="$block"
     b="${b//"$placeholder_copy"/$1}"
     b="${b//"$placeholder_probe"/$2}"
+    if [ -n "${INDENT:-}" ]; then b="$(printf '%s\n' "$b" | sed "s/^/$INDENT/")"; fi
     printf '%s\n' "$b" > "$tmp/block.sh"
 }
 # run_case <shell> <label> <copy> <probe> <pass|fail> [<text stderr must name>]
@@ -142,6 +144,12 @@ for sh in bash zsh; do
         "$tmp/installed" 'printf "src/foo.sh\r\n"' pass
     run_case "$sh" "a probe printing a CRLF path outside the copy fails" \
         "$tmp/linked" 'printf "deps/../src/foo.sh\r\n"' fail "$tmp/orig/src/foo.sh, outside the copy"
+    # Pasted indented, the PROBE_END line is not at column 0, the heredoc swallows
+    # the rest of the block, and a bare run would exit 0 having checked nothing.
+    INDENT='  ' run_case "$sh" "the block pasted indented fails rather than passing unrun" \
+        "$tmp/linked" 'sh deps/resolving.sh' fail "did not run to its end"
+    INDENT='  ' run_case "$sh" "an indented paste fails even when the probe would pass" \
+        "$tmp/installed" 'sh deps/resolving.sh' fail "did not run to its end"
 done
 
 section "the skills point at the doc, and bundle it"
