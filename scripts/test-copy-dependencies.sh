@@ -87,6 +87,13 @@ make_orig "$tmp/pre-orig"
 make_copy "$tmp/pre" install
 rm -rf "$tmp/pre/deps"; ln -s "$tmp/pre-orig/deps" "$tmp/pre/deps"
 ln -s "$tmp/installed" "$tmp/via-link"
+# A copy whose source file is itself a link: to the original's file, to another
+# file inside the copy, and to itself.
+mkdir -p "$tmp/filelink-out/src" "$tmp/filelink-in/src" "$tmp/filelink-loop/src"
+ln -s "$tmp/orig/src/foo.sh" "$tmp/filelink-out/src/foo.sh"
+printf '#!/bin/sh\necho copy\n' > "$tmp/filelink-in/src/real.sh"
+ln -s real.sh "$tmp/filelink-in/src/foo.sh"
+ln -s foo.sh "$tmp/filelink-loop/src/foo.sh"
 
 section "the premise: what a resolving loader runs through each tree"
 got="$(cd "$tmp/linked" && sh "$(sh deps/resolving.sh)")"
@@ -146,6 +153,12 @@ for sh in bash zsh; do
         "$tmp/linked" 'printf "deps/../src/foo.sh\r\n"' fail "$tmp/orig/src/foo.sh, outside the copy"
     # Pasted indented, the PROBE_END line is not at column 0, the heredoc swallows
     # the rest of the block, and a bare run would exit 0 having checked nothing.
+    run_case "$sh" "a copy file that is a link to the original's file fails and names it" \
+        "$tmp/filelink-out" 'echo src/foo.sh' fail "$tmp/orig/src/foo.sh, outside the copy"
+    run_case "$sh" "a copy file that is a link to another file inside the copy passes" \
+        "$tmp/filelink-in" 'echo src/foo.sh' pass
+    run_case "$sh" "a copy file that links to itself fails rather than looping" \
+        "$tmp/filelink-loop" 'echo src/foo.sh' fail "too many symbolic links"
     INDENT='  ' run_case "$sh" "the block pasted indented fails rather than passing unrun" \
         "$tmp/linked" 'sh deps/resolving.sh' fail "did not run to its end"
     INDENT='  ' run_case "$sh" "an indented paste fails even when the probe would pass" \

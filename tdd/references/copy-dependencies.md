@@ -63,8 +63,16 @@ OUT="$(cd "$REAL_COPY" && sh -c "$PROBE")" || { echo "copy check failed: the pro
 RESOLVED="$(printf '%s\n' "$OUT" | tr -d '\r' | sed 's/^[[:blank:]]*//;s/[[:blank:]]*$//;/^$/d' | tail -n 1)"
 [ -n "$RESOLVED" ] || { echo "copy check failed: the probe printed no path" >&2; exit 1; }
 case "$RESOLVED" in /*) ;; *) RESOLVED="$REAL_COPY/$RESOLVED" ;; esac
-DIR="$(cd -P "$(dirname "$RESOLVED")" 2>/dev/null && pwd -P)" || { echo "copy check failed: $RESOLVED does not exist" >&2; exit 1; }
-RESOLVED="$DIR/$(basename "$RESOLVED")"
+HOPS=0
+while :; do
+  DIR="$(cd -P "$(dirname "$RESOLVED")" 2>/dev/null && pwd -P)" || { echo "copy check failed: $RESOLVED does not exist" >&2; exit 1; }
+  RESOLVED="$DIR/$(basename "$RESOLVED")"
+  [ -L "$RESOLVED" ] || break
+  HOPS=$((HOPS + 1))
+  [ "$HOPS" -le 40 ] || { echo "copy check failed: too many symbolic links resolving $RESOLVED" >&2; exit 1; }
+  LINK="$(readlink "$RESOLVED")" || { echo "copy check failed: cannot read the link $RESOLVED" >&2; exit 1; }
+  case "$LINK" in /*) RESOLVED="$LINK" ;; *) RESOLVED="$DIR/$LINK" ;; esac
+done
 [ -f "$RESOLVED" ] || { echo "copy check failed: $RESOLVED is not an existing file" >&2; exit 1; }
 DONE=1
 case "$RESOLVED" in
